@@ -1,0 +1,30 @@
+{
+  "package": "zhixu-handoff-v1.0",
+  "updated_on": "2026-07-13",
+  "product": "知序教学云",
+  "market": "河北省石家庄市公办初中",
+  "pilot": "一所学校、七年级、三个班",
+  "status": "产品评审稿",
+  "modules": [
+    {"id":"ACC-001","slug":"school-entry-access","title":"学校入口、登录与身份上下文","priority":"P0","phase":"产品评审稿","ports":["Web","App"],"roles":["全部用户"],"prototype_ids":["ACC-P01","ACC-P02","ACC-P03","ACC-P04"],"open_decision":"学生首次激活凭据"},
+    {"id":"TEA-001","slug":"teacher-workbench","title":"教师工作台","priority":"P0","phase":"产品评审稿","ports":["教师Web"],"roles":["任课教师","班主任"],"prototype_ids":["TEA-P01","TEA-P02","TEA-P03"],"open_decision":"多身份首页记忆方式"},
+    {"id":"PREP-001","slug":"lesson-prep-delivery","title":"备课与课堂授课","priority":"P1","phase":"概念边界稿","ports":["教师Web"],"roles":["教师"],"prototype_ids":["PREP-P01","PREP-P02","PREP-P03","PREP-P04"],"open_decision":"集体备课、课堂硬件、资源版权与课堂练习计分"},
+    {"id":"HW-001","slug":"assignment-create","title":"作业创建与发布","priority":"P0","phase":"产品评审稿","ports":["教师Web"],"roles":["任课教师"],"prototype_ids":["HW-P01","HW-P02","HW-P03","HW-P04","HW-P05"],"open_decision":"截止前学生撤回与重提规则"},
+    {"id":"SUB-001","slug":"assignment-submit","title":"学生在线与拍照提交","priority":"P0","phase":"产品评审稿","ports":["学生App"],"roles":["学生"],"prototype_ids":["SUB-P01","SUB-P02","SUB-P03","SUB-P04","SUB-P05"],"open_decision":"已提交版本主动撤回规则"},
+    {"id":"GRD-001","slug":"ai-grading-review","title":"AI 初评与教师复核","priority":"P0","phase":"产品评审稿","ports":["教师Web"],"roles":["任课教师","班主任只读","教务汇总"],"prototype_ids":["GRD-P01","GRD-P02","GRD-P03","GRD-P04","GRD-P05"],"open_decision":"高置信客观题批量接受与抽检比例"},
+    {"id":"PUB-001","slug":"results-publish-correction","title":"成绩与反馈发布、修正","priority":"P0","phase":"产品评审稿","ports":["教师Web","学生App"],"roles":["任课教师","授权教务","学生"],"prototype_ids":["PUB-P01","PUB-P02","PUB-P03","PUB-P04"],"open_decision":"整班发布或允许按学生分批发布"},
+    {"id":"SCO-001","slug":"gradebook","title":"基础成绩册","priority":"P0","phase":"产品评审稿","ports":["教师Web","教务Web"],"roles":["任课教师","班主任","教务"],"prototype_ids":["SCO-P01","SCO-P02","SCO-P03","SCO-P04"],"open_decision":"手工新增非作业成绩列"},
+    {"id":"EXM-001","slug":"exam-score-management","title":"考试与综合成绩管理","priority":"P1","phase":"概念边界稿","ports":["教务Web","教师Web"],"roles":["教务","学科教师"],"prototype_ids":["EXM-P01","EXM-P02","EXM-P03","EXM-P04","EXM-P05"],"open_decision":"考试、等级、排名、补考、权重和舍入规则"},
+    {"id":"STU-001","slug":"student-management","title":"教师学生管理与学生详情","priority":"P0","phase":"产品评审稿","ports":["教师Web"],"roles":["任课教师","班主任"],"prototype_ids":["STU-P01","STU-P02","STU-P03","STU-P04","STU-P05"],"open_decision":"跟进记录默认可见范围"},
+    {"id":"INS-001","slug":"mastery-evidence","title":"知识点证据与学情判断","priority":"P0","phase":"产品评审稿","ports":["教师Web","学生App"],"roles":["任课教师","班主任只读","学生"],"prototype_ids":["INS-P01","INS-P02","INS-P03","INS-P04"],"open_decision":"教师人工修正状态有效期"},
+    {"id":"PLN-001","slug":"improvement-plan","title":"个性化提升与学科协同","priority":"P0","phase":"产品评审稿","ports":["教师Web","学生App"],"roles":["任课教师","班主任","学生"],"prototype_ids":["PLN-P01","PLN-P02","PLN-P03","PLN-P04","PLN-P05","PLN-P06"],"open_decision":"重点目标上限、每日时长和默认周期"},
+    {"id":"APP-001","slug":"student-home","title":"学生今日学习首页","priority":"P0","phase":"产品评审稿","ports":["学生App"],"roles":["学生"],"prototype_ids":["APP1-P01","APP1-P02","APP1-P03"],"open_decision":"学生是否可手动调整任务优先级"},
+    {"id":"APP-002","slug":"feedback-correction","title":"反馈、错题与订正","priority":"P0","phase":"产品评审稿","ports":["学生App","教师Web"],"roles":["学生","任课教师"],"prototype_ids":["APP2-P01","APP2-P02","APP2-P03","APP2-P04","APP2-P05"],"open_decision":"客观题自动判定通过和主观题复核边界"},
+    {"id":"ORG-001","slug":"organization-import","title":"学校组织与成员导入","priority":"P0","phase":"产品评审稿","ports":["管理Web"],"roles":["学校管理员","授权教务"],"prototype_ids":["ORG-P01","ORG-P02","ORG-P03","ORG-P04","ORG-P05"],"open_decision":"学校现有模板与账号激活字段"},
+    {"id":"SCH-001","slug":"academic-scheduling","title":"教务辅助排课","priority":"P2","phase":"概念边界稿","ports":["教务Web"],"roles":["教务"],"prototype_ids":["SCH-P01","SCH-P02","SCH-P03","SCH-P04","SCH-P05","SCH-P06"],"open_decision":"节次、硬软约束、走班、场地和通知规则"},
+    {"id":"AI-001","slug":"ai-command-center","title":"AI 指令中心与连续对话","priority":"P0","phase":"产品评审稿","ports":["Web","学生App"],"roles":["教师","教务","管理员","学生"],"prototype_ids":["AI-P01","AI-P02","AI-P03","AI-P04","AI-P05","AI-P06"],"open_decision":"学生助手能力边界与语音输入"},
+    {"id":"GOV-001","slug":"permissions-audit","title":"权限、数据范围与操作审计","priority":"P0","phase":"产品评审稿","ports":["管理Web","全端约束"],"roles":["全部角色"],"prototype_ids":["GOV-P01","GOV-P02","GOV-P03","GOV-P04"],"open_decision":"教务临时查看明细的岗位范围"},
+    {"id":"CLI-001","slug":"admin-cli","title":"管理员 CLI","priority":"P3","phase":"概念边界稿","ports":["CLI"],"roles":["管理员","集成方"],"prototype_ids":["CLI-P01","CLI-P02","CLI-P03","CLI-P04"],"open_decision":"目标用户、发行、认证、首批命令域与自动化审批"}
+  ]
+}
+
