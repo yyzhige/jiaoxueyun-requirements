@@ -9,6 +9,8 @@ const REQUIRED_MODEL_COLLECTIONS = [
   "extensions",
 ];
 
+const MAX_TRAVERSAL_DEPTH = 64;
+
 export function formatValidationValue(value) {
   if (value === null) return "null";
   if (typeof value === "string") return value;
@@ -31,7 +33,11 @@ function malformed(errors, path, detail) {
   errors.push(`MALFORMED_MODEL ${path} ${detail}`);
 }
 
-function cloneStructuredData(value, path, active, errors) {
+function cloneStructuredData(value, path, active, errors, depth = 0) {
+  if (depth > MAX_TRAVERSAL_DEPTH) {
+    malformed(errors, path, `exceeds maximum depth ${MAX_TRAVERSAL_DEPTH}`);
+    return undefined;
+  }
   if (value === null) return null;
 
   const valueType = typeof value;
@@ -90,6 +96,7 @@ function cloneStructuredData(value, path, active, errors) {
       childPath(path, key),
       active,
       errors,
+      depth + 1,
     );
     if (clonedValue !== undefined) {
       Object.defineProperty(clone, key, {
@@ -186,6 +193,9 @@ function validatePage(errors, page, path) {
 }
 
 function validateModule(errors, module, path) {
+  if (![1, 2].includes(module.phase)) {
+    errors.push(`INVALID_MODULE_PHASE ${path}.phase must be 1 or 2`);
+  }
   const objects = requireArray(errors, module, "objects", path);
   const actions = requireArray(errors, module, "actions", path);
   const pages = requireArray(errors, module, "pages", path);
@@ -246,7 +256,13 @@ function validateModelShape(model) {
     validateEntities(errors, model.roles, "roles", "role");
   }
   if (Array.isArray(model.duties)) {
-    validateEntities(errors, model.duties, "duties", "duty");
+    validateEntities(errors, model.duties, "duties", "duty", (duty, path) => {
+      if (!isValidId(duty.roleId)) {
+        errors.push(
+          `INVALID_ENTITY_SHAPE ${path}.roleId must be a non-empty string`,
+        );
+      }
+    });
   }
   if (Array.isArray(model.optionSets)) {
     validateEntities(
@@ -295,7 +311,23 @@ function validateModelShape(model) {
 }
 
 export function prepareRequirementModel(input) {
-  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+  if (input === null || typeof input !== "object") {
+    return {
+      errors: ["INVALID_MODEL requirement model must be an object"],
+      model: null,
+    };
+  }
+
+  let inputIsArray;
+  try {
+    inputIsArray = Array.isArray(input);
+  } catch {
+    return {
+      errors: ["MALFORMED_MODEL model cannot be classified safely"],
+      model: null,
+    };
+  }
+  if (inputIsArray) {
     return {
       errors: ["INVALID_MODEL requirement model must be an object"],
       model: null,

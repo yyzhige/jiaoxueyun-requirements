@@ -6,6 +6,16 @@ const SYSTEM_ACTOR_CATEGORIES = new Set([
   "CURRENT_ACTOR",
 ]);
 
+const VALUE_SOURCE_KINDS = new Set([
+  "OPTION_SET",
+  "SYSTEM",
+  "USER_INPUT",
+  "OBJECT_REF",
+  "RUNTIME_QUERY",
+  "DERIVED",
+  "CONSTANT",
+]);
+
 function list(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -118,7 +128,10 @@ export function buildModelIndex(model) {
     roles.map(({ value }) => value?.id).filter(isValidId),
   );
   const dutyIds = new Set(
-    duties.map(({ value }) => value?.id).filter(isValidId),
+    duties
+      .filter(({ value }) => roleIds.has(value?.roleId))
+      .map(({ value }) => value?.id)
+      .filter(isValidId),
   );
 
   return {
@@ -243,14 +256,40 @@ export function validateModelReferences(model) {
   const index = buildModelIndex(model);
   const errors = duplicateIdErrors(index);
 
+  for (const dutyEntry of index.duties) {
+    if (!index.roleIds.has(dutyEntry.value?.roleId)) {
+      errors.push(
+        `MISSING_DUTY_ROLE ${formatValidationValue(dutyEntry.value?.id)} -> ${formatValidationValue(dutyEntry.value?.roleId)}`,
+      );
+    }
+  }
+
   for (const fieldEntry of index.fields) {
     const valueSource = fieldEntry.value?.valueSource;
-    if (
-      valueSource?.kind === "OPTION_SET"
+    if (!VALUE_SOURCE_KINDS.has(valueSource?.kind)) {
+      errors.push(
+        `INVALID_VALUE_SOURCE ${formatValidationValue(fieldEntry.value?.id)} -> ${formatValidationValue(valueSource?.kind)}`,
+      );
+    } else if (
+      valueSource.kind === "OPTION_SET"
       && !index.optionSetById.has(valueSource.optionSetId)
     ) {
       errors.push(
         `MISSING_OPTION_SET ${formatValidationValue(fieldEntry.value?.id)} -> ${formatValidationValue(valueSource.optionSetId)}`,
+      );
+    } else if (
+      valueSource.kind === "OBJECT_REF"
+      && !isValidId(valueSource.targetObjectId)
+    ) {
+      errors.push(
+        `MISSING_VALUE_SOURCE_REFERENCE ${formatValidationValue(fieldEntry.value?.id)} OBJECT_REF requires targetObjectId`,
+      );
+    } else if (
+      valueSource.kind === "RUNTIME_QUERY"
+      && !isValidId(valueSource.queryId)
+    ) {
+      errors.push(
+        `MISSING_VALUE_SOURCE_REFERENCE ${formatValidationValue(fieldEntry.value?.id)} RUNTIME_QUERY requires queryId`,
       );
     }
   }
@@ -307,7 +346,11 @@ export function validateModelReferences(model) {
 
   for (const pageEntry of index.pages) {
     const page = pageEntry.value;
-    for (const objectId of [page?.objectId, ...list(page?.objectIds)]) {
+    const declaredObjectIds = isValidId(page?.objectId)
+      ? [page.objectId]
+      : list(page?.objectIds);
+    const declaredObjectIdSet = new Set(declaredObjectIds);
+    for (const objectId of declaredObjectIds) {
       const objectEntry = index.objectById.get(objectId);
       if (!objectEntry) {
         errors.push(
@@ -328,6 +371,13 @@ export function validateModelReferences(model) {
       } else if (fieldEntry.moduleId !== pageEntry.moduleId) {
         errors.push(
           `INVALID_MODULE_OWNERSHIP ${formatValidationValue(page?.id)} -> field ${formatValidationValue(fieldId)} belongs to ${formatValidationValue(fieldEntry.moduleId)}`,
+        );
+      } else if (
+        declaredObjectIdSet.size > 0
+        && !declaredObjectIdSet.has(fieldEntry.objectId)
+      ) {
+        errors.push(
+          `INVALID_OBJECT_OWNERSHIP ${formatValidationValue(page?.id)} -> field ${formatValidationValue(fieldId)} belongs to ${formatValidationValue(fieldEntry.objectId)}`,
         );
       }
     }
@@ -387,15 +437,28 @@ export function validateModelReferences(model) {
 
   for (const taskEntry of index.aiTasks) {
     const task = taskEntry.value;
-    if (!index.actionById.has(task?.actionId)) {
+    const targetActionEntry = index.actionById.get(task?.actionId);
+    if (!targetActionEntry) {
       errors.push(
         `MISSING_AI_ACTION ${formatValidationValue(task?.id)} -> ${formatValidationValue(task?.actionId)}`,
       );
     }
+    const previewableFieldIds = new Set([
+      ...list(targetActionEntry?.value?.inputFieldIds),
+      ...list(targetActionEntry?.value?.outputFieldIds),
+    ]);
     for (const fieldId of list(task?.previewFieldIds)) {
       if (!index.fieldById.has(fieldId)) {
         errors.push(
           `MISSING_AI_PREVIEW_FIELD ${formatValidationValue(task?.id)} -> ${formatValidationValue(fieldId)}`,
+        );
+      } else if (
+        task?.writes
+        && targetActionEntry
+        && !previewableFieldIds.has(fieldId)
+      ) {
+        errors.push(
+          `INVALID_AI_PREVIEW_FIELD ${formatValidationValue(task?.id)} -> ${formatValidationValue(fieldId)}`,
         );
       }
     }

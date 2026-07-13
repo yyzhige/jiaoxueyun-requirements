@@ -16,6 +16,14 @@ const FORBIDDEN_PAGE_NAMES = new Set([
   "历史/审计页",
 ]);
 
+const METRIC_EVENT_COUNTS = new Map([
+  ["duration", 2],
+  ["ratio", 2],
+  ["conversion", 2],
+  ["count", 1],
+  ["boolean", 1],
+]);
+
 function list(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -207,7 +215,14 @@ function metricErrors(index) {
   const errors = [];
   for (const metricEntry of index.metrics) {
     const metric = metricEntry.value;
-    const complete = list(metric?.eventIds).length > 0
+    const requiredEventCount = METRIC_EVENT_COUNTS.get(metric?.aggregation) ?? 1;
+    const distinctEventCount = new Set(list(metric?.eventIds)).size;
+    if (!METRIC_EVENT_COUNTS.has(metric?.aggregation)) {
+      errors.push(
+        `INVALID_METRIC_AGGREGATION ${formatValidationValue(metric?.id)} -> ${formatValidationValue(metric?.aggregation)}`,
+      );
+    }
+    const complete = distinctEventCount >= requiredEventCount
       && Boolean(metric?.scope)
       && Boolean(metric?.aggregation)
       && Boolean(metric?.ownerRef)

@@ -357,6 +357,38 @@ test("rejects functions, symbol keys, custom prototypes, and cycles", () => {
   }
 });
 
+test("returns a stable malformed error for a revoked top-level Proxy", () => {
+  const revocable = Proxy.revocable({}, {});
+  revocable.revoke();
+
+  let errors;
+  assert.doesNotThrow(() => {
+    errors = validateRequirementModel(revocable.proxy);
+  });
+  assert.deepEqual(errors, [
+    "MALFORMED_MODEL model cannot be classified safely",
+  ]);
+});
+
+test("rejects authored data beyond the maximum traversal depth", () => {
+  const model = validFixture();
+  let cursor = model;
+  for (let depth = 0; depth < 80; depth += 1) {
+    cursor.deep = {};
+    cursor = cursor.deep;
+  }
+
+  let errors;
+  assert.doesNotThrow(() => { errors = validateRequirementModel(model); });
+  assert.ok(
+    errors.some((error) => (
+      error.startsWith("MALFORMED_MODEL ")
+      && error.endsWith("exceeds maximum depth 64")
+    )),
+    errors.join("\n"),
+  );
+});
+
 test("exports stable model constants", () => {
   assert.deepEqual(PHASE, { FIRST: 1, SECOND: 2 });
   assert.deepEqual(RISK, { READ: "READ", LOW: "LOW", HIGH: "HIGH" });
@@ -416,6 +448,60 @@ test("does not include invalid IDs in duplicate lookup indexes", () => {
     errorCodes(errors).filter((code) => code === "INVALID_ENTITY_SHAPE").length,
     2,
   );
+});
+
+test("rejects missing and invalid module phases", () => {
+  for (const phase of [undefined, 0, 3, "1"]) {
+    const model = validFixture();
+    const module = moduleById(model, "SUB-001");
+    if (phase === undefined) delete module.phase;
+    else module.phase = phase;
+
+    assertHasCode(validateRequirementModel(model), "INVALID_MODULE_PHASE");
+  }
+});
+
+test("accepts every supported field value-source kind", () => {
+  const valueSources = [
+    { kind: "OPTION_SET", optionSetId: "OPT-BOOL" },
+    { kind: "SYSTEM" },
+    { kind: "USER_INPUT" },
+    { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
+    { kind: "RUNTIME_QUERY", queryId: "QUERY-STUDENT-SCOPE" },
+    { kind: "DERIVED" },
+    { kind: "CONSTANT" },
+  ];
+
+  for (const valueSource of valueSources) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").objects[0].fields[0].valueSource = valueSource;
+
+    assert.deepEqual(validateRequirementModel(model), []);
+  }
+});
+
+test("rejects missing and unknown field value-source kinds", () => {
+  for (const valueSource of [{}, { kind: "" }, { kind: "LEGACY_TEMPLATE" }]) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").objects[0].fields[0].valueSource = valueSource;
+
+    assertHasCode(validateRequirementModel(model), "INVALID_VALUE_SOURCE");
+  }
+});
+
+test("rejects missing kind-specific field value-source references", () => {
+  const cases = [
+    [{ kind: "OPTION_SET" }, "MISSING_OPTION_SET"],
+    [{ kind: "OBJECT_REF" }, "MISSING_VALUE_SOURCE_REFERENCE"],
+    [{ kind: "RUNTIME_QUERY" }, "MISSING_VALUE_SOURCE_REFERENCE"],
+  ];
+
+  for (const [valueSource, expectedCode] of cases) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").objects[0].fields[0].valueSource = valueSource;
+
+    assertHasCode(validateRequirementModel(model), expectedCode);
+  }
 });
 
 test("rejects a choice field without an Option Set", () => {
@@ -497,6 +583,48 @@ test("rejects page references owned by another module", () => {
     errorCodes(errors).filter((code) => code === "INVALID_MODULE_OWNERSHIP").length,
     3,
   );
+});
+
+test("rejects a page field owned by a different object in the same module", () => {
+  const model = validFixture();
+  const submissionModule = moduleById(model, "SUB-001");
+  submissionModule.objects.push({
+    id: "DAT-SUB-02",
+    ownerRef: "ROLE-STUDENT",
+    confirmerRef: "ROLE-STUDENT",
+    states: ["DRAFT"],
+    fields: [{ id: "SUB-F002", valueSource: { kind: "SYSTEM" } }],
+  });
+  submissionModule.pages.push({
+    id: "SUB-W01",
+    objectId: "DAT-SUB-01",
+    fieldIds: ["SUB-F002"],
+    actionIds: [],
+  });
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "INVALID_OBJECT_OWNERSHIP");
+});
+
+test("accepts page fields owned by one of its declared objects", () => {
+  const model = validFixture();
+  const submissionModule = moduleById(model, "SUB-001");
+  submissionModule.objects.push({
+    id: "DAT-SUB-02",
+    ownerRef: "ROLE-STUDENT",
+    confirmerRef: "ROLE-STUDENT",
+    states: ["DRAFT"],
+    fields: [{ id: "SUB-F002", valueSource: { kind: "SYSTEM" } }],
+  });
+  submissionModule.pages.push({
+    id: "SUB-W01",
+    objectIds: ["DAT-SUB-01", "DAT-SUB-02"],
+    fieldIds: ["SUB-F002"],
+    actionIds: [],
+  });
+
+  assert.deepEqual(validateRequirementModel(model), []);
 });
 
 test("rejects a scenario referencing a missing action", () => {
@@ -601,6 +729,24 @@ test("accepts explicit system actor categories in actor references", () => {
 
 test("does not export a mutable system actor category Set", () => {
   assert.equal(Object.hasOwn(modelValidatorExports, "SYSTEM_ACTOR_CATEGORIES"), false);
+});
+
+test("rejects a duty without a role attachment", () => {
+  const model = validFixture();
+  model.duties.push({ id: "DUTY-ORPHAN" });
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "INVALID_ENTITY_SHAPE");
+});
+
+test("rejects a duty attached to an unknown login role", () => {
+  const model = validFixture();
+  model.duties.push({ id: "DUTY-ORPHAN", roleId: "ROLE-MISSING" });
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "MISSING_DUTY_ROLE");
 });
 
 test("rejects an invalid state transition", () => {
@@ -835,6 +981,80 @@ test("accepts authorized duty confirmation for an AI write task", () => {
   assert.deepEqual(validateRequirementModel(model), []);
 });
 
+test("rejects AI confirmation by a duty not attached to a login role", () => {
+  const model = validFixture();
+  model.duties.push({
+    id: "DUTY-ORPHAN",
+    roleId: "ROLE-MISSING",
+  });
+  model.aiTasks.push({
+    id: "AI-TASK-01",
+    actionId: "SUB-ACT-01",
+    risk: RISK.HIGH,
+    writes: true,
+    previewFieldIds: ["SUB-F001"],
+    roleRefs: ["ROLE-STUDENT"],
+    confirmerDutyRef: "DUTY-ORPHAN",
+  });
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "MISSING_DUTY_ROLE");
+  assertHasCode(errors, "AI_WRITE_WITHOUT_CONFIRMATION");
+});
+
+for (const previewFieldId of ["SUB-F002", "HW-F001"]) {
+  test(`rejects unrelated AI write preview field ${previewFieldId}`, () => {
+    const model = validFixture();
+    model.duties.push({
+      id: "DUTY-SUBJECT-TEACHER",
+      roleId: "ROLE-TEACHER",
+    });
+    moduleById(model, "SUB-001").objects[0].fields.push({
+      id: "SUB-F002",
+      valueSource: { kind: "SYSTEM" },
+    });
+    model.aiTasks.push({
+      id: "AI-TASK-01",
+      actionId: "SUB-ACT-01",
+      risk: RISK.HIGH,
+      writes: true,
+      previewFieldIds: [previewFieldId],
+      roleRefs: ["ROLE-STUDENT"],
+      confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+    });
+
+    const errors = validateRequirementModel(model);
+
+    assertHasCode(errors, "INVALID_AI_PREVIEW_FIELD");
+  });
+}
+
+test("accepts AI write preview fields from action inputs and outputs", () => {
+  const model = validFixture();
+  model.duties.push({
+    id: "DUTY-SUBJECT-TEACHER",
+    roleId: "ROLE-TEACHER",
+  });
+  const submissionModule = moduleById(model, "SUB-001");
+  submissionModule.objects[0].fields.push({
+    id: "SUB-F002",
+    valueSource: { kind: "SYSTEM" },
+  });
+  submissionModule.actions[0].outputFieldIds = ["SUB-F002"];
+  model.aiTasks.push({
+    id: "AI-TASK-01",
+    actionId: "SUB-ACT-01",
+    risk: RISK.HIGH,
+    writes: true,
+    previewFieldIds: ["SUB-F001", "SUB-F002"],
+    roleRefs: ["ROLE-STUDENT"],
+    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+  });
+
+  assert.deepEqual(validateRequirementModel(model), []);
+});
+
 test("rejects a baseline metric without an event mapping", () => {
   const model = validFixture();
   model.metrics[0].eventIds = [];
@@ -861,6 +1081,45 @@ test("accepts falsy but explicitly present metric targets", () => {
     model.metrics[0].target = target;
 
     assert.deepEqual(validateRequirementModel(model), []);
+  }
+});
+
+test("accepts supported metric aggregations with sufficient events", () => {
+  const cases = [
+    ["duration", ["EVT-START", "EVT-END"]],
+    ["ratio", ["EVT-NUMERATOR", "EVT-DENOMINATOR"]],
+    ["conversion", ["EVT-ENTER", "EVT-COMPLETE"]],
+    ["count", ["EVT-COUNT"]],
+    ["boolean", ["EVT-FLAG"]],
+  ];
+
+  for (const [aggregation, eventIds] of cases) {
+    const model = validFixture();
+    model.metrics[0].aggregation = aggregation;
+    model.metrics[0].eventIds = eventIds;
+
+    assert.deepEqual(validateRequirementModel(model), []);
+  }
+});
+
+test("rejects an unknown metric aggregation", () => {
+  const model = validFixture();
+  model.metrics[0].aggregation = "average";
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "INVALID_METRIC_AGGREGATION");
+});
+
+test("requires two distinct events for paired metric aggregations", () => {
+  for (const aggregation of ["duration", "ratio", "conversion"]) {
+    for (const eventIds of [["EVT-ONLY"], ["EVT-SAME", "EVT-SAME"]]) {
+      const model = validFixture();
+      model.metrics[0].aggregation = aggregation;
+      model.metrics[0].eventIds = eventIds;
+
+      assertHasCode(validateRequirementModel(model), "MISSING_METRIC_EVENT");
+    }
   }
 });
 
