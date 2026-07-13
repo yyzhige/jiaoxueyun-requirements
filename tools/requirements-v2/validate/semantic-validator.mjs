@@ -24,6 +24,22 @@ const METRIC_EVENT_COUNTS = new Map([
   ["boolean", 1],
 ]);
 
+const EXTENSION_EXECUTABLE_KEYS = [
+  "pageIds",
+  "actionIds",
+  "pages",
+  "actions",
+  "flows",
+  "moduleIds",
+  "aiTasks",
+  "routes",
+  "commands",
+  "page",
+  "action",
+  "pageId",
+  "actionId",
+];
+
 function list(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -195,11 +211,11 @@ function phaseAndTemplateErrors(index) {
   }
   for (const extensionEntry of index.extensions) {
     const extension = extensionEntry.value;
-    const executable = ["pageIds", "actionIds", "pages", "actions"]
-      .some((property) => list(extension?.[property]).length > 0);
+    const executable = EXTENSION_EXECUTABLE_KEYS
+      .some((property) => Object.hasOwn(extension ?? {}, property));
     if (executable) {
       errors.push(
-        `PHASE_BOUNDARY_EXECUTABLE_PAGE ${formatValidationValue(extension?.id)} exposes extension pages or actions`,
+        `PHASE_BOUNDARY_EXECUTABLE_PAGE ${formatValidationValue(extension?.id)} exposes executable extension surface`,
       );
     }
   }
@@ -237,6 +253,46 @@ function metricErrors(index) {
       errors.push(
         `MISSING_METRIC_EVENT ${formatValidationValue(metric?.id)} requires events, scope, aggregation, Owner, and target`,
       );
+    }
+    if (
+      metric?.aggregation === "conversion"
+      && list(metric?.eventIds).length > 2
+    ) {
+      const metricEventIds = list(metric.eventIds).filter(isValidId);
+      const metricEventSet = new Set(metricEventIds);
+      const usedEventIds = new Set();
+      const seriesIds = new Set();
+      let seriesValid = Array.isArray(metric.series)
+        && metric.series.length > 0
+        && metricEventSet.size === metricEventIds.length;
+      for (const series of list(metric.series)) {
+        const id = series?.id;
+        const startEventId = series?.startEventId;
+        const successEventId = series?.successEventId;
+        const validPair = isValidId(id)
+          && !seriesIds.has(id)
+          && isValidId(startEventId)
+          && isValidId(successEventId)
+          && startEventId !== successEventId
+          && isValidId(series?.correlationKey)
+          && series?.target === "100%"
+          && metricEventSet.has(startEventId)
+          && metricEventSet.has(successEventId)
+          && index.eventById.has(startEventId)
+          && index.eventById.has(successEventId)
+          && !usedEventIds.has(startEventId)
+          && !usedEventIds.has(successEventId);
+        if (!validPair) seriesValid = false;
+        if (isValidId(id)) seriesIds.add(id);
+        if (isValidId(startEventId)) usedEventIds.add(startEventId);
+        if (isValidId(successEventId)) usedEventIds.add(successEventId);
+      }
+      if (!setEquals(metricEventSet, usedEventIds)) seriesValid = false;
+      if (!seriesValid) {
+        errors.push(
+          `INVALID_METRIC_SERIES ${formatValidationValue(metric?.id)} requires non-overlapping resolvable conversion pairs covering every event`,
+        );
+      }
     }
   }
   return errors;

@@ -1,4 +1,8 @@
-import { defineRequirementModel } from "../model.mjs";
+import {
+  MODEL_COLLECTIONS,
+  deepFreeze,
+  defineRequirementModel,
+} from "../model.mjs";
 import {
   baselineDecisions,
   duties,
@@ -25,11 +29,11 @@ export {
   sensitivities,
 };
 
-export const modules = [];
-export const flows = [];
-export const aiTasks = [];
+export const modules = deepFreeze([]);
+export const flows = deepFreeze([]);
+export const aiTasks = deepFreeze([]);
 
-export const requirementModel = defineRequirementModel({
+const collectionFacts = {
   baselineDecisions,
   roles,
   duties,
@@ -43,4 +47,8 @@ export const requirementModel = defineRequirementModel({
   flows,
   aiTasks,
   extensions,
-});
+};
+
+export const requirementModel = defineRequirementModel(Object.fromEntries(
+  MODEL_COLLECTIONS.map(({ key }) => [key, collectionFacts[key]]),
+));

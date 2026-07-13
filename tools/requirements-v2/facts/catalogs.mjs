@@ -1,13 +1,31 @@
+import { deepFreeze } from "../model.mjs";
+
 function optionSet(id, key, label, entries) {
   return {
     id,
     key,
     label,
+    mode: "STATIC",
     values: entries.map(([code, valueLabel]) => ({ code, label: valueLabel })),
   };
 }
 
-const currentAuthorized = [["CURRENT_AUTHORIZED", "当前授权范围"]];
+function runtimeOptionSet(id, key, label, queryId, filterContext) {
+  return {
+    id,
+    key,
+    label,
+    mode: "RUNTIME_QUERY",
+    values: [],
+    source: {
+      queryId,
+      valueField: "objectId",
+      labelField: "displayName",
+      labelSnapshot: true,
+      filterContext,
+    },
+  };
+}
 
 export const baselineDecisions = [
   {
@@ -303,6 +321,29 @@ export const metrics = [
     target: "100%",
     exclusions: "排除因权限、截止规则或无效输入导致业务本身不可执行的尝试",
     window: "每次发布前覆盖三类路径全量演练，并在试点期间按周复核",
+    series: [
+      {
+        id: "submission",
+        startEventId: "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-STARTED",
+        successEventId: "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-COMPLETED",
+        correlationKey: "submissionAttemptId",
+        target: "100%",
+      },
+      {
+        id: "grading",
+        startEventId: "EVT-AI-UNAVAILABLE-GRADING-MANUAL-STARTED",
+        successEventId: "EVT-AI-UNAVAILABLE-GRADING-MANUAL-COMPLETED",
+        correlationKey: "gradingTaskId",
+        target: "100%",
+      },
+      {
+        id: "publication",
+        startEventId: "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-STARTED",
+        successEventId: "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-COMPLETED",
+        correlationKey: "publicationBatchId",
+        target: "100%",
+      },
+    ],
   },
 ];
 
@@ -360,9 +401,13 @@ export const optionSets = [
     ["CN-HEBEI", "河北省"],
     ["CN-HEBEI-SHIJIAZHUANG", "石家庄市"],
   ]),
-  optionSet("OPT-COM-002", "school", "学校", [
-    ["PILOT-SCHOOL-01", "试点公办初中"],
-  ]),
+  runtimeOptionSet(
+    "OPT-COM-002",
+    "school",
+    "学校",
+    "QUERY-AUTHORIZED-SCHOOLS",
+    ["actorId", "regionId"],
+  ),
   optionSet("OPT-COM-003", "loginRole", "登录角色", [
     ["ROLE-STUDENT", "学生"],
     ["ROLE-TEACHER", "教师"],
@@ -370,23 +415,76 @@ export const optionSets = [
     ["ROLE-SCHOOL-ADMIN", "学校管理员"],
     ["ROLE-PLATFORM-OPS", "平台运营"],
   ]),
-  optionSet("OPT-COM-004", "term", "学期", [
-    ["CURRENT-TERM", "当前学期"],
-    ["HISTORICAL-TERM", "历史学期"],
-  ]),
-  optionSet("OPT-COM-005", "grade", "年级", [["GRADE-7", "七年级"]]),
-  optionSet("OPT-COM-006", "class", "班级", [
-    ["GRADE-7-CLASS-1", "七年级1班"],
-    ["GRADE-7-CLASS-2", "七年级2班"],
-    ["GRADE-7-CLASS-3", "七年级3班"],
-  ]),
-  optionSet("OPT-COM-007", "subject", "学科", currentAuthorized),
-  optionSet("OPT-COM-008", "course", "课程", currentAuthorized),
-  optionSet("OPT-COM-009", "teacher", "教师", currentAuthorized),
-  optionSet("OPT-COM-010", "student", "学生", currentAuthorized),
-  optionSet("OPT-COM-011", "knowledgePoint", "知识点", currentAuthorized),
-  optionSet("OPT-COM-012", "assignment", "作业", currentAuthorized),
-  optionSet("OPT-COM-013", "exam", "考试", currentAuthorized),
+  runtimeOptionSet(
+    "OPT-COM-004",
+    "term",
+    "学期",
+    "QUERY-SCHOOL-TERMS",
+    ["schoolId", "actorId"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-005",
+    "grade",
+    "年级",
+    "QUERY-SCHOOL-GRADES",
+    ["schoolId", "termId", "actorId"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-006",
+    "class",
+    "班级",
+    "QUERY-AUTHORIZED-CLASSES",
+    ["schoolId", "termId", "gradeId", "roleId", "dutyIds"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-007",
+    "subject",
+    "学科",
+    "QUERY-AUTHORIZED-SUBJECTS",
+    ["schoolId", "termId", "roleId", "dutyIds"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-008",
+    "course",
+    "课程",
+    "QUERY-AUTHORIZED-COURSES",
+    ["schoolId", "termId", "gradeId", "subjectId", "roleId", "dutyIds"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-009",
+    "teacher",
+    "教师",
+    "QUERY-SCHOOL-TEACHERS",
+    ["schoolId", "termId", "actorId"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-010",
+    "student",
+    "学生",
+    "QUERY-AUTHORIZED-STUDENTS",
+    ["schoolId", "termId", "classIds", "roleId", "dutyIds"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-011",
+    "knowledgePoint",
+    "知识点",
+    "QUERY-KNOWLEDGE-POINTS",
+    ["schoolId", "termId", "courseId", "subjectId", "curriculumVersionId"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-012",
+    "assignment",
+    "作业",
+    "QUERY-AUTHORIZED-ASSIGNMENTS",
+    ["schoolId", "termId", "classIds", "subjectIds", "actorId"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-013",
+    "exam",
+    "考试",
+    "QUERY-AUTHORIZED-EXAMS",
+    ["schoolId", "termId", "classIds", "subjectIds", "actorId"],
+  ),
   optionSet("OPT-COM-014", "timeRange", "时间范围", [
     ["TODAY", "今日"],
     ["LAST-7-DAYS", "最近7天"],
@@ -395,15 +493,13 @@ export const optionSets = [
     ["THIS-TERM", "本学期"],
     ["CUSTOM", "自定义"],
   ]),
-  optionSet("OPT-COM-015", "scopeObject", "权限范围对象", [
-    ["SCHOOL", "学校"],
-    ["GRADE", "年级"],
-    ["CLASS", "班级"],
-    ["SUBJECT", "学科"],
-    ["COURSE", "课程"],
-    ["STUDENT", "学生"],
-    ["BUSINESS-OBJECT", "业务对象"],
-  ]),
+  runtimeOptionSet(
+    "OPT-COM-015",
+    "scopeObject",
+    "权限范围对象",
+    "QUERY-AUTHORIZABLE-SCOPE-OBJECTS",
+    ["schoolId", "termId", "roleId", "dutyIds", "actionId"],
+  ),
   optionSet("OPT-ENUM-001", "yesNo", "是否", [
     ["YES", "是"],
     ["NO", "否"],
@@ -721,3 +817,18 @@ export const extensions = [
     excludedFirstStageBehavior: ["不生成、发布或替代教师提供 AI 教学视频"],
   },
 ];
+
+for (const catalog of [
+  baselineDecisions,
+  roles,
+  duties,
+  lifecyclePolicies,
+  sensitivities,
+  events,
+  metrics,
+  nfrs,
+  optionSets,
+  extensions,
+]) {
+  deepFreeze(catalog);
+}

@@ -1,20 +1,33 @@
-const REQUIRED_MODEL_COLLECTIONS = [
-  "baselineDecisions",
-  "roles",
-  "duties",
-  "lifecyclePolicies",
-  "sensitivities",
-  "optionSets",
-  "events",
-  "metrics",
-  "nfrs",
-  "modules",
-  "flows",
-  "aiTasks",
-  "extensions",
-];
+import { MODEL_COLLECTIONS } from "../model.mjs";
+
+const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 
 const MAX_TRAVERSAL_DEPTH = 64;
+const OPTION_SET_MODES = new Set(["STATIC", "RUNTIME_QUERY"]);
+const EXTENSION_ALLOWED_KEYS = new Set([
+  "id",
+  "label",
+  "phase",
+  "status",
+  "dependencies",
+  "entryCriteria",
+  "excludedFirstStageBehavior",
+]);
+const EXTENSION_EXECUTABLE_KEYS = new Set([
+  "pageIds",
+  "actionIds",
+  "pages",
+  "actions",
+  "flows",
+  "moduleIds",
+  "aiTasks",
+  "routes",
+  "commands",
+  "page",
+  "action",
+  "pageId",
+  "actionId",
+]);
 
 export function formatValidationValue(value) {
   if (value === null) return "null";
@@ -268,15 +281,160 @@ function validateAiTask(errors, task, path) {
   }
 }
 
+function validateUniqueStrings(errors, values, path, errorCode) {
+  const seen = new Set();
+  let valid = values.length > 0;
+  values.forEach((value, index) => {
+    if (!isValidId(value) || seen.has(value)) {
+      valid = false;
+      errors.push(`${errorCode} ${path}[${index}] must be a unique non-empty string`);
+    }
+    if (isValidId(value)) seen.add(value);
+  });
+  if (!valid && values.length === 0) {
+    errors.push(`${errorCode} ${path} must be a non-empty array of unique strings`);
+  }
+}
+
+function validateOptionSet(errors, optionSet, path) {
+  requireString(errors, optionSet, "key", path);
+  requireString(errors, optionSet, "label", path);
+  if (!OPTION_SET_MODES.has(optionSet.mode)) {
+    errors.push(
+      `INVALID_ENTITY_SHAPE ${path}.mode must be STATIC or RUNTIME_QUERY`,
+    );
+  }
+
+  const values = requireArray(errors, optionSet, "values", path);
+  if (optionSet.mode === "STATIC") {
+    if (values.length === 0) {
+      errors.push(`INVALID_ENTITY_SHAPE ${path}.values must be non-empty for STATIC`);
+    }
+    const codes = new Set();
+    const labels = new Set();
+    values.forEach((value, index) => {
+      const valuePath = `${path}.values[${index}]`;
+      if (!isRecord(value)) {
+        errors.push(`INVALID_ENTITY_SHAPE ${valuePath} Option Set value must be an object`);
+        return;
+      }
+      requireString(errors, value, "code", valuePath);
+      requireString(errors, value, "label", valuePath);
+      if (
+        (isValidId(value.code) && codes.has(value.code))
+        || (isValidId(value.label) && labels.has(value.label))
+      ) {
+        errors.push(
+          `DUPLICATE_OPTION_SET_VALUE ${valuePath} repeats a code or label`,
+        );
+      }
+      if (isValidId(value.code)) codes.add(value.code);
+      if (isValidId(value.label)) labels.add(value.label);
+    });
+    return;
+  }
+
+  if (optionSet.mode !== "RUNTIME_QUERY") return;
+  if (values.length > 0) {
+    errors.push(
+      `INVALID_ENTITY_SHAPE ${path}.values must be empty for RUNTIME_QUERY`,
+    );
+  }
+  const source = requireRecord(errors, optionSet, "source", path);
+  if (!source) return;
+  requireString(errors, source, "queryId", `${path}.source`);
+  if (source.valueField !== "objectId") {
+    errors.push(
+      `INVALID_ENTITY_SHAPE ${path}.source.valueField must be objectId`,
+    );
+  }
+  if (source.labelField !== "displayName") {
+    errors.push(
+      `INVALID_ENTITY_SHAPE ${path}.source.labelField must be displayName`,
+    );
+  }
+  if (source.labelSnapshot !== true) {
+    errors.push(
+      `INVALID_ENTITY_SHAPE ${path}.source.labelSnapshot must be true`,
+    );
+  }
+  const filterContext = requireArray(
+    errors,
+    source,
+    "filterContext",
+    `${path}.source`,
+  );
+  validateUniqueStrings(
+    errors,
+    filterContext,
+    `${path}.source.filterContext`,
+    "INVALID_ENTITY_SHAPE",
+  );
+}
+
+function validateMetricSeries(errors, metric, path) {
+  if (!Object.hasOwn(metric, "series")) return;
+  if (!Array.isArray(metric.series)) {
+    errors.push(`INVALID_METRIC_SERIES ${path}.series must be an array`);
+    return;
+  }
+  metric.series.forEach((series, index) => {
+    const seriesPath = `${path}.series[${index}]`;
+    if (!isRecord(series)) {
+      errors.push(`INVALID_METRIC_SERIES ${seriesPath} must be an object`);
+      return;
+    }
+    for (const property of [
+      "id",
+      "startEventId",
+      "successEventId",
+      "correlationKey",
+    ]) {
+      if (!isValidId(series[property])) {
+        errors.push(
+          `INVALID_METRIC_SERIES ${seriesPath}.${property} must be a non-empty string`,
+        );
+      }
+    }
+    if (series.target !== "100%") {
+      errors.push(`INVALID_METRIC_SERIES ${seriesPath}.target must be 100%`);
+    }
+  });
+}
+
 function validateExtension(errors, extension, path) {
+  for (const property of Object.keys(extension)) {
+    if (EXTENSION_EXECUTABLE_KEYS.has(property)) continue;
+    if (!EXTENSION_ALLOWED_KEYS.has(property)) {
+      errors.push(`INVALID_EXTENSION_SCHEMA ${path}.${property} is not allowed`);
+    }
+  }
+  if (!isValidId(extension.label)) {
+    errors.push(`INVALID_EXTENSION_SCHEMA ${path}.label must be a non-empty string`);
+  }
+  if (extension.phase !== 2) {
+    errors.push(`INVALID_EXTENSION_SCHEMA ${path}.phase must be 2`);
+  }
+  if (extension.status !== "REGISTERED_ONLY") {
+    errors.push(
+      `INVALID_EXTENSION_SCHEMA ${path}.status must be REGISTERED_ONLY`,
+    );
+  }
   for (const property of [
-    "pageIds",
-    "actionIds",
-    "pages",
-    "actions",
     "dependencies",
+    "entryCriteria",
+    "excludedFirstStageBehavior",
   ]) {
-    optionalArray(errors, extension, property, path);
+    if (!Array.isArray(extension[property])) {
+      errors.push(`INVALID_EXTENSION_SCHEMA ${path}.${property} must be an array`);
+      continue;
+    }
+    validateUniqueStrings(
+      errors,
+      extension[property],
+      `${path}.${property}`,
+      "INVALID_EXTENSION_SCHEMA",
+    );
   }
 }
 
@@ -367,10 +525,35 @@ function validateModelShape(model) {
       "optionSets",
       "Option Set",
       (optionSet, path) => {
-        const values = requireArray(errors, optionSet, "values", path);
-        validateObjectMembers(errors, values, `${path}.values`, "Option Set value");
+        validateOptionSet(errors, optionSet, path);
       },
     );
+    const firstByKey = new Map();
+    const firstByQueryId = new Map();
+    model.optionSets.forEach((optionSet, index) => {
+      if (!isRecord(optionSet)) return;
+      if (isValidId(optionSet.key)) {
+        if (firstByKey.has(optionSet.key)) {
+          errors.push(
+            `DUPLICATE_OPTION_SET_KEY optionSets[${index}].key -> ${optionSet.key}`,
+          );
+        } else {
+          firstByKey.set(optionSet.key, index);
+        }
+      }
+      const queryId = optionSet.mode === "RUNTIME_QUERY"
+        ? optionSet.source?.queryId
+        : undefined;
+      if (isValidId(queryId)) {
+        if (firstByQueryId.has(queryId)) {
+          errors.push(
+            `DUPLICATE_RUNTIME_QUERY optionSets[${index}].source.queryId -> ${queryId}`,
+          );
+        } else {
+          firstByQueryId.set(queryId, index);
+        }
+      }
+    });
   }
   if (Array.isArray(model.events)) {
     validateEntities(errors, model.events, "events", "event", (event, path) => {
@@ -396,6 +579,7 @@ function validateModelShape(model) {
           );
         }
       });
+      validateMetricSeries(errors, metric, path);
     });
   }
   if (Array.isArray(model.nfrs)) {

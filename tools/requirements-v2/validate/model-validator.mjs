@@ -1,4 +1,5 @@
 import { formatValidationValue } from "./structure-validator.mjs";
+import { MODEL_COLLECTIONS } from "../model.mjs";
 
 const SYSTEM_ACTOR_CATEGORIES = new Set([
   "SYSTEM",
@@ -188,49 +189,14 @@ export function buildModelIndex(model) {
 
 function duplicateIdErrors(index) {
   const entries = [];
-  addEntities(
-    entries,
-    index.baselineDecisions.map(({ value }) => value),
-    "baseline decision",
-    "baselineDecisions",
-  );
-  addEntities(entries, index.roles.map(({ value }) => value), "role", "roles");
-  addEntities(entries, index.duties.map(({ value }) => value), "duty", "duties");
-  addEntities(
-    entries,
-    index.lifecyclePolicies.map(({ value }) => value),
-    "lifecycle policy",
-    "lifecyclePolicies",
-  );
-  addEntities(
-    entries,
-    index.sensitivities.map(({ value }) => value),
-    "sensitivity",
-    "sensitivities",
-  );
-  addEntities(
-    entries,
-    index.optionSets.map(({ value }) => value),
-    "Option Set",
-    "optionSets",
-  );
-  addEntities(entries, index.events.map(({ value }) => value), "event", "events");
-  addEntities(entries, index.metrics.map(({ value }) => value), "metric", "metrics");
-  addEntities(entries, index.nfrs.map(({ value }) => value), "NFR", "nfrs");
-  addEntities(entries, index.modules.map(({ value }) => value), "module", "modules");
+  for (const { key, label } of MODEL_COLLECTIONS) {
+    addEntities(entries, index[key].map(({ value }) => value), label, key);
+  }
   addEntities(entries, index.objects.map(({ value }) => value), "object", "objects");
   addEntities(entries, index.fields.map(({ value }) => value), "field", "fields");
   addEntities(entries, index.actions.map(({ value }) => value), "action", "actions");
   addEntities(entries, index.pages.map(({ value }) => value), "page", "pages");
   addEntities(entries, index.scenarios.map(({ value }) => value), "scenario", "scenarios");
-  addEntities(entries, index.flows.map(({ value }) => value), "Flow", "flows");
-  addEntities(entries, index.aiTasks.map(({ value }) => value), "AI task", "aiTasks");
-  addEntities(
-    entries,
-    index.extensions.map(({ value }) => value),
-    "extension",
-    "extensions",
-  );
 
   const firstById = new Map();
   const errors = [];
@@ -306,6 +272,26 @@ export function validateModelReferences(model) {
     if (!index.roleIds.has(dutyEntry.value?.roleId)) {
       errors.push(
         `MISSING_DUTY_ROLE ${formatValidationValue(dutyEntry.value?.id)} -> ${formatValidationValue(dutyEntry.value?.roleId)}`,
+      );
+    }
+  }
+
+  for (const policyEntry of index.lifecyclePolicies) {
+    checkActorReference(
+      errors,
+      index,
+      policyEntry.value?.retentionOwner,
+      `${policyEntry.path}.retentionOwner`,
+    );
+  }
+
+  for (const nfrEntry of index.nfrs) {
+    if (Object.hasOwn(nfrEntry.value ?? {}, "ownerRef")) {
+      checkActorReference(
+        errors,
+        index,
+        nfrEntry.value?.ownerRef,
+        `${nfrEntry.path}.ownerRef`,
       );
     }
   }
