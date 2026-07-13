@@ -180,12 +180,12 @@ export const events = [
   {
     id: "EVT-TEACHER-OPERATION-STARTED",
     label: "教师有效操作开始",
-    definition: "教师进入已定义试点任务并完成首个有效交互时记录，携带任务类型和基线场景。",
+    definition: "教师在一次作业反馈闭环中开始首个有效操作时记录，携带作业版本和基线场景。",
   },
   {
     id: "EVT-TEACHER-OPERATION-COMPLETED",
     label: "教师有效操作完成",
-    definition: "同一任务达到业务成功结果并获得服务器回执时记录。",
+    definition: "同一次作业反馈闭环完成反馈发布并获得服务器回执时记录。",
   },
   {
     id: "EVT-STUDENT-FEEDBACK-VIEWED",
@@ -208,14 +208,34 @@ export const events = [
     definition: "跨学校、跨班级或跨学生的未授权数据访问或写入被执行或被检测到时记录。",
   },
   {
-    id: "EVT-AI-MANUAL-FALLBACK-STARTED",
-    label: "AI 不可用人工路径开始",
-    definition: "必测场景中 AI 不可用后，用户进入可完成同一业务目标的人工路径时记录。",
+    id: "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-STARTED",
+    label: "AI不可用时提交人工路径开始",
+    definition: "AI 不可用后，学生进入可完成提交的人工路径时记录。",
   },
   {
-    id: "EVT-AI-MANUAL-FALLBACK-COMPLETED",
-    label: "AI 不可用人工路径完成",
-    definition: "人工路径达到同一业务成功结果并获得服务器回执时记录。",
+    id: "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-COMPLETED",
+    label: "AI不可用时提交人工路径完成",
+    definition: "学生通过人工路径完成提交并获得服务器回执时记录。",
+  },
+  {
+    id: "EVT-AI-UNAVAILABLE-GRADING-MANUAL-STARTED",
+    label: "AI不可用时评分人工路径开始",
+    definition: "AI 不可用后，教师进入可完成评分的人工路径时记录。",
+  },
+  {
+    id: "EVT-AI-UNAVAILABLE-GRADING-MANUAL-COMPLETED",
+    label: "AI不可用时评分人工路径完成",
+    definition: "教师通过人工路径完成评分确认并获得服务器回执时记录。",
+  },
+  {
+    id: "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-STARTED",
+    label: "AI不可用时发布人工路径开始",
+    definition: "AI 不可用后，教师进入可完成成绩和反馈发布的人工路径时记录。",
+  },
+  {
+    id: "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-COMPLETED",
+    label: "AI不可用时发布人工路径完成",
+    definition: "教师通过人工路径完成成绩和反馈发布并获得服务器回执时记录。",
   },
 ];
 
@@ -227,11 +247,12 @@ export const metrics = [
       "EVT-TEACHER-OPERATION-STARTED",
       "EVT-TEACHER-OPERATION-COMPLETED",
     ],
-    scope: "试点学校教师完成指定高频任务的有效操作时长",
+    scope: "试点学校一次作业反馈闭环的教师有效操作时长",
     aggregation: "duration",
-    target: "相对试点基线至少降低30%",
-    exclusions: "排除用户主动离开页面、网络中断等待和媒体传输时间",
-    window: "按试点周统计并与同场景基线比较",
+    statistic: "median",
+    target: "相对试点基线降低>=30%",
+    exclusions: "排除媒体传输、用户主动离开页面和外部网络中断等待",
+    window: "以一次作业反馈闭环为统计单元，比较试点基线期与试点运行期的周中位数",
   },
   {
     id: "MET-002",
@@ -270,14 +291,18 @@ export const metrics = [
     id: "MET-005",
     ownerRef: "ROLE-PLATFORM-OPS",
     eventIds: [
-      "EVT-AI-MANUAL-FALLBACK-STARTED",
-      "EVT-AI-MANUAL-FALLBACK-COMPLETED",
+      "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-STARTED",
+      "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-COMPLETED",
+      "EVT-AI-UNAVAILABLE-GRADING-MANUAL-STARTED",
+      "EVT-AI-UNAVAILABLE-GRADING-MANUAL-COMPLETED",
+      "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-STARTED",
+      "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-COMPLETED",
     ],
-    scope: "AI 不可用时要求人工可完成的全部试点必测场景",
+    scope: "AI不可用时提交、评分和发布三类人工路径的完成率",
     aggregation: "conversion",
     target: "100%",
-    exclusions: "排除业务本身因权限、截止规则或无效输入而不可执行的场景",
-    window: "每次发布前全量演练，并在试点期间按周复核",
+    exclusions: "排除因权限、截止规则或无效输入导致业务本身不可执行的尝试",
+    window: "每次发布前覆盖三类路径全量演练，并在试点期间按周复核",
   },
 ];
 
@@ -324,7 +349,8 @@ export const nfrs = [
   },
   {
     id: "NFR-009",
-    statement: "精确保留期限是学校激活时的必填配置；未设置时阻断敏感导出和 AI 使用。",
+    ownerRef: "ROLE-SCHOOL-ADMIN",
+    statement: "精确保留期限是学校激活时由学校管理员负责的必填配置；未设置时阻断敏感导出和 AI 使用。",
     verification: "在保留期限缺失和已配置两种激活状态下验证门禁，确认不存在隐式默认期限。",
   },
 ];
@@ -383,10 +409,10 @@ export const optionSets = [
     ["NO", "否"],
   ]),
   optionSet("OPT-ENUM-002", "assignmentType", "作业类型", [
-    ["ONLINE-PRACTICE", "在线练习"],
-    ["PHOTO-ASSIGNMENT", "拍照作业"],
-    ["MIXED-ASSIGNMENT", "混合作业"],
-    ["LEARNING-TASK", "学习任务"],
+    ["ONLINE", "在线"],
+    ["PHOTO", "拍照"],
+    ["MIXED", "混合"],
+    ["LEARNING_TASK", "学习任务"],
   ]),
   optionSet("OPT-ENUM-031", "submissionMethod", "提交方式", [
     ["ONLINE-FORM", "在线作答"],
@@ -532,6 +558,13 @@ export const optionSets = [
     ["DRAFT", "草稿"],
     ["CONTROLLED-EXECUTION", "受控执行"],
     ["SCHEDULED-TASK", "定期任务"],
+  ]),
+  optionSet("OPT-ENUM-041", "aiCapabilityDecision", "AI能力决策", [
+    ["AUTO_SUPPORTED", "支持自动处理"],
+    ["SUGGESTION_ONLY", "仅提供建议"],
+    ["MANDATORY_REVIEW", "必须人工复核"],
+    ["MANUAL_ONLY", "仅人工处理"],
+    ["UNAVAILABLE", "不可用"],
   ]),
   optionSet("OPT-ENUM-038", "aiRisk", "AI风险等级", [
     ["READ-ONLY", "只读"],

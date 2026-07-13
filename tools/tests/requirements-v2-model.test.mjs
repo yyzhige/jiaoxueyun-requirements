@@ -388,13 +388,40 @@ test("defines measurable metric event contracts and all approved NFRs", () => {
         typeof metric[property] === "string" && metric[property].length > 0
       ))
   )), true);
-  assert.equal(metrics.find(({ id }) => id === "MET-001").aggregation, "duration");
+  const teacherDuration = metrics.find(({ id }) => id === "MET-001");
+  assert.deepEqual({
+    scope: teacherDuration.scope,
+    aggregation: teacherDuration.aggregation,
+    statistic: teacherDuration.statistic,
+    target: teacherDuration.target,
+    exclusions: teacherDuration.exclusions,
+    window: teacherDuration.window,
+  }, {
+    scope: "试点学校一次作业反馈闭环的教师有效操作时长",
+    aggregation: "duration",
+    statistic: "median",
+    target: "相对试点基线降低>=30%",
+    exclusions: "排除媒体传输、用户主动离开页面和外部网络中断等待",
+    window: "以一次作业反馈闭环为统计单元，比较试点基线期与试点运行期的周中位数",
+  });
   assert.equal(metrics.find(({ id }) => id === "MET-002").aggregation, "conversion");
   assert.equal(metrics.find(({ id }) => id === "MET-003").aggregation, "count");
   assert.equal(metrics.find(({ id }) => id === "MET-004").aggregation, "count");
-  assert.ok(["conversion", "boolean"].includes(
-    metrics.find(({ id }) => id === "MET-005").aggregation,
-  ));
+  const manualFallback = metrics.find(({ id }) => id === "MET-005");
+  assert.equal(manualFallback.aggregation, "conversion");
+  assert.equal(
+    manualFallback.scope,
+    "AI不可用时提交、评分和发布三类人工路径的完成率",
+  );
+  assert.equal(manualFallback.target, "100%");
+  assert.deepEqual(manualFallback.eventIds, [
+    "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-STARTED",
+    "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-COMPLETED",
+    "EVT-AI-UNAVAILABLE-GRADING-MANUAL-STARTED",
+    "EVT-AI-UNAVAILABLE-GRADING-MANUAL-COMPLETED",
+    "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-STARTED",
+    "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-COMPLETED",
+  ]);
 
   assert.deepEqual(
     nfrs.map(({ id }) => id),
@@ -408,6 +435,12 @@ test("defines measurable metric event contracts and all approved NFRs", () => {
     && typeof verification === "string"
     && verification.length > 0
   )), true);
+  const retentionConfiguration = nfrs.find(({ id }) => id === "NFR-009");
+  assert.equal(retentionConfiguration.ownerRef, "ROLE-SCHOOL-ADMIN");
+  assert.equal(
+    retentionConfiguration.statement,
+    "精确保留期限是学校激活时由学校管理员负责的必填配置；未设置时阻断敏感导出和 AI 使用。",
+  );
 });
 
 test("registers every required Option Set concept with stable code-label values", () => {
@@ -450,6 +483,7 @@ test("registers every required Option Set concept with stable code-label values"
     "reportRecipientScope",
     "reportMetric",
     "aiCapability",
+    "aiCapabilityDecision",
     "aiRisk",
     "aiTaskStatus",
     "notificationType",
@@ -481,6 +515,22 @@ test("registers every required Option Set concept with stable code-label values"
   assert.notEqual(
     optionSets.find(({ key }) => key === "assignmentType").id,
     optionSets.find(({ key }) => key === "submissionMethod").id,
+  );
+  assert.deepEqual(
+    optionSets.find(({ key }) => key === "assignmentType").values
+      .map(({ code }) => code),
+    ["ONLINE", "PHOTO", "MIXED", "LEARNING_TASK"],
+  );
+  assert.deepEqual(
+    optionSets.find(({ key }) => key === "aiCapabilityDecision").values
+      .map(({ code }) => code),
+    [
+      "AUTO_SUPPORTED",
+      "SUGGESTION_ONLY",
+      "MANDATORY_REVIEW",
+      "MANUAL_ONLY",
+      "UNAVAILABLE",
+    ],
   );
 });
 
