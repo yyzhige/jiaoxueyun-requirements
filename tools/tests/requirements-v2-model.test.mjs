@@ -128,6 +128,47 @@ test("accepts the complete semantic fixture", () => {
   assert.deepEqual(validateRequirementModel(validFixture()), []);
 });
 
+test("rejects null and non-object requirement models", () => {
+  for (const model of [null, 42, "requirement model"]) {
+    assert.deepEqual(validateRequirementModel(model), [
+      "INVALID_MODEL requirement model must be an object",
+    ]);
+  }
+});
+
+test("rejects missing required top-level collections", () => {
+  const collectionNames = [
+    "roles",
+    "duties",
+    "optionSets",
+    "metrics",
+    "modules",
+    "flows",
+    "aiTasks",
+    "extensions",
+  ];
+
+  assert.deepEqual(
+    validateRequirementModel({}),
+    collectionNames
+      .map((name) => `MISSING_MODEL_COLLECTION ${name} must be an array`)
+      .sort(),
+  );
+});
+
+test("accepts explicitly present empty top-level collections", () => {
+  assert.deepEqual(validateRequirementModel({
+    roles: [],
+    duties: [],
+    optionSets: [],
+    metrics: [],
+    modules: [],
+    flows: [],
+    aiTasks: [],
+    extensions: [],
+  }), []);
+});
+
 test("exports stable model constants", () => {
   assert.deepEqual(PHASE, { FIRST: 1, SECOND: 2 });
   assert.deepEqual(RISK, { READ: "READ", LOW: "LOW", HIGH: "HIGH" });
@@ -346,6 +387,55 @@ for (const missingEffect of ["ALLOW", "DENY"]) {
   });
 }
 
+test("returns validation errors for a null permission entry", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").actions[0].permissions = [
+    null,
+    { effect: "DENY", roleRef: "ROLE-TEACHER" },
+  ];
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "MISSING_ACTION_PERMISSION");
+});
+
+test("rejects an actor-less ALLOW permission", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").actions[0].permissions = [
+    { effect: "ALLOW" },
+    { effect: "DENY", roleRef: "ROLE-TEACHER" },
+  ];
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "MISSING_ACTOR_REFERENCE");
+});
+
+test("rejects an actor-less read-only AI task", () => {
+  const model = validFixture();
+  model.aiTasks.push({
+    id: "AI-TASK-01",
+    actionId: "SUB-ACT-01",
+    risk: RISK.READ,
+    writes: false,
+    previewFieldIds: [],
+  });
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "MISSING_ACTOR_REFERENCE");
+});
+
+test("returns stable errors for a null AI task entry", () => {
+  const model = validFixture();
+  model.aiTasks.push(null);
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "MISSING_AI_ACTION");
+  assertHasCode(errors, "MISSING_ACTOR_REFERENCE");
+});
+
 test("rejects an action without success and negative scenario coverage", () => {
   const model = validFixture();
   const submissionModule = moduleById(model, "SUB-001");
@@ -442,6 +532,15 @@ test("rejects every incomplete metric contract field", () => {
     model.metrics[0][property] = property === "eventIds" ? [] : "";
 
     assertHasCode(validateRequirementModel(model), "MISSING_METRIC_EVENT");
+  }
+});
+
+test("accepts falsy but explicitly present metric targets", () => {
+  for (const target of [0, false]) {
+    const model = validFixture();
+    model.metrics[0].target = target;
+
+    assert.deepEqual(validateRequirementModel(model), []);
   }
 });
 

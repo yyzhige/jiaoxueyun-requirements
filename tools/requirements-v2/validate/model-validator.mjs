@@ -4,6 +4,17 @@ export const SYSTEM_ACTOR_CATEGORIES = new Set([
   "CURRENT_ACTOR",
 ]);
 
+const REQUIRED_MODEL_COLLECTIONS = [
+  "roles",
+  "duties",
+  "optionSets",
+  "metrics",
+  "modules",
+  "flows",
+  "aiTasks",
+  "extensions",
+];
+
 function list(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -26,6 +37,16 @@ function mapById(entries) {
     }
   }
   return result;
+}
+
+function modelStructureErrors(model) {
+  if (model === null || typeof model !== "object" || Array.isArray(model)) {
+    return ["INVALID_MODEL requirement model must be an object"];
+  }
+
+  return REQUIRED_MODEL_COLLECTIONS
+    .filter((property) => !Array.isArray(model[property]))
+    .map((property) => `MISSING_MODEL_COLLECTION ${property} must be an array`);
 }
 
 export function buildModelIndex(model) {
@@ -215,9 +236,24 @@ function actorReferences(value) {
   return references;
 }
 
+function checkActorReferences(errors, index, value, path) {
+  const references = actorReferences(value);
+  if (references.length === 0) {
+    errors.push(`MISSING_ACTOR_REFERENCE ${path} -> no actor reference`);
+    return;
+  }
+
+  for (const { reference, property } of references) {
+    checkActorReference(errors, index, reference, `${path}.${property}`);
+  }
+}
+
 export function validateModelReferences(model) {
+  const structureErrors = modelStructureErrors(model);
+  if (structureErrors[0]?.startsWith("INVALID_MODEL ")) return structureErrors;
+
   const index = buildModelIndex(model);
-  const errors = duplicateIdErrors(index);
+  const errors = [...structureErrors, ...duplicateIdErrors(index)];
 
   for (const fieldEntry of index.fields) {
     const valueSource = fieldEntry.value?.valueSource;
@@ -257,14 +293,12 @@ export function validateModelReferences(model) {
       });
     }
     list(action?.permissions).forEach((permission, permissionIndex) => {
-      for (const { reference, property } of actorReferences(permission)) {
-        checkActorReference(
-          errors,
-          index,
-          reference,
-          `${actionEntry.path}.permissions[${permissionIndex}].${property}`,
-        );
-      }
+      checkActorReferences(
+        errors,
+        index,
+        permission,
+        `${actionEntry.path}.permissions[${permissionIndex}]`,
+      );
     });
   }
 
@@ -330,9 +364,7 @@ export function validateModelReferences(model) {
         errors.push(`MISSING_AI_PREVIEW_FIELD ${task?.id} -> ${String(fieldId)}`);
       }
     }
-    for (const { reference, property } of actorReferences(task)) {
-      checkActorReference(errors, index, reference, `${taskEntry.path}.${property}`);
-    }
+    checkActorReferences(errors, index, task, taskEntry.path);
   }
 
   return errors;

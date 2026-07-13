@@ -19,6 +19,12 @@ function list(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function isPresent(value) {
+  return value !== undefined
+    && value !== null
+    && !(typeof value === "string" && value.trim() === "");
+}
+
 function setEquals(left, right) {
   if (left.size !== right.size) return false;
   return [...left].every((value) => right.has(value));
@@ -75,7 +81,7 @@ function actionErrors(index) {
   for (const actionEntry of index.actions) {
     const action = actionEntry.value;
     const permissionEffects = new Set(
-      list(action?.permissions).map(({ effect }) => effect),
+      list(action?.permissions).map((permission) => permission?.effect),
     );
     if (!permissionEffects.has("ALLOW") || !permissionEffects.has("DENY")) {
       errors.push(`MISSING_ACTION_PERMISSION ${action?.id} requires ALLOW and DENY`);
@@ -190,7 +196,7 @@ function metricErrors(index) {
       && Boolean(metric?.scope)
       && Boolean(metric?.aggregation)
       && Boolean(metric?.ownerRef)
-      && Boolean(metric?.target);
+      && isPresent(metric?.target);
     if (!complete) {
       errors.push(
         `MISSING_METRIC_EVENT ${metric?.id} requires events, scope, aggregation, Owner, and target`,
