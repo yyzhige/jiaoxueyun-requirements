@@ -5,6 +5,7 @@ import {
   assertValidRequirementModel,
   validateRequirementModel,
 } from "../requirements-v2/validate/index.mjs";
+import * as modelValidatorExports from "../requirements-v2/validate/model-validator.mjs";
 import {
   CLIENT,
   PHASE,
@@ -124,6 +125,63 @@ function assertHasCode(errors, code) {
   );
 }
 
+const ENTITY_CASES = [
+  {
+    label: "role",
+    set(model, value) { model.roles[0] = value; },
+  },
+  {
+    label: "duty",
+    set(model, value) { model.duties = [value]; },
+  },
+  {
+    label: "Option Set",
+    set(model, value) { model.optionSets[0] = value; },
+  },
+  {
+    label: "metric",
+    set(model, value) { model.metrics[0] = value; },
+  },
+  {
+    label: "module",
+    set(model, value) { model.modules[0] = value; },
+  },
+  {
+    label: "object",
+    set(model, value) { moduleById(model, "SUB-001").objects[0] = value; },
+  },
+  {
+    label: "field",
+    set(model, value) {
+      moduleById(model, "SUB-001").objects[0].fields[0] = value;
+    },
+  },
+  {
+    label: "action",
+    set(model, value) { moduleById(model, "SUB-001").actions[0] = value; },
+  },
+  {
+    label: "page",
+    set(model, value) { moduleById(model, "SUB-001").pages = [value]; },
+  },
+  {
+    label: "scenario",
+    set(model, value) { moduleById(model, "SUB-001").scenarios[0] = value; },
+  },
+  {
+    label: "Flow",
+    set(model, value) { model.flows[0] = value; },
+  },
+  {
+    label: "AI task",
+    set(model, value) { model.aiTasks = [value]; },
+  },
+  {
+    label: "extension",
+    set(model, value) { model.extensions = [value]; },
+  },
+];
+
 test("accepts the complete semantic fixture", () => {
   assert.deepEqual(validateRequirementModel(validFixture()), []);
 });
@@ -167,6 +225,136 @@ test("accepts explicitly present empty top-level collections", () => {
     aiTasks: [],
     extensions: [],
   }), []);
+});
+
+for (const entityCase of ENTITY_CASES) {
+  test(`rejects null and primitive ${entityCase.label} entries`, () => {
+    for (const value of [null, 42]) {
+      const model = validFixture();
+      entityCase.set(model, value);
+
+      assertHasCode(validateRequirementModel(model), "INVALID_ENTITY_SHAPE");
+    }
+  });
+
+  test(`rejects missing and non-string ${entityCase.label} IDs`, () => {
+    for (const value of [{}, { id: 42 }]) {
+      const model = validFixture();
+      entityCase.set(model, value);
+
+      assertHasCode(validateRequirementModel(model), "INVALID_ENTITY_SHAPE");
+    }
+  });
+}
+
+const INVALID_COLLECTION_SHAPE_CASES = [
+  ["roles", "MISSING_MODEL_COLLECTION", (model) => { model.roles = {}; }],
+  ["duties", "MISSING_MODEL_COLLECTION", (model) => { model.duties = {}; }],
+  ["Option Set values", "INVALID_ENTITY_SHAPE", (model) => {
+    model.optionSets[0].values = {};
+  }],
+  ["metric event IDs", "INVALID_ENTITY_SHAPE", (model) => {
+    model.metrics[0].eventIds = {};
+  }],
+  ["module objects", "INVALID_ENTITY_SHAPE", (model) => {
+    moduleById(model, "SUB-001").objects = {};
+  }],
+  ["object fields", "INVALID_ENTITY_SHAPE", (model) => {
+    moduleById(model, "SUB-001").objects[0].fields = {};
+  }],
+  ["field value source", "INVALID_ENTITY_SHAPE", (model) => {
+    moduleById(model, "SUB-001").objects[0].fields[0].valueSource = [];
+  }],
+  ["action permissions", "INVALID_ENTITY_SHAPE", (model) => {
+    moduleById(model, "SUB-001").actions[0].permissions = {};
+  }],
+  ["page field IDs", "INVALID_ENTITY_SHAPE", (model) => {
+    moduleById(model, "SUB-001").pages = [{
+      id: "SUB-W01",
+      objectId: "DAT-SUB-01",
+      fieldIds: {},
+      actionIds: [],
+    }];
+  }],
+  ["scenario collection", "INVALID_ENTITY_SHAPE", (model) => {
+    moduleById(model, "SUB-001").scenarios = {};
+  }],
+  ["Flow steps", "INVALID_ENTITY_SHAPE", (model) => {
+    model.flows[0].steps = {};
+  }],
+  ["AI preview fields", "INVALID_ENTITY_SHAPE", (model) => {
+    model.aiTasks = [{
+      id: "AI-TASK-01",
+      actionId: "SUB-ACT-01",
+      writes: false,
+      previewFieldIds: {},
+      roleRefs: ["ROLE-STUDENT"],
+    }];
+  }],
+  ["extension page IDs", "INVALID_ENTITY_SHAPE", (model) => {
+    model.extensions = [{ id: "EXT-01", pageIds: {} }];
+  }],
+];
+
+for (const [label, expectedCode, mutate] of INVALID_COLLECTION_SHAPE_CASES) {
+  test(`rejects an invalid ${label} collection shape`, () => {
+    const model = validFixture();
+    mutate(model);
+
+    assertHasCode(validateRequirementModel(model), expectedCode);
+  });
+}
+
+test("does not invoke authored getters during validation", () => {
+  const model = validFixture();
+  Object.defineProperty(model.modules[0], "id", {
+    enumerable: true,
+    get() { throw new Error("getter must not run"); },
+  });
+
+  let errors;
+  assert.doesNotThrow(() => { errors = validateRequirementModel(model); });
+  assertHasCode(errors, "MALFORMED_MODEL");
+});
+
+test("does not coerce authored values while reporting validation errors", () => {
+  const model = validFixture();
+  model.metrics[0].ownerRef = {
+    [Symbol.toPrimitive]() { throw new Error("coercion must not run"); },
+  };
+
+  let errors;
+  assert.doesNotThrow(() => { errors = validateRequirementModel(model); });
+  assertHasCode(errors, "MALFORMED_MODEL");
+});
+
+test("does not coerce null-prototype authored reference values", () => {
+  const model = validFixture();
+  const reference = Object.create(null);
+  model.metrics[0].ownerRef = reference;
+  model.flows[0].moduleIds = [reference];
+  moduleById(model, "SUB-001").actions[0].transition.to = reference;
+
+  let errors;
+  assert.doesNotThrow(() => { errors = validateRequirementModel(model); });
+  assert.ok(errors.length > 0);
+  assert.equal(errors.every((error) => typeof error === "string"), true);
+});
+
+test("rejects functions, symbol keys, custom prototypes, and cycles", () => {
+  const mutations = [
+    (model) => { model.metrics[0].target = () => "target"; },
+    (model) => { model.metrics[0][Symbol("private")] = true; },
+    (model) => { Object.setPrototypeOf(model.metrics[0], { custom: true }); },
+    (model) => { model.metrics[0].cycle = model; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    mutate(model);
+
+    assertHasCode(validateRequirementModel(model), "MALFORMED_MODEL");
+  }
 });
 
 test("exports stable model constants", () => {
@@ -217,6 +405,19 @@ test("rejects duplicate IDs across entity categories", () => {
   assertHasCode(errors, "DUPLICATE_ID");
 });
 
+test("does not include invalid IDs in duplicate lookup indexes", () => {
+  const model = validFixture();
+  model.roles = [{ id: "" }, { id: "" }];
+
+  const errors = validateRequirementModel(model);
+
+  assert.equal(errorCodes(errors).includes("DUPLICATE_ID"), false);
+  assert.equal(
+    errorCodes(errors).filter((code) => code === "INVALID_ENTITY_SHAPE").length,
+    2,
+  );
+});
+
 test("rejects a choice field without an Option Set", () => {
   const model = validFixture();
   model.optionSets = [];
@@ -244,6 +445,27 @@ test("rejects an action referencing a missing target object", () => {
   assertHasCode(errors, "MISSING_ACTION_OBJECT");
 });
 
+test("rejects an action targeting an object owned by another module", () => {
+  const model = validFixture();
+  const action = moduleById(model, "SUB-001").actions[0];
+  action.targetObjectId = "DAT-HW-01";
+  action.inputFieldIds = [];
+  action.transition = { from: "DRAFT", to: "DRAFT" };
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "INVALID_MODULE_OWNERSHIP");
+});
+
+test("rejects an action field not owned by its target object", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").actions[0].inputFieldIds = ["HW-F001"];
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "INVALID_OBJECT_OWNERSHIP");
+});
+
 test("rejects missing page object, field, and action references", () => {
   const model = validFixture();
   moduleById(model, "SUB-001").pages.push({
@@ -260,6 +482,23 @@ test("rejects missing page object, field, and action references", () => {
   assertHasCode(errors, "MISSING_PAGE_ACTION");
 });
 
+test("rejects page references owned by another module", () => {
+  const model = validFixture();
+  moduleById(model, "HW-001").pages.push({
+    id: "HW-W01",
+    objectId: "DAT-SUB-01",
+    fieldIds: ["SUB-F001"],
+    actionIds: ["SUB-ACT-01"],
+  });
+
+  const errors = validateRequirementModel(model);
+
+  assert.equal(
+    errorCodes(errors).filter((code) => code === "INVALID_MODULE_OWNERSHIP").length,
+    3,
+  );
+});
+
 test("rejects a scenario referencing a missing action", () => {
   const model = validFixture();
   moduleById(model, "SUB-001").scenarios[0].actionId = "SUB-ACT-999";
@@ -267,6 +506,19 @@ test("rejects a scenario referencing a missing action", () => {
   const errors = validateRequirementModel(model);
 
   assertHasCode(errors, "MISSING_SCENARIO_ACTION");
+});
+
+test("rejects a scenario action owned by another module", () => {
+  const model = validFixture();
+  moduleById(model, "HW-001").scenarios.push({
+    id: "HW-SCN-01",
+    kind: "BOUNDARY",
+    actionId: "SUB-ACT-01",
+  });
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "INVALID_MODULE_OWNERSHIP");
 });
 
 test("rejects missing Flow module and action references", () => {
@@ -345,6 +597,10 @@ test("accepts explicit system actor categories in actor references", () => {
 
   assert.equal(errorCodes(errors).includes("MISSING_ACTOR_REFERENCE"), false);
   assert.equal(errorCodes(errors).includes("ORPHAN_OWNER_ROLE"), false);
+});
+
+test("does not export a mutable system actor category Set", () => {
+  assert.equal(Object.hasOwn(modelValidatorExports, "SYSTEM_ACTOR_CATEGORIES"), false);
 });
 
 test("rejects an invalid state transition", () => {
@@ -500,6 +756,33 @@ test("rejects executable phase-two actions independently of pages", () => {
   assertHasCode(errors, "PHASE_BOUNDARY_EXECUTABLE_PAGE");
 });
 
+test("accepts metadata-only phase-two extension registrations", () => {
+  const model = validFixture();
+  model.extensions.push({
+    id: "EXT-REPORT",
+    metadata: { label: "guardian report" },
+    dependencies: ["DAT-REPORT-01"],
+  });
+
+  assert.deepEqual(validateRequirementModel(model), []);
+});
+
+for (const [property, value] of [
+  ["pageIds", ["EXT-W01"]],
+  ["actionIds", ["EXT-ACT-01"]],
+  ["pages", [{ id: "EXT-W01" }]],
+  ["actions", [{ id: "EXT-ACT-01" }]],
+]) {
+  test(`rejects executable extension ${property}`, () => {
+    const model = validFixture();
+    model.extensions.push({ id: "EXT-REPORT", [property]: value });
+
+    const errors = validateRequirementModel(model);
+
+    assertHasCode(errors, "PHASE_BOUNDARY_EXECUTABLE_PAGE");
+  });
+}
+
 test("rejects an AI write task without confirmation", () => {
   const model = validFixture();
   model.aiTasks = [{
@@ -513,6 +796,43 @@ test("rejects an AI write task without confirmation", () => {
   const errors = validateRequirementModel(model);
 
   assertHasCode(errors, "AI_WRITE_WITHOUT_CONFIRMATION");
+});
+
+test("rejects role-only confirmation for an AI write task", () => {
+  const model = validFixture();
+  model.aiTasks.push({
+    id: "AI-TASK-01",
+    actionId: "SUB-ACT-01",
+    risk: RISK.HIGH,
+    writes: true,
+    previewFieldIds: ["SUB-F001"],
+    roleRefs: ["ROLE-STUDENT"],
+    confirmerRef: "ROLE-TEACHER",
+  });
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "AI_WRITE_WITHOUT_CONFIRMATION");
+});
+
+test("accepts authorized duty confirmation for an AI write task", () => {
+  const model = validFixture();
+  model.duties.push({
+    id: "DUTY-SUBJECT-TEACHER",
+    roleId: "ROLE-TEACHER",
+    label: "subject teacher",
+  });
+  model.aiTasks.push({
+    id: "AI-TASK-01",
+    actionId: "SUB-ACT-01",
+    risk: RISK.HIGH,
+    writes: true,
+    previewFieldIds: ["SUB-F001"],
+    roleRefs: ["ROLE-STUDENT"],
+    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+  });
+
+  assert.deepEqual(validateRequirementModel(model), []);
 });
 
 test("rejects a baseline metric without an event mapping", () => {
@@ -605,13 +925,18 @@ test("returns deterministic errors and does not stop at the first failure", () =
   const action = moduleById(model, "SUB-001").actions[0];
   action.inputFieldIds = ["SUB-F999"];
   action.permissions = [];
+  model.metrics[0].eventIds = [];
 
   const firstErrors = validateRequirementModel(model);
   const secondErrors = validateRequirementModel(model);
 
-  assert.deepEqual(firstErrors, secondErrors);
-  assertHasCode(firstErrors, "MISSING_ACTION_FIELD");
-  assertHasCode(firstErrors, "MISSING_ACTION_PERMISSION");
+  const expectedErrors = [
+    "MISSING_ACTION_FIELD SUB-ACT-01 -> SUB-F999",
+    "MISSING_ACTION_PERMISSION SUB-ACT-01 requires ALLOW and DENY",
+    "MISSING_METRIC_EVENT MET-TEST requires events, scope, aggregation, Owner, and target",
+  ];
+  assert.deepEqual(firstErrors, expectedErrors);
+  assert.deepEqual(secondErrors, expectedErrors);
 });
 
 test("assertValidRequirementModel throws one aggregated validation error", () => {

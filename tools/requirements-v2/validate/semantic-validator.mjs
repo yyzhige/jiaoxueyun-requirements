@@ -1,4 +1,5 @@
 import { buildModelIndex } from "./model-validator.mjs";
+import { formatValidationValue } from "./structure-validator.mjs";
 
 const FORBIDDEN_ACTION_NAMES = new Set([
   "对象查询与范围筛选",
@@ -34,12 +35,6 @@ function actorIsValid(index, reference) {
   return index.actorIds.has(reference);
 }
 
-function confirmerReference(task) {
-  return task?.confirmerRef
-    ?? task?.confirmerRoleRef
-    ?? task?.confirmerDutyRef;
-}
-
 function entityNames(entity) {
   return [entity?.name, entity?.label, entity?.title]
     .filter((value) => typeof value === "string")
@@ -60,7 +55,7 @@ function ownerErrors(index) {
       const reference = objectEntry.value?.[property];
       if (!actorIsValid(index, reference)) {
         errors.push(
-          `ORPHAN_OWNER_ROLE ${objectEntry.value?.id}.${property} -> ${String(reference)}`,
+          `ORPHAN_OWNER_ROLE ${formatValidationValue(objectEntry.value?.id)}.${property} -> ${formatValidationValue(reference)}`,
         );
       }
     }
@@ -69,7 +64,7 @@ function ownerErrors(index) {
     const reference = metricEntry.value?.ownerRef;
     if (!actorIsValid(index, reference)) {
       errors.push(
-        `ORPHAN_OWNER_ROLE ${metricEntry.value?.id}.ownerRef -> ${String(reference)}`,
+        `ORPHAN_OWNER_ROLE ${formatValidationValue(metricEntry.value?.id)}.ownerRef -> ${formatValidationValue(reference)}`,
       );
     }
   }
@@ -84,7 +79,9 @@ function actionErrors(index) {
       list(action?.permissions).map((permission) => permission?.effect),
     );
     if (!permissionEffects.has("ALLOW") || !permissionEffects.has("DENY")) {
-      errors.push(`MISSING_ACTION_PERMISSION ${action?.id} requires ALLOW and DENY`);
+      errors.push(
+        `MISSING_ACTION_PERMISSION ${formatValidationValue(action?.id)} requires ALLOW and DENY`,
+      );
     }
 
     const targetObject = index.objectById.get(action?.targetObjectId)?.value;
@@ -93,7 +90,7 @@ function actionErrors(index) {
       const { from, to } = action.transition;
       if (!states.has(from) || !states.has(to)) {
         errors.push(
-          `INVALID_STATE_TRANSITION ${action?.id} ${String(from)} -> ${String(to)}`,
+          `INVALID_STATE_TRANSITION ${formatValidationValue(action?.id)} ${formatValidationValue(from)} -> ${formatValidationValue(to)}`,
         );
       }
     }
@@ -114,13 +111,15 @@ function actionErrors(index) {
       && (scenarioKinds.has("FAILURE") || scenarioKinds.has("BOUNDARY"));
     if (!setEquals(declaredScenarioIds, actualScenarioIds) || !hasCoverage) {
       errors.push(
-        `MISSING_ACTION_SCENARIO ${action?.id} requires matching SUCCESS and FAILURE/BOUNDARY scenarios`,
+        `MISSING_ACTION_SCENARIO ${formatValidationValue(action?.id)} requires matching SUCCESS and FAILURE/BOUNDARY scenarios`,
       );
     }
 
     for (const name of entityNames(action)) {
       if (FORBIDDEN_ACTION_NAMES.has(name)) {
-        errors.push(`FORBIDDEN_GENERIC_TEMPLATE action ${action?.id} -> ${name}`);
+        errors.push(
+          `FORBIDDEN_GENERIC_TEMPLATE action ${formatValidationValue(action?.id)} -> ${name}`,
+        );
       }
     }
   }
@@ -138,8 +137,16 @@ function flowErrors(index) {
       if (actionEntry) actionModuleIds.add(actionEntry.moduleId);
     }
     if (!setEquals(declaredModuleIds, actionModuleIds)) {
+      const declared = [...declaredModuleIds]
+        .map(formatValidationValue)
+        .sort()
+        .join(",");
+      const actual = [...actionModuleIds]
+        .map(formatValidationValue)
+        .sort()
+        .join(",");
       errors.push(
-        `FLOW_PARTICIPANT_MISMATCH ${flow?.id} declared=${[...declaredModuleIds].sort().join(",")} actual=${[...actionModuleIds].sort().join(",")}`,
+        `FLOW_PARTICIPANT_MISMATCH ${formatValidationValue(flow?.id)} declared=${declared} actual=${actual}`,
       );
     }
   }
@@ -151,12 +158,10 @@ function aiTaskErrors(index) {
   for (const taskEntry of index.aiTasks) {
     const task = taskEntry.value;
     if (!task?.writes) continue;
-    const confirmer = confirmerReference(task);
-    const registeredConfirmer = index.roleIds.has(confirmer)
-      || index.dutyIds.has(confirmer);
+    const registeredConfirmer = index.dutyIds.has(task?.confirmerDutyRef);
     if (list(task?.previewFieldIds).length === 0 || !registeredConfirmer) {
       errors.push(
-        `AI_WRITE_WITHOUT_CONFIRMATION ${task?.id} requires preview fields and a role/duty confirmer`,
+        `AI_WRITE_WITHOUT_CONFIRMATION ${formatValidationValue(task?.id)} requires preview fields and an authorized duty confirmer`,
       );
     }
   }
@@ -172,7 +177,17 @@ function phaseAndTemplateErrors(index) {
       && (list(module?.pages).length > 0 || list(module?.actions).length > 0)
     ) {
       errors.push(
-        `PHASE_BOUNDARY_EXECUTABLE_PAGE ${module?.id} exposes pages or actions in phase two`,
+        `PHASE_BOUNDARY_EXECUTABLE_PAGE ${formatValidationValue(module?.id)} exposes pages or actions in phase two`,
+      );
+    }
+  }
+  for (const extensionEntry of index.extensions) {
+    const extension = extensionEntry.value;
+    const executable = ["pageIds", "actionIds", "pages", "actions"]
+      .some((property) => list(extension?.[property]).length > 0);
+    if (executable) {
+      errors.push(
+        `PHASE_BOUNDARY_EXECUTABLE_PAGE ${formatValidationValue(extension?.id)} exposes extension pages or actions`,
       );
     }
   }
@@ -180,7 +195,7 @@ function phaseAndTemplateErrors(index) {
     for (const name of entityNames(pageEntry.value)) {
       if (FORBIDDEN_PAGE_NAMES.has(name)) {
         errors.push(
-          `FORBIDDEN_GENERIC_TEMPLATE page ${pageEntry.value?.id} -> ${name}`,
+          `FORBIDDEN_GENERIC_TEMPLATE page ${formatValidationValue(pageEntry.value?.id)} -> ${name}`,
         );
       }
     }
@@ -199,7 +214,7 @@ function metricErrors(index) {
       && isPresent(metric?.target);
     if (!complete) {
       errors.push(
-        `MISSING_METRIC_EVENT ${metric?.id} requires events, scope, aggregation, Owner, and target`,
+        `MISSING_METRIC_EVENT ${formatValidationValue(metric?.id)} requires events, scope, aggregation, Owner, and target`,
       );
     }
   }

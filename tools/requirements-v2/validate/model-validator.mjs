@@ -1,19 +1,10 @@
-export const SYSTEM_ACTOR_CATEGORIES = new Set([
+import { formatValidationValue } from "./structure-validator.mjs";
+
+const SYSTEM_ACTOR_CATEGORIES = new Set([
   "SYSTEM",
   "AI",
   "CURRENT_ACTOR",
 ]);
-
-const REQUIRED_MODEL_COLLECTIONS = [
-  "roles",
-  "duties",
-  "optionSets",
-  "metrics",
-  "modules",
-  "flows",
-  "aiTasks",
-  "extensions",
-];
 
 function list(value) {
   return Array.isArray(value) ? value : [];
@@ -29,24 +20,18 @@ function addEntities(entries, values, type, path) {
   });
 }
 
+function isValidId(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+
 function mapById(entries) {
   const result = new Map();
   for (const entry of entries) {
-    if (typeof entry.value?.id === "string" && !result.has(entry.value.id)) {
+    if (isValidId(entry.value?.id) && !result.has(entry.value.id)) {
       result.set(entry.value.id, entry);
     }
   }
   return result;
-}
-
-function modelStructureErrors(model) {
-  if (model === null || typeof model !== "object" || Array.isArray(model)) {
-    return ["INVALID_MODEL requirement model must be an object"];
-  }
-
-  return REQUIRED_MODEL_COLLECTIONS
-    .filter((property) => !Array.isArray(model[property]))
-    .map((property) => `MISSING_MODEL_COLLECTION ${property} must be an array`);
 }
 
 export function buildModelIndex(model) {
@@ -129,8 +114,12 @@ export function buildModelIndex(model) {
     });
   }
 
-  const roleIds = new Set(roles.map(({ value }) => value?.id));
-  const dutyIds = new Set(duties.map(({ value }) => value?.id));
+  const roleIds = new Set(
+    roles.map(({ value }) => value?.id).filter(isValidId),
+  );
+  const dutyIds = new Set(
+    duties.map(({ value }) => value?.id).filter(isValidId),
+  );
 
   return {
     actions,
@@ -187,7 +176,7 @@ function duplicateIdErrors(index) {
   const firstById = new Map();
   const errors = [];
   for (const entry of entries) {
-    if (typeof entry.id !== "string") continue;
+    if (!isValidId(entry.id)) continue;
     const first = firstById.get(entry.id);
     if (first) {
       errors.push(
@@ -202,7 +191,9 @@ function duplicateIdErrors(index) {
 
 function checkActorReference(errors, index, reference, path) {
   if (!index.actorIds.has(reference)) {
-    errors.push(`MISSING_ACTOR_REFERENCE ${path} -> ${String(reference)}`);
+    errors.push(
+      `MISSING_ACTOR_REFERENCE ${path} -> ${formatValidationValue(reference)}`,
+    );
   }
 }
 
@@ -249,11 +240,8 @@ function checkActorReferences(errors, index, value, path) {
 }
 
 export function validateModelReferences(model) {
-  const structureErrors = modelStructureErrors(model);
-  if (structureErrors[0]?.startsWith("INVALID_MODEL ")) return structureErrors;
-
   const index = buildModelIndex(model);
-  const errors = [...structureErrors, ...duplicateIdErrors(index)];
+  const errors = duplicateIdErrors(index);
 
   for (const fieldEntry of index.fields) {
     const valueSource = fieldEntry.value?.valueSource;
@@ -262,7 +250,7 @@ export function validateModelReferences(model) {
       && !index.optionSetById.has(valueSource.optionSetId)
     ) {
       errors.push(
-        `MISSING_OPTION_SET ${fieldEntry.value?.id} -> ${String(valueSource.optionSetId)}`,
+        `MISSING_OPTION_SET ${formatValidationValue(fieldEntry.value?.id)} -> ${formatValidationValue(valueSource.optionSetId)}`,
       );
     }
   }
@@ -280,15 +268,30 @@ export function validateModelReferences(model) {
 
   for (const actionEntry of index.actions) {
     const action = actionEntry.value;
-    if (!index.objectById.has(action?.targetObjectId)) {
+    const targetObjectEntry = index.objectById.get(action?.targetObjectId);
+    if (!targetObjectEntry) {
       errors.push(
-        `MISSING_ACTION_OBJECT ${action?.id} -> ${String(action?.targetObjectId)}`,
+        `MISSING_ACTION_OBJECT ${formatValidationValue(action?.id)} -> ${formatValidationValue(action?.targetObjectId)}`,
+      );
+    } else if (targetObjectEntry.moduleId !== actionEntry.moduleId) {
+      errors.push(
+        `INVALID_MODULE_OWNERSHIP ${formatValidationValue(action?.id)} -> object ${formatValidationValue(action?.targetObjectId)} belongs to ${formatValidationValue(targetObjectEntry.moduleId)}`,
       );
     }
     for (const property of ["inputFieldIds", "outputFieldIds"]) {
       list(action?.[property]).forEach((fieldId) => {
-        if (!index.fieldById.has(fieldId)) {
-          errors.push(`MISSING_ACTION_FIELD ${action?.id} -> ${String(fieldId)}`);
+        const fieldEntry = index.fieldById.get(fieldId);
+        if (!fieldEntry) {
+          errors.push(
+            `MISSING_ACTION_FIELD ${formatValidationValue(action?.id)} -> ${formatValidationValue(fieldId)}`,
+          );
+        } else if (
+          targetObjectEntry
+          && fieldEntry.objectId !== targetObjectEntry.value.id
+        ) {
+          errors.push(
+            `INVALID_OBJECT_OWNERSHIP ${formatValidationValue(action?.id)} -> field ${formatValidationValue(fieldId)} belongs to ${formatValidationValue(fieldEntry.objectId)}`,
+          );
         }
       });
     }
@@ -305,26 +308,52 @@ export function validateModelReferences(model) {
   for (const pageEntry of index.pages) {
     const page = pageEntry.value;
     for (const objectId of [page?.objectId, ...list(page?.objectIds)]) {
-      if (!index.objectById.has(objectId)) {
-        errors.push(`MISSING_PAGE_OBJECT ${page?.id} -> ${String(objectId)}`);
+      const objectEntry = index.objectById.get(objectId);
+      if (!objectEntry) {
+        errors.push(
+          `MISSING_PAGE_OBJECT ${formatValidationValue(page?.id)} -> ${formatValidationValue(objectId)}`,
+        );
+      } else if (objectEntry.moduleId !== pageEntry.moduleId) {
+        errors.push(
+          `INVALID_MODULE_OWNERSHIP ${formatValidationValue(page?.id)} -> object ${formatValidationValue(objectId)} belongs to ${formatValidationValue(objectEntry.moduleId)}`,
+        );
       }
     }
     for (const fieldId of list(page?.fieldIds)) {
-      if (!index.fieldById.has(fieldId)) {
-        errors.push(`MISSING_PAGE_FIELD ${page?.id} -> ${String(fieldId)}`);
+      const fieldEntry = index.fieldById.get(fieldId);
+      if (!fieldEntry) {
+        errors.push(
+          `MISSING_PAGE_FIELD ${formatValidationValue(page?.id)} -> ${formatValidationValue(fieldId)}`,
+        );
+      } else if (fieldEntry.moduleId !== pageEntry.moduleId) {
+        errors.push(
+          `INVALID_MODULE_OWNERSHIP ${formatValidationValue(page?.id)} -> field ${formatValidationValue(fieldId)} belongs to ${formatValidationValue(fieldEntry.moduleId)}`,
+        );
       }
     }
     for (const actionId of list(page?.actionIds)) {
-      if (!index.actionById.has(actionId)) {
-        errors.push(`MISSING_PAGE_ACTION ${page?.id} -> ${String(actionId)}`);
+      const actionEntry = index.actionById.get(actionId);
+      if (!actionEntry) {
+        errors.push(
+          `MISSING_PAGE_ACTION ${formatValidationValue(page?.id)} -> ${formatValidationValue(actionId)}`,
+        );
+      } else if (actionEntry.moduleId !== pageEntry.moduleId) {
+        errors.push(
+          `INVALID_MODULE_OWNERSHIP ${formatValidationValue(page?.id)} -> action ${formatValidationValue(actionId)} belongs to ${formatValidationValue(actionEntry.moduleId)}`,
+        );
       }
     }
   }
 
   for (const scenarioEntry of index.scenarios) {
-    if (!index.actionById.has(scenarioEntry.value?.actionId)) {
+    const actionEntry = index.actionById.get(scenarioEntry.value?.actionId);
+    if (!actionEntry) {
       errors.push(
-        `MISSING_SCENARIO_ACTION ${scenarioEntry.value?.id} -> ${String(scenarioEntry.value?.actionId)}`,
+        `MISSING_SCENARIO_ACTION ${formatValidationValue(scenarioEntry.value?.id)} -> ${formatValidationValue(scenarioEntry.value?.actionId)}`,
+      );
+    } else if (actionEntry.moduleId !== scenarioEntry.moduleId) {
+      errors.push(
+        `INVALID_MODULE_OWNERSHIP ${formatValidationValue(scenarioEntry.value?.id)} -> action ${formatValidationValue(scenarioEntry.value?.actionId)} belongs to ${formatValidationValue(actionEntry.moduleId)}`,
       );
     }
   }
@@ -333,13 +362,15 @@ export function validateModelReferences(model) {
     const flow = flowEntry.value;
     for (const moduleId of list(flow?.moduleIds)) {
       if (!index.moduleById.has(moduleId)) {
-        errors.push(`MISSING_FLOW_MODULE ${flow?.id} -> ${String(moduleId)}`);
+        errors.push(
+          `MISSING_FLOW_MODULE ${formatValidationValue(flow?.id)} -> ${formatValidationValue(moduleId)}`,
+        );
       }
     }
     list(flow?.steps).forEach((step, stepIndex) => {
       if (!index.actionById.has(step?.actionId)) {
         errors.push(
-          `MISSING_FLOW_ACTION ${flow?.id}.steps[${stepIndex}] -> ${String(step?.actionId)}`,
+          `MISSING_FLOW_ACTION ${formatValidationValue(flow?.id)}.steps[${stepIndex}] -> ${formatValidationValue(step?.actionId)}`,
         );
       }
     });
@@ -357,11 +388,15 @@ export function validateModelReferences(model) {
   for (const taskEntry of index.aiTasks) {
     const task = taskEntry.value;
     if (!index.actionById.has(task?.actionId)) {
-      errors.push(`MISSING_AI_ACTION ${task?.id} -> ${String(task?.actionId)}`);
+      errors.push(
+        `MISSING_AI_ACTION ${formatValidationValue(task?.id)} -> ${formatValidationValue(task?.actionId)}`,
+      );
     }
     for (const fieldId of list(task?.previewFieldIds)) {
       if (!index.fieldById.has(fieldId)) {
-        errors.push(`MISSING_AI_PREVIEW_FIELD ${task?.id} -> ${String(fieldId)}`);
+        errors.push(
+          `MISSING_AI_PREVIEW_FIELD ${formatValidationValue(task?.id)} -> ${formatValidationValue(fieldId)}`,
+        );
       }
     }
     checkActorReferences(errors, index, task, taskEntry.path);
