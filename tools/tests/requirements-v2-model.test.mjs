@@ -104,6 +104,12 @@ function validFixture() {
   };
 }
 
+function moduleById(model, moduleId) {
+  const module = model.modules.find(({ id }) => id === moduleId);
+  assert.ok(module, `fixture module ${moduleId} must exist`);
+  return module;
+}
+
 test("accepts the complete semantic fixture", () => {
   assert.deepEqual(validateRequirementModel(validFixture()), []);
 });
@@ -158,7 +164,7 @@ test("rejects a choice field without an Option Set", () => {
 
 test("rejects an action referencing a missing field", () => {
   const model = validFixture();
-  model.modules[0].actions[0].inputFieldIds = ["SUB-F999"];
+  moduleById(model, "SUB-001").actions[0].inputFieldIds = ["SUB-F999"];
 
   const errors = validateRequirementModel(model);
 
@@ -167,7 +173,7 @@ test("rejects an action referencing a missing field", () => {
 
 test("rejects an invalid state transition", () => {
   const model = validFixture();
-  model.modules[0].actions[0].transition.to = "ARCHIVED";
+  moduleById(model, "SUB-001").actions[0].transition.to = "ARCHIVED";
 
   const errors = validateRequirementModel(model);
 
@@ -176,8 +182,8 @@ test("rejects an invalid state transition", () => {
 
 test("rejects a flow whose declared modules and action modules differ", () => {
   const model = validFixture();
-  assert.equal(model.modules.some((module) => module.id === "HW-001"), true);
-  model.flows[0].moduleIds = ["HW-001"];
+  const homeworkModule = moduleById(model, "HW-001");
+  model.flows[0].moduleIds = [homeworkModule.id];
 
   const errors = validateRequirementModel(model);
 
@@ -186,7 +192,7 @@ test("rejects a flow whose declared modules and action modules differ", () => {
 
 test("rejects an orphan Owner role", () => {
   const model = validFixture();
-  model.modules[0].objects[0].ownerRef = "ROLE-ORPHAN";
+  moduleById(model, "SUB-001").objects[0].ownerRef = "ROLE-ORPHAN";
 
   const errors = validateRequirementModel(model);
 
@@ -195,7 +201,7 @@ test("rejects an orphan Owner role", () => {
 
 test("rejects phase-two page contracts independently of actions", () => {
   const model = validFixture();
-  const reportModule = model.modules.find((module) => module.id === "REPORT-001");
+  const reportModule = moduleById(model, "REPORT-001");
   assert.deepEqual(reportModule.actions, []);
   reportModule.pages = [{
     id: "REPORT-W01",
@@ -211,7 +217,7 @@ test("rejects phase-two page contracts independently of actions", () => {
 
 test("rejects executable phase-two actions independently of pages", () => {
   const model = validFixture();
-  const reportModule = model.modules.find((module) => module.id === "REPORT-001");
+  const reportModule = moduleById(model, "REPORT-001");
   assert.deepEqual(reportModule.pages, []);
   reportModule.actions = [{
     id: "REPORT-ACT-01",
