@@ -1,0 +1,698 @@
+{
+  "version": "v2.0",
+  "generatedAt": "2026-07-14",
+  "productBaseline": "docs/product/zhixu-teaching-cloud-prd-v2.0.md",
+  "packageRoot": "docs/requirements/zhixu-handoff-v2.0",
+  "modules": [
+    {
+      "id": "ACC-001",
+      "title": "学校入口、登录与工作上下文",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/01-school-entry-access_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/01-school-entry-access-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-ACC-01",
+        "DAT-ACC-02",
+        "DAT-ACC-03",
+        "DAT-ACC-04"
+      ],
+      "fieldIds": [
+        "ACC-F001",
+        "ACC-F002",
+        "ACC-F003",
+        "ACC-F004",
+        "ACC-F005",
+        "ACC-F006"
+      ],
+      "flowIds": [
+        "DF-001",
+        "DF-015",
+        "DF-019"
+      ]
+    },
+    {
+      "id": "ORG-001",
+      "title": "学校组织、成员与导入",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/02-organization-members-import_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/02-organization-members-import-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-ORG-01",
+        "DAT-ORG-02",
+        "DAT-ORG-03",
+        "DAT-ORG-04",
+        "DAT-ORG-05",
+        "DAT-ORG-06",
+        "DAT-ORG-07",
+        "DAT-ORG-08",
+        "DAT-ORG-09",
+        "DAT-ORG-10"
+      ],
+      "fieldIds": [
+        "ORG-F001",
+        "ORG-F002",
+        "ORG-F003",
+        "ORG-F004",
+        "ORG-F005",
+        "ORG-F006",
+        "ORG-F007",
+        "ORG-F008"
+      ],
+      "flowIds": [
+        "DF-002",
+        "DF-013",
+        "DF-019"
+      ]
+    },
+    {
+      "id": "IAM-001",
+      "title": "工作身份、职责授权与数据范围",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/03-identity-permission-scope_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/03-identity-permission-scope-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-IAM-01",
+        "DAT-IAM-02",
+        "DAT-IAM-03",
+        "DAT-IAM-04"
+      ],
+      "fieldIds": [
+        "IAM-F001",
+        "IAM-F002",
+        "IAM-F003",
+        "IAM-F004",
+        "IAM-F005",
+        "IAM-F006"
+      ],
+      "flowIds": [
+        "DF-001",
+        "DF-002",
+        "DF-013",
+        "DF-019"
+      ]
+    },
+    {
+      "id": "DGV-001",
+      "title": "数据治理、生命周期与 AI 数据使用",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/04-data-governance-ai-usage_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/04-data-governance-ai-usage-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-DGV-01",
+        "DAT-DGV-02",
+        "DAT-DGV-03",
+        "DAT-DGV-04"
+      ],
+      "fieldIds": [
+        "DGV-F001",
+        "DGV-F002",
+        "DGV-F003",
+        "DGV-F004",
+        "DGV-F005"
+      ],
+      "flowIds": [
+        "DF-015",
+        "DF-019",
+        "DF-301"
+      ]
+    },
+    {
+      "id": "AUD-001",
+      "title": "操作审计与敏感访问",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/05-audit-sensitive-access_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/05-audit-sensitive-access-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-AUD-01",
+        "DAT-AUD-02",
+        "DAT-AUD-03"
+      ],
+      "fieldIds": [
+        "AUD-F001",
+        "AUD-F002",
+        "AUD-F003",
+        "AUD-F004",
+        "AUD-F005"
+      ],
+      "flowIds": [
+        "DF-019",
+        "DF-015"
+      ]
+    },
+    {
+      "id": "CURR-001",
+      "title": "课程、教材版本与知识点体系",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/06-curriculum-knowledge-map_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/06-curriculum-knowledge-map-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-CURR-01",
+        "DAT-CURR-02",
+        "DAT-CURR-03",
+        "DAT-CURR-04"
+      ],
+      "fieldIds": [
+        "CURR-F001",
+        "CURR-F002",
+        "CURR-F003",
+        "CURR-F004",
+        "CURR-F005"
+      ],
+      "flowIds": [
+        "DF-003",
+        "DF-011",
+        "DF-017"
+      ]
+    },
+    {
+      "id": "TEA-001",
+      "title": "教师与班主任工作台",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/07-teacher-homeroom-workbench_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/07-teacher-homeroom-workbench-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-TEA-01",
+        "DAT-TEA-02",
+        "DAT-TEA-03"
+      ],
+      "fieldIds": [
+        "TEA-F001",
+        "TEA-F002",
+        "TEA-F003",
+        "TEA-F004",
+        "TEA-F005"
+      ],
+      "flowIds": [
+        "DF-004",
+        "DF-007",
+        "DF-012",
+        "DF-014",
+        "DF-016"
+      ]
+    },
+    {
+      "id": "HW-001",
+      "title": "作业创建与发布",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/08-assignment-create-release_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/08-assignment-create-release-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-HW-01",
+        "DAT-HW-02",
+        "DAT-HW-03",
+        "DAT-HW-04",
+        "DAT-HW-05"
+      ],
+      "fieldIds": [
+        "HW-F001",
+        "HW-F002",
+        "HW-F003",
+        "HW-F004",
+        "HW-F005",
+        "HW-F006",
+        "HW-F007",
+        "HW-F008"
+      ],
+      "flowIds": [
+        "DF-003",
+        "DF-004",
+        "DF-006",
+        "DF-102"
+      ]
+    },
+    {
+      "id": "SUB-001",
+      "title": "学生作答与提交",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/09-student-answer-submit_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/09-student-answer-submit-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-SUB-01",
+        "DAT-SUB-02",
+        "DAT-SUB-03"
+      ],
+      "fieldIds": [
+        "SUB-F001",
+        "SUB-F002",
+        "SUB-F003",
+        "SUB-F004",
+        "SUB-F005"
+      ],
+      "flowIds": [
+        "DF-005",
+        "DF-006"
+      ]
+    },
+    {
+      "id": "GRD-001",
+      "title": "AI 初评与教师复核",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/10-ai-grading-review_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/10-ai-grading-review-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-GRD-01",
+        "DAT-GRD-02",
+        "DAT-GRD-03",
+        "DAT-GRD-04"
+      ],
+      "fieldIds": [
+        "GRD-F001",
+        "GRD-F002",
+        "GRD-F003",
+        "GRD-F004",
+        "GRD-F005",
+        "GRD-F006"
+      ],
+      "flowIds": [
+        "DF-006",
+        "DF-007",
+        "DF-019"
+      ]
+    },
+    {
+      "id": "PUB-001",
+      "title": "成绩与反馈发布、修正",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/11-result-publish-correction_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/11-result-publish-correction-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-PUB-01",
+        "DAT-PUB-02",
+        "DAT-PUB-03",
+        "DAT-PUB-04"
+      ],
+      "fieldIds": [
+        "PUB-F001",
+        "PUB-F002",
+        "PUB-F003",
+        "PUB-F004",
+        "PUB-F005"
+      ],
+      "flowIds": [
+        "DF-008",
+        "DF-009",
+        "DF-018",
+        "DF-019"
+      ]
+    },
+    {
+      "id": "SCO-001",
+      "title": "成绩册与成绩视图",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/12-gradebook-score-view_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/12-gradebook-score-view-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-SCO-01",
+        "DAT-SCO-02",
+        "DAT-SCO-03"
+      ],
+      "fieldIds": [
+        "SCO-F001",
+        "SCO-F002",
+        "SCO-F003",
+        "SCO-F004",
+        "SCO-F005"
+      ],
+      "flowIds": [
+        "DF-008",
+        "DF-009",
+        "DF-014",
+        "DF-103"
+      ]
+    },
+    {
+      "id": "STU-001",
+      "title": "教师学生管理与学生详情",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/13-teacher-student-management_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/13-teacher-student-management-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-STU-01",
+        "DAT-STU-02",
+        "DAT-STU-03"
+      ],
+      "fieldIds": [
+        "STU-F001",
+        "STU-F002",
+        "STU-F003",
+        "STU-F004",
+        "STU-F005"
+      ],
+      "flowIds": [
+        "DF-014",
+        "DF-011",
+        "DF-012"
+      ]
+    },
+    {
+      "id": "INS-001",
+      "title": "学习证据、知识点归因与掌握判断",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/14-mastery-evidence-insight_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/14-mastery-evidence-insight-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-INS-01",
+        "DAT-INS-02",
+        "DAT-INS-03",
+        "DAT-INS-04"
+      ],
+      "fieldIds": [
+        "INS-F001",
+        "INS-F002",
+        "INS-F003",
+        "INS-F004",
+        "INS-F005",
+        "INS-F006",
+        "INS-F007"
+      ],
+      "flowIds": [
+        "DF-010",
+        "DF-011",
+        "DF-017"
+      ]
+    },
+    {
+      "id": "PLN-001",
+      "title": "个性化提升与全科协调",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/15-personalized-improvement-plan_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/15-personalized-improvement-plan-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-PLN-01",
+        "DAT-PLN-02",
+        "DAT-PLN-03",
+        "DAT-PLN-04"
+      ],
+      "fieldIds": [
+        "PLN-F001",
+        "PLN-F002",
+        "PLN-F003",
+        "PLN-F004",
+        "PLN-F005",
+        "PLN-F006",
+        "PLN-F007"
+      ],
+      "flowIds": [
+        "DF-012",
+        "DF-013",
+        "DF-016",
+        "DF-017"
+      ]
+    },
+    {
+      "id": "APP-001",
+      "title": "学生首页与学习执行",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/16-student-home-learning-execution_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/16-student-home-learning-execution-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-APP-01",
+        "DAT-APP-02",
+        "DAT-APP-03"
+      ],
+      "fieldIds": [
+        "APP-F001",
+        "APP-F002",
+        "APP-F003",
+        "APP-F004",
+        "APP-F005"
+      ],
+      "flowIds": [
+        "DF-004",
+        "DF-005",
+        "DF-010",
+        "DF-013",
+        "DF-017"
+      ]
+    },
+    {
+      "id": "CORR-001",
+      "title": "反馈、错题与订正",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/17-feedback-correction_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/17-feedback-correction-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-CORR-01",
+        "DAT-CORR-02",
+        "DAT-CORR-03"
+      ],
+      "fieldIds": [
+        "CORR-F001",
+        "CORR-F002",
+        "CORR-F003",
+        "CORR-F004",
+        "CORR-F005"
+      ],
+      "flowIds": [
+        "DF-010",
+        "DF-011",
+        "DF-013"
+      ]
+    },
+    {
+      "id": "AIX-001",
+      "title": "AI 对话、可视化命令与任务执行",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/18-ai-conversation-task-execution_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/18-ai-conversation-task-execution-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-AIX-01",
+        "DAT-AIX-02",
+        "DAT-AIX-03",
+        "DAT-AIX-04"
+      ],
+      "fieldIds": [
+        "AIX-F001",
+        "AIX-F002",
+        "AIX-F003",
+        "AIX-F004",
+        "AIX-F005"
+      ],
+      "flowIds": [
+        "DF-015",
+        "DF-016",
+        "DF-019"
+      ]
+    },
+    {
+      "id": "RPT-001",
+      "title": "临时分析、定期报告与订阅",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/19-reports-subscriptions_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/19-reports-subscriptions-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-RPT-01",
+        "DAT-RPT-02",
+        "DAT-RPT-03",
+        "DAT-RPT-04"
+      ],
+      "fieldIds": [
+        "RPT-F001",
+        "RPT-F002",
+        "RPT-F003",
+        "RPT-F004",
+        "RPT-F005",
+        "RPT-F006"
+      ],
+      "flowIds": [
+        "DF-016",
+        "DF-018",
+        "DF-015"
+      ]
+    },
+    {
+      "id": "LPATH-001",
+      "title": "长期学习画像与学习路径",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/20-long-term-learning-path_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/20-long-term-learning-path-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-LPATH-01",
+        "DAT-LPATH-02",
+        "DAT-LPATH-03"
+      ],
+      "fieldIds": [
+        "LPATH-F001",
+        "LPATH-F002",
+        "LPATH-F003",
+        "LPATH-F004",
+        "LPATH-F005"
+      ],
+      "flowIds": [
+        "DF-017",
+        "DF-011",
+        "DF-012"
+      ]
+    },
+    {
+      "id": "NOTI-001",
+      "title": "站内通知、投递与阅读状态",
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/21-in-app-notification_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/21-in-app-notification-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-NOTI-01",
+        "DAT-NOTI-02",
+        "DAT-NOTI-03"
+      ],
+      "fieldIds": [
+        "NOTI-F001",
+        "NOTI-F002",
+        "NOTI-F003",
+        "NOTI-F004",
+        "NOTI-F005"
+      ],
+      "flowIds": [
+        "DF-018",
+        "DF-004",
+        "DF-008",
+        "DF-016"
+      ]
+    },
+    {
+      "id": "PREP-001",
+      "title": "教师备课与课堂授课",
+      "priority": "P1",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/22-lesson-prep-delivery_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/22-lesson-prep-delivery-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-PREP-01",
+        "DAT-PREP-02",
+        "DAT-PREP-03"
+      ],
+      "fieldIds": [
+        "PREP-F001",
+        "PREP-F002",
+        "PREP-F003",
+        "PREP-F004",
+        "PREP-F005"
+      ],
+      "flowIds": [
+        "DF-101",
+        "DF-102"
+      ]
+    },
+    {
+      "id": "CONTENT-001",
+      "title": "题库与教学内容管理",
+      "priority": "P1",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/23-question-content-management_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/23-question-content-management-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-CONTENT-01",
+        "DAT-CONTENT-02",
+        "DAT-CONTENT-03",
+        "DAT-CONTENT-04"
+      ],
+      "fieldIds": [
+        "CONTENT-F001",
+        "CONTENT-F002",
+        "CONTENT-F003",
+        "CONTENT-F004",
+        "CONTENT-F005"
+      ],
+      "flowIds": [
+        "DF-102",
+        "DF-101"
+      ]
+    },
+    {
+      "id": "EXM-001",
+      "title": "考试与综合成绩管理",
+      "priority": "P1",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/24-exam-score-management_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/24-exam-score-management-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-EXM-01",
+        "DAT-EXM-02",
+        "DAT-EXM-03",
+        "DAT-EXM-04"
+      ],
+      "fieldIds": [
+        "EXM-F001",
+        "EXM-F002",
+        "EXM-F003",
+        "EXM-F004",
+        "EXM-F005"
+      ],
+      "flowIds": [
+        "DF-103",
+        "DF-008",
+        "DF-011"
+      ]
+    },
+    {
+      "id": "SCH-001",
+      "title": "教务辅助排课",
+      "priority": "P2",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/25-academic-scheduling_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/25-academic-scheduling-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-SCH-01",
+        "DAT-SCH-02",
+        "DAT-SCH-03",
+        "DAT-SCH-04"
+      ],
+      "fieldIds": [
+        "SCH-F001",
+        "SCH-F002",
+        "SCH-F003",
+        "SCH-F004",
+        "SCH-F005"
+      ],
+      "flowIds": [
+        "DF-201",
+        "DF-202"
+      ]
+    },
+    {
+      "id": "REPORT-001",
+      "title": "家长报告受控分享",
+      "priority": "P2",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/26-guardian-report-sharing_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/26-guardian-report-sharing-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-REPORT-01",
+        "DAT-REPORT-02",
+        "DAT-REPORT-03"
+      ],
+      "fieldIds": [
+        "REPORT-F001",
+        "REPORT-F002",
+        "REPORT-F003",
+        "REPORT-F004",
+        "REPORT-F005"
+      ],
+      "flowIds": [
+        "DF-202",
+        "DF-016",
+        "DF-019"
+      ]
+    },
+    {
+      "id": "PLAT-001",
+      "title": "平台学校入驻与运营治理",
+      "priority": "P3",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/27-platform-onboarding-governance_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/27-platform-onboarding-governance-wireframe.zh-CN.md",
+      "dataIds": [
+        "DAT-PLAT-01",
+        "DAT-PLAT-02",
+        "DAT-PLAT-03",
+        "DAT-PLAT-04"
+      ],
+      "fieldIds": [
+        "PLAT-F001",
+        "PLAT-F002",
+        "PLAT-F003",
+        "PLAT-F004",
+        "PLAT-F005"
+      ],
+      "flowIds": [
+        "DF-301",
+        "DF-001",
+        "DF-019"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+# 模块与端能力矩阵
+
+端不是权限边界。同一角色可以登录 Web 和 App；差异只表示产品能力承载位置。
+
+| 优先级 | 模块 ID | 模块 | Web 能力 | App 能力 | PRD | 线框 |
+| --- | --- | --- | --- | --- | --- | --- |
+| P0 | ACC-001 | 学校入口、登录与工作上下文 | 学校搜索、账号登录、首次激活、身份选择、学期切换、上下文失效提示 | 学校搜索、登录激活、身份选择、学期确认、失效重新进入 | [PRD](../03-full-prd-md/01-school-entry-access_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/01-school-entry-access-wireframe.zh-CN.md) |
+| P0 | ORG-001 | 学校组织、成员与导入 | 组织树维护、批量导入、字段映射、冲突预览、对象级结果、权限刷新 | 查看本人班级/任课关系、导入结果通知、异常确认入口 | [PRD](../03-full-prd-md/02-organization-members-import_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/02-organization-members-import-wireframe.zh-CN.md) |
+| P0 | IAM-001 | 工作身份、职责授权与数据范围 | 身份策略配置、职责授权、范围预览、临时授权、权限审计回放 | 查看当前身份范围、授权到期提醒、高风险动作确认 | [PRD](../03-full-prd-md/03-identity-permission-scope_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/03-identity-permission-scope-wireframe.zh-CN.md) |
+| P0 | DGV-001 | 数据治理、生命周期与 AI 数据使用 | 治理策略配置、保留规则、AI 数据使用边界、导出审批、归档查询 | 查看与本人相关的数据说明、授权提示、导出结果通知 | [PRD](../03-full-prd-md/04-data-governance-ai-usage_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/04-data-governance-ai-usage-wireframe.zh-CN.md) |
+| P0 | AUD-001 | 操作审计与敏感访问 | 审计检索、敏感访问申请、复核工单、导出审计摘要 | 高风险确认记录、敏感访问到期提醒、本人操作记录入口 | [PRD](../03-full-prd-md/05-audit-sensitive-access_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/05-audit-sensitive-access-wireframe.zh-CN.md) |
+| P0 | CURR-001 | 课程、教材版本与知识点体系 | 课程目录、教材版本、知识点树、映射维护、版本发布 | 学生查看知识点路径、教师移动端查看知识点标签 | [PRD](../03-full-prd-md/06-curriculum-knowledge-map_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/06-curriculum-knowledge-map-wireframe.zh-CN.md) |
+| P0 | TEA-001 | 教师与班主任工作台 | 教师待办、班主任全科视图、批量入口、报告入口、AI 一句话操作 | 待办提醒、快速查看、移动确认、报告摘要、协调消息 | [PRD](../03-full-prd-md/07-teacher-homeroom-workbench_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/07-teacher-homeroom-workbench-wireframe.zh-CN.md) |
+| P0 | HW-001 | 作业创建与发布 | 作业列表、题目编辑、评分规则、发布预览、批量发布、版本查看 | 移动查看作业、轻量创建学习任务、发布结果提醒 | [PRD](../03-full-prd-md/08-assignment-create-release_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/08-assignment-create-release-wireframe.zh-CN.md) |
+| P0 | SUB-001 | 学生作答与提交 | 在线答题、图片上传、草稿管理、提交摘要、历史版本查看 | 拍照提交、离线草稿、上传状态、重拍、提交确认、作业提醒 | [PRD](../03-full-prd-md/09-student-answer-submit_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/09-student-answer-submit-wireframe.zh-CN.md) |
+| P0 | GRD-001 | AI 初评与教师复核 | 批改队列、逐题复核、识别修正、批量确认、人工路径、版本冲突处理 | 查看批改进度、移动端低风险确认、异常提醒 | [PRD](../03-full-prd-md/10-ai-grading-review_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/10-ai-grading-review-wireframe.zh-CN.md) |
+| P0 | PUB-001 | 成绩与反馈发布、修正 | 发布预览、逐学生阻断原因、正式发布、成绩修正、发布历史 | 学生查看成绩反馈、教师移动提醒、修正通知 | [PRD](../03-full-prd-md/11-result-publish-correction_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/11-result-publish-correction-wireframe.zh-CN.md) |
+| P0 | SCO-001 | 成绩册与成绩视图 | 成绩册表格、列配置、筛选、趋势、班主任全科只读、导出审批 | 个人成绩、教师移动查看、班主任摘要、变化提醒 | [PRD](../03-full-prd-md/12-gradebook-score-view_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/12-gradebook-score-view-wireframe.zh-CN.md) |
+| P0 | STU-001 | 教师学生管理与学生详情 | 学生列表、学生详情、跟进记录、跨学科摘要、班主任协调 | 学生本人画像、教师移动查看摘要、跟进提醒 | [PRD](../03-full-prd-md/13-teacher-student-management_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/13-teacher-student-management-wireframe.zh-CN.md) |
+| P0 | INS-001 | 学习证据、知识点归因与掌握判断 | 证据列表、知识点归因、掌握判断、教师修正、学生详情嵌入 | 学生查看已确认解释、教师移动查看薄弱点、订正后变化提醒 | [PRD](../03-full-prd-md/14-mastery-evidence-insight_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/14-mastery-evidence-insight-wireframe.zh-CN.md) |
+| P0 | PLN-001 | 个性化提升与全科协调 | 候选审阅、计划编辑、任务分配、全科负担协调、效果评估 | 学生今日提升任务、困难反馈、完成提交、教师/班主任摘要 | [PRD](../03-full-prd-md/15-personalized-improvement-plan_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/15-personalized-improvement-plan-wireframe.zh-CN.md) |
+| P0 | APP-001 | 学生首页与学习执行 | 学生作业、反馈、订正、提升任务、学习路径、AI 对话 | 首页待办、拍照提交、反馈查看、订正执行、提升任务、通知、AI 学习助手 | [PRD](../03-full-prd-md/16-student-home-learning-execution_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/16-student-home-learning-execution-wireframe.zh-CN.md) |
+| P0 | CORR-001 | 反馈、错题与订正 | 错题列表、订正查看、教师判定、批量提醒、证据回流 | 反馈查看、错题订正、拍照/文本提交、判定结果、再次订正 | [PRD](../03-full-prd-md/17-feedback-correction_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/17-feedback-correction-wireframe.zh-CN.md) |
+| P0 | AIX-001 | AI 对话、可视化命令与任务执行 | 全局 AI 入口、结构化结果、报表生成、草稿编辑、执行预览、任务历史 | 一句话查询、移动确认、学生学习助手、报告摘要、待办执行 | [PRD](../03-full-prd-md/18-ai-conversation-task-execution_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/18-ai-conversation-task-execution-wireframe.zh-CN.md) |
+| P0 | RPT-001 | 临时分析、定期报告与订阅 | 报告中心、临时报表、订阅配置、快照历史、下钻分析、AI 生成报告 | 报告摘要、定期提醒、学生个人报告、班主任移动查看 | [PRD](../03-full-prd-md/19-reports-subscriptions_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/19-reports-subscriptions-wireframe.zh-CN.md) |
+| P0 | LPATH-001 | 长期学习画像与学习路径 | 学习路径时间线、知识点趋势、教师确认、班主任全科摘要 | 学生学习路径、进步变化、下一步任务入口、确认解释展示 | [PRD](../03-full-prd-md/20-long-term-learning-path_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/20-long-term-learning-path-wireframe.zh-CN.md) |
+| P0 | NOTI-001 | 站内通知、投递与阅读状态 | 通知中心、筛选、批量已读、源对象跳转、投递结果 | 推送式站内提醒、任务入口、已读/处理状态、摘要查看 | [PRD](../03-full-prd-md/21-in-app-notification_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/21-in-app-notification-wireframe.zh-CN.md) |
+| P1 | PREP-001 | 教师备课与课堂授课 | 备课列表、课程章节、材料引用、课堂活动、生成作业草稿 | 课堂查看、移动记录形成性证据、课后提醒 | [PRD](../03-full-prd-md/22-lesson-prep-delivery_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/22-lesson-prep-delivery-wireframe.zh-CN.md) |
+| P1 | CONTENT-001 | 题库与教学内容管理 | 题目编辑、解析维护、知识点标注、授权、版本管理 | 教师移动查看内容、学生查看已开放解析 | [PRD](../03-full-prd-md/23-question-content-management_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/23-question-content-management-wireframe.zh-CN.md) |
+| P1 | EXM-001 | 考试与综合成绩管理 | 考试配置、成绩录入、导入校验、综合规则、发布、分析 | 学生查看已发布考试成绩、教师移动查看摘要、班主任全科摘要 | [PRD](../03-full-prd-md/24-exam-score-management_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/24-exam-score-management-wireframe.zh-CN.md) |
+| P2 | SCH-001 | 教务辅助排课 | 排课输入、约束维护、候选对比、正式发布、调课 | 教师/学生课表查看、调课通知、教务移动审批 | [PRD](../03-full-prd-md/25-academic-scheduling_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/25-academic-scheduling-wireframe.zh-CN.md) |
+| P2 | REPORT-001 | 家长报告受控分享 | 分享定义、审批、预览、撤销、访问审计 | 学生查看可分享摘要、班主任移动审批提醒 | [PRD](../03-full-prd-md/26-guardian-report-sharing_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/26-guardian-report-sharing-wireframe.zh-CN.md) |
+| P3 | PLAT-001 | 平台学校入驻与运营治理 | 学校入驻、服务状态、策略模板、支持访问审批、运营审计 | 无独立平台 App；学校管理员可在 App 查看服务通知 | [PRD](../03-full-prd-md/27-platform-onboarding-governance_PRD_v2.0.md) | [Wireframe](../05-wireframe-contracts/27-platform-onboarding-governance-wireframe.zh-CN.md) |
