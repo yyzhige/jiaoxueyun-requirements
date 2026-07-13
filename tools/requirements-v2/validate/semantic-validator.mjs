@@ -127,6 +127,17 @@ function actionErrors(index) {
     const actionScenarios = index.scenarios.filter(
       ({ value }) => value?.actionId === action?.id,
     );
+    const successScenarios = actionScenarios.filter(
+      ({ value }) => value?.kind === "SUCCESS",
+    );
+    if (
+      action?.writes === true
+      && successScenarios.some(({ value }) => value?.then?.expectedState?.mode !== "STATE")
+    ) {
+      errors.push(
+        `MISSING_ACTION_STATE_EFFECT ${formatValidationValue(action?.id)} requires a concrete success state`,
+      );
+    }
     if (targetObject) {
       const states = stateIds(targetObject);
       for (const { value: scenario } of actionScenarios) {

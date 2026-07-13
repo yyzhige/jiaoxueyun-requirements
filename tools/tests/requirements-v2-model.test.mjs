@@ -807,6 +807,15 @@ test("accepts STATE and UNCHANGED scenario state outcomes", () => {
   assert.deepEqual(validateRequirementModel(model), []);
 });
 
+test("rejects write actions whose success scenario claims no state effect", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").scenarios[0].then.expectedState = {
+    mode: "UNCHANGED",
+  };
+
+  assertHasCode(validateRequirementModel(model), "MISSING_ACTION_STATE_EFFECT");
+});
+
 test("rejects empty optional Flow step conditions", () => {
   const model = validFixture();
   model.flows[0].steps[0].condition = "";
@@ -1004,10 +1013,17 @@ test("models object-level organization import results and partial success", () =
     actionId === confirmImport.id
     && kind === "BOUNDARY"
     && outcome.expectedState.mode === "STATE"
-    && outcome.expectedState.value === "PARTIAL_SUCCESS"
+    && outcome.expectedState.value === "PENDING_PARTIAL_OUTCOME_AUDIT"
     && outcome.expectedPermission === "ALLOW"
     && /successful rows|成功行/.test(outcome.expectedData)
   )));
+  const finalizePartial = organization.actions.find(
+    ({ id }) => id === "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT",
+  );
+  assert.deepEqual(finalizePartial.transition, {
+    from: "PENDING_PARTIAL_OUTCOME_AUDIT",
+    to: "PARTIAL_SUCCESS",
+  });
 });
 
 test("exposes explicit grade maintenance in the organization workspace", () => {
@@ -1037,7 +1053,6 @@ test("declares complete grant authority inputs for every IAM grant action", () =
       "IAM-DUTY-F-EFFECTIVE",
       "IAM-DUTY-F-EXPIRY",
       "IAM-DUTY-F-REASON",
-      "IAM-DUTY-F-STATUS",
     ],
     "IAM-ACT-GRANT-SCOPE": [
       "IAM-SCOPE-F-GRANTOR-AUTHORITY",
@@ -1048,7 +1063,6 @@ test("declares complete grant authority inputs for every IAM grant action", () =
       "IAM-SCOPE-F-EFFECTIVE",
       "IAM-SCOPE-F-EXPIRY",
       "IAM-SCOPE-F-REASON",
-      "IAM-SCOPE-F-STATUS",
     ],
     "IAM-ACT-CREATE-TEMP-GRANT": [
       "IAM-TEMP-F-GRANTOR-AUTHORITY",
@@ -1059,13 +1073,15 @@ test("declares complete grant authority inputs for every IAM grant action", () =
       "IAM-TEMP-F-EFFECTIVE",
       "IAM-TEMP-F-EXPIRY",
       "IAM-TEMP-F-REASON",
-      "IAM-TEMP-F-STATUS",
     ],
   };
   for (const [actionId, inputFieldIds] of Object.entries(expectedInputs)) {
     const action = identity.actions.find(({ id }) => id === actionId);
     assert.ok(action, actionId);
     assert.deepEqual(action.inputFieldIds, inputFieldIds);
+    const statusFieldId = action.outputFieldIds.find((fieldId) => /-STATUS$/.test(fieldId));
+    assert.ok(statusFieldId, actionId);
+    assert.equal(action.inputFieldIds.includes(statusFieldId), false, actionId);
     const exposingPages = identity.pages.filter(({ actionIds }) => actionIds.includes(actionId));
     assert.ok(exposingPages.length > 0, actionId);
     assert.equal(inputFieldIds.every((fieldId) => (
@@ -1095,14 +1111,19 @@ test("traces every scenario to an exposing page and a valid target state", () =>
 
 test("assigns explicit object responsibility subjects and accountable actors", () => {
   const expectations = {
-    "Teacher Profile": ["TEACHER", "SCHOOL", "ROLE-ACADEMIC", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"],
+    "Active Work Context": ["CURRENT_ACTOR_WORK_CONTEXT", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "SYSTEM", "SYSTEM"],
+    "Teacher Profile": ["TEACHER", "SCHOOL", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"],
     "Student Profile": ["STUDENT", "SCHOOL", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"],
+    "Import Batch": ["ORGANIZATION_IMPORT", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"],
+    "Import Row Result": ["ORGANIZATION_IMPORT_OBJECT", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"],
     "Export Request": ["EXPORT_REQUESTER_AND_SCOPED_DATA", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"],
     "Sensitive Access Request": ["ACCESS_REQUESTER_AND_SCOPED_DATA", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"],
+    "Curriculum Version": ["SUBJECT_CURRICULUM", "SCHOOL", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"],
     "Textbook Version": ["SUBJECT_CURRICULUM", "SCHOOL", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"],
     "Knowledge Point": ["SUBJECT_CURRICULUM", "SCHOOL", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"],
     "Knowledge Mapping": ["SUBJECT_CURRICULUM", "SCHOOL", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"],
-    "Teacher Todo View Definition": ["CURRENT_TEACHER_WORK_VIEW", "SCHOOL", "SYSTEM", "CURRENT_ACTOR", "SYSTEM", "SYSTEM"],
+    "Teacher Todo View Definition": ["CURRENT_TEACHER_WORK_VIEW", "SCHOOL", "SYSTEM", "SYSTEM", "SYSTEM", "SYSTEM"],
+    "Teacher Work Preference": ["CURRENT_TEACHER_PREFERENCE", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"],
   };
   const objects = modules.flatMap((module) => module.objects);
   for (const [label, expected] of Object.entries(expectations)) {
@@ -1156,9 +1177,12 @@ test("binds foundation business choices to centralized Option Sets", () => {
     "ORG-IMPORT-ROW-F-RESULT-TYPE": "OPT-ENUM-021",
     "ORG-IMPORT-ROW-F-VALIDATION-RESULT": "OPT-ENUM-022",
     "IAM-ROLE-F-ROLE": "OPT-COM-003",
+    "DGV-RETENTION-F-CATEGORY": "OPT-ENUM-044",
+    "DGV-AI-F-MODEL-USE": "OPT-ENUM-045",
     "CURR-CURRICULUM-F-SUBJECT": "OPT-COM-007",
     "CURR-MAPPING-F-KP-ID": "OPT-COM-011",
     "CURR-MAPPING-F-RELATION": "OPT-ENUM-043",
+    "TEA-PREF-F-DEFAULT-VIEW": "OPT-ENUM-046",
   };
   const fields = modules.flatMap((module) => module.objects.flatMap((object) => object.fields));
   for (const [fieldId, optionSetId] of Object.entries(expectedOptionSetIds)) {
@@ -1175,14 +1199,26 @@ test("orders DF-001 through explicit school, login, activation, identity, term, 
   assert.deepEqual(flow.steps, [
     { order: 1, actionId: "ACC-ACT-SEARCH-SCHOOL" },
     { order: 2, actionId: "ACC-ACT-SELECT-SCHOOL" },
-    { order: 3, actionId: "ACC-ACT-LOGIN" },
-    { order: 4, actionId: "ACC-ACT-FIRST-ACTIVATION", condition: "membership state is INVITED" },
+    { order: 3, actionId: "ACC-ACT-FIRST-ACTIVATION", condition: "membership state is INVITED" },
+    { order: 4, actionId: "ACC-ACT-LOGIN", condition: "membership state is ACTIVE after optional activation" },
     { order: 5, actionId: "ACC-ACT-SELECT-IDENTITY" },
     { order: 6, actionId: "ACC-ACT-SELECT-TERM" },
     { order: 7, actionId: "ORG-ACT-RESOLVE-CONTEXT-SCOPE" },
     { order: 8, actionId: "IAM-ACT-EVALUATE-PERMISSION" },
     { order: 9, actionId: "ACC-ACT-SWITCH-CONTEXT" },
   ]);
+});
+
+test("reaches active and read-only context states through term selection and switching", () => {
+  const account = moduleById(requirementModel, "ACC-001");
+  for (const actionId of ["ACC-ACT-SELECT-TERM", "ACC-ACT-SWITCH-CONTEXT"]) {
+    const states = account.scenarios
+      .filter((scenario) => scenario.actionId === actionId)
+      .map((scenario) => scenario.then.expectedState)
+      .filter(({ mode }) => mode === "STATE")
+      .map(({ value }) => value);
+    assert.deepEqual(new Set(states), new Set(["ACTIVE", "READ_ONLY"]), actionId);
+  }
 });
 
 test("gates DF-002 writes on permission and audit before partial import acceptance", () => {
@@ -1194,15 +1230,88 @@ test("gates DF-002 writes on permission and audit before partial import acceptan
     "IAM-ACT-EVALUATE-PERMISSION",
     "AUD-ACT-APPEND-EVENT",
     "ORG-ACT-CONFIRM-IMPORT",
-    "IAM-ACT-RECALCULATE-PERMISSIONS",
     "AUD-ACT-APPEND-EVENT",
+    "ORG-ACT-FINALIZE-AUDITED-IMPORT",
+    "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT",
+    "IAM-ACT-RECALCULATE-PERMISSIONS",
   ]);
   assert.match(flow.steps[4].condition, /audit gate/i);
-  assert.match(flow.steps[7].condition, /outcome audit/i);
-  assert.match(JSON.stringify(flow), /audit gate failure.*prevents.*accepted-row writes/i);
+  assert.match(flow.steps[5].condition, /provisional.*outcome audit/i);
+  assert.match(flow.steps[6].condition, /outcome audit/i);
+  assert.match(flow.steps[7].condition, /outcome audit.*succeeded/i);
+  assert.match(flow.steps[8].condition, /partial.*outcome audit.*succeeded/i);
+  assert.match(flow.steps[9].condition, /audited import.*finalized/i);
+  assert.ok(flow.retryPolicy.retryableFailureResults.includes("AUDIT_FAILED"));
+  assert.match(JSON.stringify(flow.compensation), /rollback.*provisional.*outcome audit/i);
+  const organization = moduleById(requirementModel, "ORG-001");
+  const confirm = organization.actions.find(({ id }) => id === "ORG-ACT-CONFIRM-IMPORT");
+  const finalize = organization.actions.find(({ id }) => id === "ORG-ACT-FINALIZE-AUDITED-IMPORT");
+  const finalizePartial = organization.actions.find(
+    ({ id }) => id === "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT",
+  );
+  assert.deepEqual(
+    organization.scenarios.find(({ actionId, kind }) => (
+      actionId === confirm.id && kind === "SUCCESS"
+    )).then.expectedState,
+    { mode: "STATE", value: "PENDING_OUTCOME_AUDIT" },
+  );
+  assert.deepEqual(finalize.transition, {
+    from: "PENDING_OUTCOME_AUDIT",
+    to: "COMPLETED",
+  });
+  assert.deepEqual(finalizePartial.transition, {
+    from: "PENDING_PARTIAL_OUTCOME_AUDIT",
+    to: "PARTIAL_SUCCESS",
+  });
   const highRiskActions = modules.flatMap((module) => module.actions)
     .filter(({ risk }) => risk === RISK.HIGH);
   assert.equal(highRiskActions.every(({ failureResults }) => failureResults.includes("AUDIT_FAILED")), true);
+});
+
+test("declares concrete success states for every foundation write action", () => {
+  for (const module of modules) {
+    const successScenarioByActionId = new Map(
+      module.scenarios
+        .filter(({ kind }) => kind === "SUCCESS")
+        .map((scenario) => [scenario.actionId, scenario]),
+    );
+    for (const action of module.actions.filter(({ writes }) => writes)) {
+      assert.equal(
+        successScenarioByActionId.get(action.id)?.then.expectedState.mode,
+        "STATE",
+        action.id,
+      );
+    }
+  }
+});
+
+test("provides App-native ORG scope, import notification, and anomaly confirmation tasks", () => {
+  const organization = moduleById(requirementModel, "ORG-001");
+  const expectedActionIds = [
+    "ORG-ACT-VIEW-MY-TEACHING-SCOPE",
+    "ORG-ACT-VIEW-IMPORT-NOTIFICATION",
+    "ORG-ACT-CONFIRM-IMPORT-ANOMALY",
+  ];
+  for (const actionId of expectedActionIds) {
+    const action = organization.actions.find(({ id }) => id === actionId);
+    assert.ok(action, actionId);
+    assert.deepEqual(action.clients, [CLIENT.APP], actionId);
+    assert.ok(organization.pages.some(({ clients, actionIds }) => (
+      clients.includes(CLIENT.APP) && actionIds.includes(actionId)
+    )), actionId);
+  }
+  assert.deepEqual(
+    organization.actions.find(({ id }) => id === "ORG-ACT-CONFIRM-IMPORT").clients,
+    [CLIENT.WEB],
+  );
+});
+
+test("classifies export requests as S4 sensitive export data", () => {
+  const governance = moduleById(requirementModel, "DGV-001");
+  assert.equal(
+    governance.objects.find(({ id }) => id === "DGV-OBJ-EXPORT").sensitivityId,
+    "S4",
+  );
 });
 
 test("publishes the usable knowledge mapping before the curriculum version", () => {
@@ -1585,6 +1694,7 @@ test("registers every required Option Set concept with stable code-label values"
     "school",
     "loginRole",
     "workDuty",
+    "dataRetentionCategory",
     "term",
     "grade",
     "class",
@@ -1639,6 +1749,8 @@ test("registers every required Option Set concept with stable code-label values"
     "scoreRounding",
     "visibilityPolicy",
     "knowledgeMappingRelation",
+    "modelTrainingUse",
+    "teacherWorkspaceView",
   ];
   const runtimeSources = {
     school: {
@@ -1742,6 +1854,7 @@ test("registers every required Option Set concept with stable code-label values"
       "ROLE-PLATFORM-OPS",
     ],
     workDuty: ["DUTY-SUBJECT-TEACHER", "DUTY-HOMEROOM", "DUTY-SUBJECT-LEAD"],
+    dataRetentionCategory: ["ACCOUNT_IDENTITY", "ORGANIZATION", "TEACHING_CONTENT", "STUDENT_WORK", "SCORE_FEEDBACK", "AUDIT_EXPORT"],
     timeRange: ["TODAY", "LAST-7-DAYS", "THIS-WEEK", "THIS-MONTH", "THIS-TERM", "CUSTOM"],
     yesNo: ["YES", "NO"],
     assignmentType: ["ONLINE", "PHOTO", "MIXED", "LEARNING_TASK"],
@@ -1815,6 +1928,8 @@ test("registers every required Option Set concept with stable code-label values"
     scoreRounding: ["NONE", "HALF-UP-INTEGER", "HALF-UP-ONE-DECIMAL", "FLOOR-INTEGER"],
     visibilityPolicy: ["PRIVATE", "SUBJECT-TEACHERS", "HOMEROOM-READ", "SCHOOL-AUTHORIZED", "STUDENT-VISIBLE"],
     knowledgeMappingRelation: ["PRIMARY", "SUPPORTING", "PREREQUISITE", "EXTENSION"],
+    modelTrainingUse: ["DENIED", "SEPARATELY_APPROVED"],
+    teacherWorkspaceView: ["TODAY", "GRADING_QUEUE", "HOMEROOM_OVERVIEW", "REPORTS"],
   };
   assert.deepEqual(optionSets.map(({ key }) => key).sort(), requiredConcepts.sort());
   assert.deepEqual(

@@ -797,6 +797,24 @@ export const optionSets = [
     ["PREREQUISITE", "前置知识点"],
     ["EXTENSION", "拓展知识点"],
   ]),
+  optionSet("OPT-ENUM-044", "dataRetentionCategory", "数据保留类别", [
+    ["ACCOUNT_IDENTITY", "账号与身份"],
+    ["ORGANIZATION", "组织与成员"],
+    ["TEACHING_CONTENT", "教学内容"],
+    ["STUDENT_WORK", "学生作答与提交"],
+    ["SCORE_FEEDBACK", "成绩与反馈"],
+    ["AUDIT_EXPORT", "审计与导出"],
+  ]),
+  optionSet("OPT-ENUM-045", "modelTrainingUse", "模型训练使用", [
+    ["DENIED", "禁止用于模型训练"],
+    ["SEPARATELY_APPROVED", "经学校单独批准"],
+  ]),
+  optionSet("OPT-ENUM-046", "teacherWorkspaceView", "教师工作台默认视图", [
+    ["TODAY", "今日待办"],
+    ["GRADING_QUEUE", "批改队列"],
+    ["HOMEROOM_OVERVIEW", "班主任全科概览"],
+    ["REPORTS", "报告摘要"],
+  ]),
 ];
 
 export const extensions = [
