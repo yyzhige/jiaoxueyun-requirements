@@ -1,8 +1,13 @@
 const REQUIRED_MODEL_COLLECTIONS = [
+  "baselineDecisions",
   "roles",
   "duties",
+  "lifecyclePolicies",
+  "sensitivities",
   "optionSets",
+  "events",
   "metrics",
+  "nfrs",
   "modules",
   "flows",
   "aiTasks",
@@ -158,6 +163,20 @@ function requireRecord(errors, value, property, path) {
   return value[property];
 }
 
+function requireString(errors, value, property, path) {
+  if (!isValidId(value?.[property])) {
+    errors.push(
+      `INVALID_ENTITY_SHAPE ${path}.${property} must be a non-empty string`,
+    );
+  }
+}
+
+function requireTrue(errors, value, property, path) {
+  if (value?.[property] !== true) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.${property} must be true`);
+  }
+}
+
 function validateObjectMembers(errors, values, path, label) {
   values.forEach((value, index) => {
     if (!isRecord(value)) {
@@ -261,6 +280,39 @@ function validateExtension(errors, extension, path) {
   }
 }
 
+function validateBaselineDecision(errors, decision, path) {
+  requireString(errors, decision, "statement", path);
+  requireString(errors, decision, "rationale", path);
+  requireTrue(errors, decision, "immutable", path);
+}
+
+function validateLifecyclePolicy(errors, policy, path) {
+  for (const property of [
+    "scope",
+    "writeRule",
+    "historyRule",
+    "retentionOwner",
+    "expiryOrArchival",
+  ]) {
+    requireString(errors, policy, property, path);
+  }
+}
+
+function validateSensitivity(errors, sensitivity, path) {
+  requireString(errors, sensitivity, "label", path);
+  requireString(errors, sensitivity, "handlingRule", path);
+}
+
+function validateEvent(errors, event, path) {
+  requireString(errors, event, "label", path);
+  requireString(errors, event, "definition", path);
+}
+
+function validateNfr(errors, nfr, path) {
+  requireString(errors, nfr, "statement", path);
+  requireString(errors, nfr, "verification", path);
+}
+
 function validateModelShape(model) {
   const errors = [];
   for (const property of REQUIRED_MODEL_COLLECTIONS) {
@@ -269,6 +321,15 @@ function validateModelShape(model) {
     }
   }
 
+  if (Array.isArray(model.baselineDecisions)) {
+    validateEntities(
+      errors,
+      model.baselineDecisions,
+      "baselineDecisions",
+      "baseline decision",
+      (decision, path) => validateBaselineDecision(errors, decision, path),
+    );
+  }
   if (Array.isArray(model.roles)) {
     validateEntities(errors, model.roles, "roles", "role");
   }
@@ -280,6 +341,24 @@ function validateModelShape(model) {
         );
       }
     });
+  }
+  if (Array.isArray(model.lifecyclePolicies)) {
+    validateEntities(
+      errors,
+      model.lifecyclePolicies,
+      "lifecyclePolicies",
+      "lifecycle policy",
+      (policy, path) => validateLifecyclePolicy(errors, policy, path),
+    );
+  }
+  if (Array.isArray(model.sensitivities)) {
+    validateEntities(
+      errors,
+      model.sensitivities,
+      "sensitivities",
+      "sensitivity",
+      (sensitivity, path) => validateSensitivity(errors, sensitivity, path),
+    );
   }
   if (Array.isArray(model.optionSets)) {
     validateEntities(
@@ -293,8 +372,22 @@ function validateModelShape(model) {
       },
     );
   }
+  if (Array.isArray(model.events)) {
+    validateEntities(errors, model.events, "events", "event", (event, path) => {
+      validateEvent(errors, event, path);
+    });
+  }
   if (Array.isArray(model.metrics)) {
     validateEntities(errors, model.metrics, "metrics", "metric", (metric, path) => {
+      for (const property of [
+        "ownerRef",
+        "scope",
+        "aggregation",
+        "exclusions",
+        "window",
+      ]) {
+        requireString(errors, metric, property, path);
+      }
       const eventIds = requireArray(errors, metric, "eventIds", path);
       eventIds.forEach((eventId, index) => {
         if (!isValidId(eventId)) {
@@ -303,6 +396,11 @@ function validateModelShape(model) {
           );
         }
       });
+    });
+  }
+  if (Array.isArray(model.nfrs)) {
+    validateEntities(errors, model.nfrs, "nfrs", "NFR", (nfr, path) => {
+      validateNfr(errors, nfr, path);
     });
   }
   if (Array.isArray(model.modules)) {

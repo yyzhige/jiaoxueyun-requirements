@@ -45,6 +45,10 @@ function mapById(entries) {
 }
 
 export function buildModelIndex(model) {
+  const baselineDecisions = list(model?.baselineDecisions).map((value, index) => ({
+    value,
+    path: `baselineDecisions[${index}]`,
+  }));
   const roles = list(model?.roles).map((value, index) => ({
     value,
     path: `roles[${index}]`,
@@ -53,13 +57,29 @@ export function buildModelIndex(model) {
     value,
     path: `duties[${index}]`,
   }));
+  const lifecyclePolicies = list(model?.lifecyclePolicies).map((value, index) => ({
+    value,
+    path: `lifecyclePolicies[${index}]`,
+  }));
+  const sensitivities = list(model?.sensitivities).map((value, index) => ({
+    value,
+    path: `sensitivities[${index}]`,
+  }));
   const optionSets = list(model?.optionSets).map((value, index) => ({
     value,
     path: `optionSets[${index}]`,
   }));
+  const events = list(model?.events).map((value, index) => ({
+    value,
+    path: `events[${index}]`,
+  }));
   const metrics = list(model?.metrics).map((value, index) => ({
     value,
     path: `metrics[${index}]`,
+  }));
+  const nfrs = list(model?.nfrs).map((value, index) => ({
+    value,
+    path: `nfrs[${index}]`,
   }));
   const modules = list(model?.modules).map((value, index) => ({
     value,
@@ -139,12 +159,16 @@ export function buildModelIndex(model) {
     actionById: mapById(actions),
     actorIds: new Set([...roleIds, ...dutyIds, ...SYSTEM_ACTOR_CATEGORIES]),
     aiTasks,
+    baselineDecisions,
     duties,
     dutyIds,
     extensions,
+    events,
+    eventById: mapById(events),
     fields,
     fieldById: mapById(fields),
     flows,
+    lifecyclePolicies,
     metrics,
     modules,
     moduleById: mapById(modules),
@@ -153,24 +177,46 @@ export function buildModelIndex(model) {
     optionSets,
     optionSetById: mapById(optionSets),
     pages,
+    nfrs,
     roles,
     roleIds,
     scenarios,
     scenarioById: mapById(scenarios),
+    sensitivities,
   };
 }
 
 function duplicateIdErrors(index) {
   const entries = [];
+  addEntities(
+    entries,
+    index.baselineDecisions.map(({ value }) => value),
+    "baseline decision",
+    "baselineDecisions",
+  );
   addEntities(entries, index.roles.map(({ value }) => value), "role", "roles");
   addEntities(entries, index.duties.map(({ value }) => value), "duty", "duties");
+  addEntities(
+    entries,
+    index.lifecyclePolicies.map(({ value }) => value),
+    "lifecycle policy",
+    "lifecyclePolicies",
+  );
+  addEntities(
+    entries,
+    index.sensitivities.map(({ value }) => value),
+    "sensitivity",
+    "sensitivities",
+  );
   addEntities(
     entries,
     index.optionSets.map(({ value }) => value),
     "Option Set",
     "optionSets",
   );
+  addEntities(entries, index.events.map(({ value }) => value), "event", "events");
   addEntities(entries, index.metrics.map(({ value }) => value), "metric", "metrics");
+  addEntities(entries, index.nfrs.map(({ value }) => value), "NFR", "nfrs");
   addEntities(entries, index.modules.map(({ value }) => value), "module", "modules");
   addEntities(entries, index.objects.map(({ value }) => value), "object", "objects");
   addEntities(entries, index.fields.map(({ value }) => value), "field", "fields");
@@ -441,6 +487,13 @@ export function validateModelReferences(model) {
       metricEntry.value?.ownerRef,
       `${metricEntry.path}.ownerRef`,
     );
+    list(metricEntry.value?.eventIds).forEach((eventId, eventIndex) => {
+      if (!index.eventById.has(eventId)) {
+        errors.push(
+          `MISSING_METRIC_EVENT_REFERENCE ${formatValidationValue(metricEntry.value?.id)}.eventIds[${eventIndex}] -> ${formatValidationValue(eventId)}`,
+        );
+      }
+    });
   }
 
   for (const taskEntry of index.aiTasks) {

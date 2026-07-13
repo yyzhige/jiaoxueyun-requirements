@@ -13,17 +13,42 @@ import {
   defineModule,
   defineRequirementModel,
 } from "../requirements-v2/model.mjs";
+import {
+  baselineDecisions,
+  duties,
+  events,
+  extensions,
+  lifecyclePolicies,
+  metrics,
+  nfrs,
+  optionSets,
+  requirementModel,
+  roles,
+  sensitivities,
+} from "../requirements-v2/facts/index.mjs";
 
 function validFixture() {
   return {
+    baselineDecisions: [],
     roles: [
       { id: "ROLE-STUDENT", label: "student" },
       { id: "ROLE-TEACHER", label: "teacher" },
     ],
     duties: [],
+    lifecyclePolicies: [],
+    sensitivities: [],
     optionSets: [{
       id: "OPT-BOOL",
       values: [{ code: "YES", label: "yes" }],
+    }],
+    events: [{
+      id: "EVT-TEST-START",
+      label: "fixture start",
+      definition: "fixture metric start event",
+    }, {
+      id: "EVT-TEST-END",
+      label: "fixture end",
+      definition: "fixture metric end event",
     }],
     metrics: [{
       id: "MET-TEST",
@@ -32,7 +57,10 @@ function validFixture() {
       scope: "fixture",
       aggregation: "duration",
       target: "defined",
+      exclusions: "none",
+      window: "fixture run",
     }],
+    nfrs: [],
     modules: [{
       id: "SUB-001",
       phase: PHASE.FIRST,
@@ -127,6 +155,10 @@ function assertHasCode(errors, code) {
 
 const ENTITY_CASES = [
   {
+    label: "baseline decision",
+    set(model, value) { model.baselineDecisions = [value]; },
+  },
+  {
     label: "role",
     set(model, value) { model.roles[0] = value; },
   },
@@ -135,12 +167,28 @@ const ENTITY_CASES = [
     set(model, value) { model.duties = [value]; },
   },
   {
+    label: "lifecycle policy",
+    set(model, value) { model.lifecyclePolicies = [value]; },
+  },
+  {
+    label: "sensitivity",
+    set(model, value) { model.sensitivities = [value]; },
+  },
+  {
     label: "Option Set",
     set(model, value) { model.optionSets[0] = value; },
   },
   {
+    label: "event",
+    set(model, value) { model.events[0] = value; },
+  },
+  {
     label: "metric",
     set(model, value) { model.metrics[0] = value; },
+  },
+  {
+    label: "NFR",
+    set(model, value) { model.nfrs = [value]; },
   },
   {
     label: "module",
@@ -196,10 +244,15 @@ test("rejects null and non-object requirement models", () => {
 
 test("rejects missing required top-level collections", () => {
   const collectionNames = [
+    "baselineDecisions",
     "roles",
     "duties",
+    "lifecyclePolicies",
+    "sensitivities",
     "optionSets",
+    "events",
     "metrics",
+    "nfrs",
     "modules",
     "flows",
     "aiTasks",
@@ -216,15 +269,284 @@ test("rejects missing required top-level collections", () => {
 
 test("accepts explicitly present empty top-level collections", () => {
   assert.deepEqual(validateRequirementModel({
+    baselineDecisions: [],
     roles: [],
     duties: [],
+    lifecyclePolicies: [],
+    sensitivities: [],
     optionSets: [],
+    events: [],
     metrics: [],
+    nfrs: [],
     modules: [],
     flows: [],
     aiTasks: [],
     extensions: [],
   }), []);
+});
+
+test("assembles the shared facts into an initially empty executable model", () => {
+  assert.deepEqual(requirementModel, {
+    baselineDecisions,
+    roles,
+    duties,
+    lifecyclePolicies,
+    sensitivities,
+    optionSets,
+    events,
+    metrics,
+    nfrs,
+    modules: [],
+    flows: [],
+    aiTasks: [],
+    extensions,
+  });
+  assert.deepEqual(validateRequirementModel(requirementModel), []);
+});
+
+test("defines the immutable baseline decisions and teacher duty model", () => {
+  assert.deepEqual(
+    baselineDecisions.map(({ id }) => id),
+    Array.from({ length: 10 }, (_, index) => (
+      `BASE-${String(index + 1).padStart(3, "0")}`
+    )),
+  );
+  assert.equal(
+    baselineDecisions.every(({ statement, rationale, immutable }) => (
+      typeof statement === "string"
+      && statement.length > 0
+      && typeof rationale === "string"
+      && rationale.length > 0
+      && immutable === true
+    )),
+    true,
+  );
+  assert.deepEqual(roles, [
+    { id: "ROLE-STUDENT", label: "学生" },
+    { id: "ROLE-TEACHER", label: "教师" },
+    { id: "ROLE-ACADEMIC", label: "教务" },
+    { id: "ROLE-SCHOOL-ADMIN", label: "学校管理员" },
+    { id: "ROLE-PLATFORM-OPS", label: "平台运营" },
+  ]);
+  assert.deepEqual(duties, [
+    { id: "DUTY-SUBJECT-TEACHER", roleId: "ROLE-TEACHER", label: "任课教师" },
+    { id: "DUTY-HOMEROOM", roleId: "ROLE-TEACHER", label: "班主任" },
+    { id: "DUTY-SUBJECT-LEAD", roleId: "ROLE-TEACHER", label: "学科负责人" },
+  ]);
+});
+
+test("defines distinct lifecycle and sensitivity policies", () => {
+  assert.deepEqual(
+    lifecyclePolicies.map(({ scope }) => scope),
+    [
+      "TENANT_CONFIGURATION",
+      "SCHOOL_YEAR_ORGANIZATION",
+      "VERSIONED_TEACHING_FACTS",
+      "IMMUTABLE_AUDIT_EVENTS",
+      "TEMPORARY_AI_PREVIEWS",
+      "REPORT_SUBSCRIPTIONS_RUNS_SNAPSHOTS",
+      "CROSS_TERM_LEARNING_PATHS",
+      "EXPIRING_EXPORTS",
+    ],
+  );
+  assert.equal(new Set(lifecyclePolicies.map(({ writeRule }) => writeRule)).size > 1, true);
+  assert.equal(lifecyclePolicies.every((policy) => (
+    [
+      "id",
+      "scope",
+      "writeRule",
+      "historyRule",
+      "retentionOwner",
+      "expiryOrArchival",
+    ].every((property) => (
+      typeof policy[property] === "string" && policy[property].length > 0
+    ))
+  )), true);
+
+  assert.deepEqual(sensitivities.map(({ id }) => id), ["S1", "S2", "S3", "S4"]);
+  assert.equal(sensitivities.every(({ label, handlingRule }) => (
+    typeof label === "string"
+    && label.length > 0
+    && typeof handlingRule === "string"
+    && handlingRule.length > 0
+  )), true);
+});
+
+test("defines measurable metric event contracts and all approved NFRs", () => {
+  assert.deepEqual(metrics.map(({ id }) => id), [
+    "MET-001",
+    "MET-002",
+    "MET-003",
+    "MET-004",
+    "MET-005",
+  ]);
+  assert.equal(metrics.every((metric) => (
+    metric.eventIds.length > 0
+    && metric.eventIds.every((eventId) => events.some(({ id }) => id === eventId))
+    && ["ownerRef", "scope", "aggregation", "target", "exclusions", "window"]
+      .every((property) => (
+        typeof metric[property] === "string" && metric[property].length > 0
+      ))
+  )), true);
+  assert.equal(metrics.find(({ id }) => id === "MET-001").aggregation, "duration");
+  assert.equal(metrics.find(({ id }) => id === "MET-002").aggregation, "conversion");
+  assert.equal(metrics.find(({ id }) => id === "MET-003").aggregation, "count");
+  assert.equal(metrics.find(({ id }) => id === "MET-004").aggregation, "count");
+  assert.ok(["conversion", "boolean"].includes(
+    metrics.find(({ id }) => id === "MET-005").aggregation,
+  ));
+
+  assert.deepEqual(
+    nfrs.map(({ id }) => id),
+    Array.from({ length: 9 }, (_, index) => (
+      `NFR-${String(index + 1).padStart(3, "0")}`
+    )),
+  );
+  assert.equal(nfrs.every(({ statement, verification }) => (
+    typeof statement === "string"
+    && statement.length > 0
+    && typeof verification === "string"
+    && verification.length > 0
+  )), true);
+});
+
+test("registers every required Option Set concept with stable code-label values", () => {
+  const requiredConcepts = [
+    "region",
+    "school",
+    "loginRole",
+    "term",
+    "grade",
+    "class",
+    "subject",
+    "course",
+    "teacher",
+    "student",
+    "knowledgePoint",
+    "assignment",
+    "exam",
+    "timeRange",
+    "scopeObject",
+    "yesNo",
+    "assignmentType",
+    "submissionMethod",
+    "questionType",
+    "latePolicy",
+    "resubmissionPolicy",
+    "feedbackPolicy",
+    "aiConfidence",
+    "gradingCorrectionReason",
+    "scoreState",
+    "evidenceStage",
+    "answerResult",
+    "errorType",
+    "masteryState",
+    "improvementPriority",
+    "improvementTaskType",
+    "completionEvidenceType",
+    "reportCadence",
+    "reportScheduleTimezone",
+    "reportScheduleTime",
+    "reportRecipientScope",
+    "reportMetric",
+    "aiCapability",
+    "aiRisk",
+    "aiTaskStatus",
+    "notificationType",
+    "notificationReadState",
+    "importObject",
+    "importAction",
+    "importResult",
+    "auditAction",
+    "auditResult",
+    "accountIdentifier",
+    "activationMethod",
+    "imageQuality",
+    "correctionDecision",
+    "schedulingConstraint",
+    "schedulingView",
+    "scoreRounding",
+    "visibilityPolicy",
+  ];
+  assert.deepEqual(optionSets.map(({ key }) => key).sort(), requiredConcepts.sort());
+  assert.equal(optionSets.every(({ values }) => (
+    values.length > 0
+    && values.every(({ code, label }) => (
+      typeof code === "string"
+      && code.length > 0
+      && typeof label === "string"
+      && label.length > 0
+    ))
+  )), true);
+  assert.notEqual(
+    optionSets.find(({ key }) => key === "assignmentType").id,
+    optionSets.find(({ key }) => key === "submissionMethod").id,
+  );
+});
+
+test("registers phase-two extensions without executable surface", () => {
+  assert.equal(extensions.length, 3);
+  assert.equal(extensions.every((extension) => (
+    extension.phase === 2
+    && extension.status === "REGISTERED_ONLY"
+    && extension.dependencies.length > 0
+    && extension.entryCriteria.length > 0
+    && extension.excludedFirstStageBehavior.length > 0
+    && ["pageIds", "actionIds", "pages", "actions"]
+      .every((property) => !Object.hasOwn(extension, property))
+  )), true);
+});
+
+test("rejects missing required scalar fields in shared catalog facts", () => {
+  const cases = [
+    ["baselineDecisions", {
+      id: "BASE-X",
+      statement: "statement",
+      rationale: "rationale",
+      immutable: true,
+    }, "statement"],
+    ["lifecyclePolicies", {
+      id: "LIFE-X",
+      scope: "scope",
+      writeRule: "write",
+      historyRule: "history",
+      retentionOwner: "owner",
+      expiryOrArchival: "archive",
+    }, "writeRule"],
+    ["sensitivities", {
+      id: "S-X",
+      label: "label",
+      handlingRule: "handling",
+    }, "handlingRule"],
+    ["events", {
+      id: "EVT-X",
+      label: "label",
+      definition: "definition",
+    }, "definition"],
+    ["nfrs", {
+      id: "NFR-X",
+      statement: "statement",
+      verification: "verification",
+    }, "verification"],
+    ["metrics", {
+      id: "MET-X",
+      ownerRef: "ROLE-STUDENT",
+      eventIds: ["EVT-TEST-START", "EVT-TEST-END"],
+      scope: "scope",
+      aggregation: "duration",
+      target: "target",
+      exclusions: "none",
+      window: "window",
+    }, "window"],
+  ];
+
+  for (const [collection, entity, missingProperty] of cases) {
+    const model = validFixture();
+    delete entity[missingProperty];
+    model[collection] = [entity];
+
+    assertHasCode(validateRequirementModel(model), "INVALID_ENTITY_SHAPE");
+  }
 });
 
 for (const entityCase of ENTITY_CASES) {
@@ -248,14 +570,25 @@ for (const entityCase of ENTITY_CASES) {
 }
 
 const INVALID_COLLECTION_SHAPE_CASES = [
+  ["baseline decisions", "MISSING_MODEL_COLLECTION", (model) => {
+    model.baselineDecisions = {};
+  }],
   ["roles", "MISSING_MODEL_COLLECTION", (model) => { model.roles = {}; }],
   ["duties", "MISSING_MODEL_COLLECTION", (model) => { model.duties = {}; }],
+  ["lifecycle policies", "MISSING_MODEL_COLLECTION", (model) => {
+    model.lifecyclePolicies = {};
+  }],
+  ["sensitivities", "MISSING_MODEL_COLLECTION", (model) => {
+    model.sensitivities = {};
+  }],
   ["Option Set values", "INVALID_ENTITY_SHAPE", (model) => {
     model.optionSets[0].values = {};
   }],
   ["metric event IDs", "INVALID_ENTITY_SHAPE", (model) => {
     model.metrics[0].eventIds = {};
   }],
+  ["events", "MISSING_MODEL_COLLECTION", (model) => { model.events = {}; }],
+  ["NFRs", "MISSING_MODEL_COLLECTION", (model) => { model.nfrs = {}; }],
   ["module objects", "INVALID_ENTITY_SHAPE", (model) => {
     moduleById(model, "SUB-001").objects = {};
   }],
@@ -451,6 +784,25 @@ test("rejects duplicate IDs across entity categories", () => {
   const errors = validateRequirementModel(model);
 
   assertHasCode(errors, "DUPLICATE_ID");
+});
+
+test("rejects duplicate IDs from shared catalog collections", () => {
+  const model = validFixture();
+  model.baselineDecisions = [{
+    id: "EVT-TEST-START",
+    statement: "duplicate",
+    rationale: "duplicate",
+    immutable: true,
+  }];
+
+  assertHasCode(validateRequirementModel(model), "DUPLICATE_ID");
+});
+
+test("rejects metric references to unregistered events", () => {
+  const model = validFixture();
+  model.metrics[0].eventIds[0] = "EVT-UNKNOWN";
+
+  assertHasCode(validateRequirementModel(model), "MISSING_METRIC_EVENT_REFERENCE");
 });
 
 test("does not include invalid IDs in duplicate lookup indexes", () => {
@@ -1147,6 +1499,11 @@ test("accepts supported metric aggregations with sufficient events", () => {
     const model = validFixture();
     model.metrics[0].aggregation = aggregation;
     model.metrics[0].eventIds = eventIds;
+    model.events = eventIds.map((id) => ({
+      id,
+      label: id,
+      definition: `${aggregation} fixture event`,
+    }));
 
     assert.deepEqual(validateRequirementModel(model), []);
   }
