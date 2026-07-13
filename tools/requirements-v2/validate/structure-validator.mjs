@@ -4,6 +4,67 @@ const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 
 const MAX_TRAVERSAL_DEPTH = 64;
 const OPTION_SET_MODES = new Set(["STATIC", "RUNTIME_QUERY"]);
+const CLIENTS = new Set(["WEB", "APP"]);
+const RISKS = new Set(["READ", "LOW", "HIGH"]);
+const SCENARIO_KINDS = new Set(["SUCCESS", "FAILURE", "BOUNDARY"]);
+const DATA_TYPES = new Set([
+  "STRING",
+  "TEXT",
+  "BOOLEAN",
+  "INTEGER",
+  "DECIMAL",
+  "DATE",
+  "DATETIME",
+  "DURATION",
+  "JSON",
+  "STRING_ARRAY",
+  "ID",
+  "FILE_REFERENCE",
+  "IMAGE_REFERENCE",
+]);
+const MUTABILITIES = new Set([
+  "EDITABLE",
+  "READ_ONLY",
+  "IMMUTABLE",
+  "SYSTEM_MANAGED",
+]);
+const DATA_EXPOSURE_VISIBILITIES = new Set([
+  "AUTHORIZED_SCOPE",
+  "OWNER_ONLY",
+  "ASSIGNED_SCOPE",
+  "SCHOOL_SCOPE",
+  "PUBLIC",
+  "INTERNAL",
+]);
+const RELATIONSHIP_TYPES = new Set([
+  "ACTIVATES",
+  "APPEARS_IN",
+  "ASSIGNED_TO",
+  "AUTHORIZED_BY",
+  "BELONGS_TO",
+  "CONFIGURES",
+  "CONTAINS",
+  "DERIVED_FROM",
+  "EXTENDS_ROLE",
+  "IMPLEMENTS",
+  "INVALIDATES",
+  "MAPS_TO",
+  "OWNS",
+  "PART_OF",
+  "REFERENCES",
+  "REQUIRES",
+  "RESULT_OF",
+  "REVIEWS",
+  "TEMPORARILY_EXTENDS",
+  "USES_SUBJECT",
+  "VERSION_MEMBER",
+]);
+const CARDINALITIES = new Set([
+  "ONE_TO_ONE",
+  "ONE_TO_MANY",
+  "MANY_TO_ONE",
+  "MANY_TO_MANY",
+]);
 const EXTENSION_ALLOWED_KEYS = new Set([
   "id",
   "label",
@@ -184,6 +245,35 @@ function requireString(errors, value, property, path) {
   }
 }
 
+function contractString(errors, value, property, path, code) {
+  if (!isValidId(value?.[property])) {
+    errors.push(`${code} ${path}.${property} must be a non-empty string`);
+  }
+}
+
+function contractArray(errors, value, property, path, code, { nonEmpty = false } = {}) {
+  if (!Array.isArray(value?.[property])) {
+    errors.push(`${code} ${path}.${property} must be an array`);
+    return [];
+  }
+  if (nonEmpty && value[property].length === 0) {
+    errors.push(`${code} ${path}.${property} must be non-empty`);
+  }
+  return value[property];
+}
+
+function contractStringArray(errors, value, property, path, code, options = {}) {
+  const values = contractArray(errors, value, property, path, code, options);
+  const seen = new Set();
+  values.forEach((entry, index) => {
+    if (!isValidId(entry) || seen.has(entry)) {
+      errors.push(`${code} ${path}.${property}[${index}] must be a unique non-empty string`);
+    }
+    if (isValidId(entry)) seen.add(entry);
+  });
+  return values;
+}
+
 function requireTrue(errors, value, property, path) {
   if (value?.[property] !== true) {
     errors.push(`INVALID_ENTITY_SHAPE ${path}.${property} must be true`);
@@ -212,19 +302,98 @@ function validateEntities(errors, values, path, label, validate) {
   });
 }
 
-function validateField(errors, field, path) {
+function validateField(errors, field, path, strict) {
   requireRecord(errors, field, "valueSource", path);
+  if (!strict) return;
+  for (const property of [
+    "label",
+    "dataType",
+    "mutability",
+    "visibility",
+    "validation",
+    "historyPolicy",
+  ]) {
+    contractString(errors, field, property, path, "INVALID_FIELD_CONTRACT");
+  }
+  const required = field.required;
+  if (!(typeof required === "boolean" || isValidId(required))) {
+    errors.push(
+      `INVALID_FIELD_CONTRACT ${path}.required must be boolean or a non-empty conditional rule`,
+    );
+  }
+  if (!isRecord(field.valueSource)) {
+    errors.push(`INVALID_FIELD_CONTRACT ${path}.valueSource must be an object`);
+  }
+  if (!DATA_TYPES.has(field.dataType)) {
+    errors.push(`INVALID_FIELD_CONTRACT ${path}.dataType is unsupported`);
+  }
+  if (!MUTABILITIES.has(field.mutability)) {
+    errors.push(`INVALID_FIELD_CONTRACT ${path}.mutability is unsupported`);
+  }
+  if (!DATA_EXPOSURE_VISIBILITIES.has(field.visibility)) {
+    errors.push(`INVALID_FIELD_CONTRACT ${path}.visibility is unsupported`);
+  }
 }
 
-function validateObject(errors, object, path) {
-  requireArray(errors, object, "states", path);
+function validateObject(errors, object, path, strict) {
+  const states = requireArray(errors, object, "states", path);
   const fields = requireArray(errors, object, "fields", path);
+  if (strict) {
+    for (const property of [
+      "label",
+      "ownerRef",
+      "confirmerRef",
+      "lifecyclePolicyId",
+      "sensitivityId",
+    ]) {
+      contractString(errors, object, property, path, "INVALID_OBJECT_CONTRACT");
+    }
+    if (states.length === 0) {
+      errors.push(`INVALID_OBJECT_CONTRACT ${path}.states must be non-empty`);
+    }
+    if (fields.length === 0) {
+      errors.push(`INVALID_OBJECT_CONTRACT ${path}.fields must be non-empty`);
+    }
+    const seenStates = new Set();
+    states.forEach((state, index) => {
+      if (!isValidId(state) || seenStates.has(state)) {
+        errors.push(
+          `INVALID_OBJECT_CONTRACT ${path}.states[${index}] must be a unique non-empty string`,
+        );
+      }
+      if (isValidId(state)) seenStates.add(state);
+    });
+  }
   validateEntities(errors, fields, `${path}.fields`, "field", (field, fieldPath) => {
-    validateField(errors, field, fieldPath);
+    validateField(errors, field, fieldPath, strict);
   });
 }
 
-function validateAction(errors, action, path) {
+function validateRelationship(errors, relationship, path) {
+  for (const property of [
+    "fromObjectId",
+    "toObjectId",
+    "type",
+    "cardinality",
+    "onSourceInvalidation",
+  ]) {
+    contractString(
+      errors,
+      relationship,
+      property,
+      path,
+      "INVALID_RELATIONSHIP_CONTRACT",
+    );
+  }
+  if (!RELATIONSHIP_TYPES.has(relationship.type)) {
+    errors.push(`INVALID_RELATIONSHIP_CONTRACT ${path}.type is unsupported`);
+  }
+  if (!CARDINALITIES.has(relationship.cardinality)) {
+    errors.push(`INVALID_RELATIONSHIP_CONTRACT ${path}.cardinality is unsupported`);
+  }
+}
+
+function validateAction(errors, action, path, strict) {
   requireArray(errors, action, "inputFieldIds", path);
   requireArray(errors, action, "outputFieldIds", path);
   const permissions = requireArray(errors, action, "permissions", path);
@@ -233,38 +402,325 @@ function validateAction(errors, action, path) {
   if (Object.hasOwn(action, "transition") && !isRecord(action.transition)) {
     errors.push(`INVALID_ENTITY_SHAPE ${path}.transition must be an object`);
   }
+  if (!strict) return;
+  for (const property of ["label", "targetObjectId"]) {
+    contractString(errors, action, property, path, "INVALID_ACTION_CONTRACT");
+  }
+  for (const property of ["inputFieldIds", "outputFieldIds"]) {
+    contractStringArray(errors, action, property, path, "INVALID_ACTION_CONTRACT");
+  }
+  contractStringArray(
+    errors,
+    action,
+    "clients",
+    path,
+    "INVALID_ACTION_CONTRACT",
+    { nonEmpty: true },
+  ).forEach((client) => {
+    if (isValidId(client) && !CLIENTS.has(client)) {
+      errors.push(`INVALID_ACTION_CONTRACT ${path}.clients contains unsupported ${client}`);
+    }
+  });
+  contractStringArray(
+    errors,
+    action,
+    "scenarioIds",
+    path,
+    "INVALID_ACTION_CONTRACT",
+    { nonEmpty: true },
+  );
+  contractArray(
+    errors,
+    action,
+    "permissions",
+    path,
+    "INVALID_ACTION_CONTRACT",
+  );
+  permissions.forEach((permission, index) => {
+    if (!isRecord(permission)) return;
+    if (!["ALLOW", "DENY"].includes(permission.effect)) {
+      errors.push(
+        `INVALID_ACTION_CONTRACT ${path}.permissions[${index}].effect must be ALLOW or DENY`,
+      );
+    }
+    if (!isValidId(permission.condition)) {
+      errors.push(
+        `INVALID_ACTION_CONTRACT ${path}.permissions[${index}].condition must be a non-empty string`,
+      );
+    }
+  });
+  contractStringArray(
+    errors,
+    action,
+    "failureResults",
+    path,
+    "INVALID_ACTION_CONTRACT",
+    { nonEmpty: true },
+  );
+  if (typeof action.writes !== "boolean") {
+    errors.push(`INVALID_ACTION_CONTRACT ${path}.writes must be boolean`);
+  }
+  if (!RISKS.has(action.risk)) {
+    errors.push(`INVALID_ACTION_CONTRACT ${path}.risk must be READ, LOW, or HIGH`);
+  }
+  if (action.auditRequired !== true && action.auditRequired !== false) {
+    errors.push(`INVALID_ACTION_CONTRACT ${path}.auditRequired must be boolean`);
+  }
+  if (action.writes === true && !isValidId(action.idempotencyKey)) {
+    errors.push(
+      `INVALID_ACTION_CONTRACT ${path}.idempotencyKey is required for writes`,
+    );
+  }
 }
 
-function validatePage(errors, page, path) {
+function validatePage(errors, page, path, strict) {
   requireArray(errors, page, "fieldIds", path);
   requireArray(errors, page, "actionIds", path);
   optionalArray(errors, page, "objectIds", path);
+  if (!strict) return;
+  contractString(errors, page, "label", path, "INVALID_PAGE_CONTRACT");
+  for (const property of ["fieldIds", "actionIds"]) {
+    contractStringArray(errors, page, property, path, "INVALID_PAGE_CONTRACT");
+  }
+  contractStringArray(
+    errors,
+    page,
+    "clients",
+    path,
+    "INVALID_PAGE_CONTRACT",
+    { nonEmpty: true },
+  ).forEach((client) => {
+    if (isValidId(client) && !CLIENTS.has(client)) {
+      errors.push(`INVALID_PAGE_CONTRACT ${path}.clients contains unsupported ${client}`);
+    }
+  });
+  for (const property of ["regions", "viewStates"]) {
+    contractStringArray(
+      errors,
+      page,
+      property,
+      path,
+      "INVALID_PAGE_CONTRACT",
+      { nonEmpty: true },
+    );
+  }
+  const hasObjectId = isValidId(page.objectId);
+  const hasObjectIds = Array.isArray(page.objectIds)
+    && page.objectIds.length > 0
+    && page.objectIds.every(isValidId);
+  if (Object.hasOwn(page, "objectId") && Object.hasOwn(page, "objectIds")) {
+    errors.push(
+      `INVALID_PAGE_CONTRACT ${path} must not declare both objectId and objectIds`,
+    );
+  }
+  if (!hasObjectId && !hasObjectIds) {
+    errors.push(
+      `INVALID_PAGE_CONTRACT ${path} requires objectId or non-empty objectIds`,
+    );
+  }
+}
+
+function validateScenario(errors, scenario, path, strict) {
+  if (!strict) return;
+  if (!SCENARIO_KINDS.has(scenario.kind)) {
+    errors.push(
+      `INVALID_SCENARIO_CONTRACT ${path}.kind must be SUCCESS, FAILURE, or BOUNDARY`,
+    );
+  }
+  for (const property of ["actionId", "given", "when"]) {
+    contractString(errors, scenario, property, path, "INVALID_SCENARIO_CONTRACT");
+  }
+  const outcome = scenario.then;
+  if (!isRecord(outcome)) {
+    errors.push(`INVALID_SCENARIO_CONTRACT ${path}.then must be an object`);
+    return;
+  }
+  for (const property of [
+    "expectedData",
+    "expectedState",
+    "expectedPermission",
+    "expectedVisibility",
+  ]) {
+    contractString(errors, outcome, property, `${path}.then`, "INVALID_SCENARIO_CONTRACT");
+  }
 }
 
 function validateModule(errors, module, path) {
   if (![1, 2].includes(module.phase)) {
     errors.push(`INVALID_MODULE_PHASE ${path}.phase must be 1 or 2`);
   }
+  const strict = module.phase === 1;
+  if (strict) {
+    for (const property of ["priority", "title", "objective"]) {
+      contractString(errors, module, property, path, "INVALID_MODULE_CONTRACT");
+    }
+    for (const property of [
+      "entryConditions",
+      "exitConditions",
+      "baselineDecisionIds",
+      "nfrIds",
+    ]) {
+      contractStringArray(
+        errors,
+        module,
+        property,
+        path,
+        "INVALID_MODULE_CONTRACT",
+        { nonEmpty: true },
+      );
+    }
+  }
   const objects = requireArray(errors, module, "objects", path);
+  const relationships = strict
+    ? contractArray(errors, module, "relationships", path, "INVALID_MODULE_CONTRACT")
+    : optionalArray(errors, module, "relationships", path);
   const actions = requireArray(errors, module, "actions", path);
   const pages = requireArray(errors, module, "pages", path);
   const scenarios = requireArray(errors, module, "scenarios", path);
   validateEntities(errors, objects, `${path}.objects`, "object", (object, objectPath) => {
-    validateObject(errors, object, objectPath);
+    validateObject(errors, object, objectPath, strict);
   });
+  validateEntities(
+    errors,
+    relationships,
+    `${path}.relationships`,
+    "relationship",
+    (relationship, relationshipPath) => {
+      validateRelationship(errors, relationship, relationshipPath);
+    },
+  );
   validateEntities(errors, actions, `${path}.actions`, "action", (action, actionPath) => {
-    validateAction(errors, action, actionPath);
+    validateAction(errors, action, actionPath, strict);
   });
   validateEntities(errors, pages, `${path}.pages`, "page", (page, pagePath) => {
-    validatePage(errors, page, pagePath);
+    validatePage(errors, page, pagePath, strict);
   });
-  validateEntities(errors, scenarios, `${path}.scenarios`, "scenario");
+  validateEntities(errors, scenarios, `${path}.scenarios`, "scenario", (scenario, scenarioPath) => {
+    validateScenario(errors, scenario, scenarioPath, strict);
+  });
 }
 
 function validateFlow(errors, flow, path) {
-  requireArray(errors, flow, "moduleIds", path);
-  const steps = requireArray(errors, flow, "steps", path);
-  validateObjectMembers(errors, steps, `${path}.steps`, "Flow step");
+  contractString(errors, flow, "label", path, "INVALID_FLOW_CONTRACT");
+  if (![1, 2].includes(flow.phase)) {
+    errors.push(`INVALID_FLOW_CONTRACT ${path}.phase must be 1 or 2`);
+  }
+  contractStringArray(
+    errors,
+    flow,
+    "moduleIds",
+    path,
+    "INVALID_FLOW_CONTRACT",
+    { nonEmpty: true },
+  );
+  const steps = contractArray(
+    errors,
+    flow,
+    "steps",
+    path,
+    "INVALID_FLOW_CONTRACT",
+    { nonEmpty: true },
+  );
+  if (!Array.isArray(flow.steps)) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.steps must be an array`);
+  }
+  steps.forEach((step, index) => {
+    const stepPath = `${path}.steps[${index}]`;
+    if (!isRecord(step)) {
+      errors.push(`INVALID_FLOW_CONTRACT ${stepPath} must be an object`);
+      return;
+    }
+    if (step.order !== index + 1) {
+      errors.push(`INVALID_FLOW_CONTRACT ${stepPath}.order must be ${index + 1}`);
+    }
+    contractString(errors, step, "actionId", stepPath, "INVALID_FLOW_CONTRACT");
+  });
+  for (const property of ["sourceDataRefs", "targetDataRefs"]) {
+    const dataRefs = contractArray(
+      errors,
+      flow,
+      property,
+      path,
+      "INVALID_FLOW_CONTRACT",
+      { nonEmpty: true },
+    );
+    dataRefs.forEach((dataRef, index) => {
+      const dataRefPath = `${path}.${property}[${index}]`;
+      if (!isRecord(dataRef)) {
+        errors.push(`INVALID_FLOW_CONTRACT ${dataRefPath} must be an object`);
+        return;
+      }
+      for (const refProperty of ["objectId", "fieldId", "version"]) {
+        contractString(
+          errors,
+          dataRef,
+          refProperty,
+          dataRefPath,
+          "INVALID_FLOW_CONTRACT",
+        );
+      }
+    });
+  }
+  for (const property of ["idempotencyKey", "failureGranularity"]) {
+    contractString(errors, flow, property, path, "INVALID_FLOW_CONTRACT");
+  }
+  const retryPolicy = requireRecord(errors, flow, "retryPolicy", path);
+  if (!retryPolicy) {
+    errors.push(`INVALID_FLOW_CONTRACT ${path}.retryPolicy must be an object`);
+  } else {
+    contractString(
+      errors,
+      retryPolicy,
+      "strategy",
+      `${path}.retryPolicy`,
+      "INVALID_FLOW_CONTRACT",
+    );
+    if (!Number.isInteger(retryPolicy.maxAttempts) || retryPolicy.maxAttempts < 1) {
+      errors.push(
+        `INVALID_FLOW_CONTRACT ${path}.retryPolicy.maxAttempts must be a positive integer`,
+      );
+    }
+    contractStringArray(
+      errors,
+      retryPolicy,
+      "retryableFailureResults",
+      `${path}.retryPolicy`,
+      "INVALID_FLOW_CONTRACT",
+    );
+  }
+  const compensation = requireRecord(errors, flow, "compensation", path);
+  if (!compensation) {
+    errors.push(`INVALID_FLOW_CONTRACT ${path}.compensation must be an object`);
+  } else {
+    for (const property of ["strategy", "description"]) {
+      contractString(
+        errors,
+        compensation,
+        property,
+        `${path}.compensation`,
+        "INVALID_FLOW_CONTRACT",
+      );
+    }
+  }
+  const invalidation = requireRecord(errors, flow, "downstreamInvalidation", path);
+  if (!invalidation) {
+    errors.push(`INVALID_FLOW_CONTRACT ${path}.downstreamInvalidation must be an object`);
+  } else {
+    contractString(
+      errors,
+      invalidation,
+      "strategy",
+      `${path}.downstreamInvalidation`,
+      "INVALID_FLOW_CONTRACT",
+    );
+    contractStringArray(
+      errors,
+      invalidation,
+      "targets",
+      `${path}.downstreamInvalidation`,
+      "INVALID_FLOW_CONTRACT",
+    );
+  }
 }
 
 function validateAiTask(errors, task, path) {

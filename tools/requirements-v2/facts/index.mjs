@@ -15,6 +15,7 @@ import {
   roles,
   sensitivities,
 } from "./catalogs.mjs";
+import { foundationFlows, foundationModules } from "./foundation.mjs";
 
 export {
   baselineDecisions,
@@ -29,8 +30,8 @@ export {
   sensitivities,
 };
 
-export const modules = deepFreeze([]);
-export const flows = deepFreeze([]);
+export const modules = foundationModules;
+export const flows = foundationFlows;
 export const aiTasks = deepFreeze([]);
 
 const collectionFacts = {

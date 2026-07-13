@@ -159,6 +159,16 @@ function flowErrors(index) {
   for (const flowEntry of index.flows) {
     const flow = flowEntry.value;
     const declaredModuleIds = new Set(list(flow?.moduleIds));
+    const participantPhases = new Set(
+      [...declaredModuleIds]
+        .map((moduleId) => index.moduleById.get(moduleId)?.value?.phase)
+        .filter((phase) => phase !== undefined),
+    );
+    if (participantPhases.size !== 1 || !participantPhases.has(flow?.phase)) {
+      errors.push(
+        `FLOW_PHASE_MISMATCH ${formatValidationValue(flow?.id)} phase=${formatValidationValue(flow?.phase)} participantPhases=${[...participantPhases].sort().join(",")}`,
+      );
+    }
     const actionModuleIds = new Set();
     for (const step of list(flow?.steps)) {
       const actionEntry = index.actionById.get(step?.actionId);
@@ -175,6 +185,26 @@ function flowErrors(index) {
         .join(",");
       errors.push(
         `FLOW_PARTICIPANT_MISMATCH ${formatValidationValue(flow?.id)} declared=${declared} actual=${actual}`,
+      );
+    }
+    const dataModuleIds = new Set();
+    for (const property of ["sourceDataRefs", "targetDataRefs"]) {
+      for (const dataRef of list(flow?.[property])) {
+        const objectEntry = index.objectById.get(dataRef?.objectId);
+        if (objectEntry) dataModuleIds.add(objectEntry.moduleId);
+      }
+    }
+    if (!setEquals(declaredModuleIds, dataModuleIds)) {
+      const declared = [...declaredModuleIds]
+        .map(formatValidationValue)
+        .sort()
+        .join(",");
+      const actual = [...dataModuleIds]
+        .map(formatValidationValue)
+        .sort()
+        .join(",");
+      errors.push(
+        `FLOW_DATA_PARTICIPANT_MISMATCH ${formatValidationValue(flow?.id)} declared=${declared} actual=${actual}`,
       );
     }
   }

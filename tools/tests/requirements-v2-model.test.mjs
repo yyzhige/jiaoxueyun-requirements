@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 
 import {
   assertValidRequirementModel,
@@ -31,16 +32,123 @@ import {
   sensitivities,
 } from "../requirements-v2/facts/index.mjs";
 
-function validFixture() {
+function validField(id, overrides = {}) {
   return {
-    baselineDecisions: [],
+    id,
+    label: `${id} label`,
+    dataType: "STRING",
+    required: true,
+    valueSource: { kind: "SYSTEM" },
+    mutability: "READ_ONLY",
+    visibility: "AUTHORIZED_SCOPE",
+    validation: "must match the declared data type",
+    historyPolicy: "retain the accepted value with its source version",
+    ...overrides,
+  };
+}
+
+function validObject(id, ownerRef, field, overrides = {}) {
+  return {
+    id,
+    label: `${id} label`,
+    ownerRef,
+    confirmerRef: ownerRef,
+    lifecyclePolicyId: "LIFE-TEST",
+    sensitivityId: "S2",
+    states: ["DRAFT", "SUBMITTED"],
+    fields: [field],
+    ...overrides,
+  };
+}
+
+function validScenario(id, actionId, kind, overrides = {}) {
+  return {
+    id,
+    kind,
+    actionId,
+    given: "the actor has an active authorized context",
+    when: "the actor performs the task-specific action",
+    then: {
+      expectedData: "the target data reflects the accepted request",
+      expectedState: kind === "SUCCESS" ? "SUBMITTED" : "DRAFT",
+      expectedPermission: kind === "SUCCESS" ? "ALLOW" : "DENY",
+      expectedVisibility: "only the authorized scope is visible",
+    },
+    ...overrides,
+  };
+}
+
+function validAction(id, targetObjectId, inputFieldIds, scenarioIds, overrides = {}) {
+  return {
+    id,
+    label: `${id} task action`,
+    targetObjectId,
+    inputFieldIds,
+    outputFieldIds: [],
+    transition: { from: "DRAFT", to: "SUBMITTED" },
+    writes: true,
+    risk: RISK.LOW,
+    clients: [CLIENT.WEB, CLIENT.APP],
+    permissions: [
+      { effect: "ALLOW", roleRef: "ROLE-STUDENT", condition: "owns target object" },
+      { effect: "DENY", roleRef: "ROLE-TEACHER", condition: "outside assigned scope" },
+    ],
+    scenarioIds,
+    idempotencyKey: `${id}:target-version:request-id`,
+    auditRequired: true,
+    failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+    ...overrides,
+  };
+}
+
+function validPage(id, objectDeclaration, fieldIds, actionIds, overrides = {}) {
+  return {
+    id,
+    label: `${id} task workspace`,
+    clients: [CLIENT.WEB, CLIENT.APP],
+    ...objectDeclaration,
+    fieldIds,
+    actionIds,
+    regions: ["TASK_HEADER", "PRIMARY_WORK_AREA", "RESULT_STATUS"],
+    viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN"],
+    ...overrides,
+  };
+}
+
+function validFixture() {
+  const submissionField = validField("SUB-F001", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-BOOL" },
+    mutability: "EDITABLE",
+  });
+  const submissionScenarios = [
+    validScenario("SUB-SCN-01", "SUB-ACT-01", "SUCCESS"),
+    validScenario("SUB-SCN-02", "SUB-ACT-01", "BOUNDARY"),
+  ];
+  return {
+    baselineDecisions: [{
+      id: "BASE-TEST",
+      statement: "fixture baseline decision",
+      rationale: "fixture rationale",
+      immutable: true,
+    }],
     roles: [
       { id: "ROLE-STUDENT", label: "student" },
       { id: "ROLE-TEACHER", label: "teacher" },
     ],
     duties: [],
-    lifecyclePolicies: [],
-    sensitivities: [],
+    lifecyclePolicies: [{
+      id: "LIFE-TEST",
+      scope: "fixture",
+      writeRule: "fixture writes are authorized",
+      historyRule: "fixture history is retained",
+      retentionOwner: "ROLE-STUDENT",
+      expiryOrArchival: "fixture records expire by policy",
+    }],
+    sensitivities: [{
+      id: "S2",
+      label: "fixture internal data",
+      handlingRule: "visible only inside the authorized fixture scope",
+    }],
     optionSets: [{
       id: "OPT-BOOL",
       key: "yesNoFixture",
@@ -67,76 +175,81 @@ function validFixture() {
       exclusions: "none",
       window: "fixture run",
     }],
-    nfrs: [],
+    nfrs: [{
+      id: "NFR-TEST",
+      statement: "fixture operations are observable",
+      verification: "exercise success and failure paths",
+    }],
     modules: [{
       id: "SUB-001",
       phase: PHASE.FIRST,
-      objects: [{
-        id: "DAT-SUB-01",
-        ownerRef: "ROLE-STUDENT",
-        confirmerRef: "ROLE-STUDENT",
-        states: ["DRAFT", "SUBMITTED"],
-        fields: [{
-          id: "SUB-F001",
-          valueSource: { kind: "OPTION_SET", optionSetId: "OPT-BOOL" },
-        }],
-      }],
-      actions: [{
-        id: "SUB-ACT-01",
-        targetObjectId: "DAT-SUB-01",
-        inputFieldIds: ["SUB-F001"],
-        outputFieldIds: [],
-        transition: { from: "DRAFT", to: "SUBMITTED" },
-        permissions: [
-          { effect: "ALLOW", roleRef: "ROLE-STUDENT" },
-          { effect: "DENY", roleRef: "ROLE-TEACHER" },
-        ],
-        scenarioIds: ["SUB-SCN-01", "SUB-SCN-02"],
-      }],
+      priority: "P0",
+      title: "Fixture submission",
+      objective: "Accept one authorized fixture submission",
+      entryConditions: ["an active fixture context exists"],
+      exitConditions: ["the accepted version is observable"],
+      baselineDecisionIds: ["BASE-TEST"],
+      nfrIds: ["NFR-TEST"],
+      objects: [validObject("DAT-SUB-01", "ROLE-STUDENT", submissionField)],
+      relationships: [],
+      actions: [validAction(
+        "SUB-ACT-01",
+        "DAT-SUB-01",
+        ["SUB-F001"],
+        submissionScenarios.map(({ id }) => id),
+      )],
       pages: [],
-      scenarios: [
-        { id: "SUB-SCN-01", kind: "SUCCESS", actionId: "SUB-ACT-01" },
-        { id: "SUB-SCN-02", kind: "BOUNDARY", actionId: "SUB-ACT-01" },
-      ],
+      scenarios: submissionScenarios,
     }, {
       id: "HW-001",
       phase: PHASE.FIRST,
-      objects: [{
-        id: "DAT-HW-01",
-        ownerRef: "ROLE-TEACHER",
-        confirmerRef: "ROLE-TEACHER",
+      priority: "P0",
+      title: "Fixture homework",
+      objective: "Expose one authorized fixture homework fact",
+      entryConditions: ["an active teacher context exists"],
+      exitConditions: ["the homework fact remains readable"],
+      baselineDecisionIds: ["BASE-TEST"],
+      nfrIds: ["NFR-TEST"],
+      objects: [validObject("DAT-HW-01", "ROLE-TEACHER", validField("HW-F001"), {
         states: ["DRAFT"],
-        fields: [{
-          id: "HW-F001",
-          valueSource: { kind: "SYSTEM" },
-          mutability: "READ_ONLY",
-        }],
-      }],
+      })],
+      relationships: [],
       actions: [],
       pages: [],
       scenarios: [],
     }, {
       id: "REPORT-001",
       phase: PHASE.SECOND,
-      objects: [{
-        id: "DAT-REPORT-01",
-        ownerRef: "ROLE-TEACHER",
-        confirmerRef: "ROLE-TEACHER",
+      objects: [validObject("DAT-REPORT-01", "ROLE-TEACHER", validField("REPORT-F001"), {
         states: ["AVAILABLE", "GENERATED"],
-        fields: [{
-          id: "REPORT-F001",
-          valueSource: { kind: "SYSTEM" },
-          mutability: "READ_ONLY",
-        }],
-      }],
+      })],
       actions: [],
       pages: [],
       scenarios: [],
     }],
     flows: [{
       id: "DF-TEST",
+      label: "Fixture submission flow",
+      phase: PHASE.FIRST,
       moduleIds: ["SUB-001"],
-      steps: [{ actionId: "SUB-ACT-01" }],
+      steps: [{ order: 1, actionId: "SUB-ACT-01" }],
+      sourceDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "CURRENT" }],
+      targetDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "ACCEPTED" }],
+      idempotencyKey: "DF-TEST:actor:target-version:request-id",
+      failureGranularity: "STEP",
+      retryPolicy: {
+        strategy: "BOUNDED",
+        maxAttempts: 3,
+        retryableFailureResults: ["TRANSIENT_FAILURE"],
+      },
+      compensation: {
+        strategy: "NO_ROLLBACK_AFTER_ACCEPTANCE",
+        description: "retry only the failed step before acceptance",
+      },
+      downstreamInvalidation: {
+        strategy: "INVALIDATE_DERIVED_READ_MODELS",
+        targets: ["fixture submission read model"],
+      },
     }],
     aiTasks: [],
     extensions: [],
@@ -352,6 +465,276 @@ test("accepts the complete semantic fixture", () => {
   assert.deepEqual(validateRequirementModel(validFixture()), []);
 });
 
+test("rejects incomplete phase-one module contracts", () => {
+  for (const property of [
+    "priority",
+    "title",
+    "objective",
+    "entryConditions",
+    "exitConditions",
+    "baselineDecisionIds",
+    "nfrIds",
+    "relationships",
+  ]) {
+    const model = validFixture();
+    delete moduleById(model, "SUB-001")[property];
+
+    assertHasCode(validateRequirementModel(model), "INVALID_MODULE_CONTRACT");
+  }
+});
+
+test("rejects incomplete object and field contracts", () => {
+  for (const property of [
+    "label",
+    "ownerRef",
+    "confirmerRef",
+    "lifecyclePolicyId",
+    "sensitivityId",
+    "states",
+    "fields",
+  ]) {
+    const model = validFixture();
+    delete moduleById(model, "SUB-001").objects[0][property];
+
+    assertHasCode(validateRequirementModel(model), "INVALID_OBJECT_CONTRACT");
+  }
+
+  for (const property of [
+    "label",
+    "dataType",
+    "required",
+    "valueSource",
+    "mutability",
+    "visibility",
+    "validation",
+    "historyPolicy",
+  ]) {
+    const model = validFixture();
+    delete moduleById(model, "SUB-001").objects[0].fields[0][property];
+
+    assertHasCode(validateRequirementModel(model), "INVALID_FIELD_CONTRACT");
+  }
+});
+
+test("accepts boolean or explicit conditional field required rules", () => {
+  for (const required of [true, false, "required when activation mode is FIRST_LOGIN"]) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").objects[0].fields[0].required = required;
+
+    assert.deepEqual(validateRequirementModel(model), []);
+  }
+});
+
+test("rejects invalid field required, mutability, and visibility rules", () => {
+  const mutations = [
+    (field) => { field.required = ""; },
+    (field) => { field.required = 1; },
+    (field) => { field.mutability = ""; },
+    (field) => { field.visibility = ""; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    mutate(moduleById(model, "SUB-001").objects[0].fields[0]);
+
+    assertHasCode(validateRequirementModel(model), "INVALID_FIELD_CONTRACT");
+  }
+});
+
+test("rejects unsupported field contract enum values", () => {
+  for (const property of ["dataType", "mutability", "visibility"]) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").objects[0].fields[0][property] = "BANANA";
+
+    assertHasCode(validateRequirementModel(model), "INVALID_FIELD_CONTRACT");
+  }
+});
+
+test("rejects missing lifecycle, sensitivity, baseline decision, and NFR references", () => {
+  const model = validFixture();
+  const module = moduleById(model, "SUB-001");
+  module.baselineDecisionIds = ["BASE-MISSING"];
+  module.nfrIds = ["NFR-MISSING"];
+  module.objects[0].lifecyclePolicyId = "LIFE-MISSING";
+  module.objects[0].sensitivityId = "S-MISSING";
+
+  const errors = validateRequirementModel(model);
+
+  assertHasCode(errors, "MISSING_BASELINE_DECISION_REFERENCE");
+  assertHasCode(errors, "MISSING_NFR_REFERENCE");
+  assertHasCode(errors, "MISSING_LIFECYCLE_REFERENCE");
+  assertHasCode(errors, "MISSING_SENSITIVITY_REFERENCE");
+});
+
+test("rejects malformed and cross-module relationships", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").relationships.push({
+    id: "REL-SUB-HW",
+    fromObjectId: "DAT-SUB-01",
+    toObjectId: "DAT-HW-01",
+    type: "REFERENCES",
+    cardinality: "MANY_TO_ONE",
+    onSourceInvalidation: "retain accepted historical target version",
+  });
+
+  assertHasCode(validateRequirementModel(model), "INVALID_MODULE_OWNERSHIP");
+
+  delete moduleById(model, "SUB-001").relationships[0].cardinality;
+  assertHasCode(validateRequirementModel(model), "INVALID_RELATIONSHIP_CONTRACT");
+});
+
+test("rejects unsupported relationship type and cardinality values", () => {
+  for (const property of ["type", "cardinality"]) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").relationships.push({
+      id: "REL-SUB-SUB",
+      fromObjectId: "DAT-SUB-01",
+      toObjectId: "DAT-SUB-01",
+      type: "REFERENCES",
+      cardinality: "ONE_TO_ONE",
+      onSourceInvalidation: "retain the accepted target version",
+      [property]: "BANANA",
+    });
+
+    assertHasCode(validateRequirementModel(model), "INVALID_RELATIONSHIP_CONTRACT");
+  }
+});
+
+test("rejects incomplete action execution contracts", () => {
+  for (const property of [
+    "label",
+    "targetObjectId",
+    "inputFieldIds",
+    "outputFieldIds",
+    "writes",
+    "risk",
+    "clients",
+    "permissions",
+    "scenarioIds",
+    "auditRequired",
+    "failureResults",
+  ]) {
+    const model = validFixture();
+    delete moduleById(model, "SUB-001").actions[0][property];
+
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+  }
+});
+
+test("requires write idempotency and validates action clients, risk, audit, and failures", () => {
+  const mutations = [
+    (action) => { delete action.idempotencyKey; },
+    (action) => { action.clients = ["CLI"]; },
+    (action) => { action.risk = "CRITICAL"; },
+    (action) => { action.auditRequired = "sometimes"; },
+    (action) => { action.failureResults = []; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    mutate(moduleById(model, "SUB-001").actions[0]);
+
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+  }
+});
+
+test("rejects unknown action permission effects", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").actions[0].permissions.push({
+    effect: "CONDITIONAL",
+    roleRef: "ROLE-STUDENT",
+  });
+
+  assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+});
+
+test("rejects action permissions without an explicit boundary condition", () => {
+  const model = validFixture();
+  delete moduleById(model, "SUB-001").actions[0].permissions[0].condition;
+
+  assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+});
+
+test("rejects incomplete page, scenario, and Flow contracts", () => {
+  const model = validFixture();
+  const module = moduleById(model, "SUB-001");
+  module.pages.push(validPage(
+    "SUB-W01",
+    { objectId: "DAT-SUB-01" },
+    ["SUB-F001"],
+    ["SUB-ACT-01"],
+  ));
+
+  for (const property of ["label", "clients", "regions", "viewStates"]) {
+    const candidate = structuredClone(model);
+    delete moduleById(candidate, "SUB-001").pages[0][property];
+    assertHasCode(validateRequirementModel(candidate), "INVALID_PAGE_CONTRACT");
+  }
+
+  for (const property of ["kind", "actionId", "given", "when", "then"]) {
+    const candidate = structuredClone(model);
+    delete moduleById(candidate, "SUB-001").scenarios[0][property];
+    assertHasCode(validateRequirementModel(candidate), "INVALID_SCENARIO_CONTRACT");
+  }
+
+  for (const property of [
+    "label",
+    "phase",
+    "moduleIds",
+    "steps",
+    "sourceDataRefs",
+    "targetDataRefs",
+    "idempotencyKey",
+    "failureGranularity",
+    "retryPolicy",
+    "compensation",
+    "downstreamInvalidation",
+  ]) {
+    const candidate = structuredClone(model);
+    delete candidate.flows[0][property];
+    assertHasCode(validateRequirementModel(candidate), "INVALID_FLOW_CONTRACT");
+  }
+});
+
+test("rejects invalid Flow data references, ordering, and participant symmetry", () => {
+  const mutations = [
+    (flow) => { flow.steps[0].order = 2; },
+    (flow) => { flow.sourceDataRefs[0].objectId = "DAT-MISSING"; },
+    (flow) => { flow.targetDataRefs[0].fieldId = "FIELD-MISSING"; },
+    (flow) => { flow.sourceDataRefs[0].version = ""; },
+    (flow) => { flow.moduleIds = ["SUB-001", "HW-001"]; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    mutate(model.flows[0]);
+    const errors = validateRequirementModel(model);
+    assert.ok(
+      ["INVALID_FLOW_CONTRACT", "MISSING_FLOW_DATA_REFERENCE", "FLOW_PARTICIPANT_MISMATCH"]
+        .some((code) => errorCodes(errors).includes(code)),
+      errors.join("\n"),
+    );
+  }
+});
+
+test("rejects a Flow whose data-reference modules differ from declared participants", () => {
+  const model = validFixture();
+  model.flows[0].sourceDataRefs = [{
+    objectId: "DAT-HW-01",
+    fieldId: "HW-F001",
+    version: "CURRENT",
+  }];
+
+  assertHasCode(validateRequirementModel(model), "FLOW_DATA_PARTICIPANT_MISMATCH");
+});
+
+test("rejects a Flow phase that differs from its participant modules", () => {
+  const model = validFixture();
+  model.flows[0].phase = PHASE.SECOND;
+
+  assertHasCode(validateRequirementModel(model), "FLOW_PHASE_MISMATCH");
+});
+
 test("rejects null and non-object requirement models", () => {
   for (const model of [null, 42, "requirement model"]) {
     assert.deepEqual(validateRequirementModel(model), [
@@ -412,7 +795,7 @@ test("accepts explicitly present empty top-level collections", () => {
   }), []);
 });
 
-test("assembles the shared facts into an initially empty executable model", () => {
+test("assembles the shared facts into the phase-one executable model", () => {
   assert.deepEqual(requirementModel, {
     baselineDecisions,
     roles,
@@ -423,12 +806,144 @@ test("assembles the shared facts into an initially empty executable model", () =
     events,
     metrics,
     nfrs,
-    modules: [],
-    flows: [],
+    modules,
+    flows,
     aiTasks: [],
     extensions,
   });
   assert.deepEqual(validateRequirementModel(requirementModel), []);
+});
+
+test("defines exactly the seven phase-one foundation modules and three initial Flows", () => {
+  assert.deepEqual(
+    modules.map(({ id }) => id),
+    ["ACC-001", "ORG-001", "IAM-001", "DGV-001", "AUD-001", "CURR-001", "TEA-001"],
+  );
+  assert.deepEqual(flows.map(({ id }) => id), ["DF-001", "DF-002", "DF-003"]);
+  assert.equal(modules.every(({ phase, priority }) => phase === 1 && priority === "P0"), true);
+});
+
+test("publishes task-specific actions, pages, and complete scenario coverage", () => {
+  const genericActionLabels = new Set([
+    "对象查询与范围筛选",
+    "详情查看与版本追踪",
+    "创建/修改/确认主动作",
+    "AI 对话与草稿/执行",
+    "审计、通知与下游失效",
+  ]);
+  const genericPageLabels = new Set(["列表/工作台", "详情/处理页", "预览/确认页", "历史/审计页"]);
+
+  assert.equal(modules.length, 7);
+  for (const module of modules) {
+    assert.equal(module.actions.length > 0, true, module.id);
+    assert.equal(module.pages.length > 0, true, module.id);
+    assert.equal(module.actions.every(({ label }) => !genericActionLabels.has(label)), true);
+    assert.equal(module.pages.every(({ label }) => !genericPageLabels.has(label)), true);
+    for (const action of module.actions) {
+      const scenarios = module.scenarios.filter(({ actionId }) => actionId === action.id);
+      assert.deepEqual(new Set(action.scenarioIds), new Set(scenarios.map(({ id }) => id)));
+      assert.equal(scenarios.some(({ kind }) => kind === "SUCCESS"), true, action.id);
+      assert.equal(
+        scenarios.some(({ kind }) => kind === "FAILURE" || kind === "BOUNDARY"),
+        true,
+        action.id,
+      );
+    }
+  }
+});
+
+test("represents platform-ops, homeroom, and subject-lead authorization boundaries", () => {
+  const actions = modules.flatMap((module) => module.actions);
+  const permissionText = (permission) => JSON.stringify(permission);
+
+  assert.equal(actions.some(({ permissions }) => permissions.some((permission) => (
+    permission.effect === "DENY"
+    && permission.roleRef === "ROLE-PLATFORM-OPS"
+    && /student|学生|学校授权/.test(permissionText(permission))
+  ))), true);
+  assert.equal(actions.some(({ permissions }) => permissions.some((permission) => (
+    permission.dutyRef === "DUTY-HOMEROOM"
+    && /全学科|other subject|其他学科/.test(permissionText(permission))
+  ))), true);
+  assert.equal(actions.some(({ permissions }) => permissions.some((permission) => (
+    permission.dutyRef === "DUTY-SUBJECT-LEAD"
+    && /学科|subject/.test(permissionText(permission))
+  ))), true);
+});
+
+test("models object-level organization import results and partial success", () => {
+  const organization = moduleById(requirementModel, "ORG-001");
+  const importResult = organization.objects.find(({ label }) => label === "Import Row Result");
+  assert.ok(importResult);
+  const resultType = importResult.fields.find(({ label }) => label === "Object Result Type");
+  assert.ok(resultType);
+  assert.match(resultType.validation, /CREATE.*UPDATE.*NO_CHANGE.*REJECT.*DEACTIVATE/);
+
+  const confirmImport = organization.actions.find(({ label }) => label === "Confirm Object-level Import");
+  assert.ok(confirmImport);
+  assert.ok(confirmImport.failureResults.includes("PARTIAL_SUCCESS"));
+  assert.ok(organization.scenarios.some(({ actionId, kind, then: outcome }) => (
+    actionId === confirmImport.id
+    && kind === "BOUNDARY"
+    && outcome.expectedState === "PARTIAL_SUCCESS"
+    && outcome.expectedPermission === "ALLOW"
+    && /successful rows|成功行/.test(outcome.expectedData)
+  )));
+});
+
+test("models school-first entry and read-only historical terms", () => {
+  const account = moduleById(requirementModel, "ACC-001");
+  const narratives = account.scenarios.map((scenario) => JSON.stringify(scenario)).join("\n");
+  assert.match(narratives, /school first|先选择学校/);
+  assert.match(narratives, /no auto|不得自动|不自动进入/);
+  assert.match(narratives, /historical term|历史学期/);
+  assert.match(narratives, /read-only|只读/);
+});
+
+test("preserves published curriculum history and keeps TEA view-only ownership", () => {
+  const curriculum = moduleById(requirementModel, "CURR-001");
+  const publicationFacts = curriculum.scenarios
+    .filter(({ actionId }) => /PUBLISH/.test(actionId))
+    .map((scenario) => JSON.stringify(scenario))
+    .join("\n");
+  assert.match(publicationFacts, /historical|历史/);
+  assert.match(publicationFacts, /never rewrite|不改写|immutable|不可变/);
+
+  const workbench = moduleById(requirementModel, "TEA-001");
+  const ownedLabels = workbench.objects.map(({ label }) => label.toLowerCase());
+  assert.equal(ownedLabels.some((label) => /score|evidence|plan|成绩|证据|计划/.test(label)), false);
+});
+
+test("keeps every Flow action participant and data reference valid and symmetric", () => {
+  const moduleByActionId = new Map(modules.flatMap((module) => (
+    module.actions.map(({ id }) => [id, module.id])
+  )));
+  const objectById = new Map(modules.flatMap((module) => (
+    module.objects.map((object) => [object.id, { moduleId: module.id, object }])
+  )));
+
+  assert.equal(flows.length, 3);
+  for (const flow of flows) {
+    const actionModuleIds = new Set(flow.steps.map(({ actionId }) => moduleByActionId.get(actionId)));
+    assert.deepEqual(new Set(flow.moduleIds), actionModuleIds, flow.id);
+    for (const dataRef of [...flow.sourceDataRefs, ...flow.targetDataRefs]) {
+      const owner = objectById.get(dataRef.objectId);
+      assert.ok(owner, `${flow.id}:${dataRef.objectId}`);
+      assert.ok(owner.object.fields.some(({ id }) => id === dataRef.fieldId));
+      assert.ok(flow.moduleIds.includes(owner.moduleId));
+      assert.equal(typeof dataRef.version, "string");
+      assert.notEqual(dataRef.version, "");
+    }
+  }
+});
+
+test("the validation CLI reports seven modules and three Flows", () => {
+  const output = execFileSync(
+    process.execPath,
+    ["tools/validate_v2_requirements.mjs"],
+    { cwd: new URL("../..", import.meta.url), encoding: "utf8" },
+  );
+  assert.equal(output, "validated modules=7 flows=3\n");
 });
 
 test("defines the immutable baseline decisions and teacher duty model", () => {
@@ -1601,19 +2116,18 @@ test("rejects a page field owned by a different object in the same module", () =
 test("accepts page fields owned by one of its declared objects", () => {
   const model = validFixture();
   const submissionModule = moduleById(model, "SUB-001");
-  submissionModule.objects.push({
-    id: "DAT-SUB-02",
-    ownerRef: "ROLE-STUDENT",
-    confirmerRef: "ROLE-STUDENT",
-    states: ["DRAFT"],
-    fields: [{ id: "SUB-F002", valueSource: { kind: "SYSTEM" } }],
-  });
-  submissionModule.pages.push({
-    id: "SUB-W01",
-    objectIds: ["DAT-SUB-01", "DAT-SUB-02"],
-    fieldIds: ["SUB-F002"],
-    actionIds: [],
-  });
+  submissionModule.objects.push(validObject(
+    "DAT-SUB-02",
+    "ROLE-STUDENT",
+    validField("SUB-F002"),
+    { states: ["DRAFT"] },
+  ));
+  submissionModule.pages.push(validPage(
+    "SUB-W01",
+    { objectIds: ["DAT-SUB-01", "DAT-SUB-02"] },
+    ["SUB-F002"],
+    [],
+  ));
 
   assert.deepEqual(validateRequirementModel(model), []);
 });
@@ -1637,6 +2151,18 @@ test("rejects page fields without a declared object contract", () => {
 
     assertHasCode(validateRequirementModel(model), "MISSING_PAGE_OBJECT");
   }
+});
+
+test("rejects pages that mix objectId and objectIds declarations", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").pages.push(validPage(
+    "SUB-W01",
+    { objectId: "DAT-SUB-01", objectIds: ["DAT-HW-01"] },
+    ["SUB-F001"],
+    ["SUB-ACT-01"],
+  ));
+
+  assertHasCode(validateRequirementModel(model), "INVALID_PAGE_CONTRACT");
 });
 
 test("rejects a scenario referencing a missing action", () => {
@@ -1737,6 +2263,25 @@ test("accepts explicit system actor categories in actor references", () => {
 
   assert.equal(errorCodes(errors).includes("MISSING_ACTOR_REFERENCE"), false);
   assert.equal(errorCodes(errors).includes("ORPHAN_OWNER_ROLE"), false);
+});
+
+test("rejects role and duty references from the wrong actor namespace", () => {
+  const model = validFixture();
+  model.duties.push({
+    id: "DUTY-FIXTURE",
+    roleId: "ROLE-TEACHER",
+    label: "fixture duty",
+  });
+  moduleById(model, "SUB-001").actions[0].permissions = [
+    { effect: "ALLOW", roleRef: "DUTY-FIXTURE", condition: "wrong namespace" },
+    { effect: "DENY", dutyRef: "ROLE-TEACHER", condition: "wrong namespace" },
+  ];
+
+  assert.equal(
+    errorCodes(validateRequirementModel(model))
+      .filter((code) => code === "MISSING_ACTOR_REFERENCE").length,
+    2,
+  );
 });
 
 test("rejects unknown lifecycle retention and NFR owner references", () => {
@@ -2106,10 +2651,7 @@ test("accepts AI write preview fields from action inputs and outputs", () => {
     roleId: "ROLE-TEACHER",
   });
   const submissionModule = moduleById(model, "SUB-001");
-  submissionModule.objects[0].fields.push({
-    id: "SUB-F002",
-    valueSource: { kind: "SYSTEM" },
-  });
+  submissionModule.objects[0].fields.push(validField("SUB-F002"));
   submissionModule.actions[0].outputFieldIds = ["SUB-F002"];
   model.aiTasks.push({
     id: "AI-TASK-01",

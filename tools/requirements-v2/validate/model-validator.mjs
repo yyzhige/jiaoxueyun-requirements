@@ -101,6 +101,7 @@ export function buildModelIndex(model) {
   const objects = [];
   const fields = [];
   const actions = [];
+  const relationships = [];
   const pages = [];
   const scenarios = [];
 
@@ -127,6 +128,13 @@ export function buildModelIndex(model) {
         value,
         moduleId,
         path: `${moduleEntry.path}.actions[${index}]`,
+      });
+    });
+    list(moduleEntry.value?.relationships).forEach((value, index) => {
+      relationships.push({
+        value,
+        moduleId,
+        path: `${moduleEntry.path}.relationships[${index}]`,
       });
     });
     list(moduleEntry.value?.pages).forEach((value, index) => {
@@ -160,6 +168,7 @@ export function buildModelIndex(model) {
     actionById: mapById(actions),
     actorIds: new Set([...roleIds, ...dutyIds, ...SYSTEM_ACTOR_CATEGORIES]),
     aiTasks,
+    baselineDecisionById: mapById(baselineDecisions),
     baselineDecisions,
     duties,
     dutyIds,
@@ -169,6 +178,7 @@ export function buildModelIndex(model) {
     fields,
     fieldById: mapById(fields),
     flows,
+    lifecyclePolicyById: mapById(lifecyclePolicies),
     lifecyclePolicies,
     metrics,
     modules,
@@ -178,11 +188,14 @@ export function buildModelIndex(model) {
     optionSets,
     optionSetById: mapById(optionSets),
     pages,
+    nfrById: mapById(nfrs),
     nfrs,
+    relationships,
     roles,
     roleIds,
     scenarios,
     scenarioById: mapById(scenarios),
+    sensitivityById: mapById(sensitivities),
     sensitivities,
   };
 }
@@ -195,6 +208,12 @@ function duplicateIdErrors(index) {
   addEntities(entries, index.objects.map(({ value }) => value), "object", "objects");
   addEntities(entries, index.fields.map(({ value }) => value), "field", "fields");
   addEntities(entries, index.actions.map(({ value }) => value), "action", "actions");
+  addEntities(
+    entries,
+    index.relationships.map(({ value }) => value),
+    "relationship",
+    "relationships",
+  );
   addEntities(entries, index.pages.map(({ value }) => value), "page", "pages");
   addEntities(entries, index.scenarios.map(({ value }) => value), "scenario", "scenarios");
 
@@ -214,8 +233,18 @@ function duplicateIdErrors(index) {
   return errors;
 }
 
-function checkActorReference(errors, index, reference, path) {
-  if (!index.actorIds.has(reference)) {
+function actorReferenceIsValid(index, reference, property) {
+  if (property.startsWith("roleRef") || property.startsWith("roleId")) {
+    return index.roleIds.has(reference) || SYSTEM_ACTOR_CATEGORIES.has(reference);
+  }
+  if (property.startsWith("dutyRef") || property.startsWith("dutyId")) {
+    return index.dutyIds.has(reference);
+  }
+  return index.actorIds.has(reference);
+}
+
+function checkActorReference(errors, index, reference, path, property = "actorRef") {
+  if (!actorReferenceIsValid(index, reference, property)) {
     errors.push(
       `MISSING_ACTOR_REFERENCE ${path} -> ${formatValidationValue(reference)}`,
     );
@@ -260,7 +289,7 @@ function checkActorReferences(errors, index, value, path) {
   }
 
   for (const { reference, property } of references) {
-    checkActorReference(errors, index, reference, `${path}.${property}`);
+    checkActorReference(errors, index, reference, `${path}.${property}`, property);
   }
 }
 
@@ -334,6 +363,49 @@ export function validateModelReferences(model) {
         objectEntry.value?.[property],
         `${objectEntry.path}.${property}`,
       );
+    }
+    if (!index.lifecyclePolicyById.has(objectEntry.value?.lifecyclePolicyId)) {
+      errors.push(
+        `MISSING_LIFECYCLE_REFERENCE ${formatValidationValue(objectEntry.value?.id)} -> ${formatValidationValue(objectEntry.value?.lifecyclePolicyId)}`,
+      );
+    }
+    if (!index.sensitivityById.has(objectEntry.value?.sensitivityId)) {
+      errors.push(
+        `MISSING_SENSITIVITY_REFERENCE ${formatValidationValue(objectEntry.value?.id)} -> ${formatValidationValue(objectEntry.value?.sensitivityId)}`,
+      );
+    }
+  }
+
+  for (const moduleEntry of index.modules) {
+    for (const baselineDecisionId of list(moduleEntry.value?.baselineDecisionIds)) {
+      if (!index.baselineDecisionById.has(baselineDecisionId)) {
+        errors.push(
+          `MISSING_BASELINE_DECISION_REFERENCE ${formatValidationValue(moduleEntry.value?.id)} -> ${formatValidationValue(baselineDecisionId)}`,
+        );
+      }
+    }
+    for (const nfrId of list(moduleEntry.value?.nfrIds)) {
+      if (!index.nfrById.has(nfrId)) {
+        errors.push(
+          `MISSING_NFR_REFERENCE ${formatValidationValue(moduleEntry.value?.id)} -> ${formatValidationValue(nfrId)}`,
+        );
+      }
+    }
+  }
+
+  for (const relationshipEntry of index.relationships) {
+    for (const property of ["fromObjectId", "toObjectId"]) {
+      const objectId = relationshipEntry.value?.[property];
+      const objectEntry = index.objectById.get(objectId);
+      if (!objectEntry) {
+        errors.push(
+          `MISSING_RELATIONSHIP_OBJECT ${formatValidationValue(relationshipEntry.value?.id)}.${property} -> ${formatValidationValue(objectId)}`,
+        );
+      } else if (objectEntry.moduleId !== relationshipEntry.moduleId) {
+        errors.push(
+          `INVALID_MODULE_OWNERSHIP ${formatValidationValue(relationshipEntry.value?.id)} -> object ${formatValidationValue(objectId)} belongs to ${formatValidationValue(objectEntry.moduleId)}`,
+        );
+      }
     }
   }
 
@@ -464,6 +536,21 @@ export function validateModelReferences(model) {
         );
       }
     });
+    for (const property of ["sourceDataRefs", "targetDataRefs"]) {
+      list(flow?.[property]).forEach((dataRef, dataRefIndex) => {
+        const objectEntry = index.objectById.get(dataRef?.objectId);
+        const fieldEntry = index.fieldById.get(dataRef?.fieldId);
+        if (!objectEntry || !fieldEntry) {
+          errors.push(
+            `MISSING_FLOW_DATA_REFERENCE ${formatValidationValue(flow?.id)}.${property}[${dataRefIndex}] -> ${formatValidationValue(dataRef?.objectId)}.${formatValidationValue(dataRef?.fieldId)}`,
+          );
+        } else if (fieldEntry.objectId !== objectEntry.value.id) {
+          errors.push(
+            `INVALID_OBJECT_OWNERSHIP ${formatValidationValue(flow?.id)}.${property}[${dataRefIndex}] -> field ${formatValidationValue(dataRef?.fieldId)} belongs to ${formatValidationValue(fieldEntry.objectId)}`,
+          );
+        }
+      });
+    }
   }
 
   for (const metricEntry of index.metrics) {
