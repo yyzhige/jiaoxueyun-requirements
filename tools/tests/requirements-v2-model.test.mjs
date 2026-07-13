@@ -12,7 +12,10 @@ import {
 
 function validFixture() {
   return {
-    roles: [{ id: "ROLE-STUDENT", label: "student" }],
+    roles: [
+      { id: "ROLE-STUDENT", label: "student" },
+      { id: "ROLE-TEACHER", label: "teacher" },
+    ],
     duties: [],
     optionSets: [{
       id: "OPT-BOOL",
@@ -45,7 +48,10 @@ function validFixture() {
         inputFieldIds: ["SUB-F001"],
         outputFieldIds: [],
         transition: { from: "DRAFT", to: "SUBMITTED" },
-        permissions: [{ effect: "ALLOW", roleRef: "ROLE-STUDENT" }],
+        permissions: [
+          { effect: "ALLOW", roleRef: "ROLE-STUDENT" },
+          { effect: "DENY", roleRef: "ROLE-TEACHER" },
+        ],
         scenarioIds: ["SUB-SCN-01", "SUB-SCN-02"],
       }],
       pages: [],
@@ -53,6 +59,40 @@ function validFixture() {
         { id: "SUB-SCN-01", kind: "SUCCESS", actionId: "SUB-ACT-01" },
         { id: "SUB-SCN-02", kind: "BOUNDARY", actionId: "SUB-ACT-01" },
       ],
+    }, {
+      id: "HW-001",
+      phase: PHASE.FIRST,
+      objects: [{
+        id: "DAT-HW-01",
+        ownerRef: "ROLE-TEACHER",
+        confirmerRef: "ROLE-TEACHER",
+        states: ["DRAFT"],
+        fields: [{
+          id: "HW-F001",
+          valueSource: { kind: "SYSTEM" },
+          mutability: "READ_ONLY",
+        }],
+      }],
+      actions: [],
+      pages: [],
+      scenarios: [],
+    }, {
+      id: "REPORT-001",
+      phase: PHASE.SECOND,
+      objects: [{
+        id: "DAT-REPORT-01",
+        ownerRef: "ROLE-TEACHER",
+        confirmerRef: "ROLE-TEACHER",
+        states: ["AVAILABLE", "GENERATED"],
+        fields: [{
+          id: "REPORT-F001",
+          valueSource: { kind: "SYSTEM" },
+          mutability: "READ_ONLY",
+        }],
+      }],
+      actions: [],
+      pages: [],
+      scenarios: [],
     }],
     flows: [{
       id: "DF-TEST",
@@ -136,6 +176,7 @@ test("rejects an invalid state transition", () => {
 
 test("rejects a flow whose declared modules and action modules differ", () => {
   const model = validFixture();
+  assert.equal(model.modules.some((module) => module.id === "HW-001"), true);
   model.flows[0].moduleIds = ["HW-001"];
 
   const errors = validateRequirementModel(model);
@@ -152,13 +193,42 @@ test("rejects an orphan Owner role", () => {
   assert.match(errors.join("\n"), /ORPHAN_OWNER_ROLE/);
 });
 
-test("rejects executable phase-two pages", () => {
+test("rejects phase-two page contracts independently of actions", () => {
   const model = validFixture();
-  model.modules[0].phase = PHASE.SECOND;
-  model.modules[0].pages = [{
+  const reportModule = model.modules.find((module) => module.id === "REPORT-001");
+  assert.deepEqual(reportModule.actions, []);
+  reportModule.pages = [{
     id: "REPORT-W01",
-    actionIds: ["SUB-ACT-01"],
+    objectId: "DAT-REPORT-01",
+    fieldIds: ["REPORT-F001"],
+    actionIds: [],
   }];
+
+  const errors = validateRequirementModel(model);
+
+  assert.match(errors.join("\n"), /PHASE_BOUNDARY_EXECUTABLE_PAGE/);
+});
+
+test("rejects executable phase-two actions independently of pages", () => {
+  const model = validFixture();
+  const reportModule = model.modules.find((module) => module.id === "REPORT-001");
+  assert.deepEqual(reportModule.pages, []);
+  reportModule.actions = [{
+    id: "REPORT-ACT-01",
+    targetObjectId: "DAT-REPORT-01",
+    inputFieldIds: [],
+    outputFieldIds: [],
+    transition: { from: "AVAILABLE", to: "GENERATED" },
+    permissions: [
+      { effect: "ALLOW", roleRef: "ROLE-TEACHER" },
+      { effect: "DENY", roleRef: "ROLE-STUDENT" },
+    ],
+    scenarioIds: ["REPORT-SCN-01", "REPORT-SCN-02"],
+  }];
+  reportModule.scenarios = [
+    { id: "REPORT-SCN-01", kind: "SUCCESS", actionId: "REPORT-ACT-01" },
+    { id: "REPORT-SCN-02", kind: "BOUNDARY", actionId: "REPORT-ACT-01" },
+  ];
 
   const errors = validateRequirementModel(model);
 
