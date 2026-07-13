@@ -51,8 +51,12 @@ function validObject(id, ownerRef, field, overrides = {}) {
   return {
     id,
     label: `${id} label`,
+    dataSubject: "FIXTURE_RECORD",
+    controlSubject: "SCHOOL",
+    producerRef: ownerRef,
     ownerRef,
     confirmerRef: ownerRef,
+    stewardRef: ownerRef,
     lifecyclePolicyId: "LIFE-TEST",
     sensitivityId: "S2",
     states: ["DRAFT", "SUBMITTED"],
@@ -66,11 +70,14 @@ function validScenario(id, actionId, kind, overrides = {}) {
     id,
     kind,
     actionId,
+    pageId: "SUB-PAGE-01",
     given: "the actor has an active authorized context",
     when: "the actor performs the task-specific action",
     then: {
       expectedData: "the target data reflects the accepted request",
-      expectedState: kind === "SUCCESS" ? "SUBMITTED" : "DRAFT",
+      expectedState: kind === "SUCCESS"
+        ? { mode: "STATE", value: "SUBMITTED" }
+        : { mode: "UNCHANGED" },
       expectedPermission: kind === "SUCCESS" ? "ALLOW" : "DENY",
       expectedVisibility: "only the authorized scope is visible",
     },
@@ -198,7 +205,12 @@ function validFixture() {
         ["SUB-F001"],
         submissionScenarios.map(({ id }) => id),
       )],
-      pages: [],
+      pages: [validPage(
+        "SUB-PAGE-01",
+        { objectId: "DAT-SUB-01" },
+        ["SUB-F001"],
+        ["SUB-ACT-01"],
+      )],
       scenarios: submissionScenarios,
     }, {
       id: "HW-001",
@@ -486,8 +498,12 @@ test("rejects incomplete phase-one module contracts", () => {
 test("rejects incomplete object and field contracts", () => {
   for (const property of [
     "label",
+    "dataSubject",
+    "controlSubject",
+    "producerRef",
     "ownerRef",
     "confirmerRef",
+    "stewardRef",
     "lifecyclePolicyId",
     "sensitivityId",
     "states",
@@ -574,6 +590,7 @@ test("rejects malformed and cross-module relationships", () => {
     toObjectId: "DAT-HW-01",
     type: "REFERENCES",
     cardinality: "MANY_TO_ONE",
+    ownershipScope: "SAME_SCHOOL",
     onSourceInvalidation: "retain accepted historical target version",
   });
 
@@ -592,9 +609,28 @@ test("rejects unsupported relationship type and cardinality values", () => {
       toObjectId: "DAT-SUB-01",
       type: "REFERENCES",
       cardinality: "ONE_TO_ONE",
+      ownershipScope: "SAME_SCHOOL",
       onSourceInvalidation: "retain the accepted target version",
       [property]: "BANANA",
     });
+
+    assertHasCode(validateRequirementModel(model), "INVALID_RELATIONSHIP_CONTRACT");
+  }
+});
+
+test("rejects missing or unsupported relationship ownership scopes", () => {
+  for (const ownershipScope of [undefined, "BANANA"]) {
+    const model = validFixture();
+    const relationship = {
+      id: "REL-SUB-SUB",
+      fromObjectId: "DAT-SUB-01",
+      toObjectId: "DAT-SUB-01",
+      type: "REFERENCES",
+      cardinality: "ONE_TO_ONE",
+      onSourceInvalidation: "retain accepted source version",
+    };
+    if (ownershipScope !== undefined) relationship.ownershipScope = ownershipScope;
+    moduleById(model, "SUB-001").relationships.push(relationship);
 
     assertHasCode(validateRequirementModel(model), "INVALID_RELATIONSHIP_CONTRACT");
   }
@@ -638,6 +674,23 @@ test("requires write idempotency and validates action clients, risk, audit, and 
   }
 });
 
+test("requires fail-closed audit behavior for high-risk actions", () => {
+  const mutations = [
+    (action) => { action.auditRequired = false; },
+    (action) => { action.failureResults = ["PERMISSION_DENIED"]; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    const action = moduleById(model, "SUB-001").actions[0];
+    action.risk = RISK.HIGH;
+    action.failureResults.push("AUDIT_FAILED");
+    mutate(action);
+
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+  }
+});
+
 test("rejects unknown action permission effects", () => {
   const model = validFixture();
   moduleById(model, "SUB-001").actions[0].permissions.push({
@@ -671,7 +724,7 @@ test("rejects incomplete page, scenario, and Flow contracts", () => {
     assertHasCode(validateRequirementModel(candidate), "INVALID_PAGE_CONTRACT");
   }
 
-  for (const property of ["kind", "actionId", "given", "when", "then"]) {
+  for (const property of ["kind", "actionId", "pageId", "given", "when", "then"]) {
     const candidate = structuredClone(model);
     delete moduleById(candidate, "SUB-001").scenarios[0][property];
     assertHasCode(validateRequirementModel(candidate), "INVALID_SCENARIO_CONTRACT");
@@ -694,6 +747,71 @@ test("rejects incomplete page, scenario, and Flow contracts", () => {
     delete candidate.flows[0][property];
     assertHasCode(validateRequirementModel(candidate), "INVALID_FLOW_CONTRACT");
   }
+});
+
+test("rejects scenario pages that are missing, cross-module, or do not expose the action", () => {
+  const mutations = [
+    (model) => { moduleById(model, "SUB-001").scenarios[0].pageId = "PAGE-MISSING"; },
+    (model) => {
+      moduleById(model, "HW-001").pages.push(validPage(
+        "HW-PAGE-01",
+        { objectId: "DAT-HW-01" },
+        ["HW-F001"],
+        [],
+      ));
+      moduleById(model, "SUB-001").scenarios[0].pageId = "HW-PAGE-01";
+    },
+    (model) => {
+      moduleById(model, "SUB-001").pages.push(validPage(
+        "SUB-PAGE-NO-ACTION",
+        { objectId: "DAT-SUB-01" },
+        ["SUB-F001"],
+        [],
+      ));
+      moduleById(model, "SUB-001").scenarios[0].pageId = "SUB-PAGE-NO-ACTION";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_SCENARIO_PAGE");
+  }
+});
+
+test("rejects malformed or impossible scenario expected states", () => {
+  const expectedStates = [
+    "SUBMITTED",
+    { mode: "STATE" },
+    { mode: "STATE", value: "ARCHIVED" },
+    { mode: "UNCHANGED", value: "DRAFT" },
+    { mode: "SOMETHING_ELSE" },
+  ];
+  for (const expectedState of expectedStates) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").scenarios[0].then.expectedState = expectedState;
+    assertHasCode(validateRequirementModel(model), "INVALID_SCENARIO_STATE");
+  }
+});
+
+test("accepts STATE and UNCHANGED scenario state outcomes", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").scenarios[0].then.expectedState = {
+    mode: "STATE",
+    value: "SUBMITTED",
+  };
+  moduleById(model, "SUB-001").scenarios[1].then.expectedState = {
+    mode: "UNCHANGED",
+  };
+
+  assert.deepEqual(validateRequirementModel(model), []);
+});
+
+test("rejects empty optional Flow step conditions", () => {
+  const model = validFixture();
+  model.flows[0].steps[0].condition = "";
+
+  assertHasCode(validateRequirementModel(model), "INVALID_FLOW_CONTRACT");
 });
 
 test("rejects invalid Flow data references, ordering, and participant symmetry", () => {
@@ -885,10 +1003,267 @@ test("models object-level organization import results and partial success", () =
   assert.ok(organization.scenarios.some(({ actionId, kind, then: outcome }) => (
     actionId === confirmImport.id
     && kind === "BOUNDARY"
-    && outcome.expectedState === "PARTIAL_SUCCESS"
+    && outcome.expectedState.mode === "STATE"
+    && outcome.expectedState.value === "PARTIAL_SUCCESS"
     && outcome.expectedPermission === "ALLOW"
     && /successful rows|成功行/.test(outcome.expectedData)
   )));
+});
+
+test("exposes explicit grade maintenance in the organization workspace", () => {
+  const organization = moduleById(requirementModel, "ORG-001");
+  const gradeAction = organization.actions.find(({ id }) => id === "ORG-ACT-MANAGE-GRADE");
+  assert.ok(gradeAction);
+  assert.deepEqual(gradeAction.inputFieldIds, ["ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID"]);
+  assert.deepEqual(gradeAction.outputFieldIds, ["ORG-GRADE-F-STATUS"]);
+  assert.ok(organization.pages.some(({ actionIds }) => actionIds.includes(gradeAction.id)));
+  const scenarios = organization.scenarios.filter(({ actionId }) => actionId === gradeAction.id);
+  assert.equal(scenarios.length, 2);
+  assert.deepEqual(
+    scenarios.find(({ kind }) => kind === "SUCCESS").then.expectedState,
+    { mode: "STATE", value: "ACTIVE" },
+  );
+});
+
+test("declares complete grant authority inputs for every IAM grant action", () => {
+  const identity = moduleById(requirementModel, "IAM-001");
+  const expectedInputs = {
+    "IAM-ACT-GRANT-DUTY": [
+      "IAM-DUTY-F-GRANTOR-AUTHORITY",
+      "IAM-DUTY-F-SUBJECT",
+      "IAM-DUTY-F-DUTY",
+      "IAM-DUTY-F-SCOPE",
+      "IAM-DUTY-F-ACTIONS",
+      "IAM-DUTY-F-EFFECTIVE",
+      "IAM-DUTY-F-EXPIRY",
+      "IAM-DUTY-F-REASON",
+      "IAM-DUTY-F-STATUS",
+    ],
+    "IAM-ACT-GRANT-SCOPE": [
+      "IAM-SCOPE-F-GRANTOR-AUTHORITY",
+      "IAM-SCOPE-F-SUBJECT",
+      "IAM-SCOPE-F-DUTY",
+      "IAM-SCOPE-F-SCOPE",
+      "IAM-SCOPE-F-ACTIONS",
+      "IAM-SCOPE-F-EFFECTIVE",
+      "IAM-SCOPE-F-EXPIRY",
+      "IAM-SCOPE-F-REASON",
+      "IAM-SCOPE-F-STATUS",
+    ],
+    "IAM-ACT-CREATE-TEMP-GRANT": [
+      "IAM-TEMP-F-GRANTOR-AUTHORITY",
+      "IAM-TEMP-F-SUBJECT",
+      "IAM-TEMP-F-DUTY",
+      "IAM-TEMP-F-SCOPE",
+      "IAM-TEMP-F-ACTIONS",
+      "IAM-TEMP-F-EFFECTIVE",
+      "IAM-TEMP-F-EXPIRY",
+      "IAM-TEMP-F-REASON",
+      "IAM-TEMP-F-STATUS",
+    ],
+  };
+  for (const [actionId, inputFieldIds] of Object.entries(expectedInputs)) {
+    const action = identity.actions.find(({ id }) => id === actionId);
+    assert.ok(action, actionId);
+    assert.deepEqual(action.inputFieldIds, inputFieldIds);
+    const exposingPages = identity.pages.filter(({ actionIds }) => actionIds.includes(actionId));
+    assert.ok(exposingPages.length > 0, actionId);
+    assert.equal(inputFieldIds.every((fieldId) => (
+      exposingPages.some(({ fieldIds }) => fieldIds.includes(fieldId))
+    )), true, actionId);
+  }
+});
+
+test("traces every scenario to an exposing page and a valid target state", () => {
+  for (const module of modules) {
+    const objectById = new Map(module.objects.map((object) => [object.id, object]));
+    const actionById = new Map(module.actions.map((action) => [action.id, action]));
+    const pageById = new Map(module.pages.map((page) => [page.id, page]));
+    for (const scenario of module.scenarios) {
+      const action = actionById.get(scenario.actionId);
+      const page = pageById.get(scenario.pageId);
+      assert.ok(action, scenario.id);
+      assert.ok(page?.actionIds.includes(action.id), scenario.id);
+      const expectedState = scenario.then.expectedState;
+      assert.ok(["STATE", "UNCHANGED"].includes(expectedState.mode));
+      if (expectedState.mode === "STATE") {
+        assert.ok(objectById.get(action.targetObjectId).states.includes(expectedState.value));
+      }
+    }
+  }
+});
+
+test("assigns explicit object responsibility subjects and accountable actors", () => {
+  const expectations = {
+    "Teacher Profile": ["TEACHER", "SCHOOL", "ROLE-ACADEMIC", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"],
+    "Student Profile": ["STUDENT", "SCHOOL", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"],
+    "Export Request": ["EXPORT_REQUESTER_AND_SCOPED_DATA", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"],
+    "Sensitive Access Request": ["ACCESS_REQUESTER_AND_SCOPED_DATA", "SCHOOL", "CURRENT_ACTOR", "CURRENT_ACTOR", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"],
+    "Textbook Version": ["SUBJECT_CURRICULUM", "SCHOOL", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"],
+    "Knowledge Point": ["SUBJECT_CURRICULUM", "SCHOOL", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"],
+    "Knowledge Mapping": ["SUBJECT_CURRICULUM", "SCHOOL", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"],
+    "Teacher Todo View Definition": ["CURRENT_TEACHER_WORK_VIEW", "SCHOOL", "SYSTEM", "CURRENT_ACTOR", "SYSTEM", "SYSTEM"],
+  };
+  const objects = modules.flatMap((module) => module.objects);
+  for (const [label, expected] of Object.entries(expectations)) {
+    const object = objects.find((candidate) => candidate.label === label);
+    assert.ok(object, label);
+    assert.deepEqual([
+      object.dataSubject,
+      object.controlSubject,
+      object.producerRef,
+      object.ownerRef,
+      object.confirmerRef,
+      object.stewardRef,
+    ], expected);
+  }
+  assert.equal(objects.every(({ dataSubject, controlSubject }) => (
+    dataSubject.length > 0 && controlSubject === "SCHOOL"
+  )), true);
+});
+
+test("declares a closed ownership scope on every relationship", () => {
+  const scopes = new Set([
+    "SAME_SCHOOL",
+    "SAME_TERM",
+    "SAME_CONTEXT",
+    "SAME_SUBJECT",
+    "SAME_STUDENT",
+    "CROSS_MODULE_REFERENCE",
+  ]);
+  assert.equal(modules.every((module) => module.relationships.every(({ ownershipScope }) => (
+    scopes.has(ownershipScope)
+  ))), true);
+});
+
+test("binds foundation business choices to centralized Option Sets", () => {
+  const expectedOptionSetIds = {
+    "ACC-SCHOOL-F-REGION": "OPT-COM-001",
+    "ACC-MEMBER-F-ACCOUNT-ID-TYPE": "OPT-ENUM-025",
+    "ACC-MEMBER-F-ACTIVATION": "OPT-ENUM-026",
+    "ACC-IDENTITY-F-ROLE": "OPT-COM-003",
+    "ACC-IDENTITY-F-DUTIES": "OPT-ENUM-042",
+    "ACC-CONTEXT-F-SCHOOL-ID": "OPT-COM-002",
+    "ACC-CONTEXT-F-TERM-ID": "OPT-COM-004",
+    "ORG-GRADE-F-TERM-ID": "OPT-COM-004",
+    "ORG-CLASS-F-GRADE-ID": "OPT-COM-005",
+    "ORG-STUDENT-F-CLASS-ID": "OPT-COM-006",
+    "ORG-COURSE-F-SUBJECT-ID": "OPT-COM-007",
+    "ORG-TEACHING-F-COURSE-ID": "OPT-COM-008",
+    "ORG-TEACHING-F-TEACHER-ID": "OPT-COM-009",
+    "ORG-TEACHING-F-CLASS-ID": "OPT-COM-006",
+    "ORG-IMPORT-F-OBJECT-TYPE": "OPT-ENUM-020",
+    "ORG-IMPORT-ROW-F-RESULT-TYPE": "OPT-ENUM-021",
+    "ORG-IMPORT-ROW-F-VALIDATION-RESULT": "OPT-ENUM-022",
+    "IAM-ROLE-F-ROLE": "OPT-COM-003",
+    "CURR-CURRICULUM-F-SUBJECT": "OPT-COM-007",
+    "CURR-MAPPING-F-KP-ID": "OPT-COM-011",
+    "CURR-MAPPING-F-RELATION": "OPT-ENUM-043",
+  };
+  const fields = modules.flatMap((module) => module.objects.flatMap((object) => object.fields));
+  for (const [fieldId, optionSetId] of Object.entries(expectedOptionSetIds)) {
+    const field = fields.find(({ id }) => id === fieldId);
+    assert.ok(field, fieldId);
+    assert.deepEqual(field.valueSource, { kind: "OPTION_SET", optionSetId });
+  }
+  const accountIdentifier = fields.find(({ id }) => id === "ACC-MEMBER-F-ACCOUNT-ID");
+  assert.deepEqual(accountIdentifier.valueSource, { kind: "USER_INPUT" });
+});
+
+test("orders DF-001 through explicit school, login, activation, identity, term, and permission steps", () => {
+  const flow = flows.find(({ id }) => id === "DF-001");
+  assert.deepEqual(flow.steps, [
+    { order: 1, actionId: "ACC-ACT-SEARCH-SCHOOL" },
+    { order: 2, actionId: "ACC-ACT-SELECT-SCHOOL" },
+    { order: 3, actionId: "ACC-ACT-LOGIN" },
+    { order: 4, actionId: "ACC-ACT-FIRST-ACTIVATION", condition: "membership state is INVITED" },
+    { order: 5, actionId: "ACC-ACT-SELECT-IDENTITY" },
+    { order: 6, actionId: "ACC-ACT-SELECT-TERM" },
+    { order: 7, actionId: "ORG-ACT-RESOLVE-CONTEXT-SCOPE" },
+    { order: 8, actionId: "IAM-ACT-EVALUATE-PERMISSION" },
+    { order: 9, actionId: "ACC-ACT-SWITCH-CONTEXT" },
+  ]);
+});
+
+test("gates DF-002 writes on permission and audit before partial import acceptance", () => {
+  const flow = flows.find(({ id }) => id === "DF-002");
+  assert.deepEqual(flow.steps.map(({ actionId }) => actionId), [
+    "ORG-ACT-UPLOAD-IMPORT",
+    "ORG-ACT-MAP-IMPORT-FIELDS",
+    "ORG-ACT-VALIDATE-IMPORT",
+    "IAM-ACT-EVALUATE-PERMISSION",
+    "AUD-ACT-APPEND-EVENT",
+    "ORG-ACT-CONFIRM-IMPORT",
+    "IAM-ACT-RECALCULATE-PERMISSIONS",
+    "AUD-ACT-APPEND-EVENT",
+  ]);
+  assert.match(flow.steps[4].condition, /audit gate/i);
+  assert.match(flow.steps[7].condition, /outcome audit/i);
+  assert.match(JSON.stringify(flow), /audit gate failure.*prevents.*accepted-row writes/i);
+  const highRiskActions = modules.flatMap((module) => module.actions)
+    .filter(({ risk }) => risk === RISK.HIGH);
+  assert.equal(highRiskActions.every(({ failureResults }) => failureResults.includes("AUDIT_FAILED")), true);
+});
+
+test("publishes the usable knowledge mapping before the curriculum version", () => {
+  const curriculum = moduleById(requirementModel, "CURR-001");
+  const mappingValidate = curriculum.actions.find(({ id }) => id === "CURR-ACT-VALIDATE-MAPPING");
+  const mappingPublish = curriculum.actions.find(({ id }) => id === "CURR-ACT-PUBLISH-MAPPING");
+  const curriculumValidate = curriculum.actions.find(({ id }) => id === "CURR-ACT-VALIDATE-VERSION");
+  assert.ok(mappingValidate);
+  assert.deepEqual(mappingValidate.transition, { from: "DRAFT", to: "VALIDATED" });
+  assert.ok(mappingPublish);
+  assert.deepEqual(mappingPublish.transition, { from: "VALIDATED", to: "PUBLISHED" });
+  assert.deepEqual(curriculumValidate.transition, { from: "DRAFT", to: "VALIDATED" });
+  const flow = flows.find(({ id }) => id === "DF-003");
+  assert.deepEqual(flow.steps.map(({ actionId }) => actionId), [
+    "CURR-ACT-VALIDATE-MAPPING",
+    "CURR-ACT-VALIDATE-VERSION",
+    "CURR-ACT-PUBLISH-MAPPING",
+    "CURR-ACT-PUBLISH-VERSION",
+  ]);
+  assert.ok(flow.targetDataRefs.some(({ objectId, fieldId }) => (
+    objectId === "CURR-OBJ-MAPPING" && fieldId === "CURR-MAPPING-F-STATUS"
+  )));
+  assert.match(JSON.stringify(flow.downstreamInvalidation), /historical.*never rewritten/i);
+});
+
+test("splits export and sensitive-access approval outcomes with reasons", () => {
+  const governance = moduleById(requirementModel, "DGV-001");
+  assert.deepEqual(
+    governance.actions.filter(({ id }) => /EXPORT$/.test(id)).map(({ id }) => id),
+    ["DGV-ACT-REQUEST-EXPORT", "DGV-ACT-APPROVE-EXPORT", "DGV-ACT-DENY-EXPORT", "DGV-ACT-GENERATE-EXPORT", "DGV-ACT-EXPIRE-EXPORT"],
+  );
+  for (const actionId of ["DGV-ACT-APPROVE-EXPORT", "DGV-ACT-DENY-EXPORT"]) {
+    assert.ok(governance.actions.find(({ id }) => id === actionId).inputFieldIds.includes("DGV-EXPORT-F-DECISION-REASON"));
+  }
+
+  const audit = moduleById(requirementModel, "AUD-001");
+  for (const actionId of ["AUD-ACT-APPROVE-SENSITIVE", "AUD-ACT-DENY-SENSITIVE"]) {
+    assert.ok(audit.actions.find(({ id }) => id === actionId).inputFieldIds.includes("AUD-REQUEST-F-DECISION-REASON"));
+  }
+  const approve = audit.actions.find(({ id }) => id === "AUD-ACT-APPROVE-SENSITIVE");
+  assert.ok(approve.inputFieldIds.includes("AUD-REQUEST-F-SCOPE"));
+  assert.ok(approve.inputFieldIds.includes("AUD-REQUEST-F-EXPIRY"));
+});
+
+test("declares representative Web-only and Web/App client asymmetry", () => {
+  const byActionId = new Map(modules.flatMap((module) => module.actions.map((action) => [action.id, action])));
+  const byPageId = new Map(modules.flatMap((module) => module.pages.map((page) => [page.id, page])));
+  for (const actionId of ["ACC-ACT-LOGIN", "ACC-ACT-SWITCH-CONTEXT", "TEA-ACT-QUERY-HOMEROOM-SUMMARY"]) {
+    assert.deepEqual(byActionId.get(actionId).clients, [CLIENT.WEB, CLIENT.APP]);
+  }
+  for (const actionId of [
+    "ORG-ACT-CONFIRM-IMPORT",
+    "IAM-ACT-GRANT-SCOPE",
+    "DGV-ACT-APPROVE-EXPORT",
+    "AUD-ACT-QUERY-AUDIT",
+    "CURR-ACT-PUBLISH-VERSION",
+  ]) {
+    assert.deepEqual(byActionId.get(actionId).clients, [CLIENT.WEB]);
+  }
+  assert.deepEqual(byPageId.get("ORG-PAGE-IMPORT-MAPPING").clients, [CLIENT.WEB]);
+  assert.deepEqual(byPageId.get("CURR-PAGE-PATH").clients, [CLIENT.WEB, CLIENT.APP]);
 });
 
 test("models school-first entry and read-only historical terms", () => {
@@ -1209,6 +1584,7 @@ test("registers every required Option Set concept with stable code-label values"
     "region",
     "school",
     "loginRole",
+    "workDuty",
     "term",
     "grade",
     "class",
@@ -1262,6 +1638,7 @@ test("registers every required Option Set concept with stable code-label values"
     "schedulingView",
     "scoreRounding",
     "visibilityPolicy",
+    "knowledgeMappingRelation",
   ];
   const runtimeSources = {
     school: {
@@ -1364,6 +1741,7 @@ test("registers every required Option Set concept with stable code-label values"
       "ROLE-SCHOOL-ADMIN",
       "ROLE-PLATFORM-OPS",
     ],
+    workDuty: ["DUTY-SUBJECT-TEACHER", "DUTY-HOMEROOM", "DUTY-SUBJECT-LEAD"],
     timeRange: ["TODAY", "LAST-7-DAYS", "THIS-WEEK", "THIS-MONTH", "THIS-TERM", "CUSTOM"],
     yesNo: ["YES", "NO"],
     assignmentType: ["ONLINE", "PHOTO", "MIXED", "LEARNING_TASK"],
@@ -1436,6 +1814,7 @@ test("registers every required Option Set concept with stable code-label values"
     schedulingView: ["TEACHER", "CLASS", "CLASSROOM"],
     scoreRounding: ["NONE", "HALF-UP-INTEGER", "HALF-UP-ONE-DECIMAL", "FLOOR-INTEGER"],
     visibilityPolicy: ["PRIVATE", "SUBJECT-TEACHERS", "HOMEROOM-READ", "SCHOOL-AUTHORIZED", "STUDENT-VISIBLE"],
+    knowledgeMappingRelation: ["PRIMARY", "SUPPORTING", "PREREQUISITE", "EXTENSION"],
   };
   assert.deepEqual(optionSets.map(({ key }) => key).sort(), requiredConcepts.sort());
   assert.deepEqual(
@@ -2163,6 +2542,35 @@ test("rejects pages that mix objectId and objectIds declarations", () => {
   ));
 
   assertHasCode(validateRequirementModel(model), "INVALID_PAGE_CONTRACT");
+});
+
+test("rejects page and action client exposure mismatches", () => {
+  const mutations = [
+    (action, page) => { page.clients = [CLIENT.WEB]; },
+    (action) => { action.clients = [CLIENT.WEB]; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    const module = moduleById(model, "SUB-001");
+    mutate(module.actions[0], module.pages[0]);
+
+    assertHasCode(validateRequirementModel(model), "INVALID_CLIENT_EXPOSURE");
+  }
+});
+
+test("rejects exposing pages that omit non-system action inputs", () => {
+  const model = validFixture();
+  const module = moduleById(model, "SUB-001");
+  module.pages[0].fieldIds = [];
+  module.pages.push(validPage(
+    "SUB-PAGE-02",
+    { objectId: "DAT-SUB-01" },
+    ["SUB-F001"],
+    ["SUB-ACT-01"],
+  ));
+
+  assertHasCode(validateRequirementModel(model), "MISSING_PAGE_ACTION_INPUT");
 });
 
 test("rejects a scenario referencing a missing action", () => {

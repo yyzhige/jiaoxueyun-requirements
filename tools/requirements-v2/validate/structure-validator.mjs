@@ -65,6 +65,14 @@ const CARDINALITIES = new Set([
   "MANY_TO_ONE",
   "MANY_TO_MANY",
 ]);
+const OWNERSHIP_SCOPES = new Set([
+  "SAME_SCHOOL",
+  "SAME_TERM",
+  "SAME_CONTEXT",
+  "SAME_SUBJECT",
+  "SAME_STUDENT",
+  "CROSS_MODULE_REFERENCE",
+]);
 const EXTENSION_ALLOWED_KEYS = new Set([
   "id",
   "label",
@@ -341,8 +349,12 @@ function validateObject(errors, object, path, strict) {
   if (strict) {
     for (const property of [
       "label",
+      "dataSubject",
+      "controlSubject",
+      "producerRef",
       "ownerRef",
       "confirmerRef",
+      "stewardRef",
       "lifecyclePolicyId",
       "sensitivityId",
     ]) {
@@ -375,6 +387,7 @@ function validateRelationship(errors, relationship, path) {
     "toObjectId",
     "type",
     "cardinality",
+    "ownershipScope",
     "onSourceInvalidation",
   ]) {
     contractString(
@@ -390,6 +403,9 @@ function validateRelationship(errors, relationship, path) {
   }
   if (!CARDINALITIES.has(relationship.cardinality)) {
     errors.push(`INVALID_RELATIONSHIP_CONTRACT ${path}.cardinality is unsupported`);
+  }
+  if (!OWNERSHIP_SCOPES.has(relationship.ownershipScope)) {
+    errors.push(`INVALID_RELATIONSHIP_CONTRACT ${path}.ownershipScope is unsupported`);
   }
 }
 
@@ -449,7 +465,7 @@ function validateAction(errors, action, path, strict) {
       );
     }
   });
-  contractStringArray(
+  const failureResults = contractStringArray(
     errors,
     action,
     "failureResults",
@@ -465,6 +481,16 @@ function validateAction(errors, action, path, strict) {
   }
   if (action.auditRequired !== true && action.auditRequired !== false) {
     errors.push(`INVALID_ACTION_CONTRACT ${path}.auditRequired must be boolean`);
+  }
+  if (action.risk === "HIGH") {
+    if (action.auditRequired !== true) {
+      errors.push(`INVALID_ACTION_CONTRACT ${path}.auditRequired must be true for HIGH risk`);
+    }
+    if (!failureResults.includes("AUDIT_FAILED")) {
+      errors.push(
+        `INVALID_ACTION_CONTRACT ${path}.failureResults must include AUDIT_FAILED for HIGH risk`,
+      );
+    }
   }
   if (action.writes === true && !isValidId(action.idempotencyKey)) {
     errors.push(
@@ -527,7 +553,7 @@ function validateScenario(errors, scenario, path, strict) {
       `INVALID_SCENARIO_CONTRACT ${path}.kind must be SUCCESS, FAILURE, or BOUNDARY`,
     );
   }
-  for (const property of ["actionId", "given", "when"]) {
+  for (const property of ["actionId", "pageId", "given", "when"]) {
     contractString(errors, scenario, property, path, "INVALID_SCENARIO_CONTRACT");
   }
   const outcome = scenario.then;
@@ -535,13 +561,28 @@ function validateScenario(errors, scenario, path, strict) {
     errors.push(`INVALID_SCENARIO_CONTRACT ${path}.then must be an object`);
     return;
   }
-  for (const property of [
-    "expectedData",
-    "expectedState",
-    "expectedPermission",
-    "expectedVisibility",
-  ]) {
+  for (const property of ["expectedData", "expectedPermission", "expectedVisibility"]) {
     contractString(errors, outcome, property, `${path}.then`, "INVALID_SCENARIO_CONTRACT");
+  }
+  const expectedState = outcome.expectedState;
+  if (!isRecord(expectedState)) {
+    errors.push(`INVALID_SCENARIO_STATE ${path}.then.expectedState must be an object`);
+  } else if (expectedState.mode === "STATE") {
+    if (!isValidId(expectedState.value)) {
+      errors.push(
+        `INVALID_SCENARIO_STATE ${path}.then.expectedState.value must be a non-empty state`,
+      );
+    }
+  } else if (expectedState.mode === "UNCHANGED") {
+    if (Object.hasOwn(expectedState, "value")) {
+      errors.push(
+        `INVALID_SCENARIO_STATE ${path}.then.expectedState.value is not allowed for UNCHANGED`,
+      );
+    }
+  } else {
+    errors.push(
+      `INVALID_SCENARIO_STATE ${path}.then.expectedState.mode must be STATE or UNCHANGED`,
+    );
   }
 }
 
@@ -634,6 +675,11 @@ function validateFlow(errors, flow, path) {
       errors.push(`INVALID_FLOW_CONTRACT ${stepPath}.order must be ${index + 1}`);
     }
     contractString(errors, step, "actionId", stepPath, "INVALID_FLOW_CONTRACT");
+    if (Object.hasOwn(step, "condition") && !isValidId(step.condition)) {
+      errors.push(
+        `INVALID_FLOW_CONTRACT ${stepPath}.condition must be a non-empty string when present`,
+      );
+    }
   });
   for (const property of ["sourceDataRefs", "targetDataRefs"]) {
     const dataRefs = contractArray(

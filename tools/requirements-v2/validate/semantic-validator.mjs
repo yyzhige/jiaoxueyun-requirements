@@ -79,7 +79,7 @@ function stateIds(object) {
 function ownerErrors(index) {
   const errors = [];
   for (const objectEntry of index.objects) {
-    for (const property of ["ownerRef", "confirmerRef"]) {
+    for (const property of ["producerRef", "ownerRef", "confirmerRef", "stewardRef"]) {
       const reference = objectEntry.value?.[property];
       if (!actorIsValid(index, reference)) {
         errors.push(
@@ -127,6 +127,20 @@ function actionErrors(index) {
     const actionScenarios = index.scenarios.filter(
       ({ value }) => value?.actionId === action?.id,
     );
+    if (targetObject) {
+      const states = stateIds(targetObject);
+      for (const { value: scenario } of actionScenarios) {
+        const expectedState = scenario?.then?.expectedState;
+        if (
+          expectedState?.mode === "STATE"
+          && !states.has(expectedState.value)
+        ) {
+          errors.push(
+            `INVALID_SCENARIO_STATE ${formatValidationValue(scenario?.id)} -> ${formatValidationValue(expectedState.value)}`,
+          );
+        }
+      }
+    }
     const actualScenarioIds = new Set(
       actionScenarios.map(({ value }) => value?.id),
     );

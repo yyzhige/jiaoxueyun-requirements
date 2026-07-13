@@ -786,6 +786,17 @@ export const optionSets = [
     ["SCHOOL-AUTHORIZED", "学校授权角色"],
     ["STUDENT-VISIBLE", "学生可见"],
   ]),
+  optionSet("OPT-ENUM-042", "workDuty", "工作职责", [
+    ["DUTY-SUBJECT-TEACHER", "任课教师"],
+    ["DUTY-HOMEROOM", "班主任"],
+    ["DUTY-SUBJECT-LEAD", "学科负责人"],
+  ]),
+  optionSet("OPT-ENUM-043", "knowledgeMappingRelation", "知识映射关系", [
+    ["PRIMARY", "主要知识点"],
+    ["SUPPORTING", "辅助知识点"],
+    ["PREREQUISITE", "前置知识点"],
+    ["EXTENSION", "拓展知识点"],
+  ]),
 ];
 
 export const extensions = [

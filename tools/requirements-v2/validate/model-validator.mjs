@@ -188,6 +188,7 @@ export function buildModelIndex(model) {
     optionSets,
     optionSetById: mapById(optionSets),
     pages,
+    pageById: mapById(pages),
     nfrById: mapById(nfrs),
     nfrs,
     relationships,
@@ -258,7 +259,9 @@ function actorReferences(value) {
     "roleRef",
     "dutyRef",
     "ownerRef",
+    "producerRef",
     "confirmerRef",
+    "stewardRef",
     "confirmerRoleRef",
     "confirmerDutyRef",
   ]) {
@@ -356,7 +359,7 @@ export function validateModelReferences(model) {
   }
 
   for (const objectEntry of index.objects) {
-    for (const property of ["ownerRef", "confirmerRef"]) {
+    for (const property of ["producerRef", "ownerRef", "confirmerRef", "stewardRef"]) {
       checkActorReference(
         errors,
         index,
@@ -446,6 +449,16 @@ export function validateModelReferences(model) {
         `${actionEntry.path}.permissions[${permissionIndex}]`,
       );
     });
+    const exposingPages = index.pages.filter(({ moduleId, value }) => (
+      moduleId === actionEntry.moduleId && list(value?.actionIds).includes(action?.id)
+    ));
+    for (const client of list(action?.clients)) {
+      if (!exposingPages.some(({ value }) => list(value?.clients).includes(client))) {
+        errors.push(
+          `INVALID_CLIENT_EXPOSURE ${formatValidationValue(action?.id)} -> ${formatValidationValue(client)}`,
+        );
+      }
+    }
   }
 
   for (const pageEntry of index.pages) {
@@ -503,6 +516,23 @@ export function validateModelReferences(model) {
         errors.push(
           `INVALID_MODULE_OWNERSHIP ${formatValidationValue(page?.id)} -> action ${formatValidationValue(actionId)} belongs to ${formatValidationValue(actionEntry.moduleId)}`,
         );
+      } else {
+        const pageFieldIds = new Set(list(page?.fieldIds));
+        for (const fieldId of list(actionEntry.value?.inputFieldIds)) {
+          const field = index.fieldById.get(fieldId)?.value;
+          if (field && field.valueSource?.kind !== "SYSTEM" && !pageFieldIds.has(fieldId)) {
+            errors.push(
+              `MISSING_PAGE_ACTION_INPUT ${formatValidationValue(page?.id)} -> action ${formatValidationValue(actionId)} requires ${formatValidationValue(fieldId)}`,
+            );
+          }
+        }
+        for (const client of list(page?.clients)) {
+          if (!list(actionEntry.value?.clients).includes(client)) {
+            errors.push(
+              `INVALID_CLIENT_EXPOSURE ${formatValidationValue(page?.id)} -> action ${formatValidationValue(actionId)} does not support ${formatValidationValue(client)}`,
+            );
+          }
+        }
       }
     }
   }
@@ -516,6 +546,16 @@ export function validateModelReferences(model) {
     } else if (actionEntry.moduleId !== scenarioEntry.moduleId) {
       errors.push(
         `INVALID_MODULE_OWNERSHIP ${formatValidationValue(scenarioEntry.value?.id)} -> action ${formatValidationValue(scenarioEntry.value?.actionId)} belongs to ${formatValidationValue(actionEntry.moduleId)}`,
+      );
+    }
+    const pageEntry = index.pageById.get(scenarioEntry.value?.pageId);
+    if (
+      !pageEntry
+      || pageEntry.moduleId !== scenarioEntry.moduleId
+      || !list(pageEntry.value?.actionIds).includes(scenarioEntry.value?.actionId)
+    ) {
+      errors.push(
+        `INVALID_SCENARIO_PAGE ${formatValidationValue(scenarioEntry.value?.id)} -> ${formatValidationValue(scenarioEntry.value?.pageId)}`,
       );
     }
   }
