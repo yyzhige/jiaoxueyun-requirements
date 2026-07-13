@@ -34,6 +34,10 @@ function isPresent(value) {
     && !(typeof value === "string" && value.trim() === "");
 }
 
+function isValidId(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+
 function setEquals(left, right) {
   if (left.size !== right.size) return false;
   return [...left].every((value) => right.has(value));
@@ -216,7 +220,9 @@ function metricErrors(index) {
   for (const metricEntry of index.metrics) {
     const metric = metricEntry.value;
     const requiredEventCount = METRIC_EVENT_COUNTS.get(metric?.aggregation) ?? 1;
-    const distinctEventCount = new Set(list(metric?.eventIds)).size;
+    const distinctEventCount = new Set(
+      list(metric?.eventIds).filter(isValidId),
+    ).size;
     if (!METRIC_EVENT_COUNTS.has(metric?.aggregation)) {
       errors.push(
         `INVALID_METRIC_AGGREGATION ${formatValidationValue(metric?.id)} -> ${formatValidationValue(metric?.aggregation)}`,

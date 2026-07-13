@@ -62,6 +62,23 @@ function cloneStructuredData(value, path, active, errors, depth = 0) {
   }
 
   const isArray = Array.isArray(value);
+  if (isArray) {
+    let lengthDescriptor;
+    try {
+      lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+    } catch {
+      malformed(errors, path, "cannot be inspected safely");
+      return undefined;
+    }
+    const indexedKeyCount = keys.filter((key) => (
+      typeof key === "string"
+      && /^(?:0|[1-9]\d*)$/.test(key)
+      && Number(key) < 4_294_967_295
+    )).length;
+    if (indexedKeyCount !== lengthDescriptor?.value) {
+      malformed(errors, path, "contains sparse array entries");
+    }
+  }
   const validPrototype = isArray
     ? prototype === Array.prototype
     : prototype === Object.prototype || prototype === null;
@@ -278,7 +295,14 @@ function validateModelShape(model) {
   }
   if (Array.isArray(model.metrics)) {
     validateEntities(errors, model.metrics, "metrics", "metric", (metric, path) => {
-      requireArray(errors, metric, "eventIds", path);
+      const eventIds = requireArray(errors, metric, "eventIds", path);
+      eventIds.forEach((eventId, index) => {
+        if (!isValidId(eventId)) {
+          errors.push(
+            `INVALID_ENTITY_SHAPE ${path}.eventIds[${index}] must be a non-empty string`,
+          );
+        }
+      });
     });
   }
   if (Array.isArray(model.modules)) {

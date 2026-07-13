@@ -279,7 +279,7 @@ export function validateModelReferences(model) {
       );
     } else if (
       valueSource.kind === "OBJECT_REF"
-      && !isValidId(valueSource.targetObjectId)
+      && !index.objectById.has(valueSource.targetObjectId)
     ) {
       errors.push(
         `MISSING_VALUE_SOURCE_REFERENCE ${formatValidationValue(fieldEntry.value?.id)} OBJECT_REF requires targetObjectId`,
@@ -349,7 +349,15 @@ export function validateModelReferences(model) {
     const declaredObjectIds = isValidId(page?.objectId)
       ? [page.objectId]
       : list(page?.objectIds);
-    const declaredObjectIdSet = new Set(declaredObjectIds);
+    const declaredObjectIdSet = new Set(declaredObjectIds.filter(isValidId));
+    if (
+      list(page?.fieldIds).length > 0
+      && declaredObjectIdSet.size === 0
+    ) {
+      errors.push(
+        `MISSING_PAGE_OBJECT ${formatValidationValue(page?.id)} -> no declared object`,
+      );
+    }
     for (const objectId of declaredObjectIds) {
       const objectEntry = index.objectById.get(objectId);
       if (!objectEntry) {

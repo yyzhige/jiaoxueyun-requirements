@@ -389,6 +389,22 @@ test("rejects authored data beyond the maximum traversal depth", () => {
   );
 });
 
+test("rejects sparse authored collection arrays", () => {
+  const mutations = [
+    (model) => { model.roles = new Array(1); },
+    (model) => {
+      moduleById(model, "SUB-001").objects[0].fields = new Array(1);
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    mutate(model);
+
+    assertHasCode(validateRequirementModel(model), "MALFORMED_MODEL");
+  }
+});
+
 test("exports stable model constants", () => {
   assert.deepEqual(PHASE, { FIRST: 1, SECOND: 2 });
   assert.deepEqual(RISK, { READ: "READ", LOW: "LOW", HIGH: "HIGH" });
@@ -502,6 +518,19 @@ test("rejects missing kind-specific field value-source references", () => {
 
     assertHasCode(validateRequirementModel(model), expectedCode);
   }
+});
+
+test("rejects an object-reference value source targeting an unknown object", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").objects[0].fields[0].valueSource = {
+    kind: "OBJECT_REF",
+    targetObjectId: "DAT-MISSING",
+  };
+
+  assertHasCode(
+    validateRequirementModel(model),
+    "MISSING_VALUE_SOURCE_REFERENCE",
+  );
 });
 
 test("rejects a choice field without an Option Set", () => {
@@ -625,6 +654,27 @@ test("accepts page fields owned by one of its declared objects", () => {
   });
 
   assert.deepEqual(validateRequirementModel(model), []);
+});
+
+test("rejects page fields without a declared object contract", () => {
+  const objectDeclarations = [
+    {},
+    { objectId: "" },
+    { objectIds: [] },
+    { objectIds: [""] },
+  ];
+
+  for (const objectDeclaration of objectDeclarations) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").pages.push({
+      id: "SUB-W01",
+      ...objectDeclaration,
+      fieldIds: ["SUB-F001"],
+      actionIds: [],
+    });
+
+    assertHasCode(validateRequirementModel(model), "MISSING_PAGE_OBJECT");
+  }
 });
 
 test("rejects a scenario referencing a missing action", () => {
@@ -1119,6 +1169,24 @@ test("requires two distinct events for paired metric aggregations", () => {
       model.metrics[0].eventIds = eventIds;
 
       assertHasCode(validateRequirementModel(model), "MISSING_METRIC_EVENT");
+    }
+  }
+});
+
+test("rejects invalid metric event IDs without counting them", () => {
+  for (const invalidEventId of [null, "", 42]) {
+    for (const [aggregation, eventIds] of [
+      ["count", [invalidEventId]],
+      ["duration", ["EVT-START", invalidEventId]],
+    ]) {
+      const model = validFixture();
+      model.metrics[0].aggregation = aggregation;
+      model.metrics[0].eventIds = eventIds;
+
+      const errors = validateRequirementModel(model);
+
+      assertHasCode(errors, "INVALID_ENTITY_SHAPE");
+      assertHasCode(errors, "MISSING_METRIC_EVENT");
     }
   }
 });
