@@ -71,6 +71,7 @@ function validScenario(id, actionId, kind, overrides = {}) {
     kind,
     actionId,
     pageId: "SUB-PAGE-01",
+    ...(kind === "SUCCESS" ? {} : { resultCode: "PERMISSION_DENIED" }),
     given: "the actor has an active authorized context",
     when: "the actor performs the task-specific action",
     then: {
@@ -95,6 +96,7 @@ function validAction(id, targetObjectId, inputFieldIds, scenarioIds, overrides =
     transition: { from: "DRAFT", to: "SUBMITTED" },
     writes: true,
     risk: RISK.LOW,
+    executionMode: "USER_TASK",
     clients: [CLIENT.WEB, CLIENT.APP],
     permissions: [
       { effect: "ALLOW", roleRef: "ROLE-STUDENT", condition: "owns target object" },
@@ -102,7 +104,7 @@ function validAction(id, targetObjectId, inputFieldIds, scenarioIds, overrides =
     ],
     scenarioIds,
     idempotencyKey: `${id}:target-version:request-id`,
-    auditRequired: true,
+    auditMode: "REQUIRED",
     failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
     ...overrides,
   };
@@ -122,6 +124,27 @@ function validPage(id, objectDeclaration, fieldIds, actionIds, overrides = {}) {
   };
 }
 
+function nonUserActionFixture(executionMode, trigger) {
+  const model = validFixture();
+  const module = moduleById(model, "SUB-001");
+  const action = module.actions[0];
+  action.executionMode = executionMode;
+  action.trigger = structuredClone(trigger);
+  action.auditMode = "REQUIRED";
+  delete action.auditRequired;
+  delete action.clients;
+  action.permissions = [
+    { effect: "ALLOW", actorRef: "SYSTEM", condition: "the verified trigger invokes it" },
+    { effect: "DENY", actorRef: "CURRENT_ACTOR", condition: "users cannot invoke it" },
+  ];
+  module.pages[0].actionIds = [];
+  for (const scenario of module.scenarios) {
+    delete scenario.pageId;
+    scenario.trigger = structuredClone(trigger);
+  }
+  return model;
+}
+
 function validFixture() {
   const submissionField = validField("SUB-F001", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-BOOL" },
@@ -130,6 +153,9 @@ function validFixture() {
   const submissionScenarios = [
     validScenario("SUB-SCN-01", "SUB-ACT-01", "SUCCESS"),
     validScenario("SUB-SCN-02", "SUB-ACT-01", "BOUNDARY"),
+    validScenario("SUB-SCN-03", "SUB-ACT-01", "FAILURE", {
+      resultCode: "VERSION_CONFLICT",
+    }),
   ];
   return {
     baselineDecisions: [{
@@ -287,7 +313,8 @@ function validRuntimeOptionSet(overrides = {}) {
     mode: "RUNTIME_QUERY",
     values: [],
     source: {
-      queryId: "QUERY-RUNTIME-TEST",
+      queryId: "QUERY-AUTHORIZED-SCHOOLS",
+      idKind: "OBJECT_ID",
       valueField: "objectId",
       labelField: "displayName",
       labelSnapshot: true,
@@ -637,57 +664,59 @@ test("rejects missing or unsupported relationship ownership scopes", () => {
 });
 
 test("rejects incomplete action execution contracts", () => {
-  for (const property of [
-    "label",
-    "targetObjectId",
-    "inputFieldIds",
-    "outputFieldIds",
-    "writes",
-    "risk",
-    "clients",
-    "permissions",
-    "scenarioIds",
-    "auditRequired",
-    "failureResults",
-  ]) {
+  const properties = [
+    ["label", "INVALID_ACTION_CONTRACT"],
+    ["targetObjectId", "INVALID_ACTION_CONTRACT"],
+    ["inputFieldIds", "INVALID_ACTION_CONTRACT"],
+    ["outputFieldIds", "INVALID_ACTION_CONTRACT"],
+    ["writes", "INVALID_ACTION_CONTRACT"],
+    ["risk", "INVALID_ACTION_CONTRACT"],
+    ["executionMode", "INVALID_ACTION_CONTRACT"],
+    ["clients", "INVALID_ACTION_CONTRACT"],
+    ["permissions", "INVALID_ACTION_CONTRACT"],
+    ["scenarioIds", "INVALID_ACTION_CONTRACT"],
+    ["auditMode", "INVALID_AUDIT_MODE"],
+    ["failureResults", "INVALID_ACTION_CONTRACT"],
+  ];
+  for (const [property, errorCode] of properties) {
     const model = validFixture();
     delete moduleById(model, "SUB-001").actions[0][property];
 
-    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+    assertHasCode(validateRequirementModel(model), errorCode);
   }
 });
 
 test("requires write idempotency and validates action clients, risk, audit, and failures", () => {
   const mutations = [
-    (action) => { delete action.idempotencyKey; },
-    (action) => { action.clients = ["CLI"]; },
-    (action) => { action.risk = "CRITICAL"; },
-    (action) => { action.auditRequired = "sometimes"; },
-    (action) => { action.failureResults = []; },
+    [(action) => { delete action.idempotencyKey; }, "INVALID_ACTION_CONTRACT"],
+    [(action) => { action.clients = ["CLI"]; }, "INVALID_ACTION_CONTRACT"],
+    [(action) => { action.risk = "CRITICAL"; }, "INVALID_ACTION_CONTRACT"],
+    [(action) => { action.auditMode = "SOMETIMES"; }, "INVALID_AUDIT_MODE"],
+    [(action) => { action.failureResults = []; }, "INVALID_ACTION_CONTRACT"],
   ];
 
-  for (const mutate of mutations) {
+  for (const [mutate, errorCode] of mutations) {
     const model = validFixture();
     mutate(moduleById(model, "SUB-001").actions[0]);
 
-    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+    assertHasCode(validateRequirementModel(model), errorCode);
   }
 });
 
 test("requires fail-closed audit behavior for high-risk actions", () => {
   const mutations = [
-    (action) => { action.auditRequired = false; },
-    (action) => { action.failureResults = ["PERMISSION_DENIED"]; },
+    [(action) => { action.auditMode = "NOT_REQUIRED"; }, "INVALID_AUDIT_MODE"],
+    [(action) => { action.failureResults = ["PERMISSION_DENIED"]; }, "INVALID_ACTION_CONTRACT"],
   ];
 
-  for (const mutate of mutations) {
+  for (const [mutate, errorCode] of mutations) {
     const model = validFixture();
     const action = moduleById(model, "SUB-001").actions[0];
     action.risk = RISK.HIGH;
     action.failureResults.push("AUDIT_FAILED");
     mutate(action);
 
-    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+    assertHasCode(validateRequirementModel(model), errorCode);
   }
 });
 
@@ -706,6 +735,97 @@ test("rejects action permissions without an explicit boundary condition", () => 
   delete moduleById(model, "SUB-001").actions[0].permissions[0].condition;
 
   assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+});
+
+test("rejects incomplete, unknown, and duplicate failure-result scenario coverage", () => {
+  const mutations = [
+    (module) => {
+      delete module.scenarios[1].resultCode;
+    },
+    (module) => {
+      module.scenarios[1].resultCode = "UNKNOWN_FAILURE";
+    },
+    (module) => {
+      module.scenarios[2].resultCode = "PERMISSION_DENIED";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    mutate(moduleById(model, "SUB-001"));
+
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_FAILURE_RESULT_COVERAGE",
+    );
+  }
+});
+
+test("accepts non-user actions with verified triggers and no client or page exposure", () => {
+  const eventModel = nonUserActionFixture("SYSTEM_EVENT", {
+    kind: "EVENT",
+    eventId: "EVT-TEST-START",
+  });
+  eventModel.events[0].triggeredActionIds = ["SUB-ACT-01"];
+  assert.deepEqual(validateRequirementModel(eventModel), []);
+
+  const flowModel = nonUserActionFixture("FLOW_INTERNAL", {
+    kind: "FLOW",
+    flowIds: ["DF-TEST"],
+  });
+  assert.deepEqual(validateRequirementModel(flowModel), []);
+});
+
+test("rejects non-user triggers without reverse event or Flow consistency", () => {
+  const eventModel = nonUserActionFixture("SYSTEM_EVENT", {
+    kind: "EVENT",
+    eventId: "EVT-TEST-START",
+  });
+  eventModel.events[0].triggeredActionIds = [];
+  assertHasCode(validateRequirementModel(eventModel), "INVALID_ACTION_TRIGGER");
+
+  const flowModel = nonUserActionFixture("FLOW_INTERNAL", {
+    kind: "FLOW",
+    flowIds: ["DF-TEST"],
+  });
+  flowModel.flows[0].steps[0].actionId = "ACTION-MISSING";
+  assertHasCode(validateRequirementModel(flowModel), "INVALID_ACTION_TRIGGER");
+});
+
+test("rejects non-user actions without a SYSTEM allow subject", () => {
+  const model = nonUserActionFixture("SYSTEM_EVENT", {
+    kind: "EVENT",
+    eventId: "EVT-TEST-START",
+  });
+  model.events[0].triggeredActionIds = ["SUB-ACT-01"];
+  moduleById(model, "SUB-001").actions[0].permissions[0] = {
+    effect: "ALLOW",
+    roleRef: "ROLE-STUDENT",
+    condition: "a user attempts to invoke a system event",
+  };
+
+  assertHasCode(validateRequirementModel(model), "INVALID_PERMISSION_SUBJECT");
+});
+
+test("rejects legacy audit fields and atomic self-recording outside an audit sink", () => {
+  const legacyModel = validFixture();
+  moduleById(legacyModel, "SUB-001").actions[0].auditRequired = true;
+  assertHasCode(validateRequirementModel(legacyModel), "INVALID_AUDIT_MODE");
+
+  const atomicModel = nonUserActionFixture("SYSTEM_EVENT", {
+    kind: "EVENT",
+    eventId: "EVT-TEST-START",
+  });
+  atomicModel.events[0].triggeredActionIds = ["SUB-ACT-01"];
+  moduleById(atomicModel, "SUB-001").actions[0].auditMode = "ATOMIC_SELF_RECORD";
+  assertHasCode(validateRequirementModel(atomicModel), "INVALID_AUDIT_MODE");
+
+  const readOnlyAtomicModel = structuredClone(requirementModel);
+  const appendAudit = moduleById(readOnlyAtomicModel, "AUD-001").actions
+    .find(({ id }) => id === "AUD-ACT-APPEND-EVENT");
+  appendAudit.writes = false;
+  delete appendAudit.idempotencyKey;
+  assertHasCode(validateRequirementModel(readOnlyAtomicModel), "INVALID_AUDIT_MODE");
 });
 
 test("rejects incomplete page, scenario, and Flow contracts", () => {
@@ -996,6 +1116,81 @@ test("publishes task-specific actions, pages, and complete scenario coverage", (
   }
 });
 
+test("publishes one distinct negative scenario per declared failure result", () => {
+  for (const module of modules) {
+    for (const action of module.actions) {
+      const resultCodes = module.scenarios
+        .filter(({ actionId, kind }) => actionId === action.id && kind !== "SUCCESS")
+        .map(({ resultCode }) => resultCode);
+
+      assert.deepEqual(
+        resultCodes.toSorted(),
+        action.failureResults.toSorted(),
+        action.id,
+      );
+      assert.equal(new Set(resultCodes).size, resultCodes.length, action.id);
+    }
+  }
+});
+
+test("separates system and Flow actions from user pages and terminates audit recursion", () => {
+  const expectedModes = new Map([
+    ["ACC-ACT-EXPIRE-CONTEXT", "SYSTEM_EVENT"],
+    ["ORG-ACT-FINALIZE-AUDITED-IMPORT", "FLOW_INTERNAL"],
+    ["ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", "FLOW_INTERNAL"],
+    ["IAM-ACT-EXPIRE-GRANT", "SYSTEM_EVENT"],
+    ["IAM-ACT-EVALUATE-PERMISSION", "FLOW_INTERNAL"],
+    ["IAM-ACT-RECALCULATE-PERMISSIONS", "FLOW_INTERNAL"],
+    ["DGV-ACT-GENERATE-EXPORT", "SYSTEM_EVENT"],
+    ["DGV-ACT-EXPIRE-EXPORT", "SYSTEM_EVENT"],
+    ["AUD-ACT-APPEND-EVENT", "SYSTEM_EVENT"],
+    ["AUD-ACT-OPEN-SESSION", "SYSTEM_EVENT"],
+    ["AUD-ACT-EXPIRE-SESSION", "SYSTEM_EVENT"],
+  ]);
+  const actions = modules.flatMap((module) => module.actions);
+  const pages = modules.flatMap((module) => module.pages);
+  const scenarios = modules.flatMap((module) => module.scenarios);
+
+  assert.equal(expectedModes.size, 11);
+  for (const action of actions) {
+    const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
+    assert.equal(action.executionMode, expectedMode, action.id);
+    if (expectedMode === "USER_TASK") {
+      assert.ok(action.clients.length > 0, action.id);
+      assert.ok(pages.some(({ actionIds }) => actionIds.includes(action.id)), action.id);
+      assert.ok(
+        scenarios.filter(({ actionId }) => actionId === action.id)
+          .every(({ pageId, trigger }) => pageId && trigger === undefined),
+        action.id,
+      );
+    } else {
+      assert.equal(Object.hasOwn(action, "clients"), false, action.id);
+      assert.equal(pages.some(({ actionIds }) => actionIds.includes(action.id)), false, action.id);
+      assert.ok(
+        scenarios.filter(({ actionId }) => actionId === action.id)
+          .every(({ pageId, trigger }) => pageId === undefined && trigger !== undefined),
+        action.id,
+      );
+    }
+  }
+
+  const auditModule = moduleById(requirementModel, "AUD-001");
+  const auditSink = auditModule.objects.find(({ id }) => id === "AUD-OBJ-EVENT");
+  const appendAudit = auditModule.actions.find(({ id }) => id === "AUD-ACT-APPEND-EVENT");
+  assert.equal(auditSink.semanticType, "AUDIT_EVENT_SINK");
+  assert.equal(appendAudit.auditMode, "ATOMIC_SELF_RECORD");
+  assert.equal(Object.hasOwn(appendAudit, "auditRequired"), false);
+  assert.equal(appendAudit.failureResults.includes("AUDIT_FAILED"), false);
+  assert.equal(
+    actions
+      .filter(({ risk, id }) => risk === RISK.HIGH && id !== appendAudit.id)
+      .every(({ auditMode, failureResults }) => (
+        auditMode === "REQUIRED" && failureResults.includes("AUDIT_FAILED")
+      )),
+    true,
+  );
+});
+
 test("represents platform-ops, homeroom, and subject-lead authorization boundaries", () => {
   const actions = modules.flatMap((module) => module.actions);
   const permissionText = (permission) => JSON.stringify(permission);
@@ -1013,6 +1208,24 @@ test("represents platform-ops, homeroom, and subject-lead authorization boundari
     permission.dutyRef === "DUTY-SUBJECT-LEAD"
     && /学科|subject/.test(permissionText(permission))
   ))), true);
+});
+
+test("publishes exactly one correctly namespaced subject per permission", () => {
+  const systemActors = new Set(["SYSTEM", "AI", "CURRENT_ACTOR"]);
+  for (const action of modules.flatMap((module) => module.actions)) {
+    for (const permission of action.permissions) {
+      const selectors = ["actorRef", "roleRef", "dutyRef"]
+        .filter((property) => Object.hasOwn(permission, property));
+      assert.equal(selectors.length, 1, `${action.id} ${permission.effect}`);
+      if (selectors[0] === "actorRef") {
+        assert.equal(systemActors.has(permission.actorRef), true, action.id);
+      } else if (selectors[0] === "roleRef") {
+        assert.equal(permission.roleRef.startsWith("ROLE-"), true, action.id);
+      } else {
+        assert.equal(permission.dutyRef.startsWith("DUTY-"), true, action.id);
+      }
+    }
+  }
 });
 
 test("models object-level organization import results and partial success", () => {
@@ -1051,7 +1264,7 @@ test("exposes explicit grade maintenance in the organization workspace", () => {
   assert.deepEqual(gradeAction.outputFieldIds, ["ORG-GRADE-F-STATUS"]);
   assert.ok(organization.pages.some(({ actionIds }) => actionIds.includes(gradeAction.id)));
   const scenarios = organization.scenarios.filter(({ actionId }) => actionId === gradeAction.id);
-  assert.equal(scenarios.length, 2);
+  assert.equal(scenarios.length, 1 + gradeAction.failureResults.length);
   assert.deepEqual(
     scenarios.find(({ kind }) => kind === "SUCCESS").then.expectedState,
     { mode: "STATE", value: "ACTIVE" },
@@ -1128,6 +1341,7 @@ test("binds IAM action sets to the global authorizable action registry", () => {
   assert.deepEqual(authorizableActions.values, []);
   assert.deepEqual(authorizableActions.source, {
     queryId: "QUERY-AUTHORIZABLE-ACTIONS",
+    idKind: "ACTION_ID",
     valueField: "actionId",
     labelField: "displayName",
     labelSnapshot: true,
@@ -1162,6 +1376,11 @@ test("rejects IAM action sets that bypass the global action registry", () => {
         label: "Arbitrary action",
       }];
     },
+    (model) => {
+      model.optionSets.find(({ id }) => id === "OPT-COM-016").source.filterContext = [
+        "schoolId",
+      ];
+    },
   ];
 
   for (const mutate of mutations) {
@@ -1171,6 +1390,24 @@ test("rejects IAM action sets that bypass the global action registry", () => {
   }
 });
 
+test("validates any explicitly authorizable field without relying on its Field ID", () => {
+  const model = structuredClone(requirementModel);
+  const identity = moduleById(model, "IAM-001");
+  const rolePolicy = identity.objects.find(({ id }) => id === "IAM-OBJ-ROLE-POLICY");
+  const field = structuredClone(
+    rolePolicy.fields.find(({ id }) => id === "IAM-ROLE-F-ACTIONS"),
+  );
+  field.id = "IAM-NEW-F-AUTHORIZABLE-ACTIONS";
+  field.referenceType = "AUTHORIZABLE_ACTION";
+  field.valueSource = { kind: "OPTION_SET", optionSetId: "OPT-COM-002" };
+  rolePolicy.fields.push(field);
+
+  assertHasCode(
+    validateRequirementModel(model),
+    "INVALID_AUTHORIZABLE_ACTION_SOURCE",
+  );
+});
+
 test("traces every scenario to an exposing page and a valid target state", () => {
   for (const module of modules) {
     const objectById = new Map(module.objects.map((object) => [object.id, object]));
@@ -1178,9 +1415,15 @@ test("traces every scenario to an exposing page and a valid target state", () =>
     const pageById = new Map(module.pages.map((page) => [page.id, page]));
     for (const scenario of module.scenarios) {
       const action = actionById.get(scenario.actionId);
-      const page = pageById.get(scenario.pageId);
       assert.ok(action, scenario.id);
-      assert.ok(page?.actionIds.includes(action.id), scenario.id);
+      if (action.executionMode === "USER_TASK") {
+        const page = pageById.get(scenario.pageId);
+        assert.ok(page?.actionIds.includes(action.id), scenario.id);
+        assert.equal(scenario.trigger, undefined, scenario.id);
+      } else {
+        assert.equal(scenario.pageId, undefined, scenario.id);
+        assert.deepEqual(scenario.trigger, action.trigger, scenario.id);
+      }
       const expectedState = scenario.then.expectedState;
       assert.ok(["STATE", "UNCHANGED"].includes(expectedState.mode));
       if (expectedState.mode === "STATE") {
@@ -1346,7 +1589,11 @@ test("gates DF-002 writes on permission and audit before partial import acceptan
   });
   const highRiskActions = modules.flatMap((module) => module.actions)
     .filter(({ risk }) => risk === RISK.HIGH);
-  assert.equal(highRiskActions.every(({ failureResults }) => failureResults.includes("AUDIT_FAILED")), true);
+  assert.equal(highRiskActions.every(({ auditMode, failureResults }) => (
+    auditMode === "ATOMIC_SELF_RECORD"
+      ? !failureResults.includes("AUDIT_FAILED")
+      : auditMode === "REQUIRED" && failureResults.includes("AUDIT_FAILED")
+  )), true);
 });
 
 test("declares concrete success states for every foundation write action", () => {
@@ -2027,6 +2274,9 @@ test("registers every required Option Set concept with stable code-label values"
     modelTrainingUse: ["DENIED", "SEPARATELY_APPROVED"],
     teacherWorkspaceView: ["TODAY", "GRADING_QUEUE", "HOMEROOM_OVERVIEW", "REPORTS"],
   };
+  for (const source of Object.values(runtimeSources)) {
+    source.idKind = source.valueField === "actionId" ? "ACTION_ID" : "OBJECT_ID";
+  }
   assert.deepEqual(optionSets.map(({ key }) => key).sort(), requiredConcepts.sort());
   assert.deepEqual(
     Object.fromEntries(
@@ -2065,6 +2315,28 @@ test("registers every required Option Set concept with stable code-label values"
       "MANDATORY_REVIEW",
       "MANUAL_ONLY",
       "UNAVAILABLE",
+    ],
+  );
+});
+
+test("publishes explicit runtime-query ID and authorizable-field semantics", () => {
+  for (const optionSet of optionSets.filter(({ mode }) => mode === "RUNTIME_QUERY")) {
+    const expectedIdKind = optionSet.id === "OPT-COM-016" ? "ACTION_ID" : "OBJECT_ID";
+    const expectedValueField = expectedIdKind === "ACTION_ID" ? "actionId" : "objectId";
+    assert.equal(optionSet.source.idKind, expectedIdKind, optionSet.id);
+    assert.equal(optionSet.source.valueField, expectedValueField, optionSet.id);
+  }
+
+  const authorizableFields = moduleById(requirementModel, "IAM-001").objects
+    .flatMap(({ fields }) => fields)
+    .filter(({ referenceType }) => referenceType === "AUTHORIZABLE_ACTION");
+  assert.deepEqual(
+    authorizableFields.map(({ id }) => id).toSorted(),
+    [
+      "IAM-DUTY-F-ACTIONS",
+      "IAM-ROLE-F-ACTIONS",
+      "IAM-SCOPE-F-ACTIONS",
+      "IAM-TEMP-F-ACTIONS",
     ],
   );
 });
@@ -2115,13 +2387,52 @@ test("rejects duplicate codes and labels in STATIC Option Sets", () => {
 });
 
 test("accepts supported RUNTIME_QUERY Option Set value fields", () => {
-  for (const valueField of ["objectId", "actionId"]) {
+  const contracts = [
+    {
+      queryId: "QUERY-AUTHORIZED-SCHOOLS",
+      idKind: "OBJECT_ID",
+      valueField: "objectId",
+    },
+    {
+      queryId: "QUERY-AUTHORIZABLE-ACTIONS",
+      idKind: "ACTION_ID",
+      valueField: "actionId",
+    },
+  ];
+  for (const contract of contracts) {
     const model = validFixture();
     const optionSet = validRuntimeOptionSet();
-    optionSet.source.valueField = valueField;
+    Object.assign(optionSet.source, contract);
     model.optionSets.push(optionSet);
 
     assert.deepEqual(validateRequirementModel(model), []);
+  }
+});
+
+test("rejects runtime-query ID semantics that contradict the registered query", () => {
+  const mutations = [
+    (model) => {
+      const source = model.optionSets.find(({ id }) => id === "OPT-COM-002").source;
+      source.idKind = "ACTION_ID";
+      source.valueField = "actionId";
+    },
+    (model) => {
+      const source = model.optionSets.find(({ id }) => id === "OPT-COM-016").source;
+      source.idKind = "OBJECT_ID";
+      source.valueField = "objectId";
+    },
+    (model) => {
+      const source = model.optionSets.find(({ id }) => id === "OPT-COM-002").source;
+      source.idKind = "OBJECT_ID";
+      source.valueField = "objectId";
+      source.queryId = "QUERY-AUTHORIZABLE-ACTIONS";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_RUNTIME_QUERY_SOURCE");
   }
 });
 
@@ -2886,13 +3197,49 @@ test("accepts explicit system actor categories in actor references", () => {
   const submissionModule = moduleById(model, "SUB-001");
   submissionModule.objects[0].ownerRef = "SYSTEM";
   submissionModule.objects[0].confirmerRef = "AI";
-  submissionModule.actions[0].permissions[0].roleRef = "CURRENT_ACTOR";
+  submissionModule.actions[0].permissions[0] = {
+    effect: "ALLOW",
+    actorRef: "CURRENT_ACTOR",
+    condition: "the current actor owns the target object",
+  };
   model.metrics[0].ownerRef = "SYSTEM";
 
   const errors = validateRequirementModel(model);
 
   assert.equal(errorCodes(errors).includes("MISSING_ACTOR_REFERENCE"), false);
   assert.equal(errorCodes(errors).includes("ORPHAN_OWNER_ROLE"), false);
+});
+
+test("rejects permission subjects that combine or cross actor namespaces", () => {
+  const mutations = [
+    (permission) => { permission.dutyRef = "DUTY-FIXTURE"; },
+    (permission) => {
+      delete permission.roleRef;
+      permission.roleRef = "CURRENT_ACTOR";
+    },
+    (permission) => {
+      delete permission.roleRef;
+      permission.actorRef = "ROLE-STUDENT";
+    },
+    (permission) => { permission.roleRef = "DUTY-FIXTURE"; },
+    (permission) => {
+      delete permission.roleRef;
+      permission.dutyRef = "ROLE-STUDENT";
+    },
+    (permission) => { permission.roleRef = 42; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    model.duties.push({
+      id: "DUTY-FIXTURE",
+      roleId: "ROLE-TEACHER",
+      label: "fixture duty",
+    });
+    mutate(moduleById(model, "SUB-001").actions[0].permissions[0]);
+
+    assertHasCode(validateRequirementModel(model), "INVALID_PERMISSION_SUBJECT");
+  }
 });
 
 test("rejects role and duty references from the wrong actor namespace", () => {

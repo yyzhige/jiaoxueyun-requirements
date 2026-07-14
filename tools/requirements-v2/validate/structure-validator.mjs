@@ -4,9 +4,13 @@ const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 
 const MAX_TRAVERSAL_DEPTH = 64;
 const OPTION_SET_MODES = new Set(["STATIC", "RUNTIME_QUERY"]);
-const RUNTIME_QUERY_VALUE_FIELDS = new Set(["objectId", "actionId"]);
+const RUNTIME_QUERY_ID_KINDS = new Set(["OBJECT_ID", "ACTION_ID"]);
 const CLIENTS = new Set(["WEB", "APP"]);
 const RISKS = new Set(["READ", "LOW", "HIGH"]);
+const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
+const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
+const OBJECT_SEMANTIC_TYPES = new Set(["AUDIT_EVENT_SINK"]);
+const SYSTEM_ACTOR_CATEGORIES = new Set(["SYSTEM", "AI", "CURRENT_ACTOR"]);
 const SCENARIO_KINDS = new Set(["SUCCESS", "FAILURE", "BOUNDARY"]);
 const DATA_TYPES = new Set([
   "STRING",
@@ -342,6 +346,12 @@ function validateField(errors, field, path, strict) {
   if (!DATA_EXPOSURE_VISIBILITIES.has(field.visibility)) {
     errors.push(`INVALID_FIELD_CONTRACT ${path}.visibility is unsupported`);
   }
+  if (
+    Object.hasOwn(field, "referenceType")
+    && field.referenceType !== "AUTHORIZABLE_ACTION"
+  ) {
+    errors.push(`INVALID_FIELD_CONTRACT ${path}.referenceType is unsupported`);
+  }
 }
 
 function validateObject(errors, object, path, strict) {
@@ -360,6 +370,12 @@ function validateObject(errors, object, path, strict) {
       "sensitivityId",
     ]) {
       contractString(errors, object, property, path, "INVALID_OBJECT_CONTRACT");
+    }
+    if (
+      Object.hasOwn(object, "semanticType")
+      && !OBJECT_SEMANTIC_TYPES.has(object.semanticType)
+    ) {
+      errors.push(`INVALID_OBJECT_CONTRACT ${path}.semanticType is unsupported`);
     }
     if (states.length === 0) {
       errors.push(`INVALID_OBJECT_CONTRACT ${path}.states must be non-empty`);
@@ -410,6 +426,32 @@ function validateRelationship(errors, relationship, path) {
   }
 }
 
+function validateActionTrigger(errors, trigger, path, expectedKind) {
+  if (!isRecord(trigger)) {
+    errors.push(`INVALID_ACTION_CONTRACT ${path} must be an object`);
+    return;
+  }
+  if (expectedKind && trigger.kind !== expectedKind) {
+    errors.push(`INVALID_ACTION_CONTRACT ${path}.kind must be ${expectedKind}`);
+  }
+  if (trigger.kind === "EVENT") {
+    contractString(errors, trigger, "eventId", path, "INVALID_ACTION_CONTRACT");
+    return;
+  }
+  if (trigger.kind === "FLOW") {
+    contractStringArray(
+      errors,
+      trigger,
+      "flowIds",
+      path,
+      "INVALID_ACTION_CONTRACT",
+      { nonEmpty: true },
+    );
+    return;
+  }
+  errors.push(`INVALID_ACTION_CONTRACT ${path}.kind must be EVENT or FLOW`);
+}
+
 function validateAction(errors, action, path, strict) {
   requireArray(errors, action, "inputFieldIds", path);
   requireArray(errors, action, "outputFieldIds", path);
@@ -426,18 +468,38 @@ function validateAction(errors, action, path, strict) {
   for (const property of ["inputFieldIds", "outputFieldIds"]) {
     contractStringArray(errors, action, property, path, "INVALID_ACTION_CONTRACT");
   }
-  contractStringArray(
-    errors,
-    action,
-    "clients",
-    path,
-    "INVALID_ACTION_CONTRACT",
-    { nonEmpty: true },
-  ).forEach((client) => {
-    if (isValidId(client) && !CLIENTS.has(client)) {
-      errors.push(`INVALID_ACTION_CONTRACT ${path}.clients contains unsupported ${client}`);
+  if (!EXECUTION_MODES.has(action.executionMode)) {
+    errors.push(
+      `INVALID_ACTION_CONTRACT ${path}.executionMode must be USER_TASK, SYSTEM_EVENT, or FLOW_INTERNAL`,
+    );
+  }
+  if (action.executionMode === "USER_TASK") {
+    contractStringArray(
+      errors,
+      action,
+      "clients",
+      path,
+      "INVALID_ACTION_CONTRACT",
+      { nonEmpty: true },
+    ).forEach((client) => {
+      if (isValidId(client) && !CLIENTS.has(client)) {
+        errors.push(`INVALID_ACTION_CONTRACT ${path}.clients contains unsupported ${client}`);
+      }
+    });
+    if (Object.hasOwn(action, "trigger")) {
+      errors.push(`INVALID_ACTION_CONTRACT ${path}.trigger is not allowed for USER_TASK`);
     }
-  });
+  } else if (action.executionMode === "SYSTEM_EVENT") {
+    if (Object.hasOwn(action, "clients")) {
+      errors.push(`INVALID_ACTION_CONTRACT ${path}.clients is not allowed for SYSTEM_EVENT`);
+    }
+    validateActionTrigger(errors, action.trigger, `${path}.trigger`, "EVENT");
+  } else if (action.executionMode === "FLOW_INTERNAL") {
+    if (Object.hasOwn(action, "clients")) {
+      errors.push(`INVALID_ACTION_CONTRACT ${path}.clients is not allowed for FLOW_INTERNAL`);
+    }
+    validateActionTrigger(errors, action.trigger, `${path}.trigger`, "FLOW");
+  }
   contractStringArray(
     errors,
     action,
@@ -455,14 +517,43 @@ function validateAction(errors, action, path, strict) {
   );
   permissions.forEach((permission, index) => {
     if (!isRecord(permission)) return;
+    const permissionPath = `${path}.permissions[${index}]`;
     if (!["ALLOW", "DENY"].includes(permission.effect)) {
       errors.push(
-        `INVALID_ACTION_CONTRACT ${path}.permissions[${index}].effect must be ALLOW or DENY`,
+        `INVALID_ACTION_CONTRACT ${permissionPath}.effect must be ALLOW or DENY`,
       );
     }
     if (!isValidId(permission.condition)) {
       errors.push(
-        `INVALID_ACTION_CONTRACT ${path}.permissions[${index}].condition must be a non-empty string`,
+        `INVALID_ACTION_CONTRACT ${permissionPath}.condition must be a non-empty string`,
+      );
+    }
+    const subjectProperties = ["actorRef", "roleRef", "dutyRef"]
+      .filter((property) => Object.hasOwn(permission, property));
+    if (subjectProperties.length !== 1) {
+      errors.push(
+        `INVALID_PERMISSION_SUBJECT ${permissionPath} requires exactly one subject selector`,
+      );
+      return;
+    }
+    const subjectProperty = subjectProperties[0];
+    const subject = permission[subjectProperty];
+    const validNamespace = (
+      (subjectProperty === "actorRef" && SYSTEM_ACTOR_CATEGORIES.has(subject))
+      || (
+        subjectProperty === "roleRef"
+        && typeof subject === "string"
+        && subject.startsWith("ROLE-")
+      )
+      || (
+        subjectProperty === "dutyRef"
+        && typeof subject === "string"
+        && subject.startsWith("DUTY-")
+      )
+    );
+    if (!validNamespace) {
+      errors.push(
+        `INVALID_PERMISSION_SUBJECT ${permissionPath}.${subjectProperty} has the wrong namespace`,
       );
     }
   });
@@ -480,18 +571,31 @@ function validateAction(errors, action, path, strict) {
   if (!RISKS.has(action.risk)) {
     errors.push(`INVALID_ACTION_CONTRACT ${path}.risk must be READ, LOW, or HIGH`);
   }
-  if (action.auditRequired !== true && action.auditRequired !== false) {
-    errors.push(`INVALID_ACTION_CONTRACT ${path}.auditRequired must be boolean`);
+  if (Object.hasOwn(action, "auditRequired")) {
+    errors.push(`INVALID_AUDIT_MODE ${path}.auditRequired is obsolete and must not coexist`);
+  }
+  if (!AUDIT_MODES.has(action.auditMode)) {
+    errors.push(
+      `INVALID_AUDIT_MODE ${path}.auditMode must be REQUIRED, NOT_REQUIRED, or ATOMIC_SELF_RECORD`,
+    );
   }
   if (action.risk === "HIGH") {
-    if (action.auditRequired !== true) {
-      errors.push(`INVALID_ACTION_CONTRACT ${path}.auditRequired must be true for HIGH risk`);
+    if (!["REQUIRED", "ATOMIC_SELF_RECORD"].includes(action.auditMode)) {
+      errors.push(`INVALID_AUDIT_MODE ${path}.auditMode must fail closed for HIGH risk`);
     }
-    if (!failureResults.includes("AUDIT_FAILED")) {
+    if (action.auditMode === "REQUIRED" && !failureResults.includes("AUDIT_FAILED")) {
       errors.push(
         `INVALID_ACTION_CONTRACT ${path}.failureResults must include AUDIT_FAILED for HIGH risk`,
       );
     }
+  }
+  if (
+    action.auditMode === "ATOMIC_SELF_RECORD"
+    && failureResults.includes("AUDIT_FAILED")
+  ) {
+    errors.push(
+      `INVALID_AUDIT_MODE ${path}.failureResults must terminate without AUDIT_FAILED`,
+    );
   }
   if (action.writes === true && !isValidId(action.idempotencyKey)) {
     errors.push(
@@ -554,8 +658,30 @@ function validateScenario(errors, scenario, path, strict) {
       `INVALID_SCENARIO_CONTRACT ${path}.kind must be SUCCESS, FAILURE, or BOUNDARY`,
     );
   }
-  for (const property of ["actionId", "pageId", "given", "when"]) {
+  for (const property of ["actionId", "given", "when"]) {
     contractString(errors, scenario, property, path, "INVALID_SCENARIO_CONTRACT");
+  }
+  const hasPageId = Object.hasOwn(scenario, "pageId");
+  const hasTrigger = Object.hasOwn(scenario, "trigger");
+  if (hasPageId === hasTrigger) {
+    errors.push(
+      `INVALID_SCENARIO_CONTRACT ${path} requires exactly one of pageId or trigger`,
+    );
+  }
+  if (hasPageId) {
+    contractString(errors, scenario, "pageId", path, "INVALID_SCENARIO_CONTRACT");
+  }
+  if (hasTrigger) {
+    validateActionTrigger(errors, scenario.trigger, `${path}.trigger`);
+  }
+  if (scenario.kind === "SUCCESS") {
+    if (Object.hasOwn(scenario, "resultCode")) {
+      errors.push(
+        `INVALID_SCENARIO_CONTRACT ${path}.resultCode is not allowed for SUCCESS`,
+      );
+    }
+  } else {
+    contractString(errors, scenario, "resultCode", path, "INVALID_SCENARIO_CONTRACT");
   }
   const outcome = scenario.then;
   if (!isRecord(outcome)) {
@@ -846,9 +972,15 @@ function validateOptionSet(errors, optionSet, path) {
   const source = requireRecord(errors, optionSet, "source", path);
   if (!source) return;
   requireString(errors, source, "queryId", `${path}.source`);
-  if (!RUNTIME_QUERY_VALUE_FIELDS.has(source.valueField)) {
+  if (!RUNTIME_QUERY_ID_KINDS.has(source.idKind)) {
     errors.push(
-      `INVALID_ENTITY_SHAPE ${path}.source.valueField must be objectId or actionId`,
+      `INVALID_ENTITY_SHAPE ${path}.source.idKind must be OBJECT_ID or ACTION_ID`,
+    );
+  }
+  const expectedValueField = source.idKind === "ACTION_ID" ? "actionId" : "objectId";
+  if (source.valueField !== expectedValueField) {
+    errors.push(
+      `INVALID_ENTITY_SHAPE ${path}.source.valueField must match ${formatValidationValue(source.idKind)}`,
     );
   }
   if (source.labelField !== "displayName") {
@@ -967,6 +1099,15 @@ function validateSensitivity(errors, sensitivity, path) {
 function validateEvent(errors, event, path) {
   requireString(errors, event, "label", path);
   requireString(errors, event, "definition", path);
+  if (Object.hasOwn(event, "triggeredActionIds")) {
+    const triggeredActionIds = requireArray(errors, event, "triggeredActionIds", path);
+    validateUniqueStrings(
+      errors,
+      triggeredActionIds,
+      `${path}.triggeredActionIds`,
+      "INVALID_ENTITY_SHAPE",
+    );
+  }
 }
 
 function validateNfr(errors, nfr, path) {

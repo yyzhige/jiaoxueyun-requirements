@@ -16,11 +16,20 @@ const VALUE_SOURCE_KINDS = new Set([
   "DERIVED",
   "CONSTANT",
 ]);
-const AUTHORIZABLE_ACTION_FIELD_IDS = new Set([
-  "IAM-ROLE-F-ACTIONS",
-  "IAM-DUTY-F-ACTIONS",
-  "IAM-SCOPE-F-ACTIONS",
-  "IAM-TEMP-F-ACTIONS",
+const RUNTIME_QUERY_ID_KINDS = new Map([
+  ["QUERY-AUTHORIZED-SCHOOLS", "OBJECT_ID"],
+  ["QUERY-SCHOOL-TERMS", "OBJECT_ID"],
+  ["QUERY-SCHOOL-GRADES", "OBJECT_ID"],
+  ["QUERY-AUTHORIZED-CLASSES", "OBJECT_ID"],
+  ["QUERY-AUTHORIZED-SUBJECTS", "OBJECT_ID"],
+  ["QUERY-AUTHORIZED-COURSES", "OBJECT_ID"],
+  ["QUERY-SCHOOL-TEACHERS", "OBJECT_ID"],
+  ["QUERY-AUTHORIZED-STUDENTS", "OBJECT_ID"],
+  ["QUERY-KNOWLEDGE-POINTS", "OBJECT_ID"],
+  ["QUERY-AUTHORIZED-ASSIGNMENTS", "OBJECT_ID"],
+  ["QUERY-AUTHORIZED-EXAMS", "OBJECT_ID"],
+  ["QUERY-AUTHORIZABLE-SCOPE-OBJECTS", "OBJECT_ID"],
+  ["QUERY-AUTHORIZABLE-ACTIONS", "ACTION_ID"],
 ]);
 const AUTHORIZABLE_ACTION_FILTER_CONTEXT = [
   "schoolId",
@@ -33,6 +42,20 @@ const AUTHORIZABLE_ACTION_FILTER_CONTEXT = [
 
 function list(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function sameStringSet(left, right) {
+  const leftSet = new Set(list(left));
+  const rightSet = new Set(list(right));
+  return leftSet.size === rightSet.size
+    && [...leftSet].every((value) => rightSet.has(value));
+}
+
+function triggersMatch(left, right) {
+  if (left?.kind !== right?.kind) return false;
+  if (left?.kind === "EVENT") return left.eventId === right.eventId;
+  if (left?.kind === "FLOW") return sameStringSet(left.flowIds, right.flowIds);
+  return false;
 }
 
 function addEntities(entries, values, type, path) {
@@ -310,9 +333,46 @@ function checkActorReferences(errors, index, value, path) {
   }
 }
 
+function checkPermissionSubject(errors, index, permission, path) {
+  const subjectProperties = ["actorRef", "roleRef", "dutyRef"]
+    .filter((property) => Object.hasOwn(permission ?? {}, property));
+  if (subjectProperties.length !== 1) {
+    errors.push(`INVALID_PERMISSION_SUBJECT ${path} requires exactly one subject selector`);
+    return;
+  }
+  const property = subjectProperties[0];
+  const reference = permission[property];
+  const valid = (
+    (property === "actorRef" && SYSTEM_ACTOR_CATEGORIES.has(reference))
+    || (property === "roleRef" && index.roleIds.has(reference))
+    || (property === "dutyRef" && index.dutyIds.has(reference))
+  );
+  if (!valid) {
+    errors.push(
+      `INVALID_PERMISSION_SUBJECT ${path}.${property} -> ${formatValidationValue(reference)}`,
+    );
+  }
+}
+
 export function validateModelReferences(model) {
   const index = buildModelIndex(model);
   const errors = duplicateIdErrors(index);
+
+  for (const optionSetEntry of index.optionSets) {
+    const optionSet = optionSetEntry.value;
+    if (optionSet?.mode !== "RUNTIME_QUERY") continue;
+    const expectedIdKind = RUNTIME_QUERY_ID_KINDS.get(optionSet?.source?.queryId);
+    const expectedValueField = expectedIdKind === "ACTION_ID" ? "actionId" : "objectId";
+    if (
+      !expectedIdKind
+      || optionSet?.source?.idKind !== expectedIdKind
+      || optionSet?.source?.valueField !== expectedValueField
+    ) {
+      errors.push(
+        `INVALID_RUNTIME_QUERY_SOURCE ${formatValidationValue(optionSet?.id)} -> ${formatValidationValue(optionSet?.source?.queryId)}`,
+      );
+    }
+  }
 
   for (const dutyEntry of index.duties) {
     if (!index.roleIds.has(dutyEntry.value?.roleId)) {
@@ -370,7 +430,7 @@ export function validateModelReferences(model) {
         `MISSING_VALUE_SOURCE_REFERENCE ${formatValidationValue(fieldEntry.value?.id)} RUNTIME_QUERY requires queryId`,
       );
     }
-    if (AUTHORIZABLE_ACTION_FIELD_IDS.has(fieldEntry.value?.id)) {
+    if (fieldEntry.value?.referenceType === "AUTHORIZABLE_ACTION") {
       const optionSet = valueSource?.kind === "OPTION_SET"
         ? index.optionSetById.get(valueSource.optionSetId)?.value
         : undefined;
@@ -389,6 +449,7 @@ export function validateModelReferences(model) {
         || !Array.isArray(optionSet?.values)
         || optionSet.values.length !== 0
         || source?.queryId !== "QUERY-AUTHORIZABLE-ACTIONS"
+        || source?.idKind !== "ACTION_ID"
         || source?.valueField !== "actionId"
         || source?.labelField !== "displayName"
         || source?.labelSnapshot !== true
@@ -467,6 +528,18 @@ export function validateModelReferences(model) {
         `INVALID_MODULE_OWNERSHIP ${formatValidationValue(action?.id)} -> object ${formatValidationValue(action?.targetObjectId)} belongs to ${formatValidationValue(targetObjectEntry.moduleId)}`,
       );
     }
+    if (
+      action?.auditMode === "ATOMIC_SELF_RECORD"
+      && (
+        action.executionMode !== "SYSTEM_EVENT"
+        || action.writes !== true
+        || targetObjectEntry?.value?.semanticType !== "AUDIT_EVENT_SINK"
+      )
+    ) {
+      errors.push(
+        `INVALID_AUDIT_MODE ${formatValidationValue(action?.id)} requires a writable SYSTEM_EVENT audit event sink`,
+      );
+    }
     for (const property of ["inputFieldIds", "outputFieldIds"]) {
       list(action?.[property]).forEach((fieldId) => {
         const fieldEntry = index.fieldById.get(fieldId);
@@ -485,6 +558,12 @@ export function validateModelReferences(model) {
       });
     }
     list(action?.permissions).forEach((permission, permissionIndex) => {
+      checkPermissionSubject(
+        errors,
+        index,
+        permission,
+        `${actionEntry.path}.permissions[${permissionIndex}]`,
+      );
       checkActorReferences(
         errors,
         index,
@@ -492,13 +571,50 @@ export function validateModelReferences(model) {
         `${actionEntry.path}.permissions[${permissionIndex}]`,
       );
     });
+    if (
+      action?.executionMode !== "USER_TASK"
+      && !list(action?.permissions).some((permission) => (
+        permission?.effect === "ALLOW" && permission?.actorRef === "SYSTEM"
+      ))
+    ) {
+      errors.push(
+        `INVALID_PERMISSION_SUBJECT ${formatValidationValue(action?.id)} requires SYSTEM ALLOW for non-user execution`,
+      );
+    }
     const exposingPages = index.pages.filter(({ moduleId, value }) => (
       moduleId === actionEntry.moduleId && list(value?.actionIds).includes(action?.id)
     ));
-    for (const client of list(action?.clients)) {
-      if (!exposingPages.some(({ value }) => list(value?.clients).includes(client))) {
+    if (action?.executionMode === "USER_TASK") {
+      for (const client of list(action?.clients)) {
+        if (!exposingPages.some(({ value }) => list(value?.clients).includes(client))) {
+          errors.push(
+            `INVALID_CLIENT_EXPOSURE ${formatValidationValue(action?.id)} -> ${formatValidationValue(client)}`,
+          );
+        }
+      }
+    } else if (exposingPages.length > 0) {
+      errors.push(
+        `INVALID_ACTION_EXPOSURE ${formatValidationValue(action?.id)} must not be exposed by a page`,
+      );
+    }
+    if (action?.executionMode === "SYSTEM_EVENT") {
+      const eventEntry = index.eventById.get(action?.trigger?.eventId);
+      if (
+        !eventEntry
+        || !list(eventEntry.value?.triggeredActionIds).includes(action?.id)
+      ) {
         errors.push(
-          `INVALID_CLIENT_EXPOSURE ${formatValidationValue(action?.id)} -> ${formatValidationValue(client)}`,
+          `INVALID_ACTION_TRIGGER ${formatValidationValue(action?.id)} -> ${formatValidationValue(action?.trigger?.eventId)}`,
+        );
+      }
+    }
+    if (action?.executionMode === "FLOW_INTERNAL") {
+      const actualFlowIds = index.flows
+        .filter(({ value }) => list(value?.steps).some(({ actionId }) => actionId === action?.id))
+        .map(({ value }) => value?.id);
+      if (!sameStringSet(action?.trigger?.flowIds, actualFlowIds)) {
+        errors.push(
+          `INVALID_ACTION_TRIGGER ${formatValidationValue(action?.id)} requires exact containing Flow references`,
         );
       }
     }
@@ -559,6 +675,10 @@ export function validateModelReferences(model) {
         errors.push(
           `INVALID_MODULE_OWNERSHIP ${formatValidationValue(page?.id)} -> action ${formatValidationValue(actionId)} belongs to ${formatValidationValue(actionEntry.moduleId)}`,
         );
+      } else if (actionEntry.value?.executionMode !== "USER_TASK") {
+        errors.push(
+          `INVALID_ACTION_EXPOSURE ${formatValidationValue(page?.id)} -> ${formatValidationValue(actionId)}`,
+        );
       } else {
         const pageFieldIds = new Set(list(page?.fieldIds));
         for (const fieldId of list(actionEntry.value?.inputFieldIds)) {
@@ -591,15 +711,39 @@ export function validateModelReferences(model) {
         `INVALID_MODULE_OWNERSHIP ${formatValidationValue(scenarioEntry.value?.id)} -> action ${formatValidationValue(scenarioEntry.value?.actionId)} belongs to ${formatValidationValue(actionEntry.moduleId)}`,
       );
     }
-    const pageEntry = index.pageById.get(scenarioEntry.value?.pageId);
-    if (
-      !pageEntry
-      || pageEntry.moduleId !== scenarioEntry.moduleId
-      || !list(pageEntry.value?.actionIds).includes(scenarioEntry.value?.actionId)
+    if (actionEntry?.value?.executionMode === "USER_TASK") {
+      const pageEntry = index.pageById.get(scenarioEntry.value?.pageId);
+      if (
+        Object.hasOwn(scenarioEntry.value ?? {}, "trigger")
+        || !pageEntry
+        || pageEntry.moduleId !== scenarioEntry.moduleId
+        || !list(pageEntry.value?.actionIds).includes(scenarioEntry.value?.actionId)
+      ) {
+        errors.push(
+          `INVALID_SCENARIO_PAGE ${formatValidationValue(scenarioEntry.value?.id)} -> ${formatValidationValue(scenarioEntry.value?.pageId)}`,
+        );
+      }
+    } else if (
+      Object.hasOwn(scenarioEntry.value ?? {}, "pageId")
+      || !triggersMatch(scenarioEntry.value?.trigger, actionEntry?.value?.trigger)
     ) {
       errors.push(
-        `INVALID_SCENARIO_PAGE ${formatValidationValue(scenarioEntry.value?.id)} -> ${formatValidationValue(scenarioEntry.value?.pageId)}`,
+        `INVALID_ACTION_TRIGGER ${formatValidationValue(scenarioEntry.value?.id)} must trace its action trigger`,
       );
+    }
+  }
+
+  for (const eventEntry of index.events) {
+    for (const actionId of list(eventEntry.value?.triggeredActionIds)) {
+      const action = index.actionById.get(actionId)?.value;
+      if (
+        action?.executionMode !== "SYSTEM_EVENT"
+        || action?.trigger?.eventId !== eventEntry.value?.id
+      ) {
+        errors.push(
+          `INVALID_ACTION_TRIGGER ${formatValidationValue(eventEntry.value?.id)} -> ${formatValidationValue(actionId)}`,
+        );
+      }
     }
   }
 

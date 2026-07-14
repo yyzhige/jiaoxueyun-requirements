@@ -166,6 +166,20 @@ function actionErrors(index) {
     const actualScenarioIds = new Set(
       actionScenarios.map(({ value }) => value?.id),
     );
+    const declaredFailureResults = list(action?.failureResults);
+    const coveredFailureResults = actionScenarios
+      .filter(({ value }) => value?.kind !== "SUCCESS")
+      .map(({ value }) => value?.resultCode);
+    const coveredFailureResultSet = new Set(coveredFailureResults);
+    if (
+      coveredFailureResults.length !== declaredFailureResults.length
+      || coveredFailureResultSet.size !== coveredFailureResults.length
+      || !setEquals(new Set(declaredFailureResults), coveredFailureResultSet)
+    ) {
+      errors.push(
+        `INVALID_FAILURE_RESULT_COVERAGE ${formatValidationValue(action?.id)} requires one negative scenario per failure result`,
+      );
+    }
     const scenarioKinds = new Set(
       actionScenarios
         .filter(({ value }) => declaredScenarioIds.has(value?.id))

@@ -10,7 +10,14 @@ function optionSet(id, key, label, entries) {
   };
 }
 
-function runtimeOptionSet(id, key, label, queryId, filterContext, sourceOverrides = {}) {
+function runtimeOptionSet(
+  id,
+  key,
+  label,
+  queryId,
+  filterContext,
+  idKind = "OBJECT_ID",
+) {
   return {
     id,
     key,
@@ -19,7 +26,8 @@ function runtimeOptionSet(id, key, label, queryId, filterContext, sourceOverride
     values: [],
     source: {
       queryId,
-      valueField: sourceOverrides.valueField ?? "objectId",
+      idKind,
+      valueField: idKind === "ACTION_ID" ? "actionId" : "objectId",
       labelField: "displayName",
       labelSnapshot: true,
       filterContext,
@@ -254,6 +262,48 @@ export const events = [
     id: "EVT-AI-UNAVAILABLE-PUBLICATION-MANUAL-COMPLETED",
     label: "AI不可用时发布人工路径完成",
     definition: "教师通过人工路径完成成绩和反馈发布并获得服务器回执时记录。",
+  },
+  {
+    id: "EVT-CONTEXT-EXPIRY-REACHED",
+    label: "工作上下文到期或失效",
+    definition: "活动上下文到达显式期限或其来源版本失效时触发上下文过期动作。",
+    triggeredActionIds: ["ACC-ACT-EXPIRE-CONTEXT"],
+  },
+  {
+    id: "EVT-TEMP-GRANT-EXPIRY-REACHED",
+    label: "临时授权到期",
+    definition: "临时授权到达强制失效时间时触发授权过期动作。",
+    triggeredActionIds: ["IAM-ACT-EXPIRE-GRANT"],
+  },
+  {
+    id: "EVT-EXPORT-APPROVAL-RECORDED",
+    label: "敏感导出批准已记录",
+    definition: "学校批准的不可变导出范围、用途和期限完成记录后触发导出生成动作。",
+    triggeredActionIds: ["DGV-ACT-GENERATE-EXPORT"],
+  },
+  {
+    id: "EVT-EXPORT-EXPIRY-REACHED",
+    label: "导出文件到期",
+    definition: "导出文件达到批准的显式期限时触发过期和删除动作。",
+    triggeredActionIds: ["DGV-ACT-EXPIRE-EXPORT"],
+  },
+  {
+    id: "EVT-AUDIT-APPEND-REQUESTED",
+    label: "原子审计追加请求",
+    definition: "受审计动作提交不可变结果记录时触发原子审计事件追加。",
+    triggeredActionIds: ["AUD-ACT-APPEND-EVENT"],
+  },
+  {
+    id: "EVT-SENSITIVE-ACCESS-APPROVED",
+    label: "敏感访问批准已记录",
+    definition: "学校批准的敏感访问范围和期限完成记录后触发受限会话开启。",
+    triggeredActionIds: ["AUD-ACT-OPEN-SESSION"],
+  },
+  {
+    id: "EVT-SENSITIVE-SESSION-EXPIRY-REACHED",
+    label: "敏感访问会话到期",
+    definition: "敏感访问会话达到批准期限时触发会话过期动作。",
+    triggeredActionIds: ["AUD-ACT-EXPIRE-SESSION"],
   },
 ];
 
@@ -513,7 +563,7 @@ export const optionSets = [
       "targetDutyId",
       "scopeObjectIds",
     ],
-    { valueField: "actionId" },
+    "ACTION_ID",
   ),
   optionSet("OPT-ENUM-001", "yesNo", "是否", [
     ["YES", "是"],

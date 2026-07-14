@@ -3,6 +3,20 @@ import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 const WEB_ONLY = [CLIENT.WEB];
 const APP_ONLY = [CLIENT.APP];
+const USER_TASK = "USER_TASK";
+const SYSTEM_EVENT = "SYSTEM_EVENT";
+const FLOW_INTERNAL = "FLOW_INTERNAL";
+const AUDIT_REQUIRED = "REQUIRED";
+const AUDIT_NOT_REQUIRED = "NOT_REQUIRED";
+const ATOMIC_SELF_RECORD = "ATOMIC_SELF_RECORD";
+
+function eventTrigger(eventId) {
+  return { executionMode: SYSTEM_EVENT, trigger: { kind: "EVENT", eventId } };
+}
+
+function flowTrigger(...flowIds) {
+  return { executionMode: FLOW_INTERNAL, trigger: { kind: "FLOW", flowIds } };
+}
 
 function field(id, label, overrides = {}) {
   return {
@@ -52,6 +66,7 @@ function object(
   sensitivityId,
   states,
   fields,
+  overrides = {},
 ) {
   return {
     id,
@@ -66,13 +81,14 @@ function object(
     sensitivityId,
     states,
     fields,
+    ...overrides,
   };
 }
 
 function actorReference(actorRef) {
-  return actorRef.startsWith("DUTY-")
-    ? { dutyRef: actorRef }
-    : { roleRef: actorRef };
+  if (actorRef.startsWith("DUTY-")) return { dutyRef: actorRef };
+  if (actorRef.startsWith("ROLE-")) return { roleRef: actorRef };
+  return { actorRef };
 }
 
 function permissions(allowRef, denyRef, allowCondition, denyCondition) {
@@ -91,28 +107,52 @@ function action({
   writes = true,
   risk = writes ? RISK.LOW : RISK.READ,
   clients,
+  executionMode = USER_TASK,
+  trigger,
   permissions: actionPermissions,
   transition,
-  auditRequired = writes,
+  auditMode = writes ? AUDIT_REQUIRED : AUDIT_NOT_REQUIRED,
   failureResults = ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT"],
   successData,
   successState,
   successPermission = "ALLOW",
   successVisibility = "authorized object scope only",
-  failureData,
-  failureState,
-  failurePermission = "DENY",
-  failureVisibility = "no data outside the authorized scope",
-  failureKind = "FAILURE",
+  failureOutcomes = {},
 }) {
   const successScenarioId = `${id}-SCN-SUCCESS`;
-  const failureScenarioId = `${id}-SCN-${failureKind}`;
   const stateOutcome = (state) => state
     ? { mode: "STATE", value: state }
     : { mode: "UNCHANGED" };
-  const effectiveFailureResults = risk === RISK.HIGH
+  const effectiveFailureResults = risk === RISK.HIGH && auditMode === AUDIT_REQUIRED
     ? [...new Set([...failureResults, "AUDIT_FAILED"])]
     : failureResults;
+  const unknownFailureOutcomes = Object.keys(failureOutcomes)
+    .filter((resultCode) => !effectiveFailureResults.includes(resultCode));
+  if (unknownFailureOutcomes.length > 0) {
+    throw new Error(
+      `${id} failureOutcomes contain undeclared result codes: ${unknownFailureOutcomes.join(", ")}`,
+    );
+  }
+  const failureScenarios = effectiveFailureResults.map((resultCode) => {
+    const outcome = failureOutcomes[resultCode] ?? {};
+    return {
+      id: `${id}-SCN-${resultCode}`,
+      kind: outcome.kind ?? "FAILURE",
+      resultCode,
+      actionId: id,
+      ...(executionMode === USER_TASK ? {} : { trigger }),
+      given: `${resultCode} applies to ${label}`,
+      when: `the actor requests ${label}`,
+      then: {
+        expectedData: outcome.expectedData
+          ?? `${label} returns ${resultCode} without hidden writes`,
+        expectedState: stateOutcome(outcome.expectedState),
+        expectedPermission: outcome.expectedPermission ?? "DENY",
+        expectedVisibility: outcome.expectedVisibility
+          ?? "no data outside the authorized scope",
+      },
+    };
+  });
   return {
     action: {
       id,
@@ -123,17 +163,20 @@ function action({
       ...(transition ? { transition } : {}),
       writes,
       risk,
-      ...(clients ? { clients } : {}),
+      executionMode,
+      ...(executionMode === USER_TASK && clients ? { clients } : {}),
+      ...(executionMode === USER_TASK ? {} : { trigger }),
       permissions: actionPermissions,
-      scenarioIds: [successScenarioId, failureScenarioId],
+      scenarioIds: [successScenarioId, ...failureScenarios.map(({ id: scenarioId }) => scenarioId)],
       ...(writes ? { idempotencyKey: `${id}:school:object:source-version:request-id` } : {}),
-      auditRequired,
+      auditMode,
       failureResults: effectiveFailureResults,
     },
     scenarios: [{
       id: successScenarioId,
       kind: "SUCCESS",
       actionId: id,
+      ...(executionMode === USER_TASK ? {} : { trigger }),
       given: `the actor meets the entry conditions for ${label}`,
       when: `the actor requests ${label}`,
       then: {
@@ -142,19 +185,7 @@ function action({
         expectedPermission: successPermission,
         expectedVisibility: successVisibility,
       },
-    }, {
-      id: failureScenarioId,
-      kind: failureKind,
-      actionId: id,
-      given: `a boundary or failure condition applies to ${label}`,
-      when: `the actor requests ${label}`,
-      then: {
-        expectedData: failureData ?? `${label} returns an explicit failure without hidden writes`,
-        expectedState: stateOutcome(failureState),
-        expectedPermission: failurePermission,
-        expectedVisibility: failureVisibility,
-      },
-    }],
+    }, ...failureScenarios],
   };
 }
 
@@ -187,17 +218,22 @@ function moduleFact({
       if (!pageByActionId.has(actionId)) pageByActionId.set(actionId, pageValue.id);
     }
   }
+  const actionById = new Map(
+    actionFacts.map(({ action: actionValue }) => [actionValue.id, actionValue]),
+  );
   return defineModule({
     ...module,
     pages,
-    actions: actionFacts.map(({ action: actionValue }) => ({
-      ...actionValue,
-      clients: actionValue.clients ?? defaultClients,
-    })),
-    scenarios: actionFacts.flatMap(({ scenarios }) => scenarios.map((scenario) => ({
-      ...scenario,
-      pageId: pageByActionId.get(scenario.actionId),
-    }))),
+    actions: actionFacts.map(({ action: actionValue }) => (
+      actionValue.executionMode === USER_TASK
+        ? { ...actionValue, clients: actionValue.clients ?? defaultClients }
+        : actionValue
+    )),
+    scenarios: actionFacts.flatMap(({ scenarios }) => scenarios.map((scenario) => (
+      actionById.get(scenario.actionId)?.executionMode === USER_TASK
+        ? { ...scenario, pageId: pageByActionId.get(scenario.actionId) }
+        : scenario
+    ))),
   });
 }
 
@@ -215,10 +251,14 @@ const accActions = [
       "school first search is limited to schools visible to the actor",
       "platform operations has no school member entry without school authorization",
     ),
-    auditRequired: false,
+    auditMode: AUDIT_NOT_REQUIRED,
     successData: "school first search returns authorized schools and never auto-enters a recent school",
-    failureData: "no auto entry occurs when no authorized school matches",
-    failureKind: "BOUNDARY",
+    failureOutcomes: {
+      PERMISSION_DENIED: {
+        kind: "BOUNDARY",
+        expectedData: "no auto entry occurs when no authorized school matches",
+      },
+    },
   }),
   action({
     id: "ACC-ACT-SELECT-SCHOOL",
@@ -233,7 +273,7 @@ const accActions = [
       "the actor explicitly selects one authorized active school",
       "platform operations cannot select a school member context without authorization",
     ),
-    auditRequired: true,
+    auditMode: AUDIT_REQUIRED,
     successData: "the selected school becomes the explicit login boundary without auto-entering it",
   }),
   action({
@@ -249,9 +289,13 @@ const accActions = [
       "all approved login roles may authenticate on Web and App after selecting a school",
       "platform operations cannot assume a school member identity",
     ),
-    auditRequired: true,
+    auditMode: AUDIT_REQUIRED,
     successData: "the selected school and account membership are authenticated on Web or App",
-    failureData: "login is denied without an explicitly selected school or active membership",
+    failureOutcomes: {
+      PERMISSION_DENIED: {
+        expectedData: "login is denied without an explicitly selected school or active membership",
+      },
+    },
   }),
   action({
     id: "ACC-ACT-FIRST-ACTIVATION",
@@ -280,7 +324,7 @@ const accActions = [
       "the actor may select only an effective assigned role and duty set",
       "platform operations cannot select an ungranted school identity",
     ),
-    auditRequired: true,
+    auditMode: AUDIT_REQUIRED,
   }),
   action({
     id: "ACC-ACT-SELECT-TERM",
@@ -295,11 +339,15 @@ const accActions = [
       "platform operations cannot open a school term without authorization",
     ),
     successData: "current term creates a writable context; historical term creates a read-only context",
-    failureData: "historical term write attempts are denied and remain read-only",
     successState: "ACTIVE",
-    failureState: "READ_ONLY",
-    failurePermission: "ALLOW",
-    failureKind: "BOUNDARY",
+    failureOutcomes: {
+      VALIDATION_FAILED: {
+        kind: "BOUNDARY",
+        expectedData: "historical term write attempts are denied and remain read-only",
+        expectedState: "READ_ONLY",
+        expectedPermission: "ALLOW",
+      },
+    },
   }),
   action({
     id: "ACC-ACT-SWITCH-CONTEXT",
@@ -319,10 +367,14 @@ const accActions = [
     ),
     successState: "ACTIVE",
     successData: "the new context becomes active only after school, identity, term, and scope checks",
-    failureData: "a historical-term destination becomes an explicitly read-only context",
-    failureState: "READ_ONLY",
-    failurePermission: "ALLOW",
-    failureKind: "BOUNDARY",
+    failureOutcomes: {
+      VALIDATION_FAILED: {
+        kind: "BOUNDARY",
+        expectedData: "a historical-term destination becomes an explicitly read-only context",
+        expectedState: "READ_ONLY",
+        expectedPermission: "ALLOW",
+      },
+    },
   }),
   action({
     id: "ACC-ACT-EXPIRE-CONTEXT",
@@ -336,6 +388,7 @@ const accActions = [
       "the system expires a context at its expiry or invalidated source version",
       "a user cannot extend an expired context without re-establishment",
     ),
+    ...eventTrigger("EVT-CONTEXT-EXPIRY-REACHED"),
     transition: { from: "ACTIVE", to: "EXPIRED" },
     successData: "the stale context is expired and all writes require context recovery",
   }),
@@ -471,7 +524,7 @@ const accModule = moduleFact({
     page("ACC-PAGE-LOGIN-ACTIVATION", "Selected School Login and First Activation", ["ACC-OBJ-MEMBERSHIP"], ["ACC-MEMBER-F-ACCOUNT-ID-TYPE", "ACC-MEMBER-F-ACCOUNT-ID", "ACC-MEMBER-F-SCHOOL-ID", "ACC-MEMBER-F-ACTIVATION", "ACC-MEMBER-F-STATE"], ["ACC-ACT-LOGIN", "ACC-ACT-FIRST-ACTIVATION"]),
     page("ACC-PAGE-IDENTITY-TERM", "Effective Identity and Term Selection", ["ACC-OBJ-IDENTITY", "ACC-OBJ-CONTEXT"], ["ACC-IDENTITY-F-ROLE", "ACC-IDENTITY-F-DUTIES", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-SELECT-IDENTITY", "ACC-ACT-SELECT-TERM"]),
     page("ACC-PAGE-CONTEXT-SWITCH", "Active Context Switcher", ["ACC-OBJ-CONTEXT"], ["ACC-CONTEXT-F-SCHOOL-ID", "ACC-CONTEXT-F-IDENTITY-ID", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-SWITCH-CONTEXT"]),
-    page("ACC-PAGE-CONTEXT-RECOVERY", "Expired Context Recovery", ["ACC-OBJ-CONTEXT"], ["ACC-CONTEXT-F-SCHOOL-ID", "ACC-CONTEXT-F-IDENTITY-ID", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-EXPIRY", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-EXPIRE-CONTEXT", "ACC-ACT-SWITCH-CONTEXT"]),
+    page("ACC-PAGE-CONTEXT-RECOVERY", "Expired Context Recovery", ["ACC-OBJ-CONTEXT"], ["ACC-CONTEXT-F-SCHOOL-ID", "ACC-CONTEXT-F-IDENTITY-ID", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-EXPIRY", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-SWITCH-CONTEXT"]),
   ],
 });
 
@@ -567,18 +620,18 @@ const orgActions = [
   action({ id: "ORG-ACT-MANAGE-STUDENT", label: "Create or Update a Student Profile", targetObjectId: "ORG-OBJ-STUDENT", inputFieldIds: ["ORG-STUDENT-F-NAME", "ORG-STUDENT-F-CLASS-ID"], outputFieldIds: ["ORG-STUDENT-F-MEMBER-STATE"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
   action({ id: "ORG-ACT-ASSIGN-SUBJECT-TEACHER", label: "Assign a Subject Teacher to Course and Class", targetObjectId: "ORG-OBJ-TEACHING-ASSIGNMENT", inputFieldIds: ["ORG-TEACHING-F-TEACHER-ID", "ORG-TEACHING-F-COURSE-ID", "ORG-TEACHING-F-CLASS-ID", "ORG-TEACHING-F-EFFECTIVE"], permissions: permissions("ROLE-ACADEMIC", "DUTY-SUBJECT-LEAD", "academic staff owns assignment changes", "subject lead may review subject scope but cannot grant organization duties"), successState: "PLANNED" }),
   action({ id: "ORG-ACT-ASSIGN-HOMEROOM", label: "Assign a Homeroom Teacher to a Class", targetObjectId: "ORG-OBJ-HOMEROOM-ASSIGNMENT", inputFieldIds: ["ORG-HOMEROOM-F-TEACHER-ID", "ORG-HOMEROOM-F-CLASS-ID", "ORG-HOMEROOM-F-EFFECTIVE"], permissions: orgAdminPermissions, successState: "PLANNED" }),
-  action({ id: "ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE", label: "Download Object-specific Import Template", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-OBJECT-TYPE"], outputFieldIds: ["ORG-IMPORT-F-TEMPLATE-VERSION"], writes: false, permissions: orgAdminPermissions, auditRequired: false }),
+  action({ id: "ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE", label: "Download Object-specific Import Template", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-OBJECT-TYPE"], outputFieldIds: ["ORG-IMPORT-F-TEMPLATE-VERSION"], writes: false, permissions: orgAdminPermissions, auditMode: AUDIT_NOT_REQUIRED }),
   action({ id: "ORG-ACT-UPLOAD-IMPORT", label: "Upload Organization Import Workbook", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-OBJECT-TYPE", "ORG-IMPORT-F-TEMPLATE-VERSION"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: orgAdminPermissions, successState: "UPLOADED" }),
   action({ id: "ORG-ACT-MAP-IMPORT-FIELDS", label: "Map Workbook Columns to Organization Fields", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-MAPPING"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: orgAdminPermissions, successState: "MAPPED" }),
-  action({ id: "ORG-ACT-VALIDATE-IMPORT", label: "Validate Object-level Import Rows", targetObjectId: "ORG-OBJ-IMPORT-ROW", inputFieldIds: ["ORG-IMPORT-ROW-F-BATCH-ID"], outputFieldIds: ["ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-VALIDATION-RESULT", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS"], permissions: orgAdminPermissions, successState: "VALIDATED", successData: "each row receives CREATE, UPDATE, NO_CHANGE, REJECT, or DEACTIVATE before confirmation", failureData: "errors and conflicts block only affected rows and remain visible" }),
-  action({ id: "ORG-ACT-CONFIRM-IMPORT", label: "Confirm Object-level Import", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: orgAdminPermissions, risk: RISK.HIGH, failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT", "PARTIAL_SUCCESS"], successState: "PENDING_OUTCOME_AUDIT", successData: "accepted rows remain provisional until the outcome audit succeeds; rejected rows remain object-level results for correction", failureData: "successful rows in a partial result remain provisional until outcome audit and every failed object row is reported", failureKind: "BOUNDARY", failureState: "PENDING_PARTIAL_OUTCOME_AUDIT", failurePermission: "ALLOW", failureVisibility: "successful and failed object-level row results remain visible inside the authorized import scope" }),
-  action({ id: "ORG-ACT-FINALIZE-AUDITED-IMPORT", label: "Finalize an Audited Organization Import", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "the system finalizes only rows covered by the successful outcome audit", "a user cannot finalize provisional rows without the outcome audit"), risk: RISK.HIGH, transition: { from: "PENDING_OUTCOME_AUDIT", to: "COMPLETED" }, successData: "the audited provisional rows become the final accepted organization version" }),
-  action({ id: "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", label: "Finalize an Audited Partial Organization Import", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "the system finalizes only partial-success rows covered by the successful outcome audit", "a user cannot finalize provisional partial rows without the outcome audit"), risk: RISK.HIGH, transition: { from: "PENDING_PARTIAL_OUTCOME_AUDIT", to: "PARTIAL_SUCCESS" }, successData: "audited successful rows become final while rejected rows remain visible for correction" }),
+  action({ id: "ORG-ACT-VALIDATE-IMPORT", label: "Validate Object-level Import Rows", targetObjectId: "ORG-OBJ-IMPORT-ROW", inputFieldIds: ["ORG-IMPORT-ROW-F-BATCH-ID"], outputFieldIds: ["ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-VALIDATION-RESULT", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS"], permissions: orgAdminPermissions, successState: "VALIDATED", successData: "each row receives CREATE, UPDATE, NO_CHANGE, REJECT, or DEACTIVATE before confirmation", failureOutcomes: { VALIDATION_FAILED: { expectedData: "errors and conflicts block only affected rows and remain visible" } } }),
+  action({ id: "ORG-ACT-CONFIRM-IMPORT", label: "Confirm Object-level Import", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: orgAdminPermissions, risk: RISK.HIGH, failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT", "PARTIAL_SUCCESS"], successState: "PENDING_OUTCOME_AUDIT", successData: "accepted rows remain provisional until the outcome audit succeeds; rejected rows remain object-level results for correction", failureOutcomes: { PARTIAL_SUCCESS: { kind: "BOUNDARY", expectedData: "successful rows in a partial result remain provisional until outcome audit and every failed object row is reported", expectedState: "PENDING_PARTIAL_OUTCOME_AUDIT", expectedPermission: "ALLOW", expectedVisibility: "successful and failed object-level row results remain visible inside the authorized import scope" } } }),
+  action({ id: "ORG-ACT-FINALIZE-AUDITED-IMPORT", label: "Finalize an Audited Organization Import", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "the system finalizes only rows covered by the successful outcome audit", "a user cannot finalize provisional rows without the outcome audit"), ...flowTrigger("DF-002"), risk: RISK.HIGH, transition: { from: "PENDING_OUTCOME_AUDIT", to: "COMPLETED" }, successData: "the audited provisional rows become the final accepted organization version" }),
+  action({ id: "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", label: "Finalize an Audited Partial Organization Import", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "the system finalizes only partial-success rows covered by the successful outcome audit", "a user cannot finalize provisional partial rows without the outcome audit"), ...flowTrigger("DF-002"), risk: RISK.HIGH, transition: { from: "PENDING_PARTIAL_OUTCOME_AUDIT", to: "PARTIAL_SUCCESS" }, successData: "audited successful rows become final while rejected rows remain visible for correction" }),
   action({ id: "ORG-ACT-RETRY-FAILED-ROWS", label: "Retry Corrected Failed Import Rows", targetObjectId: "ORG-OBJ-IMPORT-ROW", inputFieldIds: ["ORG-IMPORT-ROW-F-ID"], outputFieldIds: ["ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS"], permissions: orgAdminPermissions, successState: "VALIDATED", successData: "only corrected failed rows are retried; prior successful rows remain accepted" }),
   action({ id: "ORG-ACT-DEACTIVATE-MEMBER", label: "Deactivate a School Member Profile", targetObjectId: "ORG-OBJ-STUDENT", inputFieldIds: ["ORG-STUDENT-F-ID"], outputFieldIds: ["ORG-STUDENT-F-MEMBER-STATE"], permissions: orgAdminPermissions, risk: RISK.HIGH, successState: "DEACTIVATED" }),
-  action({ id: "ORG-ACT-RESOLVE-CONTEXT-SCOPE", label: "Resolve Current Term and Organization Scope", targetObjectId: "ORG-OBJ-TERM", inputFieldIds: ["ORG-TERM-F-ID"], outputFieldIds: ["ORG-TERM-F-STATUS"], writes: false, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "resolve only organization facts inside the active school identity", "platform operations cannot resolve school scope without authorization"), auditRequired: false, successData: "current term and organization versions are returned for permission evaluation" }),
-  action({ id: "ORG-ACT-VIEW-MY-TEACHING-SCOPE", label: "View My Class and Teaching Scope on App", targetObjectId: "ORG-OBJ-TEACHING-ASSIGNMENT", inputFieldIds: ["ORG-TEACHING-F-TEACHER-ID"], outputFieldIds: ["ORG-TEACHING-F-COURSE-ID", "ORG-TEACHING-F-CLASS-ID", "ORG-TEACHING-F-EFFECTIVE"], writes: false, clients: APP_ONLY, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "the current teacher may view only effective class and teaching relationships", "platform operations cannot view teacher scope without school authorization"), auditRequired: false, successData: "App returns the current teacher's effective classes and teaching relationships" }),
-  action({ id: "ORG-ACT-VIEW-IMPORT-NOTIFICATION", label: "View Import Result Notification on App", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], writes: false, clients: APP_ONLY, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "the import operator may view the operator's own batch outcome notification", "platform operations cannot view school import results without authorization"), auditRequired: false, successData: "App shows batch status and object-level exceptions without exposing bulk editing" }),
+  action({ id: "ORG-ACT-RESOLVE-CONTEXT-SCOPE", label: "Resolve Current Term and Organization Scope", targetObjectId: "ORG-OBJ-TERM", inputFieldIds: ["ORG-TERM-F-ID"], outputFieldIds: ["ORG-TERM-F-STATUS"], writes: false, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "resolve only organization facts inside the active school identity", "platform operations cannot resolve school scope without authorization"), auditMode: AUDIT_NOT_REQUIRED, successData: "current term and organization versions are returned for permission evaluation" }),
+  action({ id: "ORG-ACT-VIEW-MY-TEACHING-SCOPE", label: "View My Class and Teaching Scope on App", targetObjectId: "ORG-OBJ-TEACHING-ASSIGNMENT", inputFieldIds: ["ORG-TEACHING-F-TEACHER-ID"], outputFieldIds: ["ORG-TEACHING-F-COURSE-ID", "ORG-TEACHING-F-CLASS-ID", "ORG-TEACHING-F-EFFECTIVE"], writes: false, clients: APP_ONLY, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "the current teacher may view only effective class and teaching relationships", "platform operations cannot view teacher scope without school authorization"), auditMode: AUDIT_NOT_REQUIRED, successData: "App returns the current teacher's effective classes and teaching relationships" }),
+  action({ id: "ORG-ACT-VIEW-IMPORT-NOTIFICATION", label: "View Import Result Notification on App", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-ID"], outputFieldIds: ["ORG-IMPORT-F-STATUS"], writes: false, clients: APP_ONLY, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "the import operator may view the operator's own batch outcome notification", "platform operations cannot view school import results without authorization"), auditMode: AUDIT_NOT_REQUIRED, successData: "App shows batch status and object-level exceptions without exposing bulk editing" }),
   action({ id: "ORG-ACT-CONFIRM-IMPORT-ANOMALY", label: "Confirm an Import Anomaly on App", targetObjectId: "ORG-OBJ-IMPORT-ROW", inputFieldIds: ["ORG-IMPORT-ROW-F-ID", "ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION", "ORG-IMPORT-ROW-F-CONFIRMATION-NOTE"], outputFieldIds: ["ORG-IMPORT-ROW-F-VALIDATION-RESULT", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS"], clients: APP_ONLY, permissions: orgAdminPermissions, risk: RISK.HIGH, successState: "VALIDATED", successData: "App records an explicit anomaly confirmation without executing or reproducing the bulk import workflow" }),
 ];
 
@@ -605,7 +658,7 @@ const orgModule = moduleFact({
     page("ORG-PAGE-MEMBERS", "Teacher and Student Member Management", ["ORG-OBJ-TEACHER", "ORG-OBJ-STUDENT"], ["ORG-TEACHER-F-NAME", "ORG-TEACHER-F-MEMBER-STATE", "ORG-STUDENT-F-NAME", "ORG-STUDENT-F-CLASS-ID", "ORG-STUDENT-F-MEMBER-STATE"], ["ORG-ACT-MANAGE-TEACHER", "ORG-ACT-MANAGE-STUDENT", "ORG-ACT-DEACTIVATE-MEMBER"]),
     page("ORG-PAGE-IMPORT-TEMPLATE", "Import Object and Template Selection", ["ORG-OBJ-IMPORT-BATCH"], ["ORG-IMPORT-F-OBJECT-TYPE", "ORG-IMPORT-F-TEMPLATE-VERSION"], ["ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE", "ORG-ACT-UPLOAD-IMPORT"]),
     page("ORG-PAGE-IMPORT-MAPPING", "Import Mapping and Row Validation", ["ORG-OBJ-IMPORT-BATCH", "ORG-OBJ-IMPORT-ROW"], ["ORG-IMPORT-F-MAPPING", "ORG-IMPORT-F-STATUS", "ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-VALIDATION-RESULT", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS"], ["ORG-ACT-MAP-IMPORT-FIELDS", "ORG-ACT-VALIDATE-IMPORT", "ORG-ACT-CONFIRM-IMPORT"]),
-    page("ORG-PAGE-IMPORT-RESULT", "Object-level Import Result and Retry", ["ORG-OBJ-IMPORT-BATCH", "ORG-OBJ-IMPORT-ROW"], ["ORG-IMPORT-F-STATUS", "ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS", "ORG-IMPORT-ROW-F-OBJECT-ID"], ["ORG-ACT-FINALIZE-AUDITED-IMPORT", "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", "ORG-ACT-RETRY-FAILED-ROWS"]),
+    page("ORG-PAGE-IMPORT-RESULT", "Object-level Import Result and Retry", ["ORG-OBJ-IMPORT-BATCH", "ORG-OBJ-IMPORT-ROW"], ["ORG-IMPORT-F-STATUS", "ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS", "ORG-IMPORT-ROW-F-OBJECT-ID"], ["ORG-ACT-RETRY-FAILED-ROWS"]),
     page("ORG-PAGE-TEACHING-ASSIGNMENT", "Subject and Homeroom Teaching Assignment", ["ORG-OBJ-TEACHING-ASSIGNMENT", "ORG-OBJ-HOMEROOM-ASSIGNMENT"], ["ORG-TEACHING-F-TEACHER-ID", "ORG-TEACHING-F-COURSE-ID", "ORG-TEACHING-F-CLASS-ID", "ORG-TEACHING-F-EFFECTIVE", "ORG-HOMEROOM-F-TEACHER-ID", "ORG-HOMEROOM-F-CLASS-ID", "ORG-HOMEROOM-F-EFFECTIVE"], ["ORG-ACT-ASSIGN-SUBJECT-TEACHER", "ORG-ACT-ASSIGN-HOMEROOM"]),
     page("ORG-PAGE-APP-MY-TEACHING-SCOPE", "My Class and Teaching Scope", ["ORG-OBJ-TEACHING-ASSIGNMENT", "ORG-OBJ-HOMEROOM-ASSIGNMENT"], ["ORG-TEACHING-F-TEACHER-ID", "ORG-TEACHING-F-COURSE-ID", "ORG-TEACHING-F-CLASS-ID", "ORG-TEACHING-F-EFFECTIVE", "ORG-HOMEROOM-F-CLASS-ID", "ORG-HOMEROOM-F-EFFECTIVE"], ["ORG-ACT-VIEW-MY-TEACHING-SCOPE"], APP_ONLY),
     page("ORG-PAGE-APP-IMPORT-RESULT", "Import Result Notification and Anomaly Confirmation", ["ORG-OBJ-IMPORT-BATCH", "ORG-OBJ-IMPORT-ROW"], ["ORG-IMPORT-F-STATUS", "ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-VALIDATION-RESULT", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS", "ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION", "ORG-IMPORT-ROW-F-CONFIRMATION-NOTE"], ["ORG-ACT-VIEW-IMPORT-NOTIFICATION", "ORG-ACT-CONFIRM-IMPORT-ANOMALY"], APP_ONLY),
@@ -616,7 +669,7 @@ const iamObjects = [
   object("IAM-OBJ-ROLE-POLICY", "Role Policy", responsibility("SCHOOL_ROLE_POLICY", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-001", "S4", ["DRAFT", "ACTIVE", "SUPERSEDED"], [
     field("IAM-ROLE-F-ID", "Role Policy ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-ROLE-F-ROLE", "Login Role", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-003" } }),
-    field("IAM-ROLE-F-ACTIONS", "Allowed Action Set", { dataType: "STRING_ARRAY", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
+    field("IAM-ROLE-F-ACTIONS", "Allowed Action Set", { dataType: "STRING_ARRAY", referenceType: "AUTHORIZABLE_ACTION", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
     field("IAM-ROLE-F-VERSION", "Policy Version", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
   ]),
   object("IAM-OBJ-DUTY-GRANT", "Duty Grant", responsibility("SCHOOL_DUTY_GRANT", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-002", "S4", ["PLANNED", "EFFECTIVE", "EXPIRED", "REVOKED"], [
@@ -625,7 +678,7 @@ const iamObjects = [
     field("IAM-DUTY-F-SUBJECT", "Subject Account ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-009" } }),
     field("IAM-DUTY-F-DUTY", "Duty ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-042" } }),
     field("IAM-DUTY-F-SCOPE", "Duty Object Scope", { dataType: "JSON", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-015" } }),
-    field("IAM-DUTY-F-ACTIONS", "Duty Granted Actions", { dataType: "STRING_ARRAY", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
+    field("IAM-DUTY-F-ACTIONS", "Duty Granted Actions", { dataType: "STRING_ARRAY", referenceType: "AUTHORIZABLE_ACTION", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
     field("IAM-DUTY-F-EFFECTIVE", "Effective At", { dataType: "DATETIME" }),
     field("IAM-DUTY-F-EXPIRY", "Expires At", { dataType: "DATETIME", required: false }),
     field("IAM-DUTY-F-REASON", "Grant Reason"),
@@ -637,7 +690,7 @@ const iamObjects = [
     field("IAM-SCOPE-F-SUBJECT", "Scope Subject ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-009" } }),
     field("IAM-SCOPE-F-DUTY", "Target Duty ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-042" } }),
     field("IAM-SCOPE-F-SCOPE", "Granted Object Scope", { dataType: "JSON", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-015" } }),
-    field("IAM-SCOPE-F-ACTIONS", "Granted Actions", { dataType: "STRING_ARRAY", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
+    field("IAM-SCOPE-F-ACTIONS", "Granted Actions", { dataType: "STRING_ARRAY", referenceType: "AUTHORIZABLE_ACTION", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
     field("IAM-SCOPE-F-EFFECTIVE", "Scope Effective At", { dataType: "DATETIME" }),
     field("IAM-SCOPE-F-EXPIRY", "Scope Expires At", { dataType: "DATETIME", required: false }),
     field("IAM-SCOPE-F-REASON", "Scope Grant Reason"),
@@ -658,7 +711,7 @@ const iamObjects = [
     field("IAM-TEMP-F-SUBJECT", "Temporary Subject ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-009" } }),
     field("IAM-TEMP-F-DUTY", "Temporary Duty ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-042" } }),
     field("IAM-TEMP-F-SCOPE", "Temporary Scope", { dataType: "JSON", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-015" } }),
-    field("IAM-TEMP-F-ACTIONS", "Temporary Actions", { dataType: "STRING_ARRAY", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
+    field("IAM-TEMP-F-ACTIONS", "Temporary Actions", { dataType: "STRING_ARRAY", referenceType: "AUTHORIZABLE_ACTION", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
     field("IAM-TEMP-F-EFFECTIVE", "Temporary Effective At", { dataType: "DATETIME" }),
     field("IAM-TEMP-F-EXPIRY", "Mandatory Expiry", { dataType: "DATETIME" }),
     field("IAM-TEMP-F-REASON", "Temporary Grant Reason"),
@@ -674,15 +727,15 @@ const iamAdminPermissions = permissions(
 );
 
 const iamActions = [
-  action({ id: "IAM-ACT-PREVIEW-SCOPE", label: "Preview Effective Current Data Scope", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-SUBJECT", "IAM-DECISION-F-ACTION"], outputFieldIds: ["IAM-DECISION-F-SCOPE", "IAM-DECISION-F-SOURCE-VERSIONS"], writes: false, clients: WEB_APP, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "the actor may preview only the actor's effective school scope", "platform operations cannot preview student detail without school authorization"), auditRequired: true }),
+  action({ id: "IAM-ACT-PREVIEW-SCOPE", label: "Preview Effective Current Data Scope", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-SUBJECT", "IAM-DECISION-F-ACTION"], outputFieldIds: ["IAM-DECISION-F-SCOPE", "IAM-DECISION-F-SOURCE-VERSIONS"], writes: false, clients: WEB_APP, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "the actor may preview only the actor's effective school scope", "platform operations cannot preview student detail without school authorization"), auditMode: AUDIT_REQUIRED }),
   action({ id: "IAM-ACT-GRANT-DUTY", label: "Grant an Effective Teacher Duty", targetObjectId: "IAM-OBJ-DUTY-GRANT", inputFieldIds: ["IAM-DUTY-F-GRANTOR-AUTHORITY", "IAM-DUTY-F-SUBJECT", "IAM-DUTY-F-DUTY", "IAM-DUTY-F-SCOPE", "IAM-DUTY-F-ACTIONS", "IAM-DUTY-F-EFFECTIVE", "IAM-DUTY-F-EXPIRY", "IAM-DUTY-F-REASON"], outputFieldIds: ["IAM-DUTY-F-STATUS"], permissions: iamAdminPermissions, risk: RISK.HIGH, successState: "EFFECTIVE" }),
   action({ id: "IAM-ACT-GRANT-SCOPE", label: "Grant an Object-level Data Scope", targetObjectId: "IAM-OBJ-SCOPE-GRANT", inputFieldIds: ["IAM-SCOPE-F-GRANTOR-AUTHORITY", "IAM-SCOPE-F-SUBJECT", "IAM-SCOPE-F-DUTY", "IAM-SCOPE-F-SCOPE", "IAM-SCOPE-F-ACTIONS", "IAM-SCOPE-F-EFFECTIVE", "IAM-SCOPE-F-EXPIRY", "IAM-SCOPE-F-REASON"], outputFieldIds: ["IAM-SCOPE-F-STATUS"], permissions: iamAdminPermissions, risk: RISK.HIGH, successState: "EFFECTIVE" }),
   action({ id: "IAM-ACT-CREATE-TEMP-GRANT", label: "Create a Time-bounded Temporary Grant", targetObjectId: "IAM-OBJ-TEMP-GRANT", inputFieldIds: ["IAM-TEMP-F-GRANTOR-AUTHORITY", "IAM-TEMP-F-SUBJECT", "IAM-TEMP-F-DUTY", "IAM-TEMP-F-SCOPE", "IAM-TEMP-F-ACTIONS", "IAM-TEMP-F-EFFECTIVE", "IAM-TEMP-F-EXPIRY", "IAM-TEMP-F-REASON"], outputFieldIds: ["IAM-TEMP-F-STATUS"], permissions: iamAdminPermissions, risk: RISK.HIGH, successState: "EFFECTIVE", successData: "temporary grant has explicit school owner, scope, actions, reason, and mandatory expiry" }),
   action({ id: "IAM-ACT-REVOKE-GRANT", label: "Revoke an Effective Data Scope Grant", targetObjectId: "IAM-OBJ-SCOPE-GRANT", inputFieldIds: ["IAM-SCOPE-F-ID", "IAM-SCOPE-F-REASON"], outputFieldIds: ["IAM-SCOPE-F-STATUS"], permissions: iamAdminPermissions, risk: RISK.HIGH, transition: { from: "EFFECTIVE", to: "REVOKED" } }),
-  action({ id: "IAM-ACT-EXPIRE-GRANT", label: "Expire a Temporary Grant at Deadline", targetObjectId: "IAM-OBJ-TEMP-GRANT", inputFieldIds: ["IAM-TEMP-F-EXPIRY"], outputFieldIds: ["IAM-TEMP-F-STATUS"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "the system expires grants at the mandatory deadline", "a user cannot bypass or extend expiry without a new grant"), transition: { from: "EFFECTIVE", to: "EXPIRED" } }),
-  action({ id: "IAM-ACT-EVALUATE-PERMISSION", label: "Evaluate Context Action Permission", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-SUBJECT", "IAM-DECISION-F-ACTION", "IAM-DECISION-F-SCOPE", "IAM-DECISION-F-SOURCE-VERSIONS"], outputFieldIds: ["IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "the system evaluates role, duty, object scope, action, time, and source versions", "platform operations receives DENY for student detail without school authorization"), risk: RISK.HIGH, successState: "ALLOW", failureState: "DENY", successData: "permission decision records result, reason, and every source version used" }),
-  action({ id: "IAM-ACT-REPLAY-DECISION", label: "Replay a Permission Decision from Source Versions", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-ID", "IAM-DECISION-F-SOURCE-VERSIONS"], outputFieldIds: ["IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON"], writes: false, permissions: permissions("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "school administrator may replay decisions inside school audit scope", "platform operations needs explicit school authorization to replay student-detail decisions"), auditRequired: true }),
-  action({ id: "IAM-ACT-RECALCULATE-PERMISSIONS", label: "Recalculate Permissions after Organization Change", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-SOURCE-VERSIONS"], outputFieldIds: ["IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON", "IAM-DECISION-F-SOURCE-VERSIONS"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "organization source version change invalidates and recalculates affected decisions", "platform operations cannot override the recalculated school scope"), successState: "ALLOW", failureState: "DENY", successData: "affected permission decisions use the new organization versions and stale decisions are invalidated" }),
+  action({ id: "IAM-ACT-EXPIRE-GRANT", label: "Expire a Temporary Grant at Deadline", targetObjectId: "IAM-OBJ-TEMP-GRANT", inputFieldIds: ["IAM-TEMP-F-EXPIRY"], outputFieldIds: ["IAM-TEMP-F-STATUS"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "the system expires grants at the mandatory deadline", "a user cannot bypass or extend expiry without a new grant"), ...eventTrigger("EVT-TEMP-GRANT-EXPIRY-REACHED"), transition: { from: "EFFECTIVE", to: "EXPIRED" } }),
+  action({ id: "IAM-ACT-EVALUATE-PERMISSION", label: "Evaluate Context Action Permission", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-SUBJECT", "IAM-DECISION-F-ACTION", "IAM-DECISION-F-SCOPE", "IAM-DECISION-F-SOURCE-VERSIONS"], outputFieldIds: ["IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "the system evaluates role, duty, object scope, action, time, and source versions", "platform operations receives DENY for student detail without school authorization"), ...flowTrigger("DF-001", "DF-002"), risk: RISK.HIGH, successState: "ALLOW", failureOutcomes: { PERMISSION_DENIED: { expectedState: "DENY" } }, successData: "permission decision records result, reason, and every source version used" }),
+  action({ id: "IAM-ACT-REPLAY-DECISION", label: "Replay a Permission Decision from Source Versions", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-ID", "IAM-DECISION-F-SOURCE-VERSIONS"], outputFieldIds: ["IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON"], writes: false, permissions: permissions("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "school administrator may replay decisions inside school audit scope", "platform operations needs explicit school authorization to replay student-detail decisions"), auditMode: AUDIT_REQUIRED }),
+  action({ id: "IAM-ACT-RECALCULATE-PERMISSIONS", label: "Recalculate Permissions after Organization Change", targetObjectId: "IAM-OBJ-PERMISSION-DECISION", inputFieldIds: ["IAM-DECISION-F-SOURCE-VERSIONS"], outputFieldIds: ["IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON", "IAM-DECISION-F-SOURCE-VERSIONS"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "organization source version change invalidates and recalculates affected decisions", "platform operations cannot override the recalculated school scope"), ...flowTrigger("DF-002"), successState: "ALLOW", failureOutcomes: { PERMISSION_DENIED: { expectedState: "DENY" } }, successData: "affected permission decisions use the new organization versions and stale decisions are invalidated" }),
 ];
 
 const iamModule = moduleFact({
@@ -706,8 +759,8 @@ const iamModule = moduleFact({
     page("IAM-PAGE-POLICY", "Login Role Policy and Effective Scope", ["IAM-OBJ-ROLE-POLICY", "IAM-OBJ-PERMISSION-DECISION"], ["IAM-ROLE-F-ROLE", "IAM-ROLE-F-ACTIONS", "IAM-ROLE-F-VERSION", "IAM-DECISION-F-SCOPE", "IAM-DECISION-F-SOURCE-VERSIONS"], ["IAM-ACT-PREVIEW-SCOPE"], WEB_APP),
     page("IAM-PAGE-DUTY-GRANT", "Teacher Duty Grant Administration", ["IAM-OBJ-DUTY-GRANT"], ["IAM-DUTY-F-GRANTOR-AUTHORITY", "IAM-DUTY-F-SUBJECT", "IAM-DUTY-F-DUTY", "IAM-DUTY-F-SCOPE", "IAM-DUTY-F-ACTIONS", "IAM-DUTY-F-EFFECTIVE", "IAM-DUTY-F-EXPIRY", "IAM-DUTY-F-REASON", "IAM-DUTY-F-STATUS"], ["IAM-ACT-GRANT-DUTY"]),
     page("IAM-PAGE-SCOPE-GRANT", "Object-level Data Scope Grant Administration", ["IAM-OBJ-SCOPE-GRANT"], ["IAM-SCOPE-F-ID", "IAM-SCOPE-F-GRANTOR-AUTHORITY", "IAM-SCOPE-F-SUBJECT", "IAM-SCOPE-F-DUTY", "IAM-SCOPE-F-SCOPE", "IAM-SCOPE-F-ACTIONS", "IAM-SCOPE-F-EFFECTIVE", "IAM-SCOPE-F-EXPIRY", "IAM-SCOPE-F-REASON", "IAM-SCOPE-F-STATUS"], ["IAM-ACT-GRANT-SCOPE", "IAM-ACT-REVOKE-GRANT"]),
-    page("IAM-PAGE-TEMP-GRANT", "Time-bounded Temporary Grant Administration", ["IAM-OBJ-TEMP-GRANT"], ["IAM-TEMP-F-GRANTOR-AUTHORITY", "IAM-TEMP-F-SUBJECT", "IAM-TEMP-F-DUTY", "IAM-TEMP-F-SCOPE", "IAM-TEMP-F-ACTIONS", "IAM-TEMP-F-EFFECTIVE", "IAM-TEMP-F-EXPIRY", "IAM-TEMP-F-REASON", "IAM-TEMP-F-STATUS"], ["IAM-ACT-CREATE-TEMP-GRANT", "IAM-ACT-EXPIRE-GRANT"]),
-    page("IAM-PAGE-REPLAY", "Permission Decision Replay", ["IAM-OBJ-PERMISSION-DECISION"], ["IAM-DECISION-F-SUBJECT", "IAM-DECISION-F-ACTION", "IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON", "IAM-DECISION-F-SOURCE-VERSIONS"], ["IAM-ACT-EVALUATE-PERMISSION", "IAM-ACT-REPLAY-DECISION", "IAM-ACT-RECALCULATE-PERMISSIONS"]),
+    page("IAM-PAGE-TEMP-GRANT", "Time-bounded Temporary Grant Administration", ["IAM-OBJ-TEMP-GRANT"], ["IAM-TEMP-F-GRANTOR-AUTHORITY", "IAM-TEMP-F-SUBJECT", "IAM-TEMP-F-DUTY", "IAM-TEMP-F-SCOPE", "IAM-TEMP-F-ACTIONS", "IAM-TEMP-F-EFFECTIVE", "IAM-TEMP-F-EXPIRY", "IAM-TEMP-F-REASON", "IAM-TEMP-F-STATUS"], ["IAM-ACT-CREATE-TEMP-GRANT"]),
+    page("IAM-PAGE-REPLAY", "Permission Decision Replay", ["IAM-OBJ-PERMISSION-DECISION"], ["IAM-DECISION-F-SUBJECT", "IAM-DECISION-F-ACTION", "IAM-DECISION-F-RESULT", "IAM-DECISION-F-REASON", "IAM-DECISION-F-SOURCE-VERSIONS"], ["IAM-ACT-REPLAY-DECISION"]),
   ],
 });
 
@@ -746,14 +799,14 @@ const dgvObjects = [
 
 const dgvAdminPermissions = permissions("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "school administrator owns activation governance and explicit export authorization", "platform operations has no default student-detail export or AI use access without school authorization");
 const dgvActions = [
-  action({ id: "DGV-ACT-VIEW-EXPLANATION", label: "View School Data Use Explanation", targetObjectId: "DGV-OBJ-POLICY", inputFieldIds: ["DGV-POLICY-F-SCHOOL-ID"], outputFieldIds: ["DGV-POLICY-F-EXPLANATION", "DGV-POLICY-F-VERSION"], writes: false, clients: WEB_APP, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "school members may view the active school explanation", "platform operations cannot view student-detail governance data without school authorization"), auditRequired: false }),
+  action({ id: "DGV-ACT-VIEW-EXPLANATION", label: "View School Data Use Explanation", targetObjectId: "DGV-OBJ-POLICY", inputFieldIds: ["DGV-POLICY-F-SCHOOL-ID"], outputFieldIds: ["DGV-POLICY-F-EXPLANATION", "DGV-POLICY-F-VERSION"], writes: false, clients: WEB_APP, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "school members may view the active school explanation", "platform operations cannot view student-detail governance data without school authorization"), auditMode: AUDIT_NOT_REQUIRED }),
   action({ id: "DGV-ACT-CONFIGURE-RETENTION", label: "Configure School Activation Retention Periods", targetObjectId: "DGV-OBJ-RETENTION", inputFieldIds: ["DGV-RETENTION-F-CATEGORY", "DGV-RETENTION-F-PERIOD"], outputFieldIds: ["DGV-RETENTION-F-ACTIVATED-BY", "DGV-RETENTION-F-STATUS"], permissions: dgvAdminPermissions, risk: RISK.HIGH, successState: "ACTIVE", successData: "school-owned retention periods become an explicit activation configuration with no implicit defaults" }),
-  action({ id: "DGV-ACT-CONFIGURE-AI-USE", label: "Configure AI Data Use Boundary", targetObjectId: "DGV-OBJ-AI-RULE", inputFieldIds: ["DGV-AI-F-DATA-SCOPE", "DGV-AI-F-PURPOSE", "DGV-AI-F-MODEL-USE"], outputFieldIds: ["DGV-AI-F-STATUS"], permissions: dgvAdminPermissions, risk: RISK.HIGH, successState: "ACTIVE", failureState: "BLOCKED_UNSET_RETENTION", successData: "AI use is enabled only for the declared scope and purpose after retention is configured", failureData: "unset retention blocks sensitive AI use and returns BLOCKED_UNSET_RETENTION" }),
-  action({ id: "DGV-ACT-REQUEST-EXPORT", label: "Request a Purpose-bound Data Export", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-PURPOSE", "DGV-EXPORT-F-EXPIRY"], outputFieldIds: ["DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "requester may request only an authorized school object scope and purpose", "platform operations cannot request student-detail export by default"), risk: RISK.HIGH, successState: "REQUESTED", failureData: "unset retention or unauthorized sensitive scope blocks the export request" }),
+  action({ id: "DGV-ACT-CONFIGURE-AI-USE", label: "Configure AI Data Use Boundary", targetObjectId: "DGV-OBJ-AI-RULE", inputFieldIds: ["DGV-AI-F-DATA-SCOPE", "DGV-AI-F-PURPOSE", "DGV-AI-F-MODEL-USE"], outputFieldIds: ["DGV-AI-F-STATUS"], permissions: dgvAdminPermissions, risk: RISK.HIGH, successState: "ACTIVE", failureOutcomes: { VALIDATION_FAILED: { expectedData: "unset retention blocks sensitive AI use and returns BLOCKED_UNSET_RETENTION", expectedState: "BLOCKED_UNSET_RETENTION" } }, successData: "AI use is enabled only for the declared scope and purpose after retention is configured" }),
+  action({ id: "DGV-ACT-REQUEST-EXPORT", label: "Request a Purpose-bound Data Export", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-PURPOSE", "DGV-EXPORT-F-EXPIRY"], outputFieldIds: ["DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "requester may request only an authorized school object scope and purpose", "platform operations cannot request student-detail export by default"), risk: RISK.HIGH, successState: "REQUESTED", failureOutcomes: { PERMISSION_DENIED: { expectedData: "unauthorized sensitive scope blocks the export request" }, VALIDATION_FAILED: { expectedData: "unset retention blocks the export request" } } }),
   action({ id: "DGV-ACT-APPROVE-EXPORT", label: "Approve a Sensitive Export Request", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-ID", "DGV-EXPORT-F-APPROVER", "DGV-EXPORT-F-DECISION-REASON"], outputFieldIds: ["DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], permissions: dgvAdminPermissions, risk: RISK.HIGH, transition: { from: "REQUESTED", to: "APPROVED" } }),
   action({ id: "DGV-ACT-DENY-EXPORT", label: "Deny a Sensitive Export Request", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-ID", "DGV-EXPORT-F-APPROVER", "DGV-EXPORT-F-DECISION-REASON"], outputFieldIds: ["DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], permissions: dgvAdminPermissions, risk: RISK.HIGH, transition: { from: "REQUESTED", to: "DENIED" } }),
-  action({ id: "DGV-ACT-GENERATE-EXPORT", label: "Generate an Approved Expiring Export", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-ID", "DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-EXPIRY"], outputFieldIds: ["DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "system generates only the approved immutable scope and expiry", "platform operations cannot expand or regenerate student detail outside approval"), risk: RISK.HIGH, successState: "AVAILABLE" }),
-  action({ id: "DGV-ACT-EXPIRE-EXPORT", label: "Expire and Remove an Export File", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-EXPIRY"], outputFieldIds: ["DGV-EXPORT-F-RESULT"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "system expires the file at its explicit deadline", "a user cannot extend an export file without a new request"), transition: { from: "AVAILABLE", to: "EXPIRED" } }),
+  action({ id: "DGV-ACT-GENERATE-EXPORT", label: "Generate an Approved Expiring Export", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-ID", "DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-EXPIRY"], outputFieldIds: ["DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "system generates only the approved immutable scope and expiry", "platform operations cannot expand or regenerate student detail outside approval"), ...eventTrigger("EVT-EXPORT-APPROVAL-RECORDED"), risk: RISK.HIGH, successState: "AVAILABLE" }),
+  action({ id: "DGV-ACT-EXPIRE-EXPORT", label: "Expire and Remove an Export File", targetObjectId: "DGV-OBJ-EXPORT", inputFieldIds: ["DGV-EXPORT-F-EXPIRY"], outputFieldIds: ["DGV-EXPORT-F-RESULT"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "system expires the file at its explicit deadline", "a user cannot extend an export file without a new request"), ...eventTrigger("EVT-EXPORT-EXPIRY-REACHED"), transition: { from: "AVAILABLE", to: "EXPIRED" } }),
 ];
 
 const dgvModule = moduleFact({
@@ -780,7 +833,7 @@ const dgvModule = moduleFact({
     page("DGV-PAGE-AI-BOUNDARY", "AI Data Scope and Purpose Boundary", ["DGV-OBJ-AI-RULE"], ["DGV-AI-F-DATA-SCOPE", "DGV-AI-F-PURPOSE", "DGV-AI-F-MODEL-USE", "DGV-AI-F-STATUS"], ["DGV-ACT-CONFIGURE-AI-USE"]),
     page("DGV-PAGE-EXPORT-REQUEST", "Purpose-bound Export Request", ["DGV-OBJ-EXPORT"], ["DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-PURPOSE", "DGV-EXPORT-F-EXPIRY", "DGV-EXPORT-F-RESULT"], ["DGV-ACT-REQUEST-EXPORT"]),
     page("DGV-PAGE-EXPORT-DECISION", "Sensitive Export Approval", ["DGV-OBJ-EXPORT"], ["DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-PURPOSE", "DGV-EXPORT-F-APPROVER", "DGV-EXPORT-F-DECISION-REASON", "DGV-EXPORT-F-AUDIT-REF"], ["DGV-ACT-APPROVE-EXPORT", "DGV-ACT-DENY-EXPORT"]),
-    page("DGV-PAGE-EXPORT-RESULT", "Expiring Export Result", ["DGV-OBJ-EXPORT"], ["DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-EXPIRY", "DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], ["DGV-ACT-GENERATE-EXPORT", "DGV-ACT-EXPIRE-EXPORT"]),
+    page("DGV-PAGE-EXPORT-RESULT", "Expiring Export Result", ["DGV-OBJ-EXPORT"], ["DGV-EXPORT-F-SCOPE", "DGV-EXPORT-F-EXPIRY", "DGV-EXPORT-F-RESULT", "DGV-EXPORT-F-AUDIT-REF"], []),
     page("DGV-PAGE-EXPORT-NOTIFICATION", "Export Result Notification", ["DGV-OBJ-EXPORT"], ["DGV-EXPORT-F-EXPIRY", "DGV-EXPORT-F-RESULT"], [], WEB_APP),
   ],
 });
@@ -793,7 +846,7 @@ const audObjects = [
     field("AUD-EVENT-F-ACTION", "Audited Action", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-EVENT-F-SCOPE", "Audited Object Scope", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-EVENT-F-RESULT", "Audited Result", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-  ]),
+  ], { semanticType: "AUDIT_EVENT_SINK" }),
   object("AUD-OBJ-ACCESS-REQUEST", "Sensitive Access Request", responsibility("ACCESS_REQUESTER_AND_SCOPED_DATA", "CURRENT_ACTOR", "CURRENT_ACTOR", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-004", "S4", ["REQUESTED", "APPROVED", "DENIED", "EXPIRED"], [
     field("AUD-REQUEST-F-ID", "Sensitive Access Request ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-REQUEST-F-REQUESTER", "Access Requester ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -823,13 +876,13 @@ const audObjects = [
 
 const audSchoolPermissions = permissions("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "school administrator acts inside school audit scope", "platform operations has no default student-detail access and requires school authorization, limited scope and time");
 const audActions = [
-  action({ id: "AUD-ACT-APPEND-EVENT", label: "Append an Immutable Audit Event", targetObjectId: "AUD-OBJ-EVENT", inputFieldIds: ["AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION", "AUD-EVENT-F-SCOPE", "AUD-EVENT-F-RESULT"], outputFieldIds: ["AUD-EVENT-F-ID", "AUD-EVENT-F-TIME"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "system append is mandatory for audited actions", "no user may update or delete an accepted immutable audit event"), risk: RISK.HIGH, successState: "ACCEPTED", successData: "immutable audit event is appended before the audited result is final" }),
-  action({ id: "AUD-ACT-QUERY-AUDIT", label: "Query Authorized Audit Events", targetObjectId: "AUD-OBJ-EVENT", inputFieldIds: ["AUD-EVENT-F-SCOPE", "AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION"], outputFieldIds: ["AUD-EVENT-F-ID", "AUD-EVENT-F-TIME", "AUD-EVENT-F-RESULT"], writes: false, permissions: audSchoolPermissions, auditRequired: true }),
+  action({ id: "AUD-ACT-APPEND-EVENT", label: "Append an Immutable Audit Event", targetObjectId: "AUD-OBJ-EVENT", inputFieldIds: ["AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION", "AUD-EVENT-F-SCOPE", "AUD-EVENT-F-RESULT"], outputFieldIds: ["AUD-EVENT-F-ID", "AUD-EVENT-F-TIME"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "system append is mandatory for audited actions", "no user may update or delete an accepted immutable audit event"), ...eventTrigger("EVT-AUDIT-APPEND-REQUESTED"), auditMode: ATOMIC_SELF_RECORD, risk: RISK.HIGH, successState: "ACCEPTED", successData: "immutable audit event is appended before the audited result is final" }),
+  action({ id: "AUD-ACT-QUERY-AUDIT", label: "Query Authorized Audit Events", targetObjectId: "AUD-OBJ-EVENT", inputFieldIds: ["AUD-EVENT-F-SCOPE", "AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION"], outputFieldIds: ["AUD-EVENT-F-ID", "AUD-EVENT-F-TIME", "AUD-EVENT-F-RESULT"], writes: false, permissions: audSchoolPermissions, auditMode: AUDIT_REQUIRED }),
   action({ id: "AUD-ACT-REQUEST-SENSITIVE", label: "Request Time-limited Sensitive Access", targetObjectId: "AUD-OBJ-ACCESS-REQUEST", inputFieldIds: ["AUD-REQUEST-F-SCOPE", "AUD-REQUEST-F-PURPOSE", "AUD-REQUEST-F-EXPIRY"], outputFieldIds: ["AUD-REQUEST-F-RESULT"], clients: WEB_APP, permissions: permissions("ROLE-PLATFORM-OPS", "ROLE-PLATFORM-OPS", "platform operations may request but not self-approve explicitly limited school scope and time", "platform operations has no default student-detail access without a school-approved request"), risk: RISK.HIGH, successState: "REQUESTED", successData: "request remains non-executable until school authorization" }),
   action({ id: "AUD-ACT-APPROVE-SENSITIVE", label: "Approve Limited Sensitive Access", targetObjectId: "AUD-OBJ-ACCESS-REQUEST", inputFieldIds: ["AUD-REQUEST-F-ID", "AUD-REQUEST-F-APPROVER", "AUD-REQUEST-F-SCOPE", "AUD-REQUEST-F-EXPIRY", "AUD-REQUEST-F-DECISION-REASON"], outputFieldIds: ["AUD-REQUEST-F-RESULT"], permissions: audSchoolPermissions, risk: RISK.HIGH, transition: { from: "REQUESTED", to: "APPROVED" } }),
   action({ id: "AUD-ACT-DENY-SENSITIVE", label: "Deny Sensitive Access", targetObjectId: "AUD-OBJ-ACCESS-REQUEST", inputFieldIds: ["AUD-REQUEST-F-ID", "AUD-REQUEST-F-APPROVER", "AUD-REQUEST-F-DECISION-REASON"], outputFieldIds: ["AUD-REQUEST-F-RESULT"], permissions: audSchoolPermissions, risk: RISK.HIGH, transition: { from: "REQUESTED", to: "DENIED" } }),
-  action({ id: "AUD-ACT-OPEN-SESSION", label: "Open an Approved Sensitive Access Session", targetObjectId: "AUD-OBJ-ACCESS-SESSION", inputFieldIds: ["AUD-SESSION-F-REQUEST-ID", "AUD-SESSION-F-SCOPE", "AUD-SESSION-F-EXPIRY"], outputFieldIds: ["AUD-SESSION-F-ID", "AUD-SESSION-F-START", "AUD-SESSION-F-STATUS"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "system opens only the school-approved scope and time and requires immutable audit", "platform operations cannot widen the approved student-detail scope"), risk: RISK.HIGH, successState: "ACTIVE" }),
-  action({ id: "AUD-ACT-EXPIRE-SESSION", label: "Expire a Sensitive Access Session", targetObjectId: "AUD-OBJ-ACCESS-SESSION", inputFieldIds: ["AUD-SESSION-F-EXPIRY"], outputFieldIds: ["AUD-SESSION-F-STATUS"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "system expires the session at the approved deadline", "platform operations cannot extend a sensitive session directly"), transition: { from: "ACTIVE", to: "EXPIRED" }, risk: RISK.HIGH }),
+  action({ id: "AUD-ACT-OPEN-SESSION", label: "Open an Approved Sensitive Access Session", targetObjectId: "AUD-OBJ-ACCESS-SESSION", inputFieldIds: ["AUD-SESSION-F-REQUEST-ID", "AUD-SESSION-F-SCOPE", "AUD-SESSION-F-EXPIRY"], outputFieldIds: ["AUD-SESSION-F-ID", "AUD-SESSION-F-START", "AUD-SESSION-F-STATUS"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "system opens only the school-approved scope and time and requires immutable audit", "platform operations cannot widen the approved student-detail scope"), ...eventTrigger("EVT-SENSITIVE-ACCESS-APPROVED"), risk: RISK.HIGH, successState: "ACTIVE" }),
+  action({ id: "AUD-ACT-EXPIRE-SESSION", label: "Expire a Sensitive Access Session", targetObjectId: "AUD-OBJ-ACCESS-SESSION", inputFieldIds: ["AUD-SESSION-F-EXPIRY"], outputFieldIds: ["AUD-SESSION-F-STATUS"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "system expires the session at the approved deadline", "platform operations cannot extend a sensitive session directly"), ...eventTrigger("EVT-SENSITIVE-SESSION-EXPIRY-REACHED"), transition: { from: "ACTIVE", to: "EXPIRED" }, risk: RISK.HIGH }),
   action({ id: "AUD-ACT-CREATE-REVIEW", label: "Create an Audit Review Case", targetObjectId: "AUD-OBJ-REVIEW", inputFieldIds: ["AUD-REVIEW-F-EVENT-IDS", "AUD-REVIEW-F-REASON"], outputFieldIds: ["AUD-REVIEW-F-STATUS"], permissions: audSchoolPermissions, risk: RISK.HIGH, successState: "OPEN" }),
   action({ id: "AUD-ACT-RESOLVE-REVIEW", label: "Resolve an Audit Review Case", targetObjectId: "AUD-OBJ-REVIEW", inputFieldIds: ["AUD-REVIEW-F-ID", "AUD-REVIEW-F-RESOLUTION"], outputFieldIds: ["AUD-REVIEW-F-STATUS"], permissions: audSchoolPermissions, risk: RISK.HIGH, transition: { from: "INVESTIGATING", to: "RESOLVED" } }),
   action({ id: "AUD-ACT-EXPORT-SUMMARY", label: "Export an Authorized Audit Summary", targetObjectId: "AUD-OBJ-REVIEW", inputFieldIds: ["AUD-REVIEW-F-ID", "AUD-REVIEW-F-EVENT-IDS"], outputFieldIds: ["AUD-REVIEW-F-RESOLUTION"], permissions: audSchoolPermissions, risk: RISK.HIGH, successState: "RESOLVED", successData: "summary excludes unauthorized student detail and retains immutable source event references" }),
@@ -853,10 +906,10 @@ const audModule = moduleFact({
   ],
   actions: audActions,
   pages: [
-    page("AUD-PAGE-SEARCH", "Authorized Audit Event Search", ["AUD-OBJ-EVENT"], ["AUD-EVENT-F-TIME", "AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION", "AUD-EVENT-F-SCOPE", "AUD-EVENT-F-RESULT"], ["AUD-ACT-QUERY-AUDIT", "AUD-ACT-APPEND-EVENT"]),
+    page("AUD-PAGE-SEARCH", "Authorized Audit Event Search", ["AUD-OBJ-EVENT"], ["AUD-EVENT-F-TIME", "AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION", "AUD-EVENT-F-SCOPE", "AUD-EVENT-F-RESULT"], ["AUD-ACT-QUERY-AUDIT"]),
     page("AUD-PAGE-ACCESS-REQUEST", "Time-limited Sensitive Access Request", ["AUD-OBJ-ACCESS-REQUEST"], ["AUD-REQUEST-F-REQUESTER", "AUD-REQUEST-F-SCOPE", "AUD-REQUEST-F-PURPOSE", "AUD-REQUEST-F-EXPIRY", "AUD-REQUEST-F-RESULT"], ["AUD-ACT-REQUEST-SENSITIVE"], WEB_APP),
     page("AUD-PAGE-ACCESS-APPROVAL", "School Sensitive Access Approval", ["AUD-OBJ-ACCESS-REQUEST"], ["AUD-REQUEST-F-SCOPE", "AUD-REQUEST-F-PURPOSE", "AUD-REQUEST-F-EXPIRY", "AUD-REQUEST-F-APPROVER", "AUD-REQUEST-F-DECISION-REASON", "AUD-REQUEST-F-RESULT"], ["AUD-ACT-APPROVE-SENSITIVE", "AUD-ACT-DENY-SENSITIVE"]),
-    page("AUD-PAGE-ACTIVE-SESSION", "Active Sensitive Access Session", ["AUD-OBJ-ACCESS-SESSION"], ["AUD-SESSION-F-SCOPE", "AUD-SESSION-F-START", "AUD-SESSION-F-EXPIRY", "AUD-SESSION-F-STATUS"], ["AUD-ACT-OPEN-SESSION", "AUD-ACT-EXPIRE-SESSION"]),
+    page("AUD-PAGE-ACTIVE-SESSION", "Active Sensitive Access Session", ["AUD-OBJ-ACCESS-SESSION"], ["AUD-SESSION-F-SCOPE", "AUD-SESSION-F-START", "AUD-SESSION-F-EXPIRY", "AUD-SESSION-F-STATUS"], []),
     page("AUD-PAGE-REVIEW", "Audit Review Case Investigation", ["AUD-OBJ-REVIEW"], ["AUD-REVIEW-F-EVENT-IDS", "AUD-REVIEW-F-REASON", "AUD-REVIEW-F-RESOLUTION", "AUD-REVIEW-F-STATUS"], ["AUD-ACT-CREATE-REVIEW", "AUD-ACT-RESOLVE-REVIEW", "AUD-ACT-EXPORT-SUMMARY"]),
   ],
 });
@@ -916,9 +969,9 @@ const currActions = [
   action({ id: "CURR-ACT-VALIDATE-MAPPING", label: "Validate Knowledge Mapping Publication Readiness", targetObjectId: "CURR-OBJ-MAPPING", inputFieldIds: ["CURR-MAPPING-F-ID", "CURR-MAPPING-F-VERSION"], outputFieldIds: ["CURR-MAPPING-F-STATUS"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "DRAFT", to: "VALIDATED" }, successData: "mapping validation confirms chapter, knowledge point, relation, and source version resolve before publication" }),
   action({ id: "CURR-ACT-VALIDATE-VERSION", label: "Validate Curriculum Publication Readiness", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-ID"], outputFieldIds: ["CURR-CURRICULUM-F-VALIDATION", "CURR-CURRICULUM-F-STATUS"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "DRAFT", to: "VALIDATED" }, successData: "validation confirms textbook, chapter, knowledge point, and mapping references resolve in one version" }),
   action({ id: "CURR-ACT-PUBLISH-MAPPING", label: "Publish a Validated Knowledge Mapping", targetObjectId: "CURR-OBJ-MAPPING", inputFieldIds: ["CURR-MAPPING-F-ID", "CURR-MAPPING-F-VERSION"], outputFieldIds: ["CURR-MAPPING-F-STATUS"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "VALIDATED", to: "PUBLISHED" }, successData: "the usable mapping version is published before curriculum activation and historical references remain immutable" }),
-  action({ id: "CURR-ACT-PUBLISH-VERSION", label: "Publish a Validated Curriculum Version", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-ID", "CURR-CURRICULUM-F-VALIDATION"], outputFieldIds: ["CURR-CURRICULUM-F-STATUS", "CURR-CURRICULUM-F-PUBLISHED-AT"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "VALIDATED", to: "PUBLISHED" }, successData: "published version becomes selectable; historical assignment and evidence references are immutable and never rewrite to the new version", failureData: "publication failure leaves historical references unchanged and the prior published version active" }),
+  action({ id: "CURR-ACT-PUBLISH-VERSION", label: "Publish a Validated Curriculum Version", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-ID", "CURR-CURRICULUM-F-VALIDATION"], outputFieldIds: ["CURR-CURRICULUM-F-STATUS", "CURR-CURRICULUM-F-PUBLISHED-AT"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "VALIDATED", to: "PUBLISHED" }, successData: "published version becomes selectable; historical assignment and evidence references are immutable and never rewrite to the new version", failureOutcomes: { VERSION_CONFLICT: { expectedData: "publication failure leaves historical references unchanged and the prior published version active" } } }),
   action({ id: "CURR-ACT-DEPRECATE-VERSION", label: "Deprecate a Published Curriculum Version", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-ID"], outputFieldIds: ["CURR-CURRICULUM-F-STATUS"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "PUBLISHED", to: "DEPRECATED" }, successData: "deprecated version is blocked for new work while historical assignment and evidence references remain immutable" }),
-  action({ id: "CURR-ACT-VIEW-KNOWLEDGE-PATH", label: "View Student or Teacher Knowledge Path", targetObjectId: "CURR-OBJ-MAPPING", inputFieldIds: ["CURR-MAPPING-F-VERSION"], outputFieldIds: ["CURR-MAPPING-F-CHAPTER-ID", "CURR-MAPPING-F-KP-ID", "CURR-MAPPING-F-RELATION"], writes: false, clients: WEB_APP, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "student and teacher views resolve the historically referenced published mapping version", "platform operations cannot view student learning path detail without school authorization"), auditRequired: true }),
+  action({ id: "CURR-ACT-VIEW-KNOWLEDGE-PATH", label: "View Student or Teacher Knowledge Path", targetObjectId: "CURR-OBJ-MAPPING", inputFieldIds: ["CURR-MAPPING-F-VERSION"], outputFieldIds: ["CURR-MAPPING-F-CHAPTER-ID", "CURR-MAPPING-F-KP-ID", "CURR-MAPPING-F-RELATION"], writes: false, clients: WEB_APP, permissions: permissions("CURRENT_ACTOR", "ROLE-PLATFORM-OPS", "student and teacher views resolve the historically referenced published mapping version", "platform operations cannot view student learning path detail without school authorization"), auditMode: AUDIT_REQUIRED }),
 ];
 
 const currModule = moduleFact({
@@ -978,8 +1031,8 @@ const teaActions = [
     { effect: "ALLOW", dutyRef: "DUTY-SUBJECT-TEACHER", condition: "subject teacher reads referenced tasks only in assigned subject and class scope" },
     { effect: "ALLOW", dutyRef: "DUTY-SUBJECT-LEAD", condition: "subject lead reads referenced subject-wide queue facts without changing teacher-owned facts" },
     { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations cannot read teacher or student work detail without school authorization" },
-  ], auditRequired: false, successData: "todo view returns references to source tasks and never copies score, evidence, or plan facts" }),
-  action({ id: "TEA-ACT-QUERY-HOMEROOM-SUMMARY", label: "Query Homeroom Whole-subject Summary", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID"], outputFieldIds: ["TEA-COORD-F-SUBJECT-REFS"], writes: false, clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "ROLE-PLATFORM-OPS", "homeroom duty may read all-subject references for the assigned class", "platform operations has no default student-detail or all-subject class access"), auditRequired: true, successData: "homeroom view resolves all-subject references without copying professional facts" }),
+  ], auditMode: AUDIT_NOT_REQUIRED, successData: "todo view returns references to source tasks and never copies score, evidence, or plan facts" }),
+  action({ id: "TEA-ACT-QUERY-HOMEROOM-SUMMARY", label: "Query Homeroom Whole-subject Summary", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID"], outputFieldIds: ["TEA-COORD-F-SUBJECT-REFS"], writes: false, clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "ROLE-PLATFORM-OPS", "homeroom duty may read all-subject references for the assigned class", "platform operations has no default student-detail or all-subject class access"), auditMode: AUDIT_REQUIRED, successData: "homeroom view resolves all-subject references without copying professional facts" }),
   action({ id: "TEA-ACT-CREATE-COORDINATION", label: "Create a Homeroom Coordination Item", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID", "TEA-COORD-F-SUBJECT-REFS", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may create coordination notes for the assigned class", "homeroom duty cannot write another subject's professional facts, scores, evidence, or plans"), successState: "OPEN", successData: "coordination item stores references and coordination notes only" }),
   action({ id: "TEA-ACT-UPDATE-COORDINATION", label: "Update a Homeroom Coordination Note", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may update coordination-owned notes for the assigned class", "homeroom duty cannot write or overwrite other subject professional facts" ), successState: "IN_PROGRESS" }),
   action({ id: "TEA-ACT-CLOSE-COORDINATION", label: "Close a Resolved Homeroom Coordination Item", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-SUBJECT-TEACHER", "homeroom duty closes only coordination-owned items for the assigned class", "subject teacher cannot close a homeroom coordination item but retains ownership of subject facts"), transition: { from: "IN_PROGRESS", to: "CLOSED" } }),
