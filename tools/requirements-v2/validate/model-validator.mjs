@@ -809,8 +809,8 @@ export function validateModelReferences(model) {
     }
     if (action?.operationKind === "CREATE" && targetObjectEntry) {
       const targetIdentityFieldIds = list(targetObjectEntry.value?.fields)
-        .filter(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")
-        .map(({ id }) => id);
+        .filter((field) => field?.idempotencyRole === "OBJECT_ID")
+        .map((field) => field?.id);
       if (
         targetIdentityFieldIds.length !== 1
         || targetIdentityFieldIds.some((fieldId) => list(action.inputFieldIds).includes(fieldId))

@@ -1318,6 +1318,26 @@ test("requires CREATE actions to receive target identity only as a system output
   );
 });
 
+test("aggregates malformed CREATE target fields without throwing", () => {
+  const mutations = [
+    [null, "INVALID_ENTITY_SHAPE"],
+    [undefined, "MALFORMED_MODEL"],
+  ];
+  for (const [invalidField, structureCode] of mutations) {
+    const model = structuredClone(requirementModel);
+    const grade = moduleById(model, "ORG-001").objects
+      .find(({ id }) => id === "ORG-OBJ-GRADE");
+    grade.fields[0] = invalidField;
+
+    let errors;
+    assert.doesNotThrow(() => {
+      errors = validateRequirementModel(model);
+    });
+    assertHasCode(errors, structureCode);
+    assertHasCode(errors, "INVALID_ACTION_OPERATION");
+  }
+});
+
 test("rejects ORG CREATE identity input output and marker-output bypasses", () => {
   const mutations = [
     (_gradeId, createGrade) => { createGrade.inputFieldIds.push("ORG-GRADE-F-ID"); },
