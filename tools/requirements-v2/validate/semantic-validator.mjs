@@ -378,6 +378,181 @@ function metricErrors(index) {
   return errors;
 }
 
+function gradingCapabilityErrors(index) {
+  const errors = [];
+  for (const moduleEntry of index.modules) {
+    const module = moduleEntry.value;
+    const declaresCapabilityFacts = Object.hasOwn(module ?? {}, "capabilityMatrix")
+      || Object.hasOwn(module ?? {}, "capabilityApplicability");
+    if (!declaresCapabilityFacts) continue;
+
+    const matrix = list(module?.capabilityMatrix);
+    const applicability = module?.capabilityApplicability;
+    const dimensions = applicability?.dimensions;
+    const subjectFamilies = list(dimensions?.subjectFamilies);
+    const questionTypes = list(dimensions?.questionTypes);
+    const submissionMethods = list(dimensions?.submissionMethods);
+    const subjectiveQuestionTypes = list(applicability?.subjectiveQuestionTypes);
+    const unsupportedRule = applicability?.unsupportedRule;
+    const unsupportedDecision = unsupportedRule?.decision;
+    const exceptCombinationIds = list(unsupportedRule?.exceptCombinationIds);
+    const exactRulePriority = applicability?.exactRulePriority;
+    const optionSetBindings = applicability?.optionSetBindings;
+    const optionProperties = [
+      "subjectFamily",
+      "questionType",
+      "submissionMethod",
+      "recognitionLevel",
+      "scoringLevel",
+      "requiredEvidence",
+      "teacherReviewRequired",
+      "batchConfirmEligibility",
+      "unavailableFallback",
+    ];
+    const allowedCodesByProperty = new Map();
+    for (const property of optionProperties) {
+      const optionSetId = optionSetBindings?.[property];
+      const optionSet = index.optionSetById.get(optionSetId)?.value;
+      const codes = new Set(list(optionSet?.values).map(({ code }) => code));
+      if (optionSet?.mode !== "STATIC" || codes.size === 0) {
+        allowedCodesByProperty.set(property, null);
+      } else {
+        allowedCodesByProperty.set(property, codes);
+      }
+    }
+    const codeIsAllowed = (property, value) => {
+      const allowedCodes = allowedCodesByProperty.get(property);
+      if (!allowedCodes) return false;
+      const values = Array.isArray(value) ? value : [value];
+      return values.length > 0 && values.every((entry) => allowedCodes.has(entry));
+    };
+    let valid = Array.isArray(module?.capabilityMatrix)
+      && matrix.length > 0
+      && applicability !== null
+      && typeof applicability === "object"
+      && !Array.isArray(applicability)
+      && dimensions !== null
+      && typeof dimensions === "object"
+      && !Array.isArray(dimensions)
+      && Number.isInteger(exactRulePriority)
+      && Number.isInteger(unsupportedRule?.priority)
+      && unsupportedRule.priority < exactRulePriority
+      && unsupportedRule?.match?.subjectFamily === "*"
+      && unsupportedRule?.match?.questionType === "*"
+      && unsupportedRule?.match?.submissionMethod === "*"
+      && optionProperties.every((property) => (
+        isValidId(optionSetBindings?.[property])
+        && allowedCodesByProperty.get(property) !== null
+      ));
+
+    const dimensionLists = [subjectFamilies, questionTypes, submissionMethods];
+    for (const values of dimensionLists) {
+      if (
+        values.length === 0
+        || values.some((value) => !isValidId(value))
+        || new Set(values).size !== values.length
+      ) {
+        valid = false;
+      }
+    }
+    if (
+      subjectiveQuestionTypes.length === 0
+      || subjectiveQuestionTypes.some((value) => !questionTypes.includes(value))
+      || new Set(subjectiveQuestionTypes).size !== subjectiveQuestionTypes.length
+    ) {
+      valid = false;
+    }
+
+    const combinationId = (subjectFamily, questionType, submissionMethod) => (
+      `${subjectFamily}|${questionType}|${submissionMethod}`
+    );
+    const exactMatchCounts = new Map();
+    const supportedCombinationIds = [];
+    for (const rule of matrix) {
+      const subjectFamily = rule?.subjectFamily;
+      const questionType = rule?.questionType;
+      const submissionMethod = rule?.submissionMethod;
+      const ruleIsComplete = isValidId(rule?.id)
+        && subjectFamilies.includes(subjectFamily)
+        && questionTypes.includes(questionType)
+        && submissionMethods.includes(submissionMethod)
+        && isValidId(rule?.recognitionLevel)
+        && isValidId(rule?.scoringLevel)
+        && list(rule?.requiredEvidence).length > 0
+        && list(rule?.requiredEvidence).every(isValidId)
+        && isValidId(rule?.teacherReviewRequired)
+        && isValidId(rule?.batchConfirmEligibility)
+        && isValidId(rule?.unavailableFallback)
+        && typeof rule?.isSubjective === "boolean"
+        && optionProperties.every((property) => codeIsAllowed(property, rule?.[property]))
+        && (
+          !subjectiveQuestionTypes.includes(questionType)
+          || rule.teacherReviewRequired === "YES"
+        );
+      if (!ruleIsComplete) valid = false;
+      if (
+        isValidId(subjectFamily)
+        && isValidId(questionType)
+        && isValidId(submissionMethod)
+      ) {
+        const id = combinationId(subjectFamily, questionType, submissionMethod);
+        supportedCombinationIds.push(id);
+        exactMatchCounts.set(id, (exactMatchCounts.get(id) ?? 0) + 1);
+      }
+    }
+
+    const supportedCombinationIdSet = new Set(supportedCombinationIds);
+    const exceptCombinationIdSet = new Set(exceptCombinationIds);
+    if (
+      supportedCombinationIdSet.size !== supportedCombinationIds.length
+      || exceptCombinationIdSet.size !== exceptCombinationIds.length
+      || !setEquals(supportedCombinationIdSet, exceptCombinationIdSet)
+    ) {
+      valid = false;
+    }
+    if (
+      unsupportedDecision === null
+      || typeof unsupportedDecision !== "object"
+      || Array.isArray(unsupportedDecision)
+      || !isValidId(unsupportedDecision?.recognitionLevel)
+      || !isValidId(unsupportedDecision?.scoringLevel)
+      || list(unsupportedDecision?.requiredEvidence).length === 0
+      || !list(unsupportedDecision?.requiredEvidence).every(isValidId)
+      || unsupportedDecision?.teacherReviewRequired !== "YES"
+      || !isValidId(unsupportedDecision?.batchConfirmEligibility)
+      || !isValidId(unsupportedDecision?.unavailableFallback)
+      || ![
+        "recognitionLevel",
+        "scoringLevel",
+        "requiredEvidence",
+        "teacherReviewRequired",
+        "batchConfirmEligibility",
+        "unavailableFallback",
+      ].every((property) => codeIsAllowed(property, unsupportedDecision?.[property]))
+    ) {
+      valid = false;
+    }
+
+    for (const subjectFamily of subjectFamilies) {
+      for (const questionType of questionTypes) {
+        for (const submissionMethod of submissionMethods) {
+          const id = combinationId(subjectFamily, questionType, submissionMethod);
+          const exactMatchCount = exactMatchCounts.get(id) ?? 0;
+          const fallbackMatchCount = exceptCombinationIdSet.has(id) ? 0 : 1;
+          if (exactMatchCount + fallbackMatchCount !== 1) valid = false;
+        }
+      }
+    }
+
+    if (!valid) {
+      errors.push(
+        `INVALID_GRADING_CAPABILITY_MATRIX ${formatValidationValue(module?.id)} requires one explicit non-overlapping decision for every declared combination and mandatory review for subjective questions`,
+      );
+    }
+  }
+  return errors;
+}
+
 export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
@@ -387,5 +562,6 @@ export function validateModelSemantics(model) {
     ...aiTaskErrors(index),
     ...phaseAndTemplateErrors(index),
     ...metricErrors(index),
+    ...gradingCapabilityErrors(index),
   ];
 }

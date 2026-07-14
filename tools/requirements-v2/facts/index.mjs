@@ -11,11 +11,21 @@ import {
   lifecyclePolicies,
   metrics,
   nfrs,
-  optionSets,
+  optionSets as catalogOptionSets,
   roles,
   sensitivities,
 } from "./catalogs.mjs";
 import { foundationFlows, foundationModules } from "./foundation.mjs";
+import {
+  teachingLoopFlows,
+  teachingLoopModules,
+  teachingLoopOptionSets,
+} from "./teaching-loop.mjs";
+
+export const optionSets = deepFreeze([
+  ...catalogOptionSets,
+  ...teachingLoopOptionSets,
+]);
 
 export {
   baselineDecisions,
@@ -25,13 +35,12 @@ export {
   lifecyclePolicies,
   metrics,
   nfrs,
-  optionSets,
   roles,
   sensitivities,
 };
 
-export const modules = foundationModules;
-export const flows = foundationFlows;
+export const modules = deepFreeze([...foundationModules, ...teachingLoopModules]);
+export const flows = deepFreeze([...foundationFlows, ...teachingLoopFlows]);
 export const aiTasks = deepFreeze([]);
 
 const collectionFacts = {

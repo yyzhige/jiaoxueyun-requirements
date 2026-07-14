@@ -1131,13 +1131,409 @@ test("assembles the shared facts into the phase-one executable model", () => {
   assert.deepEqual(validateRequirementModel(requirementModel), []);
 });
 
-test("defines exactly the seven phase-one foundation modules and three initial Flows", () => {
+test("defines the seven foundation modules plus the four teaching-loop modules and nine Flows", () => {
   assert.deepEqual(
     modules.map(({ id }) => id),
-    ["ACC-001", "ORG-001", "IAM-001", "DGV-001", "AUD-001", "CURR-001", "TEA-001"],
+    [
+      "ACC-001",
+      "ORG-001",
+      "IAM-001",
+      "DGV-001",
+      "AUD-001",
+      "CURR-001",
+      "TEA-001",
+      "HW-001",
+      "SUB-001",
+      "GRD-001",
+      "PUB-001",
+    ],
   );
-  assert.deepEqual(flows.map(({ id }) => id), ["DF-001", "DF-002", "DF-003"]);
+  assert.deepEqual(
+    flows.map(({ id }) => id),
+    ["DF-001", "DF-002", "DF-003", "DF-004", "DF-005", "DF-006", "DF-007", "DF-008", "DF-009"],
+  );
   assert.equal(modules.every(({ phase, priority }) => phase === 1 && priority === "P0"), true);
+});
+
+test("models assignment fields and task-specific lifecycle actions", () => {
+  const assignment = moduleById(requirementModel, "HW-001");
+  const fieldIds = new Set(assignment.objects.flatMap((object) => (
+    object.fields.map(({ id }) => id)
+  )));
+  const requiredFieldIds = [
+    "HW-ASSIGNMENT-F-TITLE",
+    "HW-ASSIGNMENT-F-INSTRUCTIONS",
+    "HW-ASSIGNMENT-F-SUBJECT-ID",
+    "HW-ASSIGNMENT-F-COURSE-ID",
+    "HW-ASSIGNMENT-F-CLASS-SCOPE-IDS",
+    "HW-ASSIGNMENT-F-OPEN-AT",
+    "HW-ASSIGNMENT-F-DUE-AT",
+    "HW-ASSIGNMENT-F-LATE-POLICY",
+    "HW-ASSIGNMENT-F-RESUBMISSION-POLICY",
+    "HW-ASSIGNMENT-F-ASSIGNMENT-TYPE",
+    "HW-ASSIGNMENT-F-QUESTION-ORDER",
+    "HW-ITEM-F-PROMPT",
+    "HW-ITEM-F-ANSWER-KEY",
+    "HW-ITEM-F-POINTS",
+    "HW-ITEM-F-RUBRIC-VERSION",
+    "HW-ITEM-F-KNOWLEDGE-POINT-IDS",
+    "HW-ASSIGNMENT-F-FEEDBACK-POLICY",
+    "HW-ASSIGNMENT-F-NOTIFICATION-POLICY",
+    "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    "HW-ASSIGNMENT-F-REVISION-REASON",
+  ];
+  assert.equal(requiredFieldIds.every((fieldId) => fieldIds.has(fieldId)), true);
+  assert.deepEqual(assignment.actions.map(({ id }) => id), [
+    "HW-ACT-CREATE-DRAFT",
+    "HW-ACT-EDIT-ITEM",
+    "HW-ACT-VALIDATE",
+    "HW-ACT-PREVIEW",
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-CLOSE",
+    "HW-ACT-REVISE",
+    "HW-ACT-OPEN-PUBLISHED",
+  ]);
+  assert.ok(assignment.relationships.some(({ fromObjectId, toObjectId, type }) => (
+    fromObjectId === "HW-OBJ-ASSIGNMENT"
+    && toObjectId === "HW-OBJ-ITEM"
+    && type === "CONTAINS"
+  )));
+});
+
+test("models submission payloads uploads receipts and App-first weak-network semantics", () => {
+  const submission = moduleById(requirementModel, "SUB-001");
+  const fields = submission.objects.flatMap((object) => object.fields);
+  const fieldIds = new Set(fields.map(({ id }) => id));
+  assert.equal([
+    "SUB-DRAFT-F-ANSWER-PAYLOAD",
+    "SUB-DRAFT-F-MEDIA-METADATA",
+    "SUB-DRAFT-F-PAGE-ITEM-MAPPING",
+    "SUB-DRAFT-F-IMAGE-QUALITY",
+    "SUB-DRAFT-F-UPLOAD-SESSION-ID",
+    "SUB-DRAFT-F-SUCCESSFUL-CHUNKS",
+    "SUB-DRAFT-F-DRAFT-VERSION",
+    "SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT",
+    "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+    "SUB-ATTEMPT-F-LATE-FLAG",
+    "SUB-ATTEMPT-F-RESUBMISSION-OF",
+    "SUB-ATTEMPT-F-RECEIPT-ID",
+    "SUB-ATTEMPT-F-RECEIPT-ISSUED-AT",
+  ].every((fieldId) => fieldIds.has(fieldId)), true);
+  assert.deepEqual(submission.actions.map(({ id }) => id), [
+    "SUB-ACT-SAVE-DRAFT",
+    "SUB-ACT-UPLOAD-CHUNK",
+    "SUB-ACT-RETRY-UPLOAD",
+    "SUB-ACT-SUBMIT",
+    "SUB-ACT-RESUBMIT",
+    "SUB-ACT-VIEW-RECEIPT",
+  ]);
+  assert.equal(submission.clientStrategy.primaryClient, CLIENT.APP);
+  assert.equal(submission.clientStrategy.webParityRequired, false);
+  const uploadActions = submission.actions.filter(({ id }) => (
+    id === "SUB-ACT-UPLOAD-CHUNK" || id === "SUB-ACT-RETRY-UPLOAD"
+  ));
+  assert.equal(uploadActions.every(({ clients }) => (
+    clients.length === 1 && clients[0] === CLIENT.APP
+  )), true);
+  const submitAction = submission.actions.find(({ id }) => id === "SUB-ACT-SUBMIT");
+  assert.ok(submitAction.failureResults.includes("OFFLINE_FINAL_SUBMISSION_BLOCKED"));
+  const offlineScenario = submission.scenarios.find(({ actionId, resultCode }) => (
+    actionId === submitAction.id && resultCode === "OFFLINE_FINAL_SUBMISSION_BLOCKED"
+  ));
+  assert.match(offlineScenario.then.expectedData, /draft.*successful chunks.*server receipt/i);
+  assert.deepEqual(offlineScenario.then.expectedState, { mode: "UNCHANGED" });
+  assert.match(
+    submission.scenarios.find(({ actionId, kind }) => (
+      actionId === submitAction.id && kind === "SUCCESS"
+    )).then.expectedData,
+    /server receipt/i,
+  );
+});
+
+test("publishes an authoritative all-subject grading capability matrix", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const matrixObject = grading.objects.find(({ id }) => id === "GRD-OBJ-CAPABILITY-RULE");
+  assert.ok(matrixObject);
+  assert.ok(Array.isArray(grading.capabilityMatrix));
+  assert.ok(grading.capabilityMatrix.length > 0);
+
+  const optionCodes = new Map(optionSets.map((optionSet) => [
+    optionSet.id,
+    new Set(optionSet.values.map(({ code }) => code)),
+  ]));
+  const matrixFieldById = new Map(matrixObject.fields.map((field) => [field.id, field]));
+  const bindings = {
+    subjectFamily: "GRD-CAP-F-SUBJECT-FAMILY",
+    questionType: "GRD-CAP-F-QUESTION-TYPE",
+    submissionMethod: "GRD-CAP-F-SUBMISSION-METHOD",
+    recognitionLevel: "GRD-CAP-F-RECOGNITION-LEVEL",
+    scoringLevel: "GRD-CAP-F-SCORING-LEVEL",
+    requiredEvidence: "GRD-CAP-F-REQUIRED-EVIDENCE",
+    teacherReviewRequired: "GRD-CAP-F-TEACHER-REVIEW",
+    batchConfirmEligibility: "GRD-CAP-F-BATCH-CONFIRM",
+    unavailableFallback: "GRD-CAP-F-UNAVAILABLE-FALLBACK",
+  };
+  for (const [property, fieldId] of Object.entries(bindings)) {
+    const field = matrixFieldById.get(fieldId);
+    assert.equal(field.valueSource.kind, "OPTION_SET", fieldId);
+    const allowedCodes = optionCodes.get(field.valueSource.optionSetId);
+    assert.ok(allowedCodes, fieldId);
+    for (const row of grading.capabilityMatrix) {
+      const values = Array.isArray(row[property]) ? row[property] : [row[property]];
+      assert.equal(values.every((value) => allowedCodes.has(value)), true, `${row.id}:${property}`);
+    }
+  }
+  assert.deepEqual(
+    [...new Set(grading.capabilityMatrix.map(({ subjectFamily }) => subjectFamily))].toSorted(),
+    [
+      "ARTS",
+      "BIOLOGY",
+      "CHEMISTRY",
+      "CHINESE",
+      "ENGLISH",
+      "GEOGRAPHY",
+      "HISTORY",
+      "INFORMATION-TECHNOLOGY",
+      "MATHEMATICS",
+      "MORALITY-AND-LAW",
+      "PHYSICAL-EDUCATION",
+      "PHYSICS",
+    ],
+  );
+  const subjectiveRows = grading.capabilityMatrix.filter(({ isSubjective }) => isSubjective);
+  assert.ok(subjectiveRows.length > 0);
+  assert.equal(subjectiveRows.every((row) => (
+    row.teacherReviewRequired === "YES"
+    && row.batchConfirmEligibility === "INELIGIBLE"
+    && row.scoringLevel !== "AUTO-SCORE"
+  )), true);
+  assert.equal(grading.capabilityMatrix.every(({ unavailableFallback }) => (
+    unavailableFallback === "MANUAL-GRADING"
+    || unavailableFallback === "MANUAL-TRANSCRIPTION-THEN-GRADING"
+  )), true);
+});
+
+test("covers every declared grading combination with exactly one explicit decision", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const applicability = grading.capabilityApplicability;
+  assert.ok(applicability, "GRD-001 must declare the complete capability applicability space");
+  const exactRules = grading.capabilityMatrix;
+  const unsupportedRule = applicability.unsupportedRule;
+  const combinationId = (subjectFamily, questionType, submissionMethod) => (
+    `${subjectFamily}|${questionType}|${submissionMethod}`
+  );
+  const supportedIds = exactRules.map((rule) => combinationId(
+    rule.subjectFamily,
+    rule.questionType,
+    rule.submissionMethod,
+  ));
+
+  assert.equal(new Set(supportedIds).size, supportedIds.length);
+  assert.deepEqual(applicability.optionSetBindings, {
+    subjectFamily: "OPT-TL-003",
+    questionType: "OPT-ENUM-003",
+    submissionMethod: "OPT-ENUM-031",
+    recognitionLevel: "OPT-TL-004",
+    scoringLevel: "OPT-TL-005",
+    requiredEvidence: "OPT-TL-006",
+    teacherReviewRequired: "OPT-ENUM-001",
+    batchConfirmEligibility: "OPT-TL-007",
+    unavailableFallback: "OPT-TL-008",
+  });
+  assert.equal(unsupportedRule.priority < applicability.exactRulePriority, true);
+  assert.deepEqual(unsupportedRule.exceptCombinationIds.toSorted(), supportedIds.toSorted());
+  assert.deepEqual(unsupportedRule.decision, {
+    recognitionLevel: "NONE",
+    scoringLevel: "MANUAL-ONLY",
+    requiredEvidence: ["TEACHER-JUDGMENT"],
+    teacherReviewRequired: "YES",
+    batchConfirmEligibility: "INELIGIBLE",
+    unavailableFallback: "MANUAL-GRADING",
+  });
+
+  const dimensions = applicability.dimensions;
+  const subjectiveQuestionTypes = new Set(applicability.subjectiveQuestionTypes);
+  let coveredCombinationCount = 0;
+  for (const subjectFamily of dimensions.subjectFamilies) {
+    for (const questionType of dimensions.questionTypes) {
+      for (const submissionMethod of dimensions.submissionMethods) {
+        const id = combinationId(subjectFamily, questionType, submissionMethod);
+        const exactMatches = exactRules.filter((rule) => combinationId(
+          rule.subjectFamily,
+          rule.questionType,
+          rule.submissionMethod,
+        ) === id);
+        const fallbackMatches = unsupportedRule.exceptCombinationIds.includes(id)
+          ? []
+          : [unsupportedRule.decision];
+        const decisions = [...exactMatches, ...fallbackMatches];
+        assert.equal(decisions.length, 1, id);
+        if (subjectiveQuestionTypes.has(questionType)) {
+          assert.equal(decisions[0].teacherReviewRequired, "YES", id);
+        }
+        coveredCombinationCount += 1;
+      }
+    }
+  }
+  assert.equal(coveredCombinationCount, 12 * 9 * 5);
+});
+
+test("rejects grading capability overlap, gaps, implicit fallback, and review bypass", () => {
+  const mutations = [
+    (grading) => {
+      grading.capabilityMatrix.push(structuredClone(grading.capabilityMatrix[0]));
+    },
+    (grading) => {
+      grading.capabilityApplicability.unsupportedRule.exceptCombinationIds.pop();
+    },
+    (grading) => {
+      grading.capabilityApplicability.unsupportedRule.exceptCombinationIds.push(
+        "CHINESE|TRUE-FALSE|TEXT",
+      );
+    },
+    (grading) => {
+      delete grading.capabilityApplicability.unsupportedRule.decision.unavailableFallback;
+    },
+    (grading) => {
+      grading.capabilityMatrix.find(({ isSubjective }) => isSubjective)
+        .teacherReviewRequired = "NO";
+    },
+    (grading) => {
+      grading.capabilityMatrix[0].recognitionLevel = "UNKNOWN-LEVEL";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(moduleById(model, "GRD-001"));
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_GRADING_CAPABILITY_MATRIX",
+    );
+  }
+});
+
+test("keeps formal grading under corresponding subject-teacher confirmation", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  assert.deepEqual(grading.actions.map(({ id }) => id), [
+    "GRD-ACT-ENQUEUE",
+    "GRD-ACT-PROCESS",
+    "GRD-ACT-ROUTE",
+    "GRD-ACT-CORRECT-RECOGNITION",
+    "GRD-ACT-ACCEPT-SUGGESTION",
+    "GRD-ACT-OVERRIDE-SCORE",
+    "GRD-ACT-MANUAL-GRADE",
+    "GRD-ACT-BATCH-CONFIRM",
+    "GRD-ACT-RESOLVE-VERSION-CONFLICT",
+  ]);
+  const decisionFieldIds = new Set(
+    grading.objects.find(({ id }) => id === "GRD-OBJ-DECISION")
+      .fields.map(({ id }) => id),
+  );
+  assert.equal([
+    "GRD-DECISION-F-RECOGNIZED-ANSWER",
+    "GRD-DECISION-F-RECOGNIZED-REGION",
+    "GRD-DECISION-F-SUBMISSION-VERSION",
+    "GRD-DECISION-F-ITEM-VERSION",
+    "GRD-DECISION-F-RUBRIC-VERSION",
+    "GRD-DECISION-F-SUGGESTED-SCORE",
+    "GRD-DECISION-F-SCORING-RATIONALE",
+    "GRD-DECISION-F-CONFIDENCE",
+    "GRD-DECISION-F-LIMITATION",
+    "GRD-DECISION-F-OFFICIAL-SCORE",
+    "GRD-DECISION-F-TEACHER-FEEDBACK",
+    "GRD-DECISION-F-CORRECTION-REASON",
+    "GRD-DECISION-F-DECISION-VERSION",
+  ].every((fieldId) => decisionFieldIds.has(fieldId)), true);
+  const formalActionIds = new Set([
+    "GRD-ACT-ACCEPT-SUGGESTION",
+    "GRD-ACT-OVERRIDE-SCORE",
+    "GRD-ACT-MANUAL-GRADE",
+    "GRD-ACT-BATCH-CONFIRM",
+    "GRD-ACT-RESOLVE-VERSION-CONFLICT",
+  ]);
+  for (const action of grading.actions.filter(({ id }) => formalActionIds.has(id))) {
+    assert.ok(action.permissions.some(({ effect, dutyRef, condition }) => (
+      effect === "ALLOW"
+      && dutyRef === "DUTY-SUBJECT-TEACHER"
+      && /corresponding|对应/.test(condition)
+    )), action.id);
+    assert.ok(action.permissions.some(({ effect, condition }) => (
+      effect === "DENY" && /other subject|其他学科|unconfirmed subjective/i.test(condition)
+    )), action.id);
+  }
+});
+
+test("models publication eligibility visibility correction and invalidation", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const fieldIds = new Set(publication.objects.flatMap((object) => (
+    object.fields.map(({ id }) => id)
+  )));
+  assert.equal([
+    "PUB-RESULT-F-ELIGIBILITY",
+    "PUB-RESULT-F-BLOCKING-CODES",
+    "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+    "PUB-RESULT-F-RESULT-VERSION",
+    "PUB-RESULT-F-CORRECTION-VERSION",
+    "PUB-RESULT-F-PUBLIC-CORRECTION-NOTE",
+    "PUB-RESULT-F-NOTIFICATION-STATUS",
+    "PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS",
+  ].every((fieldId) => fieldIds.has(fieldId)), true);
+  assert.deepEqual(publication.actions.map(({ id }) => id), [
+    "PUB-ACT-PREVIEW",
+    "PUB-ACT-PUBLISH-SELECTED",
+    "PUB-ACT-RETRY-FAILED",
+    "PUB-ACT-CORRECT-RESULT",
+    "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
+  ]);
+  const publish = publication.actions.find(({ id }) => id === "PUB-ACT-PUBLISH-SELECTED");
+  assert.ok(publish.failureResults.includes("UNCONFIRMED_SUBJECTIVE_SCORE"));
+  assert.ok(publish.failureResults.includes("VISIBILITY_POLICY_BLOCKED"));
+  const studentRead = publication.permissions.studentRead;
+  assert.match(studentRead, /published.*visible time/i);
+});
+
+test("defines DF-004 through DF-009 as a versioned retryable teaching loop with manual fallback", () => {
+  const teachingFlows = flows.filter(({ id }) => /^DF-00[4-9]$/.test(id));
+  assert.deepEqual(teachingFlows.map(({ id }) => id), [
+    "DF-004",
+    "DF-005",
+    "DF-006",
+    "DF-007",
+    "DF-008",
+    "DF-009",
+  ]);
+  const moduleByActionId = new Map(modules.flatMap((module) => (
+    module.actions.map(({ id }) => [id, module.id])
+  )));
+  const fieldIds = new Set(modules.flatMap((module) => (
+    module.objects.flatMap((object) => object.fields.map(({ id }) => id))
+  )));
+  for (const flow of teachingFlows) {
+    assert.deepEqual(
+      new Set(flow.moduleIds),
+      new Set(flow.steps.map(({ actionId }) => moduleByActionId.get(actionId))),
+      flow.id,
+    );
+    for (const ref of [...flow.sourceDataRefs, ...flow.targetDataRefs]) {
+      assert.equal(fieldIds.has(ref.version), true, `${flow.id}:${ref.version}`);
+    }
+    assert.match(flow.idempotencyKey, /school:term:.*version.*request-id/i, flow.id);
+    assert.match(flow.failureGranularity, /OBJECT/, flow.id);
+    assert.ok(flow.retryPolicy.maxAttempts >= 2, flow.id);
+    assert.ok(flow.retryPolicy.retryableFailureResults.length > 0, flow.id);
+    assert.ok(flow.downstreamInvalidation.targets.length > 0, flow.id);
+  }
+  const routing = teachingFlows.find(({ id }) => id === "DF-006");
+  assert.match(JSON.stringify(routing.steps), /AI.*unavailable.*manual/i);
+  const confirmation = teachingFlows.find(({ id }) => id === "DF-007");
+  assert.ok(confirmation.steps.some(({ actionId }) => actionId === "GRD-ACT-MANUAL-GRADE"));
+  const release = teachingFlows.find(({ id }) => id === "DF-008");
+  assert.ok(release.steps.some(({ actionId }) => actionId === "PUB-ACT-PUBLISH-SELECTED"));
+  const correction = teachingFlows.find(({ id }) => id === "DF-009");
+  assert.ok(correction.steps.some(({ actionId }) => actionId === "PUB-ACT-CORRECT-RESULT"));
 });
 
 test("publishes task-specific actions, pages, and complete scenario coverage", () => {
@@ -1150,7 +1546,7 @@ test("publishes task-specific actions, pages, and complete scenario coverage", (
   ]);
   const genericPageLabels = new Set(["列表/工作台", "详情/处理页", "预览/确认页", "历史/审计页"]);
 
-  assert.equal(modules.length, 7);
+  assert.equal(modules.length, 11);
   for (const module of modules) {
     assert.equal(module.actions.length > 0, true, module.id);
     assert.equal(module.pages.length > 0, true, module.id);
@@ -1199,12 +1595,15 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["AUD-ACT-APPEND-EVENT", "SYSTEM_EVENT"],
     ["AUD-ACT-OPEN-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-SESSION", "SYSTEM_EVENT"],
+    ["GRD-ACT-ENQUEUE", "FLOW_INTERNAL"],
+    ["GRD-ACT-PROCESS", "FLOW_INTERNAL"],
+    ["GRD-ACT-ROUTE", "FLOW_INTERNAL"],
   ]);
   const actions = modules.flatMap((module) => module.actions);
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 11);
+  assert.equal(expectedModes.size, 14);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -1787,7 +2186,7 @@ test("keeps every Flow action participant and data reference valid and symmetric
     module.objects.map((object) => [object.id, { moduleId: module.id, object }])
   )));
 
-  assert.equal(flows.length, 3);
+  assert.equal(flows.length, 9);
   for (const flow of flows) {
     const actionModuleIds = new Set(flow.steps.map(({ actionId }) => moduleByActionId.get(actionId)));
     assert.deepEqual(new Set(flow.moduleIds), actionModuleIds, flow.id);
@@ -1802,13 +2201,13 @@ test("keeps every Flow action participant and data reference valid and symmetric
   }
 });
 
-test("the validation CLI reports seven modules and three Flows", () => {
+test("the validation CLI reports eleven modules and nine Flows", () => {
   const output = execFileSync(
     process.execPath,
     ["tools/validate_v2_requirements.mjs"],
     { cwd: new URL("../..", import.meta.url), encoding: "utf8" },
   );
-  assert.equal(output, "validated modules=7 flows=3\n");
+  assert.equal(output, "validated modules=11 flows=9\n");
 });
 
 test("defines the immutable baseline decisions and teacher duty model", () => {
@@ -2091,13 +2490,21 @@ test("registers every required Option Set concept with stable code-label values"
     "authorizableAction",
     "yesNo",
     "assignmentType",
+    "assignmentNotificationPolicy",
     "submissionMethod",
     "questionType",
+    "questionOrder",
     "latePolicy",
     "resubmissionPolicy",
     "feedbackPolicy",
     "aiConfidence",
     "gradingCorrectionReason",
+    "subjectFamily",
+    "recognitionLevel",
+    "scoringLevel",
+    "gradingEvidenceRequirement",
+    "batchConfirmEligibility",
+    "gradingUnavailableFallback",
     "scoreState",
     "evidenceStage",
     "answerResult",
@@ -2117,6 +2524,8 @@ test("registers every required Option Set concept with stable code-label values"
     "aiTaskStatus",
     "notificationType",
     "notificationReadState",
+    "publicationEligibility",
+    "publicationNotificationStatus",
     "importObject",
     "importAction",
     "importResult",
@@ -2254,6 +2663,7 @@ test("registers every required Option Set concept with stable code-label values"
     timeRange: ["TODAY", "LAST-7-DAYS", "THIS-WEEK", "THIS-MONTH", "THIS-TERM", "CUSTOM"],
     yesNo: ["YES", "NO"],
     assignmentType: ["ONLINE", "PHOTO", "MIXED", "LEARNING_TASK"],
+    assignmentNotificationPolicy: ["NONE", "IN-APP-IMMEDIATE", "IN-APP-SCHEDULED"],
     submissionMethod: ["ONLINE-FORM", "TEXT", "IMAGE-UPLOAD", "FILE-UPLOAD", "MIXED-MEDIA"],
     questionType: [
       "SINGLE-CHOICE",
@@ -2266,6 +2676,7 @@ test("registers every required Option Set concept with stable code-label values"
       "ATTACHMENT-ANSWER",
       "LEARNING-TASK",
     ],
+    questionOrder: ["FIXED", "SHUFFLED"],
     latePolicy: ["NOT-ALLOWED", "ALLOW-WITH-MARK", "ALLOW-UNTIL-DATE"],
     resubmissionPolicy: ["NOT-ALLOWED", "BEFORE-DEADLINE", "AFTER-FEEDBACK", "TEACHER-APPROVAL"],
     feedbackPolicy: ["WITH-SCORE-PUBLISH", "SCHEDULED", "AFTER-CORRECTION", "CLOSED"],
@@ -2278,6 +2689,33 @@ test("registers every required Option Set concept with stable code-label values"
       "TEACHER-JUDGMENT",
       "OTHER",
     ],
+    subjectFamily: [
+      "CHINESE",
+      "MATHEMATICS",
+      "ENGLISH",
+      "MORALITY-AND-LAW",
+      "HISTORY",
+      "GEOGRAPHY",
+      "BIOLOGY",
+      "PHYSICS",
+      "CHEMISTRY",
+      "PHYSICAL-EDUCATION",
+      "ARTS",
+      "INFORMATION-TECHNOLOGY",
+    ],
+    recognitionLevel: ["NONE", "METADATA", "CONTENT", "STRUCTURED"],
+    scoringLevel: ["AUTO-SCORE", "RULE-SUGGESTION", "AI-SUGGESTION", "MANUAL-ONLY"],
+    gradingEvidenceRequirement: [
+      "ANSWER-PAYLOAD",
+      "MEDIA",
+      "REGION-MAP",
+      "IMAGE-QUALITY",
+      "ITEM-VERSION",
+      "RUBRIC-VERSION",
+      "TEACHER-JUDGMENT",
+    ],
+    batchConfirmEligibility: ["ELIGIBLE", "INELIGIBLE"],
+    gradingUnavailableFallback: ["MANUAL-GRADING", "MANUAL-TRANSCRIPTION-THEN-GRADING"],
     scoreState: ["UNPUBLISHED", "PUBLISHED", "MISSING", "EXEMPT", "INVALID", "CORRECTED"],
     evidenceStage: ["FIRST-ANSWER", "CORRECTION", "RETEST", "FORMATIVE"],
     answerResult: ["CORRECT", "PARTIAL", "INCORRECT", "UNDETERMINED"],
@@ -2310,6 +2748,8 @@ test("registers every required Option Set concept with stable code-label values"
     ],
     notificationType: ["ASSIGNMENT", "SUBMISSION", "GRADING", "PUBLISH", "CORRECTION", "IMPROVEMENT", "REPORT", "PERMISSION", "SYSTEM"],
     notificationReadState: ["UNREAD", "READ", "HANDLED", "ARCHIVED"],
+    publicationEligibility: ["ELIGIBLE", "BLOCKED"],
+    publicationNotificationStatus: ["PENDING", "SENT", "FAILED", "NOT-REQUIRED"],
     importObject: ["TERM", "CLASS", "TEACHER", "STUDENT", "TEACHING-ASSIGNMENT", "HOMEROOM-ASSIGNMENT", "COURSE", "KNOWLEDGE-POINT"],
     importAction: ["CREATE", "UPDATE", "UNCHANGED", "REJECT", "DEACTIVATE"],
     importResult: ["PASSED", "WARNING", "ERROR", "DUPLICATE", "CONFLICT"],
