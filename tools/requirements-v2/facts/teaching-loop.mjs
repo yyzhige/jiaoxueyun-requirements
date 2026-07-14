@@ -81,6 +81,13 @@ function provideInputs(actorRef, ...fieldIds) {
   return fieldIds.map((fieldId) => ({ fieldId, provider: actorReference(actorRef) }));
 }
 
+function providePathInputs(stepOrder, actorRef, ...fieldIds) {
+  return provideInputs(actorRef, ...fieldIds).map((providedInput) => ({
+    stepOrder,
+    ...providedInput,
+  }));
+}
+
 function declareSourceCardinalities(flowDefinitions) {
   return flowDefinitions.map((flowDefinition) => ({
     ...flowDefinition,
@@ -321,6 +328,7 @@ const hwAssignmentFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("HW-ASSIGNMENT-F-REVISION-REASON", "Revision Reason", {
     dataType: "TEXT",
@@ -339,6 +347,7 @@ const hwItemFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("HW-ITEM-F-QUESTION-TYPE", "Question Type", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-003" },
@@ -371,9 +380,10 @@ const hwRubricFields = [
     idempotencyRole: "OBJECT_ID",
   }),
   field("HW-RUBRIC-F-RUBRIC-VERSION", "Rubric Version", {
-    dataType: "ID",
+    dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("HW-RUBRIC-F-CRITERIA", "Rubric Criteria", {
     dataType: "JSON",
@@ -741,6 +751,7 @@ const submissionDraftFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT", "Weak Network Recovery Checkpoint", {
     dataType: "JSON",
@@ -771,6 +782,7 @@ const submissionAttemptFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("SUB-ATTEMPT-F-LATE-FLAG", "Late Submission Flag", {
     dataType: "BOOLEAN",
@@ -1021,6 +1033,7 @@ const capabilityMatrixFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("GRD-CAP-F-SUBJECT-FAMILY", "Subject Family", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-003" },
@@ -1082,6 +1095,7 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "SUB-OBJ-ATTEMPT" },
     mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_REF",
     referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
@@ -1174,6 +1188,7 @@ const gradingDecisionFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("GRD-DECISION-F-PRIOR-DECISION-VERSION", "Prior Confirmed Decision Version", {
     dataType: "INTEGER",
@@ -1820,6 +1835,7 @@ const publicationBatchFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT", "Immutable Selected Student Scope", {
     dataType: "STRING_ARRAY",
@@ -1988,6 +2004,7 @@ const publishedResultFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
   field("PUB-RESULT-F-CORRECTION-VERSION", "Correction Version", {
     dataType: "INTEGER",
@@ -2044,7 +2061,8 @@ const dependencySnapshotFields = [
   field("PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION", "Dependency Snapshot Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
-    mutability: "SYSTEM_MANAGED",
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_VERSION",
   }),
 ];
 
@@ -2406,7 +2424,7 @@ const publicationModule = moduleFact({
       {
         dataSubject: "STUDENT_RESULT_PUBLICATION_PREVIEW",
         controlSubject: "SCHOOL",
-        producerRef: "SYSTEM",
+        producerRef: "DUTY-SUBJECT-TEACHER",
         ownerRef: "DUTY-SUBJECT-TEACHER",
         confirmerRef: "DUTY-SUBJECT-TEACHER",
         stewardRef: "ROLE-ACADEMIC",
@@ -2687,6 +2705,7 @@ const scoreViewFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
 ];
 
@@ -3031,6 +3050,7 @@ const evidenceFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
 ];
 
@@ -3449,6 +3469,7 @@ const planFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
 ];
 
@@ -3526,6 +3547,7 @@ const homeroomCoordinationFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
 ];
 
@@ -3908,6 +3930,7 @@ const studentTodoFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
 ];
 
@@ -4116,37 +4139,76 @@ const studentExecutionModule = moduleFact({
   )],
 });
 
-const correctionAttemptFields = [
-  field("CORR-ATTEMPT-F-ID", "Correction Attempt ID"),
-  field("CORR-ATTEMPT-F-STUDENT-REF", "Correction Student Reference", {
+const correctionTaskFields = [
+  field("CORR-TASK-F-ID", "Correction Task ID"),
+  field("CORR-TASK-F-STUDENT-REF", "Correction Task Student Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "IDENTITY_ONLY",
     idempotencyRole: "OBJECT_REF",
   }),
-  field("CORR-ATTEMPT-F-SOURCE-DATA-ID", "Correction Source Result Data ID", {
+  field("CORR-TASK-F-SOURCE-DATA-ID", "Correction Task Source Result Data ID", {
     dataType: "ID",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
-  field("CORR-ATTEMPT-F-SOURCE-RESULT-REF", "Correction Source Result Reference", {
+  field("CORR-TASK-F-SOURCE-RESULT-REF", "Correction Task Source Result Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
-      versionFieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
+      versionFieldId: "CORR-TASK-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
     },
   }),
-  field("CORR-ATTEMPT-F-SOURCE-RESULT-VERSION", "Correction Source Result Version", {
+  field("CORR-TASK-F-SOURCE-RESULT-VERSION", "Correction Task Source Result Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
-  field("CORR-ATTEMPT-F-DUE-AT", "Correction Due Time", {
+  field("CORR-TASK-F-DUE-AT", "Correction Task Due Time", {
     dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("CORR-TASK-F-OVERDUE-HANDLING", "Correction Task Overdue Handling", {
+    dataType: "TEXT",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when the correction task reaches OVERDUE",
+  }),
+  field("CORR-TASK-F-TASK-VERSION", "Correction Task Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
+  }),
+];
+
+const correctionAttemptFields = [
+  field("CORR-ATTEMPT-F-ID", "Correction Attempt ID"),
+  field("CORR-ATTEMPT-F-STUDENT-REF", "Correction Attempt Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+    idempotencyRole: "OBJECT_REF",
+  }),
+  field("CORR-ATTEMPT-F-TASK-REF", "Correction Task Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-TASK" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "CORR-ATTEMPT-F-TASK-VERSION",
+      targetVersionFieldId: "CORR-TASK-F-TASK-VERSION",
+    },
+    idempotencyRole: "OBJECT_REF",
+  }),
+  field("CORR-ATTEMPT-F-TASK-VERSION", "Correction Task Version at Submission", {
+    dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
@@ -4180,6 +4242,7 @@ const correctionAttemptFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    idempotencyRole: "OBJECT_VERSION",
   }),
 ];
 
@@ -4297,23 +4360,31 @@ const correctionSubmissionOutputFieldIds = [
   "CORR-ATTEMPT-F-CORRECTION-VERSION",
 ];
 
+const correctionAttemptCreateOutputFieldIds = [
+  "CORR-ATTEMPT-F-ID",
+  "CORR-ATTEMPT-F-STUDENT-REF",
+  "CORR-ATTEMPT-F-TASK-REF",
+  "CORR-ATTEMPT-F-TASK-VERSION",
+  "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
+  "CORR-ATTEMPT-F-CORRECTION-VERSION",
+];
+
 const correctionActions = [
   action({
     id: "CORR-ACT-CREATE-TASK",
     label: "Create a Correction Task",
     operationKind: "CREATE",
-    targetObjectId: "CORR-OBJ-ATTEMPT",
+    targetObjectId: "CORR-OBJ-TASK",
     inputFieldIds: [
-      "CORR-ATTEMPT-F-STUDENT-REF",
-      "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
-      "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
+      "CORR-TASK-F-STUDENT-REF",
+      "CORR-TASK-F-SOURCE-RESULT-REF",
+      "CORR-TASK-F-SOURCE-RESULT-VERSION",
     ],
     outputFieldIds: [
-      "CORR-ATTEMPT-F-ID",
-      "CORR-ATTEMPT-F-SOURCE-DATA-ID",
-      "CORR-ATTEMPT-F-DUE-AT",
-      "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
-      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      "CORR-TASK-F-ID",
+      "CORR-TASK-F-SOURCE-DATA-ID",
+      "CORR-TASK-F-DUE-AT",
+      "CORR-TASK-F-TASK-VERSION",
     ],
     permissions: correctionTaskTeacherPermissions,
     successState: "OPEN",
@@ -4322,16 +4393,15 @@ const correctionActions = [
     id: "CORR-ACT-AUTO-CREATE-TASK",
     label: "Automatically Create a Required Correction Task",
     operationKind: "CREATE",
-    targetObjectId: "CORR-OBJ-ATTEMPT",
+    targetObjectId: "CORR-OBJ-TASK",
     outputFieldIds: [
-      "CORR-ATTEMPT-F-ID",
-      "CORR-ATTEMPT-F-STUDENT-REF",
-      "CORR-ATTEMPT-F-SOURCE-DATA-ID",
-      "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
-      "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
-      "CORR-ATTEMPT-F-DUE-AT",
-      "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
-      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      "CORR-TASK-F-ID",
+      "CORR-TASK-F-STUDENT-REF",
+      "CORR-TASK-F-SOURCE-DATA-ID",
+      "CORR-TASK-F-SOURCE-RESULT-REF",
+      "CORR-TASK-F-SOURCE-RESULT-VERSION",
+      "CORR-TASK-F-DUE-AT",
+      "CORR-TASK-F-TASK-VERSION",
     ],
     executionMode: FLOW_INTERNAL,
     trigger: { kind: "FLOW", flowIds: ["DF-008"] },
@@ -4344,10 +4414,10 @@ const correctionActions = [
   action({
     id: "CORR-ACT-MARK-OVERDUE",
     label: "Mark an Open Correction Task Overdue",
-    targetObjectId: "CORR-OBJ-ATTEMPT",
+    targetObjectId: "CORR-OBJ-TASK",
     outputFieldIds: [
-      "CORR-ATTEMPT-F-OVERDUE-HANDLING",
-      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      "CORR-TASK-F-OVERDUE-HANDLING",
+      "CORR-TASK-F-TASK-VERSION",
     ],
     executionMode: SYSTEM_EVENT,
     trigger: { kind: "EVENT", eventId: "EVT-CORRECTION-TASK-DUE" },
@@ -4360,23 +4430,25 @@ const correctionActions = [
   action({
     id: "CORR-ACT-SUBMIT-INITIAL",
     label: "Submit an Open Correction Answer",
+    operationKind: "CREATE",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
-    outputFieldIds: correctionSubmissionOutputFieldIds,
+    outputFieldIds: correctionAttemptCreateOutputFieldIds,
     permissions: correctionStudentPermissions,
-    transition: { from: "OPEN", to: "SUBMITTED" },
+    successState: "SUBMITTED",
   }),
   action({
     id: "CORR-ACT-SUBMIT-LATE",
     label: "Submit an Overdue Correction Answer",
+    operationKind: "CREATE",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
     outputFieldIds: [
-      ...correctionSubmissionOutputFieldIds,
+      ...correctionAttemptCreateOutputFieldIds,
       "CORR-ATTEMPT-F-OVERDUE-HANDLING",
     ],
     permissions: correctionStudentPermissions,
-    transition: { from: "OVERDUE", to: "SUBMITTED" },
+    successState: "SUBMITTED",
   }),
   action({
     id: "CORR-ACT-CONFIRM-JUDGMENT",
@@ -4413,11 +4485,12 @@ const correctionActions = [
   action({
     id: "CORR-ACT-RESUBMIT",
     label: "Resubmit a Repeated Correction",
+    operationKind: "CREATE",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
-    outputFieldIds: correctionSubmissionOutputFieldIds,
+    outputFieldIds: correctionAttemptCreateOutputFieldIds,
     permissions: correctionStudentPermissions,
-    transition: { from: "NEEDS_RETRY", to: "SUBMITTED" },
+    successState: "SUBMITTED",
   }),
   action({
     id: "CORR-ACT-NORMALIZE-SUBMISSION",
@@ -4459,6 +4532,30 @@ const correctionModule = moduleFact({
   nfrIds: ["NFR-006", "NFR-008"],
   objects: [
     object(
+      "CORR-OBJ-TASK",
+      "Teacher Correction Task",
+      {
+        dataSubject: "STUDENT_CORRECTION_TASK",
+        controlSubject: "SCHOOL",
+        producerRef: "DUTY-SUBJECT-TEACHER",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-SUBJECT-TEACHER",
+      },
+      ["OPEN", "OVERDUE"],
+      correctionTaskFields,
+      "CORR-TASK-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [{
+          refFieldId: "CORR-TASK-F-SOURCE-RESULT-REF",
+          versionFieldId: "CORR-TASK-F-SOURCE-RESULT-VERSION",
+          targetObjectId: "PUB-OBJ-RESULT",
+          targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+        }],
+      },
+    ),
+    object(
       "CORR-OBJ-ATTEMPT",
       "Student Correction Attempt Version",
       {
@@ -4469,16 +4566,16 @@ const correctionModule = moduleFact({
         confirmerRef: "DUTY-SUBJECT-TEACHER",
         stewardRef: "DUTY-SUBJECT-TEACHER",
       },
-      ["OPEN", "OVERDUE", "SUBMITTED", "JUDGED", "NEEDS_RETRY"],
+      ["SUBMITTED", "JUDGED", "NEEDS_RETRY"],
       correctionAttemptFields,
       "CORR-ATTEMPT-F-ID",
       {
         sensitivityId: "S3",
         lineageBindings: [{
-          refFieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
-          versionFieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
-          targetObjectId: "PUB-OBJ-RESULT",
-          targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+          refFieldId: "CORR-ATTEMPT-F-TASK-REF",
+          versionFieldId: "CORR-ATTEMPT-F-TASK-VERSION",
+          targetObjectId: "CORR-OBJ-TASK",
+          targetVersionFieldId: "CORR-TASK-F-TASK-VERSION",
         }],
       },
     ),
@@ -4525,13 +4622,21 @@ const correctionModule = moduleFact({
       },
     ),
   ],
-  relationships: [],
+  relationships: [{
+    id: "CORR-REL-TASK-ATTEMPT",
+    fromObjectId: "CORR-OBJ-TASK",
+    toObjectId: "CORR-OBJ-ATTEMPT",
+    type: "CONTAINS",
+    cardinality: "ONE_TO_MANY",
+    ownershipScope: "SAME_STUDENT",
+    onSourceInvalidation: "retain every submitted attempt version when the task or its source result is corrected",
+  }],
   actions: correctionActions,
   pages: [page(
     "CORR-PAGE-ATTEMPT",
     "Student Correction and Teacher Judgment",
-    ["CORR-OBJ-ATTEMPT"],
-    correctionAttemptFields.map(({ id }) => id),
+    ["CORR-OBJ-TASK", "CORR-OBJ-ATTEMPT"],
+    [...correctionTaskFields, ...correctionAttemptFields].map(({ id }) => id),
     [
       "CORR-ACT-CREATE-TASK",
       "CORR-ACT-SUBMIT-INITIAL",
@@ -5116,7 +5221,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["HW-ASSIGNMENT-F-ID", "SUB-DRAFT-F-ID"],
+      identityFieldIds: ["HW-ASSIGNMENT-F-ID"],
       versionFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION", "SUB-DRAFT-F-DRAFT-VERSION"],
       fanoutFieldId: "SUB-DRAFT-F-ID",
     },
@@ -5310,9 +5415,65 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         ),
       },
     ],
+    executionPaths: [
+      {
+        id: "ACCEPT_SUGGESTION",
+        stepOrders: [2],
+        providedInputs: [],
+      },
+      {
+        id: "CORRECT_RECOGNITION_AND_ACCEPT",
+        stepOrders: [1, 2],
+        providedInputs: [],
+      },
+      {
+        id: "OVERRIDE_SCORE",
+        stepOrders: [3],
+        providedInputs: providePathInputs(
+          3,
+          "DUTY-SUBJECT-TEACHER",
+          "GRD-DECISION-F-OFFICIAL-SCORE",
+          "GRD-DECISION-F-TEACHER-FEEDBACK",
+        ),
+      },
+      {
+        id: "CORRECT_RECOGNITION_AND_OVERRIDE",
+        stepOrders: [1, 3],
+        providedInputs: providePathInputs(
+          3,
+          "DUTY-SUBJECT-TEACHER",
+          "GRD-DECISION-F-OFFICIAL-SCORE",
+          "GRD-DECISION-F-TEACHER-FEEDBACK",
+        ),
+      },
+      {
+        id: "MANUAL_GRADE",
+        stepOrders: [4],
+        providedInputs: providePathInputs(
+          4,
+          "DUTY-SUBJECT-TEACHER",
+          "GRD-DECISION-F-OFFICIAL-SCORE",
+          "GRD-DECISION-F-TEACHER-FEEDBACK",
+        ),
+      },
+      {
+        id: "BATCH_CONFIRM",
+        stepOrders: [5],
+        providedInputs: [],
+      },
+      {
+        id: "RESOLVE_VERSION_CONFLICT",
+        stepOrders: [6],
+        providedInputs: [],
+      },
+    ],
     sourceDataRefs: [{
       objectId: "GRD-OBJ-DECISION",
       fieldId: "GRD-DECISION-F-ID",
+      version: "GRD-DECISION-F-DECISION-VERSION",
+    }, {
+      objectId: "GRD-OBJ-DECISION",
+      fieldId: "GRD-DECISION-F-SUBMISSION-REF",
       version: "GRD-DECISION-F-DECISION-VERSION",
     }, {
       objectId: "GRD-OBJ-DECISION",
@@ -5334,7 +5495,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     idempotencyKeyParts: {
       identityFieldIds: ["GRD-DECISION-F-ID"],
       versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
-      fanoutFieldId: "GRD-DECISION-F-ID",
+      fanoutFieldId: "GRD-DECISION-F-SUBMISSION-REF",
     },
     failureGranularity: "STUDENT_ITEM_GRADING_OBJECT",
     retryPolicy: {
@@ -5505,44 +5666,39 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
       {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-ID",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-ID",
+        version: "CORR-TASK-F-TASK-VERSION",
       },
       {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-STUDENT-REF",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-STUDENT-REF",
+        version: "CORR-TASK-F-TASK-VERSION",
       },
       {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-SOURCE-DATA-ID",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-SOURCE-DATA-ID",
+        version: "CORR-TASK-F-TASK-VERSION",
       },
       {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-SOURCE-RESULT-REF",
+        version: "CORR-TASK-F-TASK-VERSION",
       },
       {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-SOURCE-RESULT-VERSION",
+        version: "CORR-TASK-F-TASK-VERSION",
       },
       {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-DUE-AT",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-DUE-AT",
+        version: "CORR-TASK-F-TASK-VERSION",
       },
       {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
-      },
-      {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-TASK-VERSION",
+        version: "CORR-TASK-F-TASK-VERSION",
       },
     ],
     idempotencyKeyParts: {
@@ -5878,18 +6034,19 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       {
         order: 3,
         actionId: "CORR-ACT-CONFIRM-JUDGMENT",
-        condition: "the corresponding subject teacher confirms the formal correction judgment",
+        condition: "the corresponding subject teacher confirms a PASSED correction judgment",
         providedInputs: provideInputs(
           "DUTY-SUBJECT-TEACHER",
           "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         ),
       },
-      { order: 4, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "dependent versions receive object-level invalidation outcomes with history retained" },
-      { order: 5, actionId: "INS-ACT-MARK-STALE", condition: "the prior evidence depends on the corrected result or decision version" },
-      { order: 6, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "a plan evaluation depends on the corrected result, decision, evidence, or mastery version" },
-      { order: 7, actionId: "INS-ACT-CREATE-CANDIDATE", condition: "the confirmed correction produces a new evidence and mastery candidate" },
+      { order: 4, actionId: "CORR-ACT-REQUEST-RETRY", condition: "the corresponding subject teacher records NOT-PASSED or NEEDS-MORE and terminates this judgment path in NEEDS_RETRY" },
+      { order: 5, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "a PASSED judgment invalidates dependent versions with history retained" },
+      { order: 6, actionId: "INS-ACT-MARK-STALE", condition: "the prior evidence depends on the corrected result or decision version" },
+      { order: 7, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "a plan evaluation depends on the corrected result, decision, evidence, or mastery version" },
+      { order: 8, actionId: "INS-ACT-CREATE-CANDIDATE", condition: "the PASSED correction produces a new evidence and mastery candidate" },
       {
-        order: 8,
+        order: 9,
         actionId: "INS-ACT-CONFIRM-MASTERY",
         condition: "the corresponding subject teacher confirms the candidate interpretation",
         providedInputs: provideInputs(
@@ -5898,7 +6055,31 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
           "INS-EVIDENCE-F-TEACHER-CONFIRMATION",
         ),
       },
-      { order: 9, actionId: "INS-ACT-PUBLISH-INTERPRETATION", condition: "only the teacher-confirmed interpretation becomes student-visible" },
+      { order: 10, actionId: "INS-ACT-PUBLISH-INTERPRETATION", condition: "only the teacher-confirmed interpretation becomes student-visible" },
+    ],
+    executionPaths: [
+      {
+        id: "PASSED",
+        stepOrders: [1, 2, 3, 5, 6, 7, 8, 9, 10],
+        providedInputs: [],
+        when: {
+          fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+          values: ["PASSED"],
+        },
+      },
+      {
+        id: "RETRY_REQUIRED",
+        stepOrders: [1, 2, 4],
+        providedInputs: providePathInputs(
+          4,
+          "DUTY-SUBJECT-TEACHER",
+          "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        ),
+        when: {
+          fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+          values: ["NOT-PASSED", "NEEDS-MORE"],
+        },
+      },
     ],
     sourceDataRefs: [
       {
@@ -5922,8 +6103,43 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
       {
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-ID",
+        version: "CORR-TASK-F-TASK-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-STUDENT-REF",
+        version: "CORR-TASK-F-TASK-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-SOURCE-RESULT-REF",
+        version: "CORR-TASK-F-TASK-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-SOURCE-RESULT-VERSION",
+        version: "CORR-TASK-F-TASK-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-TASK",
+        fieldId: "CORR-TASK-F-TASK-VERSION",
+        version: "CORR-TASK-F-TASK-VERSION",
+      },
+      {
         objectId: "CORR-OBJ-ATTEMPT",
         fieldId: "CORR-ATTEMPT-F-ID",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-TASK-REF",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-TASK-VERSION",
         version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
       },
       {
@@ -6077,12 +6293,13 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     idempotencyKeyParts: {
       identityFieldIds: [
         "PUB-RESULT-F-ID",
+        "CORR-TASK-F-ID",
         "CORR-ATTEMPT-F-ID",
-        "INS-EVIDENCE-F-ID",
         "PLN-PLAN-F-ID",
       ],
       versionFieldIds: [
         "PUB-RESULT-F-RESULT-VERSION",
+        "CORR-TASK-F-TASK-VERSION",
         "CORR-ATTEMPT-F-CORRECTION-VERSION",
         "INS-EVIDENCE-F-EVIDENCE-VERSION",
         "PLN-PLAN-F-PLAN-VERSION",
@@ -6239,7 +6456,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["INS-EVIDENCE-F-ID", "INS-EVIDENCE-F-STUDENT-REF"],
+      identityFieldIds: ["INS-EVIDENCE-F-ID"],
       versionFieldIds: ["INS-EVIDENCE-F-EVIDENCE-VERSION"],
       fanoutFieldId: "INS-EVIDENCE-F-STUDENT-REF",
     },

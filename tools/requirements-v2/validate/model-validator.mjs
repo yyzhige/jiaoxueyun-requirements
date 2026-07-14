@@ -464,6 +464,9 @@ export function validateModelReferences(model) {
     if (idempotencyRole) {
       const stableScalar = fieldEntry.value?.dataType === "ID"
         && fieldEntry.value?.mutability === "IMMUTABLE";
+      const stableVersion = fieldEntry.value?.dataType === "INTEGER"
+        && ["IMMUTABLE", "SYSTEM_MANAGED"].includes(fieldEntry.value?.mutability)
+        && valueSource?.kind === "SYSTEM";
       const valid = (
         idempotencyRole === "OBJECT_ID"
         && stableScalar
@@ -473,6 +476,9 @@ export function validateModelReferences(model) {
         && stableScalar
         && valueSource?.kind === "OBJECT_REF"
         && index.objectById.has(valueSource.targetObjectId)
+      ) || (
+        idempotencyRole === "OBJECT_VERSION"
+        && stableVersion
       ) || (
         idempotencyRole === "FANOUT_SET"
         && ["STRING_ARRAY", "JSON"].includes(fieldEntry.value?.dataType)

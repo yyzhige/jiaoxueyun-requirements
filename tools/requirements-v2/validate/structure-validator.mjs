@@ -8,7 +8,12 @@ const RUNTIME_QUERY_ID_KINDS = new Set(["OBJECT_ID", "ACTION_ID"]);
 const CLIENTS = new Set(["WEB", "APP"]);
 const RISKS = new Set(["READ", "LOW", "HIGH"]);
 const OPERATION_KINDS = new Set(["READ", "CREATE", "UPDATE"]);
-const IDEMPOTENCY_ROLES = new Set(["OBJECT_ID", "OBJECT_REF", "FANOUT_SET"]);
+const IDEMPOTENCY_ROLES = new Set([
+  "OBJECT_ID",
+  "OBJECT_REF",
+  "OBJECT_VERSION",
+  "FANOUT_SET",
+]);
 const REFERENCE_INTEGRITIES = new Set(["IDENTITY_ONLY", "VERSION_PINNED"]);
 const READ_MODES = new Set(["AUTHORIZED", "NO_DIRECT_READ", "STUDENT_TIMED_RELEASE"]);
 const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
@@ -1196,6 +1201,189 @@ function validateFlow(errors, flow, path) {
       }
     });
   });
+  if (Object.hasOwn(flow, "executionPaths")) {
+    const executionPaths = contractArray(
+      errors,
+      flow,
+      "executionPaths",
+      path,
+      "INVALID_FLOW_CONTRACT",
+      { nonEmpty: true },
+    );
+    const validStepOrders = new Set(
+      steps.map((step) => step?.order).filter(Number.isInteger),
+    );
+    const seenPathIds = new Set();
+    const coveredStepOrders = new Set();
+    executionPaths.forEach((executionPath, executionPathIndex) => {
+      const executionPathPath = `${path}.executionPaths[${executionPathIndex}]`;
+      if (!isRecord(executionPath)) {
+        errors.push(`INVALID_FLOW_CONTRACT ${executionPathPath} must be an object`);
+        return;
+      }
+      const expectedPathKeys = new Set(["id", "stepOrders", "providedInputs", "when"]);
+      if (
+        ![3, 4].includes(Object.keys(executionPath).length)
+        || Object.keys(executionPath).some((key) => !expectedPathKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_FLOW_CONTRACT ${executionPathPath} must use the closed id, stepOrders, providedInputs, and optional when shape`,
+        );
+      }
+      contractString(
+        errors,
+        executionPath,
+        "id",
+        executionPathPath,
+        "INVALID_FLOW_CONTRACT",
+      );
+      if (seenPathIds.has(executionPath.id)) {
+        errors.push(`INVALID_FLOW_CONTRACT ${executionPathPath}.id must be unique`);
+      }
+      seenPathIds.add(executionPath.id);
+      if (Object.hasOwn(executionPath, "when")) {
+        const when = executionPath.when;
+        const whenPath = `${executionPathPath}.when`;
+        const expectedWhenKeys = new Set(["fieldId", "values"]);
+        if (
+          !isRecord(when)
+          || Object.keys(when).length !== expectedWhenKeys.size
+          || Object.keys(when).some((key) => !expectedWhenKeys.has(key))
+        ) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${whenPath} must use the closed fieldId and values shape`,
+          );
+        } else {
+          contractString(errors, when, "fieldId", whenPath, "INVALID_FLOW_CONTRACT");
+          const values = contractStringArray(
+            errors,
+            when,
+            "values",
+            whenPath,
+            "INVALID_FLOW_CONTRACT",
+            { nonEmpty: true },
+          );
+          validateUniqueStrings(
+            errors,
+            values,
+            `${whenPath}.values`,
+            "INVALID_FLOW_CONTRACT",
+          );
+        }
+      }
+      const stepOrders = contractArray(
+        errors,
+        executionPath,
+        "stepOrders",
+        executionPathPath,
+        "INVALID_FLOW_CONTRACT",
+        { nonEmpty: true },
+      );
+      const seenStepOrders = new Set();
+      stepOrders.forEach((stepOrder, stepOrderIndex) => {
+        if (
+          !Number.isInteger(stepOrder)
+          || !validStepOrders.has(stepOrder)
+          || seenStepOrders.has(stepOrder)
+          || (stepOrderIndex > 0 && stepOrders[stepOrderIndex - 1] >= stepOrder)
+        ) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${executionPathPath}.stepOrders[${stepOrderIndex}] must be a unique ascending declared step order`,
+          );
+        }
+        seenStepOrders.add(stepOrder);
+        coveredStepOrders.add(stepOrder);
+      });
+      const pathProvidedInputs = contractArray(
+        errors,
+        executionPath,
+        "providedInputs",
+        executionPathPath,
+        "INVALID_FLOW_CONTRACT",
+      );
+      const seenProvidedInputs = new Set();
+      pathProvidedInputs.forEach((providedInput, providedInputIndex) => {
+        const providedInputPath = (
+          `${executionPathPath}.providedInputs[${providedInputIndex}]`
+        );
+        if (!isRecord(providedInput)) {
+          errors.push(`INVALID_FLOW_CONTRACT ${providedInputPath} must be an object`);
+          return;
+        }
+        const expectedInputKeys = new Set(["stepOrder", "fieldId", "provider"]);
+        if (
+          Object.keys(providedInput).length !== expectedInputKeys.size
+          || Object.keys(providedInput).some((key) => !expectedInputKeys.has(key))
+        ) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${providedInputPath} must use the closed stepOrder, fieldId, and provider shape`,
+          );
+        }
+        if (
+          !Number.isInteger(providedInput.stepOrder)
+          || !seenStepOrders.has(providedInput.stepOrder)
+        ) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${providedInputPath}.stepOrder must reference a step on the same path`,
+          );
+        }
+        contractString(
+          errors,
+          providedInput,
+          "fieldId",
+          providedInputPath,
+          "INVALID_FLOW_CONTRACT",
+        );
+        const inputKey = `${providedInput.stepOrder}:${providedInput.fieldId}`;
+        if (seenProvidedInputs.has(inputKey)) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${providedInputPath} must be unique within the path`,
+          );
+        }
+        seenProvidedInputs.add(inputKey);
+        const provider = providedInput.provider;
+        if (!isRecord(provider)) {
+          errors.push(`INVALID_FLOW_CONTRACT ${providedInputPath}.provider must be an object`);
+          return;
+        }
+        const subjectProperties = ["actorRef", "roleRef", "dutyRef"]
+          .filter((property) => Object.hasOwn(provider, property));
+        if (Object.keys(provider).length !== 1 || subjectProperties.length !== 1) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${providedInputPath}.provider requires exactly one actorRef, roleRef, or dutyRef`,
+          );
+          return;
+        }
+        const subjectProperty = subjectProperties[0];
+        const subject = provider[subjectProperty];
+        const validNamespace = (
+          (subjectProperty === "actorRef" && SYSTEM_ACTOR_CATEGORIES.has(subject))
+          || (
+            subjectProperty === "roleRef"
+            && typeof subject === "string"
+            && subject.startsWith("ROLE-")
+          )
+          || (
+            subjectProperty === "dutyRef"
+            && typeof subject === "string"
+            && subject.startsWith("DUTY-")
+          )
+        );
+        if (!validNamespace) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${providedInputPath}.provider.${subjectProperty} has the wrong namespace`,
+          );
+        }
+      });
+    });
+    for (const stepOrder of validStepOrders) {
+      if (!coveredStepOrders.has(stepOrder)) {
+        errors.push(
+          `INVALID_FLOW_CONTRACT ${path}.executionPaths must cover declared step order ${stepOrder}`,
+        );
+      }
+    }
+  }
   if (Object.hasOwn(flow, "systemProvidedInputs")) {
     errors.push(
       `INVALID_FLOW_CONTRACT ${path}.systemProvidedInputs is obsolete; use steps[].providedInputs`,

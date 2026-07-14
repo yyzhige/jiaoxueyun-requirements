@@ -78,6 +78,11 @@ function hasStableIdempotencyRole(index, fieldId, allowedRoles) {
       && field.mutability === "IMMUTABLE"
       && field.valueSource?.kind === "SYSTEM";
   }
+  if (field.idempotencyRole === "OBJECT_VERSION") {
+    return field.dataType === "INTEGER"
+      && ["IMMUTABLE", "SYSTEM_MANAGED"].includes(field.mutability)
+      && field.valueSource?.kind === "SYSTEM";
+  }
   if (field.dataType !== "ID" || field.mutability !== "IMMUTABLE") return false;
   if (field.idempotencyRole === "OBJECT_ID") {
     return field.valueSource?.kind === "SYSTEM";
@@ -146,6 +151,28 @@ function actionErrors(index) {
     }
 
     const targetObject = index.objectById.get(action?.targetObjectId)?.value;
+    if (targetObject && action?.operationKind === "CREATE") {
+      const allowPermissions = list(action?.permissions).filter(({ effect }) => (
+        effect === "ALLOW"
+      ));
+      const producerRef = targetObject.producerRef;
+      const userProducerMatches = allowPermissions.some((permission) => {
+        const subject = permission?.actorRef ?? permission?.roleRef ?? permission?.dutyRef;
+        if (producerRef === "CURRENT_ACTOR") {
+          return isValidId(permission?.roleRef)
+            || isValidId(permission?.dutyRef)
+            || permission?.actorRef === "CURRENT_ACTOR";
+        }
+        return subject === producerRef;
+      });
+      const systemFlowProduces = action.executionMode !== "USER_TASK"
+        && allowPermissions.some(({ actorRef }) => actorRef === "SYSTEM");
+      if (!userProducerMatches && !systemFlowProduces) {
+        errors.push(
+          `INVALID_CREATE_PRODUCER ${formatValidationValue(action?.id)} ALLOW subject must match ${formatValidationValue(producerRef)} or a verified SYSTEM Flow producer`,
+        );
+      }
+    }
     if (targetObject && action?.transition) {
       const states = stateIds(targetObject);
       const { from, to } = action.transition;
@@ -329,60 +356,111 @@ function flowErrors(index) {
     const steps = [...list(flow?.steps)].sort((left, right) => (
       (left?.order ?? 0) - (right?.order ?? 0)
     ));
+    const stepByOrder = new Map(steps.map((step) => [step?.order, step]));
     const providedInputsByStepOrder = new Map();
-    for (const step of steps) {
+    const validateProvidedInput = (step, providedInput, pathId) => {
       const action = index.actionById.get(step?.actionId)?.value;
+      const { fieldId, provider } = providedInput ?? {};
+      const fieldEntry = index.fieldById.get(fieldId);
+      const pathContext = pathId ? ` path=${formatValidationValue(pathId)}` : "";
+      if (
+        !action
+        || !list(action.inputFieldIds).includes(fieldId)
+        || fieldEntry?.objectId !== action.targetObjectId
+      ) {
+        errors.push(
+          `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)}${pathContext} step=${formatValidationValue(step?.order)} provided field ${formatValidationValue(fieldId)} must be an input owned by the step target`,
+        );
+      }
+      const providerEntries = Object.entries(provider ?? {});
+      const matchesAllowSubject = list(action?.permissions).some((permission) => (
+        permission?.effect === "ALLOW"
+        && providerEntries.length === 1
+        && permission?.[providerEntries[0][0]] === providerEntries[0][1]
+      ));
+      const nonUserProviderIsSystemActor = (
+        action?.executionMode === "USER_TASK"
+        || provider?.actorRef === "SYSTEM"
+        || provider?.actorRef === "AI"
+      );
+      if (!matchesAllowSubject || !nonUserProviderIsSystemActor) {
+        errors.push(
+          `INVALID_FLOW_INPUT_PROVIDER ${formatValidationValue(flow?.id)}${pathContext} step=${formatValidationValue(step?.order)} field=${formatValidationValue(fieldId)} provider must match an ALLOW subject for the step action`,
+        );
+      }
+    };
+    for (const step of steps) {
       const providedInputs = list(step?.providedInputs);
       providedInputsByStepOrder.set(
         step?.order,
         new Set(providedInputs.map(({ fieldId }) => fieldId)),
       );
       for (const providedInput of providedInputs) {
-        const { fieldId, provider } = providedInput ?? {};
-        const fieldEntry = index.fieldById.get(fieldId);
-        if (
-          !action
-          || !list(action.inputFieldIds).includes(fieldId)
-          || fieldEntry?.objectId !== action.targetObjectId
-        ) {
-          errors.push(
-            `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} step=${formatValidationValue(step?.order)} provided field ${formatValidationValue(fieldId)} must be an input owned by the step target`,
-          );
-        }
-        const providerEntries = Object.entries(provider ?? {});
-        const matchesAllowSubject = list(action?.permissions).some((permission) => (
-          permission?.effect === "ALLOW"
-          && providerEntries.length === 1
-          && permission?.[providerEntries[0][0]] === providerEntries[0][1]
-        ));
-        const nonUserProviderIsSystemActor = (
-          action?.executionMode === "USER_TASK"
-          || provider?.actorRef === "SYSTEM"
-          || provider?.actorRef === "AI"
-        );
-        if (!matchesAllowSubject || !nonUserProviderIsSystemActor) {
-          errors.push(
-            `INVALID_FLOW_INPUT_PROVIDER ${formatValidationValue(flow?.id)} step=${formatValidationValue(step?.order)} field=${formatValidationValue(fieldId)} provider must match an ALLOW subject for the step action`,
-          );
-        }
+        validateProvidedInput(step, providedInput);
       }
     }
-    const availableFieldIds = new Set(list(flow?.sourceDataRefs).flatMap((dataRef) => (
-      [dataRef?.fieldId, dataRef?.version].filter(isValidId)
-    )));
-    for (const step of steps) {
-      const action = index.actionById.get(step?.actionId)?.value;
-      if (!action) continue;
-      const providedFieldIds = providedInputsByStepOrder.get(step?.order) ?? new Set();
-      const missingInputFieldIds = list(action.inputFieldIds).filter((fieldId) => (
-        !availableFieldIds.has(fieldId) && !providedFieldIds.has(fieldId)
-      ));
-      if (missingInputFieldIds.length > 0) {
+    const executionPaths = list(flow?.executionPaths).length > 0
+      ? list(flow.executionPaths)
+      : [{
+        id: "DEFAULT",
+        stepOrders: steps.map((step) => step?.order),
+        providedInputs: [],
+      }];
+    const pathValuesByFieldId = new Map();
+    for (const executionPath of executionPaths) {
+      const when = executionPath?.when;
+      if (!when) continue;
+      const field = index.fieldById.get(when?.fieldId)?.value;
+      const optionSet = field?.valueSource?.kind === "OPTION_SET"
+        ? index.optionSetById.get(field.valueSource.optionSetId)?.value
+        : undefined;
+      const validCodes = new Set(list(optionSet?.values).map(({ code }) => code));
+      const usedCodes = pathValuesByFieldId.get(when?.fieldId) ?? new Set();
+      const values = list(when?.values);
+      if (
+        optionSet?.mode !== "STATIC"
+        || values.length === 0
+        || values.some((value) => !validCodes.has(value) || usedCodes.has(value))
+      ) {
         errors.push(
-          `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} step=${formatValidationValue(step?.order)} action=${formatValidationValue(action.id)} missing ${missingInputFieldIds.map(formatValidationValue).join(",")}`,
+          `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} requires unique registered Option Set values for ${formatValidationValue(when?.fieldId)}`,
         );
       }
-      for (const fieldId of list(action.outputFieldIds)) availableFieldIds.add(fieldId);
+      for (const value of values) usedCodes.add(value);
+      pathValuesByFieldId.set(when?.fieldId, usedCodes);
+    }
+    const sourceFieldIdsForResolution = list(flow?.sourceDataRefs).flatMap((dataRef) => (
+      [dataRef?.fieldId, dataRef?.version].filter(isValidId)
+    ));
+    for (const executionPath of executionPaths) {
+      const pathProvidedInputsByStepOrder = new Map();
+      for (const providedInput of list(executionPath?.providedInputs)) {
+        const step = stepByOrder.get(providedInput?.stepOrder);
+        if (step) validateProvidedInput(step, providedInput, executionPath?.id);
+        const fieldIds = pathProvidedInputsByStepOrder.get(providedInput?.stepOrder)
+          ?? new Set();
+        fieldIds.add(providedInput?.fieldId);
+        pathProvidedInputsByStepOrder.set(providedInput?.stepOrder, fieldIds);
+      }
+      const availableFieldIds = new Set(sourceFieldIdsForResolution);
+      for (const stepOrder of list(executionPath?.stepOrders)) {
+        const step = stepByOrder.get(stepOrder);
+        const action = index.actionById.get(step?.actionId)?.value;
+        if (!action) continue;
+        const providedFieldIds = new Set([
+          ...(providedInputsByStepOrder.get(stepOrder) ?? []),
+          ...(pathProvidedInputsByStepOrder.get(stepOrder) ?? []),
+        ]);
+        const missingInputFieldIds = list(action.inputFieldIds).filter((fieldId) => (
+          !availableFieldIds.has(fieldId) && !providedFieldIds.has(fieldId)
+        ));
+        if (missingInputFieldIds.length > 0) {
+          errors.push(
+            `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} step=${formatValidationValue(stepOrder)} action=${formatValidationValue(action.id)} missing ${missingInputFieldIds.map(formatValidationValue).join(",")}`,
+          );
+        }
+        for (const fieldId of list(action.outputFieldIds)) availableFieldIds.add(fieldId);
+      }
     }
 
     for (const targetRef of list(flow?.targetDataRefs)) {
@@ -477,17 +555,25 @@ function flowErrors(index) {
     const identityRolesValid = identityFieldIds.every((fieldId) => (
       hasStableIdempotencyRole(index, fieldId, ["OBJECT_ID", "OBJECT_REF"])
     ));
+    const versionRolesValid = versionFieldIds.every((fieldId) => (
+      hasStableIdempotencyRole(index, fieldId, ["OBJECT_VERSION"])
+    ));
     const fanoutRoleValid = hasStableIdempotencyRole(
       index,
       keyParts?.fanoutFieldId,
       ["OBJECT_ID", "OBJECT_REF", "FANOUT_SET"],
     );
+    const keyPartsDisjoint = identityFieldIds.every((fieldId) => (
+      !versionFieldIds.includes(fieldId) && fieldId !== keyParts?.fanoutFieldId
+    )) && versionFieldIds.every((fieldId) => fieldId !== keyParts?.fanoutFieldId);
     if (
       identityFieldIds.length === 0
       || identityFieldIds.some((fieldId) => (
         !fixedSourceFieldIds.has(fieldId) && !producerOutputFieldIds.has(fieldId)
       ))
       || !identityRolesValid
+      || !versionRolesValid
+      || !keyPartsDisjoint
       || [...fixedSourceVersionFieldIds].some((fieldId) => !versionFieldIds.includes(fieldId))
       || producedVersionFieldIds.some((fieldId) => !producerOutputFieldIds.has(fieldId))
       || (
@@ -498,7 +584,7 @@ function flowErrors(index) {
       || !producerContractValid
     ) {
       errors.push(
-        `INVALID_FLOW_IDEMPOTENCY ${formatValidationValue(flow?.id)} requires source identity, exact source versions, and a source fanout field`,
+        `INVALID_FLOW_IDEMPOTENCY ${formatValidationValue(flow?.id)} requires disjoint source identity, declared version, and source fanout fields`,
       );
     }
   }

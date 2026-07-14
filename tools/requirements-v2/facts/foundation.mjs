@@ -487,7 +487,7 @@ const accModule = moduleFact({
         field("ACC-SCHOOL-F-NAME", "School Name"),
         field("ACC-SCHOOL-F-REGION", "School Region", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-001" } }),
         field("ACC-SCHOOL-F-TYPE", "School Type"),
-        field("ACC-SCHOOL-F-SCHOOL-VERSION", "School Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
+        field("ACC-SCHOOL-F-SCHOOL-VERSION", "School Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED", idempotencyRole: "OBJECT_VERSION" }),
         field("ACC-SCHOOL-F-SERVICE-STATE", "Service State", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
       ],
       "ACC-SCHOOL-F-ID",
@@ -533,7 +533,7 @@ const accModule = moduleFact({
         field("ACC-IDENTITY-F-ROLE", "Login Role", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-003" } }),
         field("ACC-IDENTITY-F-DUTIES", "Assigned Duties", { dataType: "STRING_ARRAY", required: false, valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-042" } }),
         field("ACC-IDENTITY-F-SCOPES", "Effective Data Scopes", { dataType: "STRING_ARRAY", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
-        field("ACC-IDENTITY-F-IDENTITY-VERSION", "Identity Assignment Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
+        field("ACC-IDENTITY-F-IDENTITY-VERSION", "Identity Assignment Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED", idempotencyRole: "OBJECT_VERSION" }),
         field("ACC-IDENTITY-F-EFFECTIVE", "Effective At", { dataType: "DATETIME" }),
         field("ACC-IDENTITY-F-EXPIRY", "Expires At", { dataType: "DATETIME", required: false }),
       ],
@@ -601,7 +601,7 @@ const orgObjects = [
     field("ORG-TERM-F-NAME", "Term Name"),
     field("ORG-TERM-F-START", "Start Date", { dataType: "DATE" }),
     field("ORG-TERM-F-END", "End Date", { dataType: "DATE" }),
-    field("ORG-TERM-F-TERM-VERSION", "Term Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
+    field("ORG-TERM-F-TERM-VERSION", "Term Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED", idempotencyRole: "OBJECT_VERSION" }),
     field("ORG-TERM-F-STATUS", "Term Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ], "ORG-TERM-F-ID"),
   object("ORG-OBJ-GRADE", "Grade", responsibility("SCHOOL_GRADE", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["ACTIVE", "HISTORICAL"], [
@@ -628,7 +628,7 @@ const orgObjects = [
     field("ORG-COURSE-F-TERM-ID", "Term ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-004" } }),
     field("ORG-COURSE-F-STATUS", "Course Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ], "ORG-COURSE-F-ID"),
-  object("ORG-OBJ-TEACHER", "Teacher Profile", responsibility("TEACHER", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-002", "S3", ["ACTIVE", "SUSPENDED", "DEACTIVATED"], [
+  object("ORG-OBJ-TEACHER", "Teacher Profile", responsibility("TEACHER", "ROLE-ACADEMIC", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-002", "S3", ["ACTIVE", "SUSPENDED", "DEACTIVATED"], [
     field("ORG-TEACHER-F-ID", "Teacher ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-TEACHER-F-NAME", "Teacher Name"),
     field("ORG-TEACHER-F-MEMBER-STATE", "Member State", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
@@ -657,13 +657,13 @@ const orgObjects = [
     field("ORG-IMPORT-F-OBJECT-TYPE", "Import Object Type", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-020" } }),
     field("ORG-IMPORT-F-TEMPLATE-VERSION", "Template Version"),
     field("ORG-IMPORT-F-MAPPING", "Field Mapping", { dataType: "JSON", required: false }),
-    field("ORG-IMPORT-F-BATCH-VERSION", "Import Batch Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
+    field("ORG-IMPORT-F-BATCH-VERSION", "Import Batch Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED", idempotencyRole: "OBJECT_VERSION" }),
     field("ORG-IMPORT-F-STATUS", "Import Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ], "ORG-IMPORT-F-ID"),
   object("ORG-OBJ-IMPORT-ROW", "Import Row Result", responsibility("ORGANIZATION_IMPORT_OBJECT", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"), "LIFE-002", "S3", ["PENDING", "VALIDATED", "CREATE", "UPDATE", "NO_CHANGE", "REJECT", "DEACTIVATE", "RETRYABLE"], [
     field("ORG-IMPORT-ROW-F-ID", "Import Row ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("ORG-IMPORT-ROW-F-BATCH-ID", "Import Batch ID", { valueSource: { kind: "SYSTEM" } }),
-    field("ORG-IMPORT-ROW-F-ROW-VERSION", "Import Row Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
+    field("ORG-IMPORT-ROW-F-ROW-VERSION", "Import Row Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED", idempotencyRole: "OBJECT_VERSION" }),
     field("ORG-IMPORT-ROW-F-RESULT-TYPE", "Object Result Type", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-021" }, mutability: "READ_ONLY", validation: "must be CREATE, UPDATE, NO_CHANGE, REJECT, or DEACTIVATE" }),
     field("ORG-IMPORT-ROW-F-VALIDATION-RESULT", "Row Validation Result", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-022" }, mutability: "READ_ONLY" }),
     field("ORG-IMPORT-ROW-F-ERRORS", "Row Errors", { dataType: "STRING_ARRAY", required: false, valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
@@ -781,7 +781,7 @@ const iamObjects = [
     field("IAM-DECISION-F-RESULT", "Permission Result", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-DECISION-F-REASON", "Permission Reason", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-DECISION-F-SOURCE-VERSIONS", "Permission Source Versions", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-    field("IAM-DECISION-F-DECISION-VERSION", "Permission Decision Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("IAM-DECISION-F-DECISION-VERSION", "Permission Decision Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_VERSION" }),
   ], "IAM-DECISION-F-ID"),
   object("IAM-OBJ-TEMP-GRANT", "Temporary Grant", responsibility("TEMPORARY_SCHOOL_GRANT", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-001", "S4", ["PLANNED", "EFFECTIVE", "EXPIRED", "REVOKED"], [
     field("IAM-TEMP-F-ID", "Temporary Grant ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -998,19 +998,19 @@ const currObjects = [
     field("CURR-CURRICULUM-F-ID", "Curriculum Version ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("CURR-CURRICULUM-F-NAME", "Curriculum Version Name"),
     field("CURR-CURRICULUM-F-SUBJECT", "Curriculum Subject", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" } }),
-    field("CURR-CURRICULUM-F-VERSION", "Curriculum Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("CURR-CURRICULUM-F-VERSION", "Curriculum Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_VERSION" }),
     field("CURR-CURRICULUM-F-STATUS", "Curriculum Version Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
     field("CURR-CURRICULUM-F-VALIDATION", "Version Validation Result", { dataType: "JSON", required: "required when the curriculum version reaches VALIDATED", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
     field("CURR-CURRICULUM-F-PUBLISHED-AT", "Published At", { dataType: "DATETIME", required: false, valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
   ], "CURR-CURRICULUM-F-ID"),
-  object("CURR-OBJ-TEXTBOOK", "Textbook Version", responsibility("SUBJECT_CURRICULUM", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
+  object("CURR-OBJ-TEXTBOOK", "Textbook Version", responsibility("SUBJECT_CURRICULUM", "ROLE-ACADEMIC", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
     field("CURR-TEXTBOOK-F-ID", "Textbook Version ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("CURR-TEXTBOOK-F-CURRICULUM-ID", "Curriculum Version ID", { valueSource: { kind: "SYSTEM" } }),
     field("CURR-TEXTBOOK-F-NAME", "Textbook Name"),
     field("CURR-TEXTBOOK-F-EDITION", "Textbook Edition"),
     field("CURR-TEXTBOOK-F-STATUS", "Textbook Version Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ], "CURR-TEXTBOOK-F-ID"),
-  object("CURR-OBJ-CHAPTER", "Chapter", responsibility("SUBJECT_CURRICULUM", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
+  object("CURR-OBJ-CHAPTER", "Chapter", responsibility("SUBJECT_CURRICULUM", "ROLE-ACADEMIC", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
     field("CURR-CHAPTER-F-ID", "Chapter ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("CURR-CHAPTER-F-TEXTBOOK-ID", "Textbook Version ID", { valueSource: { kind: "SYSTEM" } }),
     field("CURR-CHAPTER-F-TITLE", "Chapter Title"),
@@ -1029,7 +1029,7 @@ const currObjects = [
     field("CURR-MAPPING-F-CHAPTER-ID", "Mapped Chapter ID"),
     field("CURR-MAPPING-F-KP-ID", "Mapped Knowledge Point ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-011" } }),
     field("CURR-MAPPING-F-RELATION", "Mapping Relation", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-043" } }),
-    field("CURR-MAPPING-F-VERSION", "Mapping Source Version", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("CURR-MAPPING-F-VERSION", "Mapping Source Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_VERSION" }),
     field("CURR-MAPPING-F-STATUS", "Mapping Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ], "CURR-MAPPING-F-ID"),
 ];
@@ -1251,7 +1251,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
       { objectId: "IAM-OBJ-PERMISSION-DECISION", fieldId: "IAM-DECISION-F-RESULT", version: "IAM-DECISION-F-DECISION-VERSION" },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["ACC-SCHOOL-F-ID", "ACC-IDENTITY-F-ID", "ORG-TERM-F-ID", "IAM-DECISION-F-ID"],
+      identityFieldIds: ["ACC-SCHOOL-F-ID", "ACC-IDENTITY-F-ID", "ORG-TERM-F-ID"],
       versionFieldIds: ["ACC-SCHOOL-F-SCHOOL-VERSION", "ACC-IDENTITY-F-IDENTITY-VERSION", "ORG-TERM-F-TERM-VERSION", "IAM-DECISION-F-DECISION-VERSION"],
       fanoutFieldId: "IAM-DECISION-F-ID",
     },
@@ -1335,7 +1335,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
       { objectId: "AUD-OBJ-EVENT", fieldId: "AUD-EVENT-F-ID", version: "AUD-EVENT-F-EVENT-VERSION" },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["ORG-IMPORT-F-ID", "ORG-IMPORT-ROW-F-ID", "IAM-DECISION-F-ID"],
+      identityFieldIds: ["ORG-IMPORT-F-ID", "IAM-DECISION-F-ID"],
       versionFieldIds: ["ORG-IMPORT-F-BATCH-VERSION", "ORG-IMPORT-ROW-F-ROW-VERSION", "IAM-DECISION-F-DECISION-VERSION"],
       fanoutFieldId: "ORG-IMPORT-ROW-F-ID",
     },
@@ -1367,7 +1367,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
       { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-PUBLISHED-AT", version: "CURR-CURRICULUM-F-VERSION" },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["CURR-CURRICULUM-F-ID", "CURR-MAPPING-F-ID"],
+      identityFieldIds: ["CURR-CURRICULUM-F-ID"],
       versionFieldIds: ["CURR-CURRICULUM-F-VERSION", "CURR-MAPPING-F-VERSION"],
       fanoutFieldId: "CURR-MAPPING-F-ID",
     },
