@@ -114,6 +114,11 @@ function objectIdentityFieldId(object) {
   ))?.id;
 }
 
+function fieldIsRequiredForState(field, state) {
+  if (typeof field?.required !== "string" || !isValidId(state)) return false;
+  return (field.required.match(/[A-Z][A-Z0-9_-]*/g) ?? []).includes(state);
+}
+
 function ownerErrors(index) {
   const errors = [];
   for (const objectEntry of index.objects) {
@@ -139,6 +144,7 @@ function ownerErrors(index) {
 
 function actionErrors(index) {
   const errors = [];
+  const acceptedInputPartitions = new Map();
   for (const actionEntry of index.actions) {
     const action = actionEntry.value;
     const permissionEffects = new Set(
@@ -176,11 +182,89 @@ function actionErrors(index) {
     if (targetObject && action?.transition) {
       const states = stateIds(targetObject);
       const { from, to } = action.transition;
-      if (!states.has(from) || !states.has(to)) {
+      const fromStates = Array.isArray(from) ? from : [from];
+      if (
+        fromStates.length === 0
+        || fromStates.some((state) => !states.has(state))
+        || !states.has(to)
+      ) {
         errors.push(
           `INVALID_STATE_TRANSITION ${formatValidationValue(action?.id)} ${formatValidationValue(from)} -> ${formatValidationValue(to)}`,
         );
       }
+    }
+
+    for (const guard of list(action?.relatedStateGuards)) {
+      const refField = index.fieldById.get(guard?.refFieldId);
+      const versionField = index.fieldById.get(guard?.versionFieldId);
+      const guardTarget = index.objectById.get(guard?.targetObjectId)?.value;
+      const coveredFieldIds = new Set([
+        ...list(action?.inputFieldIds),
+        ...list(action?.outputFieldIds),
+      ]);
+      const lineageBinding = list(targetObject?.lineageBindings).find((binding) => (
+        binding?.refFieldId === guard?.refFieldId
+        && binding?.versionFieldId === guard?.versionFieldId
+        && binding?.targetObjectId === guard?.targetObjectId
+      ));
+      const guardValid = refField?.objectId === action?.targetObjectId
+        && versionField?.objectId === action?.targetObjectId
+        && refField?.value?.valueSource?.kind === "OBJECT_REF"
+        && refField.value.valueSource.targetObjectId === guard?.targetObjectId
+        && refField.value.referenceIntegrity === "VERSION_PINNED"
+        && refField.value.versionBinding?.versionFieldId === guard?.versionFieldId
+        && refField.value.versionBinding?.targetVersionFieldId
+          === lineageBinding?.targetVersionFieldId
+        && coveredFieldIds.has(guard?.refFieldId)
+        && coveredFieldIds.has(guard?.versionFieldId)
+        && stateIds(guardTarget).has(guard?.requiredState);
+      if (!guardValid) {
+        errors.push(
+          `INVALID_ACTION_STATE_GUARD ${formatValidationValue(action?.id)} requires a covered version-pinned lineage to ${formatValidationValue(guard?.targetObjectId)}.${formatValidationValue(guard?.requiredState)}`,
+        );
+      }
+    }
+
+    for (const acceptedInputValue of list(action?.acceptedInputValues)) {
+      const fieldId = acceptedInputValue?.fieldId;
+      const optionSetId = acceptedInputValue?.optionSetId;
+      const partitionId = acceptedInputValue?.partitionId;
+      const codes = list(acceptedInputValue?.codes);
+      const fieldEntry = index.fieldById.get(fieldId);
+      const optionSet = index.optionSetById.get(optionSetId)?.value;
+      const optionValues = list(optionSet?.values);
+      const registeredCodes = new Set(
+        optionValues.filter(isRecord).map(({ code }) => code).filter(isValidId),
+      );
+      const bindingValid = list(action?.inputFieldIds).includes(fieldId)
+        && fieldEntry?.objectId === action?.targetObjectId
+        && fieldEntry?.value?.valueSource?.kind === "OPTION_SET"
+        && fieldEntry.value.valueSource.optionSetId === optionSetId
+        && optionSet?.mode === "STATIC"
+        && registeredCodes.size === optionValues.length
+        && codes.length > 0
+        && codes.every(isValidId)
+        && new Set(codes).size === codes.length
+        && codes.every((code) => registeredCodes.has(code));
+      if (!bindingValid) {
+        errors.push(
+          `INVALID_ACTION_INPUT_VALUES ${formatValidationValue(action?.id)} must accept registered STATIC Option Set values for an input owned by its target object`,
+        );
+      }
+
+      const partitionKey = [action?.targetObjectId, fieldId, partitionId].join("\u0000");
+      const partition = acceptedInputPartitions.get(partitionKey) ?? {
+        optionSetId,
+        registeredCodes,
+        acceptedCodes: new Set(),
+        valid: true,
+      };
+      if (partition.optionSetId !== optionSetId) partition.valid = false;
+      for (const code of codes) {
+        if (partition.acceptedCodes.has(code)) partition.valid = false;
+        partition.acceptedCodes.add(code);
+      }
+      acceptedInputPartitions.set(partitionKey, partition);
     }
 
     const declaredScenarioIds = new Set(list(action?.scenarioIds));
@@ -290,6 +374,16 @@ function actionErrors(index) {
           `FORBIDDEN_GENERIC_TEMPLATE action ${formatValidationValue(action?.id)} -> ${name}`,
         );
       }
+    }
+  }
+  for (const partition of acceptedInputPartitions.values()) {
+    if (
+      !partition.valid
+      || !setEquals(partition.acceptedCodes, partition.registeredCodes)
+    ) {
+      errors.push(
+        "INVALID_ACTION_INPUT_VALUES accepted action input partitions must be disjoint and exhaust their STATIC Option Set",
+      );
     }
   }
   return errors;
@@ -429,6 +523,20 @@ function flowErrors(index) {
       for (const value of values) usedCodes.add(value);
       pathValuesByFieldId.set(when?.fieldId, usedCodes);
     }
+    for (const [fieldId, usedCodes] of pathValuesByFieldId) {
+      const field = index.fieldById.get(fieldId)?.value;
+      const optionSet = field?.valueSource?.kind === "OPTION_SET"
+        ? index.optionSetById.get(field.valueSource.optionSetId)?.value
+        : undefined;
+      const registeredCodes = new Set(
+        list(optionSet?.values).filter(isRecord).map(({ code }) => code).filter(isValidId),
+      );
+      if (optionSet?.mode !== "STATIC" || !setEquals(usedCodes, registeredCodes)) {
+        errors.push(
+          `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} branches for ${formatValidationValue(fieldId)} must exhaust its STATIC Option Set`,
+        );
+      }
+    }
     const sourceFieldIdsForResolution = list(flow?.sourceDataRefs).flatMap((dataRef) => (
       [dataRef?.fieldId, dataRef?.version].filter(isValidId)
     ));
@@ -443,10 +551,12 @@ function flowErrors(index) {
         pathProvidedInputsByStepOrder.set(providedInput?.stepOrder, fieldIds);
       }
       const availableFieldIds = new Set(sourceFieldIdsForResolution);
+      let finalAction;
       for (const stepOrder of list(executionPath?.stepOrders)) {
         const step = stepByOrder.get(stepOrder);
         const action = index.actionById.get(step?.actionId)?.value;
         if (!action) continue;
+        finalAction = action;
         const providedFieldIds = new Set([
           ...(providedInputsByStepOrder.get(stepOrder) ?? []),
           ...(pathProvidedInputsByStepOrder.get(stepOrder) ?? []),
@@ -459,7 +569,29 @@ function flowErrors(index) {
             `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} step=${formatValidationValue(stepOrder)} action=${formatValidationValue(action.id)} missing ${missingInputFieldIds.map(formatValidationValue).join(",")}`,
           );
         }
+        for (const fieldId of list(action.inputFieldIds)) {
+          if (providedFieldIds.has(fieldId)) availableFieldIds.add(fieldId);
+        }
         for (const fieldId of list(action.outputFieldIds)) availableFieldIds.add(fieldId);
+      }
+      const successStates = new Set(index.scenarios
+        .filter(({ value }) => (
+          value?.actionId === finalAction?.id
+          && value?.kind === "SUCCESS"
+          && value?.then?.expectedState?.mode === "STATE"
+        ))
+        .map(({ value }) => value.then.expectedState.value));
+      const terminalState = finalAction?.transition?.to
+        ?? (successStates.size === 1 ? [...successStates][0] : undefined);
+      const terminalObject = index.objectById.get(finalAction?.targetObjectId)?.value;
+      const missingTerminalFieldIds = list(terminalObject?.fields)
+        .filter((field) => fieldIsRequiredForState(field, terminalState))
+        .map(({ id }) => id)
+        .filter((fieldId) => !availableFieldIds.has(fieldId));
+      if (missingTerminalFieldIds.length > 0) {
+        errors.push(
+          `INVALID_FLOW_TERMINAL_STATE ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} state=${formatValidationValue(terminalState)} missing ${missingTerminalFieldIds.map(formatValidationValue).join(",")}`,
+        );
       }
     }
 

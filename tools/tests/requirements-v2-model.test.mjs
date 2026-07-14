@@ -1099,10 +1099,10 @@ test("classifies every phase-one object reference with a closed integrity mode",
       .filter(({ valueSource }) => valueSource?.kind === "OBJECT_REF")
       .map((field) => ({ module, object, field }))
   )));
-  assert.equal(objectRefs.length, 46);
+  assert.equal(objectRefs.length, 47);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "VERSION_PINNED"
-  )).length, 31);
+  )).length, 32);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "IDENTITY_ONLY"
   )).length, 15);
@@ -1334,6 +1334,63 @@ test("rejects CREATE actions whose generic command semantics also express update
     model.flows[0].steps[0].actionId = action.id;
 
     assertHasCode(validateRequirementModel(model), "INVALID_ACTION_OPERATION");
+  }
+});
+
+test("requires closed accepted Option Set values on action inputs", () => {
+  const validModel = validFixture();
+  validModel.modules[0].actions[0].acceptedInputValues = [{
+    fieldId: "SUB-F001",
+    optionSetId: "OPT-BOOL",
+    partitionId: "SUBMISSION_DECISION",
+    codes: ["YES"],
+  }];
+  assertNoCode(validateRequirementModel(validModel), "INVALID_ACTION_CONTRACT");
+  assertNoCode(validateRequirementModel(validModel), "INVALID_ACTION_INPUT_VALUES");
+
+  const malformed = structuredClone(validModel);
+  malformed.modules[0].actions[0].acceptedInputValues[0].extra = true;
+  assertHasCode(validateRequirementModel(malformed), "INVALID_ACTION_CONTRACT");
+
+  const wrongReference = structuredClone(validModel);
+  wrongReference.modules[0].actions[0].acceptedInputValues[0].optionSetId = "OPT-MISSING";
+  assertHasCode(validateRequirementModel(wrongReference), "INVALID_ACTION_INPUT_VALUES");
+});
+
+test("requires closed version-pinned related state guards on actions", () => {
+  const validModel = validFixture();
+  addLineageBindingFixture(validModel);
+  const action = moduleById(validModel, "SUB-001").actions[0];
+  action.outputFieldIds.push("SUB-F003");
+  action.relatedStateGuards = [{
+    refFieldId: "SUB-F003",
+    versionFieldId: "SUB-F002",
+    targetObjectId: "DAT-HW-01",
+    requiredState: "DRAFT",
+  }];
+  assertNoCode(validateRequirementModel(validModel), "INVALID_ACTION_CONTRACT");
+  assertNoCode(validateRequirementModel(validModel), "INVALID_ACTION_STATE_GUARD");
+
+  const malformed = structuredClone(validModel);
+  malformed.modules[0].actions[0].relatedStateGuards[0].extra = true;
+  assertHasCode(validateRequirementModel(malformed), "INVALID_ACTION_CONTRACT");
+
+  const mutations = [
+    (model) => {
+      model.modules[0].actions[0].relatedStateGuards[0].requiredState = "MISSING";
+    },
+    (model) => {
+      model.modules[0].actions[0].outputFieldIds = model.modules[0].actions[0]
+        .outputFieldIds.filter((fieldId) => fieldId !== "SUB-F003");
+    },
+    (model) => {
+      model.modules[0].objects[0].lineageBindings[0].targetVersionFieldId = "HW-F000";
+    },
+  ];
+  for (const mutate of mutations) {
+    const model = structuredClone(validModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_STATE_GUARD");
   }
 });
 
@@ -1976,6 +2033,127 @@ test("requires closed Option Set conditions on value-routed execution paths", ()
   assertHasCode(validateRequirementModel(overlapping), "INVALID_FLOW_BRANCH");
 });
 
+test("partitions the complete DF-010 judgment domain across actions and paths", () => {
+  const correction = moduleById(requirementModel, "CORR-001");
+  const actionById = new Map(correction.actions.map((action) => [action.id, action]));
+  const acceptedCodes = (actionId) => actionById.get(actionId)
+    ?.acceptedInputValues?.find(({ fieldId }) => (
+      fieldId === "CORR-ATTEMPT-F-TEACHER-JUDGMENT"
+    ))?.codes;
+  assert.deepEqual(acceptedCodes("CORR-ACT-CONFIRM-JUDGMENT"), ["PASSED", "CLOSED"]);
+  assert.deepEqual(acceptedCodes("CORR-ACT-REQUEST-RETRY"), [
+    "NOT-PASSED",
+    "NEEDS-MORE",
+  ]);
+
+  const flow = flows.find(({ id }) => id === "DF-010");
+  assert.deepEqual(flow.executionPaths.map(({ id, when }) => ({ id, when })), [
+    {
+      id: "PASSED",
+      when: {
+        fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        values: ["PASSED"],
+      },
+    },
+    {
+      id: "CLOSED",
+      when: {
+        fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        values: ["CLOSED"],
+      },
+    },
+    {
+      id: "NOT_PASSED",
+      when: {
+        fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        values: ["NOT-PASSED"],
+      },
+    },
+    {
+      id: "NEEDS_MORE",
+      when: {
+        fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        values: ["NEEDS-MORE"],
+      },
+    },
+  ]);
+});
+
+test("fails closed when DF-010 judgment action or branch domains are mutated", () => {
+  const closedModel = structuredClone(requirementModel);
+  const correction = moduleById(closedModel, "CORR-001");
+  const confirm = correction.actions.find(({ id }) => id === "CORR-ACT-CONFIRM-JUDGMENT");
+  const retry = correction.actions.find(({ id }) => id === "CORR-ACT-REQUEST-RETRY");
+  confirm.acceptedInputValues = [{
+    fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+    optionSetId: "OPT-ENUM-028",
+    partitionId: "CORRECTION_JUDGMENT",
+    codes: ["PASSED", "CLOSED"],
+  }];
+  retry.acceptedInputValues = [{
+    fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+    optionSetId: "OPT-ENUM-028",
+    partitionId: "CORRECTION_JUDGMENT",
+    codes: ["NOT-PASSED", "NEEDS-MORE"],
+  }];
+  const flow = closedModel.flows.find(({ id }) => id === "DF-010");
+  const passed = flow.executionPaths.find(({ id }) => id === "PASSED");
+  const retryRequired = flow.executionPaths.find(({ id }) => id === "RETRY_REQUIRED")
+    ?? flow.executionPaths.find(({ id }) => id === "NOT_PASSED");
+  flow.executionPaths = [
+    { ...passed, id: "PASSED", when: { ...passed.when, values: ["PASSED"] } },
+    { ...passed, id: "CLOSED", when: { ...passed.when, values: ["CLOSED"] } },
+    {
+      ...retryRequired,
+      id: "NOT_PASSED",
+      when: { ...retryRequired.when, values: ["NOT-PASSED"] },
+    },
+    {
+      ...retryRequired,
+      id: "NEEDS_MORE",
+      when: { ...retryRequired.when, values: ["NEEDS-MORE"] },
+    },
+  ];
+
+  const mutations = [
+    ["deleted NEEDS_MORE path", "INVALID_FLOW_BRANCH", (model) => {
+      model.flows.find(({ id }) => id === "DF-010").executionPaths = model.flows
+        .find(({ id }) => id === "DF-010").executionPaths
+        .filter(({ id }) => id !== "NEEDS_MORE");
+    }],
+    ["deleted CLOSED path", "INVALID_FLOW_BRANCH", (model) => {
+      model.flows.find(({ id }) => id === "DF-010").executionPaths = model.flows
+        .find(({ id }) => id === "DF-010").executionPaths
+        .filter(({ id }) => id !== "CLOSED");
+    }],
+    ["wrong confirm action code", "INVALID_ACTION_INPUT_VALUES", (model) => {
+      moduleById(model, "CORR-001").actions.find(({ id }) => (
+        id === "CORR-ACT-CONFIRM-JUDGMENT"
+      )).acceptedInputValues[0].codes = ["PASSED", "NOT-PASSED"];
+    }],
+    ["overlapping accepted values", "INVALID_ACTION_INPUT_VALUES", (model) => {
+      moduleById(model, "CORR-001").actions.find(({ id }) => (
+        id === "CORR-ACT-REQUEST-RETRY"
+      )).acceptedInputValues[0].codes.push("PASSED");
+    }],
+    ["omitted accepted value", "INVALID_ACTION_INPUT_VALUES", (model) => {
+      moduleById(model, "CORR-001").actions.find(({ id }) => (
+        id === "CORR-ACT-CONFIRM-JUDGMENT"
+      )).acceptedInputValues[0].codes = ["PASSED"];
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, errorCode, mutate] of mutations) {
+    const model = structuredClone(closedModel);
+    mutate(model);
+    if (!errorCodes(validateRequirementModel(model)).includes(errorCode)) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
 test("resolves Flow inputs independently on every reachable execution path", () => {
   const mutations = [
     ["override", 3],
@@ -1991,6 +2169,87 @@ test("resolves Flow inputs independently on every reachable execution path", () 
     assertHasCode(
       validateRequirementModel(model),
       "INVALID_FLOW_INPUT_RESOLUTION",
+    );
+  }
+});
+
+test("requires each Flow path terminal state to satisfy its conditional fields", () => {
+  const validModel = validFixture();
+  const submission = moduleById(validModel, "SUB-001");
+  submission.objects[0].fields.push(validField("SUB-F003", {
+    required: "required when the object reaches SUBMITTED",
+  }));
+  submission.actions[0].outputFieldIds.push("SUB-F003");
+  assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_TERMINAL_STATE");
+
+  const missingTerminalField = structuredClone(validModel);
+  moduleById(missingTerminalField, "SUB-001").actions[0].outputFieldIds = moduleById(
+    missingTerminalField,
+    "SUB-001",
+  ).actions[0].outputFieldIds.filter((fieldId) => fieldId !== "SUB-F003");
+  assertHasCode(
+    validateRequirementModel(missingTerminalField),
+    "INVALID_FLOW_TERMINAL_STATE",
+  );
+
+  const providerCompletesState = validFixture();
+  const providedSubmission = moduleById(providerCompletesState, "SUB-001");
+  providedSubmission.objects[0].fields.find(({ id }) => id === "SUB-F001").required =
+    "required when the object reaches SUBMITTED";
+  providedSubmission.actions[0].outputFieldIds = providedSubmission.actions[0]
+    .outputFieldIds.filter((fieldId) => fieldId !== "SUB-F001");
+  assertNoCode(
+    validateRequirementModel(providerCompletesState),
+    "INVALID_FLOW_TERMINAL_STATE",
+  );
+});
+
+test("keeps terminal completeness path-local and closes DF-007 batch confirmation", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const batchConfirm = grading.actions.find(({ id }) => id === "GRD-ACT-BATCH-CONFIRM");
+  assert.deepEqual(batchConfirm.inputFieldIds, [
+    "GRD-DECISION-F-SUGGESTED-SCORE",
+    "GRD-DECISION-F-SCORING-RATIONALE",
+  ]);
+  assert.deepEqual(batchConfirm.outputFieldIds, [
+    "GRD-DECISION-F-OFFICIAL-SCORE",
+    "GRD-DECISION-F-TEACHER-FEEDBACK",
+    "GRD-DECISION-F-DECISION-VERSION",
+  ]);
+
+  const closedModel = structuredClone(requirementModel);
+  const closedBatch = moduleById(closedModel, "GRD-001").actions
+    .find(({ id }) => id === "GRD-ACT-BATCH-CONFIRM");
+  closedBatch.inputFieldIds = [
+    "GRD-DECISION-F-SUGGESTED-SCORE",
+    "GRD-DECISION-F-SCORING-RATIONALE",
+  ];
+  closedBatch.outputFieldIds = [
+    "GRD-DECISION-F-OFFICIAL-SCORE",
+    "GRD-DECISION-F-TEACHER-FEEDBACK",
+    "GRD-DECISION-F-DECISION-VERSION",
+  ];
+  const closedFlow = closedModel.flows.find(({ id }) => id === "DF-007");
+  closedFlow.sourceDataRefs.push({
+    objectId: "GRD-OBJ-DECISION",
+    fieldId: "GRD-DECISION-F-SCORING-RATIONALE",
+    version: "GRD-DECISION-F-DECISION-VERSION",
+    cardinality: "ONE",
+  });
+  assertNoCode(validateRequirementModel(closedModel), "INVALID_FLOW_TERMINAL_STATE");
+
+  for (const missingFieldId of [
+    "GRD-DECISION-F-OFFICIAL-SCORE",
+    "GRD-DECISION-F-TEACHER-FEEDBACK",
+  ]) {
+    const mutated = structuredClone(closedModel);
+    const mutatedBatch = moduleById(mutated, "GRD-001").actions
+      .find(({ id }) => id === "GRD-ACT-BATCH-CONFIRM");
+    mutatedBatch.outputFieldIds = mutatedBatch.outputFieldIds
+      .filter((fieldId) => fieldId !== missingFieldId);
+    assertHasCode(
+      validateRequirementModel(mutated),
+      "INVALID_FLOW_TERMINAL_STATE",
     );
   }
 });
@@ -2040,51 +2299,76 @@ test("declares path-specific teacher inputs for every DF-007 grading branch", ()
   );
 });
 
-test("routes DF-010 passed judgments to evidence and retry judgments to termination", () => {
+test("routes DF-010 final judgments to evidence and retry judgments to termination", () => {
   const flow = flows.find(({ id }) => id === "DF-010");
   assert.ok(Array.isArray(flow.executionPaths));
   const actionByOrder = new Map(flow.steps.map(({ order, actionId }) => [order, actionId]));
   const passedPath = flow.executionPaths.find(({ id }) => id === "PASSED");
-  const retryPath = flow.executionPaths.find(({ id }) => id === "RETRY_REQUIRED");
+  const closedPath = flow.executionPaths.find(({ id }) => id === "CLOSED");
+  const notPassedPath = flow.executionPaths.find(({ id }) => id === "NOT_PASSED");
+  const needsMorePath = flow.executionPaths.find(({ id }) => id === "NEEDS_MORE");
   assert.deepEqual(passedPath.when, {
     fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
     values: ["PASSED"],
   });
-  assert.deepEqual(retryPath.when, {
+  assert.deepEqual(closedPath.when, {
     fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
-    values: ["NOT-PASSED", "NEEDS-MORE"],
+    values: ["CLOSED"],
   });
-  assert.deepEqual(passedPath.stepOrders.map((order) => actionByOrder.get(order)), [
+  assert.deepEqual(notPassedPath.when, {
+    fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+    values: ["NOT-PASSED"],
+  });
+  assert.deepEqual(needsMorePath.when, {
+    fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+    values: ["NEEDS-MORE"],
+  });
+  const finalActionIds = [
     "PUB-ACT-VIEW-RESULT",
     "CORR-ACT-NORMALIZE-SUBMISSION",
     "CORR-ACT-CONFIRM-JUDGMENT",
+    "CORR-ACT-COMPLETE-TASK",
     "CORR-ACT-RECORD-INVALIDATION",
     "INS-ACT-MARK-STALE",
     "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
     "INS-ACT-CREATE-CANDIDATE",
     "INS-ACT-CONFIRM-MASTERY",
     "INS-ACT-PUBLISH-INTERPRETATION",
-  ]);
-  assert.deepEqual(retryPath.stepOrders.map((order) => actionByOrder.get(order)), [
+  ];
+  assert.deepEqual(
+    passedPath.stepOrders.map((order) => actionByOrder.get(order)),
+    finalActionIds,
+  );
+  assert.deepEqual(
+    closedPath.stepOrders.map((order) => actionByOrder.get(order)),
+    finalActionIds,
+  );
+  const retryActionIds = [
     "PUB-ACT-VIEW-RESULT",
     "CORR-ACT-NORMALIZE-SUBMISSION",
     "CORR-ACT-REQUEST-RETRY",
-  ]);
-  assert.equal(retryPath.stepOrders.some((order) => [
-    "CORR-ACT-RECORD-INVALIDATION",
-    "INS-ACT-MARK-STALE",
-    "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
-    "INS-ACT-CREATE-CANDIDATE",
-    "INS-ACT-CONFIRM-MASTERY",
-    "INS-ACT-PUBLISH-INTERPRETATION",
-  ].includes(actionByOrder.get(order))), false);
+    "CORR-ACT-MARK-TASK-AWAITING-RETRY",
+  ];
+  for (const retryPath of [notPassedPath, needsMorePath]) {
+    assert.deepEqual(
+      retryPath.stepOrders.map((order) => actionByOrder.get(order)),
+      retryActionIds,
+    );
+    assert.equal(retryPath.stepOrders.some((order) => finalActionIds.slice(3)
+      .includes(actionByOrder.get(order))), false);
+  }
 
   const requestRetry = modules.flatMap((module) => module.actions)
     .find(({ id }) => id === "CORR-ACT-REQUEST-RETRY");
   assert.deepEqual(requestRetry.transition, { from: "SUBMITTED", to: "NEEDS_RETRY" });
-  assert.equal(retryPath.stepOrders.at(-1), flow.steps.find(({ actionId }) => (
-    actionId === requestRetry.id
-  )).order);
+  const retryOrder = flow.steps.find(({ actionId }) => actionId === requestRetry.id).order;
+  const awaitingRetryOrder = flow.steps.find(({ actionId }) => (
+    actionId === "CORR-ACT-MARK-TASK-AWAITING-RETRY"
+  )).order;
+  assert.equal(notPassedPath.stepOrders.at(-2), retryOrder);
+  assert.equal(needsMorePath.stepOrders.at(-2), retryOrder);
+  assert.equal(notPassedPath.stepOrders.at(-1), awaitingRetryOrder);
+  assert.equal(needsMorePath.stepOrders.at(-1), awaitingRetryOrder);
 });
 
 test("requires closed actor-aware step input providers and rejects legacy bindings", () => {
@@ -2152,7 +2436,7 @@ test("keeps candidate generation separate from teacher-provided final learning f
       .providedInputs.map(({ fieldId, provider }) => [fieldId, provider]),
   );
 
-  const evidenceProviders = providerFields("DF-010", 9);
+  const evidenceProviders = providerFields("DF-010", 11);
   assert.deepEqual(evidenceProviders, new Map([
     ["INS-EVIDENCE-F-MASTERY-INTERPRETATION", { dutyRef: "DUTY-SUBJECT-TEACHER" }],
     ["INS-EVIDENCE-F-TEACHER-CONFIRMATION", { dutyRef: "DUTY-SUBJECT-TEACHER" }],
@@ -4620,7 +4904,7 @@ test("separates teacher-owned correction tasks from student-produced attempts", 
   }, {
     producerRef: "DUTY-SUBJECT-TEACHER",
     ownerRef: "DUTY-SUBJECT-TEACHER",
-    states: ["OPEN", "OVERDUE"],
+    states: ["OPEN", "OVERDUE", "AWAITING_RETRY", "COMPLETED"],
   });
   assert.deepEqual({
     producerRef: attempt.producerRef,
@@ -4693,7 +4977,7 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
   const correction = moduleById(requirementModel, "CORR-001");
   const task = correction.objects.find(({ id }) => id === "CORR-OBJ-TASK");
   const attempt = correction.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
-  assert.deepEqual(task.states, ["OPEN", "OVERDUE"]);
+  assert.deepEqual(task.states, ["OPEN", "OVERDUE", "AWAITING_RETRY", "COMPLETED"]);
   assert.deepEqual(attempt.states, ["SUBMITTED", "JUDGED", "NEEDS_RETRY"]);
   const dueAt = task.fields.find(({ id }) => id === "CORR-TASK-F-DUE-AT");
   assert.deepEqual({
@@ -4724,6 +5008,14 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
     ["CORR-ACT-MARK-OVERDUE", { from: "OPEN", to: "OVERDUE" }],
     ["CORR-ACT-CONFIRM-JUDGMENT", { from: "SUBMITTED", to: "JUDGED" }],
     ["CORR-ACT-REQUEST-RETRY", { from: "SUBMITTED", to: "NEEDS_RETRY" }],
+    ["CORR-ACT-MARK-TASK-AWAITING-RETRY", {
+      from: ["OPEN", "OVERDUE", "AWAITING_RETRY"],
+      to: "AWAITING_RETRY",
+    }],
+    ["CORR-ACT-COMPLETE-TASK", {
+      from: ["OPEN", "OVERDUE", "AWAITING_RETRY"],
+      to: "COMPLETED",
+    }],
   ]);
   for (const [actionId, transition] of expectedTransitions) {
     assert.deepEqual(actionById.get(actionId)?.transition, transition, actionId);
@@ -4789,6 +5081,8 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
       "CORR-ACT-NORMALIZE-SUBMISSION",
       "CORR-ACT-CONFIRM-JUDGMENT",
       "CORR-ACT-REQUEST-RETRY",
+      "CORR-ACT-COMPLETE-TASK",
+      "CORR-ACT-MARK-TASK-AWAITING-RETRY",
       "CORR-ACT-RECORD-INVALIDATION",
     ],
   );
@@ -4797,6 +5091,91 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
     "CORR-ACT-SUBMIT-LATE",
     "CORR-ACT-RESUBMIT",
   ].includes(actionId)), false);
+});
+
+test("closes correction Task states and version-pinned Attempt lineage", () => {
+  const correction = moduleById(requirementModel, "CORR-001");
+  const task = correction.objects.find(({ id }) => id === "CORR-OBJ-TASK");
+  const attempt = correction.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
+  const actionById = new Map(correction.actions.map((action) => [action.id, action]));
+  assert.deepEqual(task.states, ["OPEN", "OVERDUE", "AWAITING_RETRY", "COMPLETED"]);
+
+  const priorAttemptRef = attempt.fields.find(({ id }) => (
+    id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
+  ));
+  const priorAttemptVersion = attempt.fields.find(({ id }) => (
+    id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION"
+  ));
+  assert.deepEqual(priorAttemptRef?.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+  });
+  assert.equal(priorAttemptRef?.referenceIntegrity, "VERSION_PINNED");
+  assert.deepEqual(priorAttemptRef?.versionBinding, {
+    versionFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+    targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+  });
+  assert.equal(priorAttemptVersion?.dataType, "INTEGER");
+  assert.ok(attempt.lineageBindings.some((binding) => (
+    binding.refFieldId === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
+    && binding.versionFieldId === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION"
+    && binding.targetObjectId === attempt.id
+    && binding.targetVersionFieldId === "CORR-ATTEMPT-F-CORRECTION-VERSION"
+  )));
+
+  const taskGuardState = (actionId) => actionById.get(actionId).relatedStateGuards
+    .find(({ targetObjectId }) => targetObjectId === task.id).requiredState;
+  assert.equal(taskGuardState("CORR-ACT-SUBMIT-INITIAL"), "OPEN");
+  assert.equal(taskGuardState("CORR-ACT-SUBMIT-LATE"), "OVERDUE");
+  assert.equal(taskGuardState("CORR-ACT-RESUBMIT"), "AWAITING_RETRY");
+
+  const priorGuard = actionById.get("CORR-ACT-RESUBMIT").relatedStateGuards
+    .find(({ refFieldId }) => refFieldId === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF");
+  assert.deepEqual(priorGuard, {
+    refFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF",
+    versionFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    requiredState: "NEEDS_RETRY",
+  });
+  for (const fieldId of [
+    "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF",
+    "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+  ]) {
+    assert.equal(actionById.get("CORR-ACT-SUBMIT-INITIAL").outputFieldIds.includes(fieldId), false);
+    assert.equal(actionById.get("CORR-ACT-SUBMIT-LATE").outputFieldIds.includes(fieldId), false);
+    assert.equal(actionById.get("CORR-ACT-RESUBMIT").outputFieldIds.includes(fieldId), true);
+  }
+
+  assert.deepEqual(actionById.get("CORR-ACT-MARK-TASK-AWAITING-RETRY").transition, {
+    from: ["OPEN", "OVERDUE", "AWAITING_RETRY"],
+    to: "AWAITING_RETRY",
+  });
+  assert.deepEqual(actionById.get("CORR-ACT-COMPLETE-TASK").transition, {
+    from: ["OPEN", "OVERDUE", "AWAITING_RETRY"],
+    to: "COMPLETED",
+  });
+  assert.equal(
+    actionById.get("CORR-ACT-MARK-TASK-AWAITING-RETRY").targetObjectId,
+    task.id,
+  );
+  assert.equal(actionById.get("CORR-ACT-COMPLETE-TASK").targetObjectId, task.id);
+
+  const flow = flows.find(({ id }) => id === "DF-010");
+  const actionIdByOrder = new Map(flow.steps.map(({ order, actionId }) => [order, actionId]));
+  for (const pathId of ["PASSED", "CLOSED"]) {
+    const actionIds = flow.executionPaths.find(({ id }) => id === pathId).stepOrders
+      .map((order) => actionIdByOrder.get(order));
+    assert.ok(actionIds.indexOf("CORR-ACT-COMPLETE-TASK")
+      < actionIds.indexOf("CORR-ACT-RECORD-INVALIDATION"), pathId);
+  }
+  for (const pathId of ["NOT_PASSED", "NEEDS_MORE"]) {
+    const actionIds = flow.executionPaths.find(({ id }) => id === pathId).stepOrders
+      .map((order) => actionIdByOrder.get(order));
+    assert.deepEqual(actionIds.slice(-2), [
+      "CORR-ACT-REQUEST-RETRY",
+      "CORR-ACT-MARK-TASK-AWAITING-RETRY",
+    ], pathId);
+  }
 });
 
 test("keeps correction task creation teacher or system owned and reachable from DF-008", () => {
@@ -4930,6 +5309,8 @@ test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidati
         "CORR-ACT-NORMALIZE-SUBMISSION",
         "CORR-ACT-CONFIRM-JUDGMENT",
         "CORR-ACT-REQUEST-RETRY",
+        "CORR-ACT-COMPLETE-TASK",
+        "CORR-ACT-MARK-TASK-AWAITING-RETRY",
         "CORR-ACT-RECORD-INVALIDATION",
         "INS-ACT-MARK-STALE",
         "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
@@ -5115,6 +5496,8 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["CORR-ACT-MARK-OVERDUE", "SYSTEM_EVENT"],
     ["CORR-ACT-AUTO-CREATE-TASK", "FLOW_INTERNAL"],
     ["CORR-ACT-NORMALIZE-SUBMISSION", "FLOW_INTERNAL"],
+    ["CORR-ACT-COMPLETE-TASK", "FLOW_INTERNAL"],
+    ["CORR-ACT-MARK-TASK-AWAITING-RETRY", "FLOW_INTERNAL"],
     ["CORR-ACT-RECORD-INVALIDATION", "FLOW_INTERNAL"],
     ["STU-ACT-BUILD-PROFILE", "FLOW_INTERNAL"],
   ]);
@@ -5122,7 +5505,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 38);
+  assert.equal(expectedModes.size, 40);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);

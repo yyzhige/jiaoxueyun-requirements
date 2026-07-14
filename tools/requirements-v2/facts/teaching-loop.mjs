@@ -107,6 +107,8 @@ function action({
   label,
   targetObjectId,
   inputFieldIds = [],
+  acceptedInputValues,
+  relatedStateGuards,
   outputFieldIds = [],
   operationKind,
   writes,
@@ -181,6 +183,8 @@ function action({
       label,
       targetObjectId,
       inputFieldIds,
+      ...(acceptedInputValues ? { acceptedInputValues } : {}),
+      ...(relatedStateGuards ? { relatedStateGuards } : {}),
       outputFieldIds,
       ...(transition ? { transition } : {}),
       operationKind: effectiveOperationKind,
@@ -1648,7 +1652,15 @@ const gradingActions = [
     id: "GRD-ACT-BATCH-CONFIRM",
     label: "Batch Confirm Eligible Scores",
     targetObjectId: "GRD-OBJ-DECISION",
-    outputFieldIds: ["GRD-DECISION-F-OFFICIAL-SCORE", "GRD-DECISION-F-DECISION-VERSION"],
+    inputFieldIds: [
+      "GRD-DECISION-F-SUGGESTED-SCORE",
+      "GRD-DECISION-F-SCORING-RATIONALE",
+    ],
+    outputFieldIds: [
+      "GRD-DECISION-F-OFFICIAL-SCORE",
+      "GRD-DECISION-F-TEACHER-FEEDBACK",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
     transition: { from: "ROUTED_REVIEW", to: "TEACHER_CONFIRMED" },
@@ -4212,6 +4224,24 @@ const correctionAttemptFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
+  field("CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF", "Prior Correction Attempt Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-ATTEMPT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+      targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    },
+    idempotencyRole: "OBJECT_REF",
+    required: "required for a resubmission and absent for the first accepted submission",
+  }),
+  field("CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION", "Prior Correction Attempt Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    required: "required for a resubmission and absent for the first accepted submission",
+  }),
   field("CORR-ATTEMPT-F-CORRECTION-ANSWER", "Student Correction Answer", {
     dataType: "JSON",
     required: "required when the correction reaches SUBMITTED",
@@ -4354,6 +4384,20 @@ const correctionFlowPermissions = [
   permission("DENY", "CURRENT_ACTOR", "a user cannot invoke internal correction submission normalization directly"),
 ];
 
+const correctionTaskJudgmentFlowPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified correction judgment Flow updates only the guarded correction Task version"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot bypass the formal judgment to update correction Task state directly"),
+];
+
+function correctionTaskStateGuard(requiredState) {
+  return {
+    refFieldId: "CORR-ATTEMPT-F-TASK-REF",
+    versionFieldId: "CORR-ATTEMPT-F-TASK-VERSION",
+    targetObjectId: "CORR-OBJ-TASK",
+    requiredState,
+  };
+}
+
 const correctionSubmissionOutputFieldIds = [
   "CORR-ATTEMPT-F-CORRECTION-ANSWER",
   "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
@@ -4433,6 +4477,7 @@ const correctionActions = [
     operationKind: "CREATE",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
+    relatedStateGuards: [correctionTaskStateGuard("OPEN")],
     outputFieldIds: correctionAttemptCreateOutputFieldIds,
     permissions: correctionStudentPermissions,
     successState: "SUBMITTED",
@@ -4443,6 +4488,7 @@ const correctionActions = [
     operationKind: "CREATE",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
+    relatedStateGuards: [correctionTaskStateGuard("OVERDUE")],
     outputFieldIds: [
       ...correctionAttemptCreateOutputFieldIds,
       "CORR-ATTEMPT-F-OVERDUE-HANDLING",
@@ -4455,6 +4501,12 @@ const correctionActions = [
     label: "Confirm the Formal Correction Judgment",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-TEACHER-JUDGMENT"],
+    acceptedInputValues: [{
+      fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+      optionSetId: "OPT-ENUM-028",
+      partitionId: "CORRECTION_JUDGMENT",
+      codes: ["PASSED", "CLOSED"],
+    }],
     outputFieldIds: [
       "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
       "CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF",
@@ -4471,6 +4523,12 @@ const correctionActions = [
     label: "Request Another Correction Attempt",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-TEACHER-JUDGMENT"],
+    acceptedInputValues: [{
+      fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+      optionSetId: "OPT-ENUM-028",
+      partitionId: "CORRECTION_JUDGMENT",
+      codes: ["NOT-PASSED", "NEEDS-MORE"],
+    }],
     outputFieldIds: [
       "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
       "CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF",
@@ -4483,12 +4541,57 @@ const correctionActions = [
     successData: "the corresponding subject teacher records the retry judgment without accepting the correction as final",
   }),
   action({
+    id: "CORR-ACT-MARK-TASK-AWAITING-RETRY",
+    label: "Mark the Correction Task Awaiting Retry",
+    targetObjectId: "CORR-OBJ-TASK",
+    inputFieldIds: ["CORR-TASK-F-ID", "CORR-TASK-F-TASK-VERSION"],
+    outputFieldIds: ["CORR-TASK-F-TASK-VERSION"],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    permissions: correctionTaskJudgmentFlowPermissions,
+    transition: {
+      from: ["OPEN", "OVERDUE", "AWAITING_RETRY"],
+      to: "AWAITING_RETRY",
+    },
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "moves the exact guarded correction Task version to AWAITING_RETRY after a retry judgment",
+  }),
+  action({
+    id: "CORR-ACT-COMPLETE-TASK",
+    label: "Complete the Correction Task after Final Judgment",
+    targetObjectId: "CORR-OBJ-TASK",
+    inputFieldIds: ["CORR-TASK-F-ID", "CORR-TASK-F-TASK-VERSION"],
+    outputFieldIds: ["CORR-TASK-F-TASK-VERSION"],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    permissions: correctionTaskJudgmentFlowPermissions,
+    transition: {
+      from: ["OPEN", "OVERDUE", "AWAITING_RETRY"],
+      to: "COMPLETED",
+    },
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "moves the exact guarded correction Task version to COMPLETED before dependent evidence work",
+  }),
+  action({
     id: "CORR-ACT-RESUBMIT",
     label: "Resubmit a Repeated Correction",
     operationKind: "CREATE",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
-    outputFieldIds: correctionAttemptCreateOutputFieldIds,
+    relatedStateGuards: [
+      correctionTaskStateGuard("AWAITING_RETRY"),
+      {
+        refFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF",
+        versionFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+        targetObjectId: "CORR-OBJ-ATTEMPT",
+        requiredState: "NEEDS_RETRY",
+      },
+    ],
+    outputFieldIds: [
+      ...correctionAttemptCreateOutputFieldIds,
+      "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF",
+      "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+    ],
     permissions: correctionStudentPermissions,
     successState: "SUBMITTED",
   }),
@@ -4542,7 +4645,7 @@ const correctionModule = moduleFact({
         confirmerRef: "DUTY-SUBJECT-TEACHER",
         stewardRef: "DUTY-SUBJECT-TEACHER",
       },
-      ["OPEN", "OVERDUE"],
+      ["OPEN", "OVERDUE", "AWAITING_RETRY", "COMPLETED"],
       correctionTaskFields,
       "CORR-TASK-F-ID",
       {
@@ -4571,12 +4674,20 @@ const correctionModule = moduleFact({
       "CORR-ATTEMPT-F-ID",
       {
         sensitivityId: "S3",
-        lineageBindings: [{
-          refFieldId: "CORR-ATTEMPT-F-TASK-REF",
-          versionFieldId: "CORR-ATTEMPT-F-TASK-VERSION",
-          targetObjectId: "CORR-OBJ-TASK",
-          targetVersionFieldId: "CORR-TASK-F-TASK-VERSION",
-        }],
+        lineageBindings: [
+          {
+            refFieldId: "CORR-ATTEMPT-F-TASK-REF",
+            versionFieldId: "CORR-ATTEMPT-F-TASK-VERSION",
+            targetObjectId: "CORR-OBJ-TASK",
+            targetVersionFieldId: "CORR-TASK-F-TASK-VERSION",
+          },
+          {
+            refFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF",
+            versionFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+            targetObjectId: "CORR-OBJ-ATTEMPT",
+            targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+          },
+        ],
       },
     ),
     object(
@@ -5479,6 +5590,10 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       objectId: "GRD-OBJ-DECISION",
       fieldId: "GRD-DECISION-F-SUGGESTED-SCORE",
       version: "GRD-DECISION-F-DECISION-VERSION",
+    }, {
+      objectId: "GRD-OBJ-DECISION",
+      fieldId: "GRD-DECISION-F-SCORING-RATIONALE",
+      version: "GRD-DECISION-F-DECISION-VERSION",
     }],
     targetDataRefs: [
       {
@@ -6034,19 +6149,21 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       {
         order: 3,
         actionId: "CORR-ACT-CONFIRM-JUDGMENT",
-        condition: "the corresponding subject teacher confirms a PASSED correction judgment",
+        condition: "the corresponding subject teacher confirms a PASSED or CLOSED correction judgment",
         providedInputs: provideInputs(
           "DUTY-SUBJECT-TEACHER",
           "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         ),
       },
       { order: 4, actionId: "CORR-ACT-REQUEST-RETRY", condition: "the corresponding subject teacher records NOT-PASSED or NEEDS-MORE and terminates this judgment path in NEEDS_RETRY" },
-      { order: 5, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "a PASSED judgment invalidates dependent versions with history retained" },
-      { order: 6, actionId: "INS-ACT-MARK-STALE", condition: "the prior evidence depends on the corrected result or decision version" },
-      { order: 7, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "a plan evaluation depends on the corrected result, decision, evidence, or mastery version" },
-      { order: 8, actionId: "INS-ACT-CREATE-CANDIDATE", condition: "the PASSED correction produces a new evidence and mastery candidate" },
+      { order: 5, actionId: "CORR-ACT-COMPLETE-TASK", condition: "a PASSED or CLOSED judgment completes the exact guarded correction Task before dependent work" },
+      { order: 6, actionId: "CORR-ACT-MARK-TASK-AWAITING-RETRY", condition: "a NOT-PASSED or NEEDS-MORE judgment moves the exact guarded correction Task to AWAITING_RETRY and terminates" },
+      { order: 7, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "a PASSED or CLOSED judgment invalidates dependent versions with history retained" },
+      { order: 8, actionId: "INS-ACT-MARK-STALE", condition: "the prior evidence depends on the corrected result or decision version" },
+      { order: 9, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "a plan evaluation depends on the corrected result, decision, evidence, or mastery version" },
+      { order: 10, actionId: "INS-ACT-CREATE-CANDIDATE", condition: "the PASSED or CLOSED correction produces a new evidence and mastery candidate" },
       {
-        order: 9,
+        order: 11,
         actionId: "INS-ACT-CONFIRM-MASTERY",
         condition: "the corresponding subject teacher confirms the candidate interpretation",
         providedInputs: provideInputs(
@@ -6055,12 +6172,12 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
           "INS-EVIDENCE-F-TEACHER-CONFIRMATION",
         ),
       },
-      { order: 10, actionId: "INS-ACT-PUBLISH-INTERPRETATION", condition: "only the teacher-confirmed interpretation becomes student-visible" },
+      { order: 12, actionId: "INS-ACT-PUBLISH-INTERPRETATION", condition: "only the teacher-confirmed interpretation becomes student-visible" },
     ],
     executionPaths: [
       {
         id: "PASSED",
-        stepOrders: [1, 2, 3, 5, 6, 7, 8, 9, 10],
+        stepOrders: [1, 2, 3, 5, 7, 8, 9, 10, 11, 12],
         providedInputs: [],
         when: {
           fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
@@ -6068,8 +6185,17 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         },
       },
       {
-        id: "RETRY_REQUIRED",
-        stepOrders: [1, 2, 4],
+        id: "CLOSED",
+        stepOrders: [1, 2, 3, 5, 7, 8, 9, 10, 11, 12],
+        providedInputs: [],
+        when: {
+          fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+          values: ["CLOSED"],
+        },
+      },
+      {
+        id: "NOT_PASSED",
+        stepOrders: [1, 2, 4, 6],
         providedInputs: providePathInputs(
           4,
           "DUTY-SUBJECT-TEACHER",
@@ -6077,7 +6203,20 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         ),
         when: {
           fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
-          values: ["NOT-PASSED", "NEEDS-MORE"],
+          values: ["NOT-PASSED"],
+        },
+      },
+      {
+        id: "NEEDS_MORE",
+        stepOrders: [1, 2, 4, 6],
+        providedInputs: providePathInputs(
+          4,
+          "DUTY-SUBJECT-TEACHER",
+          "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        ),
+        when: {
+          fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+          values: ["NEEDS-MORE"],
         },
       },
     ],

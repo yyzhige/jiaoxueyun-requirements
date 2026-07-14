@@ -759,15 +759,38 @@ function validateAction(errors, action, path, strict) {
   if (Object.hasOwn(action, "transition") && !isRecord(action.transition)) {
     errors.push(`INVALID_ENTITY_SHAPE ${path}.transition must be an object`);
   } else if (isRecord(action.transition)) {
-    for (const property of ["from", "to"]) {
+    const transitionPath = `${path}.transition`;
+    if (Array.isArray(action.transition.from)) {
+      const fromStates = contractStringArray(
+        errors,
+        action.transition,
+        "from",
+        transitionPath,
+        "INVALID_ACTION_CONTRACT",
+        { nonEmpty: true },
+      );
+      validateUniqueStrings(
+        errors,
+        fromStates,
+        `${transitionPath}.from`,
+        "INVALID_ACTION_CONTRACT",
+      );
+    } else {
       contractString(
         errors,
         action.transition,
-        property,
-        `${path}.transition`,
+        "from",
+        transitionPath,
         "INVALID_ACTION_CONTRACT",
       );
     }
+    contractString(
+      errors,
+      action.transition,
+      "to",
+      transitionPath,
+      "INVALID_ACTION_CONTRACT",
+    );
   }
   if (!strict) return;
   for (const property of ["label", "targetObjectId"]) {
@@ -781,6 +804,91 @@ function validateAction(errors, action, path, strict) {
   }
   for (const property of ["inputFieldIds", "outputFieldIds"]) {
     contractStringArray(errors, action, property, path, "INVALID_ACTION_CONTRACT");
+  }
+  if (Object.hasOwn(action, "acceptedInputValues")) {
+    const acceptedInputValues = contractArray(
+      errors,
+      action,
+      "acceptedInputValues",
+      path,
+      "INVALID_ACTION_CONTRACT",
+      { nonEmpty: true },
+    );
+    const expectedKeys = new Set(["fieldId", "optionSetId", "partitionId", "codes"]);
+    acceptedInputValues.forEach((acceptedInputValue, index) => {
+      const acceptedInputValuePath = `${path}.acceptedInputValues[${index}]`;
+      if (
+        !isRecord(acceptedInputValue)
+        || Object.keys(acceptedInputValue).length !== expectedKeys.size
+        || Object.keys(acceptedInputValue).some((key) => !expectedKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_ACTION_CONTRACT ${acceptedInputValuePath} must use the closed fieldId, optionSetId, partitionId, and codes shape`,
+        );
+        return;
+      }
+      for (const property of ["fieldId", "optionSetId", "partitionId"]) {
+        contractString(
+          errors,
+          acceptedInputValue,
+          property,
+          acceptedInputValuePath,
+          "INVALID_ACTION_CONTRACT",
+        );
+      }
+      const codes = contractStringArray(
+        errors,
+        acceptedInputValue,
+        "codes",
+        acceptedInputValuePath,
+        "INVALID_ACTION_CONTRACT",
+        { nonEmpty: true },
+      );
+      validateUniqueStrings(
+        errors,
+        codes,
+        `${acceptedInputValuePath}.codes`,
+        "INVALID_ACTION_CONTRACT",
+      );
+    });
+  }
+  if (Object.hasOwn(action, "relatedStateGuards")) {
+    const relatedStateGuards = contractArray(
+      errors,
+      action,
+      "relatedStateGuards",
+      path,
+      "INVALID_ACTION_CONTRACT",
+      { nonEmpty: true },
+    );
+    const expectedKeys = new Set([
+      "refFieldId",
+      "versionFieldId",
+      "targetObjectId",
+      "requiredState",
+    ]);
+    relatedStateGuards.forEach((guard, index) => {
+      const guardPath = `${path}.relatedStateGuards[${index}]`;
+      if (
+        !isRecord(guard)
+        || Object.keys(guard).length !== expectedKeys.size
+        || Object.keys(guard).some((key) => !expectedKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_ACTION_CONTRACT ${guardPath} must use the closed refFieldId, versionFieldId, targetObjectId, and requiredState shape`,
+        );
+        return;
+      }
+      for (const property of expectedKeys) {
+        contractString(
+          errors,
+          guard,
+          property,
+          guardPath,
+          "INVALID_ACTION_CONTRACT",
+        );
+      }
+    });
   }
   if (!EXECUTION_MODES.has(action.executionMode)) {
     errors.push(
