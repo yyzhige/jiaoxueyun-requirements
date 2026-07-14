@@ -103,6 +103,12 @@ function stateIds(object) {
   }));
 }
 
+function objectIdentityFieldId(object) {
+  return list(object?.fields).find(({ idempotencyRole }) => (
+    idempotencyRole === "OBJECT_ID"
+  ))?.id;
+}
+
 function ownerErrors(index) {
   const errors = [];
   for (const objectEntry of index.objects) {
@@ -410,6 +416,64 @@ function flowErrors(index) {
     const keyParts = flow?.idempotencyKeyParts;
     const identityFieldIds = list(keyParts?.identityFieldIds);
     const versionFieldIds = list(keyParts?.versionFieldIds);
+    const producedIdentityFieldIds = identityFieldIds.filter((fieldId) => (
+      !fixedSourceFieldIds.has(fieldId)
+    ));
+    const producedVersionFieldIds = versionFieldIds.filter((fieldId) => (
+      !fixedSourceVersionFieldIds.has(fieldId)
+    ));
+    const hasProducedKeyParts = producedIdentityFieldIds.length > 0
+      || producedVersionFieldIds.length > 0;
+    const producerCandidates = hasProducedKeyParts
+      ? steps.map((step) => ({
+        step,
+        action: index.actionById.get(step?.actionId)?.value,
+      })).filter(({ action }) => {
+        const outputFieldIds = new Set(list(action?.outputFieldIds));
+        return [...producedIdentityFieldIds, ...producedVersionFieldIds]
+          .every((fieldId) => outputFieldIds.has(fieldId));
+      })
+      : [];
+    const producer = producerCandidates.length === 1 ? producerCandidates[0] : undefined;
+    const producerObject = index.objectById.get(producer?.action?.targetObjectId)?.value;
+    const producerOutputFieldIds = new Set(list(producer?.action?.outputFieldIds));
+    const producerObjectFieldIds = new Set(list(producerObject?.fields).map(({ id }) => id));
+    const producerIdentityFieldId = objectIdentityFieldId(producerObject);
+    const fanoutField = index.fieldById.get(keyParts?.fanoutFieldId)?.value;
+    const hasExactSourceLineage = list(producerObject?.lineageBindings).some((binding) => {
+      const targetObject = index.objectById.get(binding?.targetObjectId)?.value;
+      const targetIdentityFieldId = objectIdentityFieldId(targetObject);
+      return producerOutputFieldIds.has(binding?.refFieldId)
+        && producerOutputFieldIds.has(binding?.versionFieldId)
+        && fixedSourceRefs.some((sourceRef) => (
+          sourceRef?.objectId === binding?.targetObjectId
+          && sourceRef?.fieldId === targetIdentityFieldId
+          && sourceRef?.version === binding?.targetVersionFieldId
+        ));
+    });
+    const producerContractValid = !hasProducedKeyParts || (
+      producerCandidates.length === 1
+      && producer?.step?.order === 1
+      && producer?.action?.operationKind === "CREATE"
+      && producedIdentityFieldIds.length > 0
+      && producedVersionFieldIds.length > 0
+      && producedIdentityFieldIds.every((fieldId) => (
+        producerObjectFieldIds.has(fieldId) && producerOutputFieldIds.has(fieldId)
+      ))
+      && producedVersionFieldIds.every((fieldId) => (
+        producerObjectFieldIds.has(fieldId) && producerOutputFieldIds.has(fieldId)
+      ))
+      && identityFieldIds.includes(producerIdentityFieldId)
+      && producerObjectFieldIds.has(keyParts?.fanoutFieldId)
+      && producerOutputFieldIds.has(keyParts?.fanoutFieldId)
+      && fanoutField?.idempotencyRole === "FANOUT_SET"
+      && hasExactSourceLineage
+    );
+    if (!producerContractValid) {
+      errors.push(
+        `INVALID_FLOW_IDEMPOTENCY_PRODUCER ${formatValidationValue(flow?.id)} requires one first-step CREATE producer for the version-pinned identity, version, and fanout key fields`,
+      );
+    }
     const identityRolesValid = identityFieldIds.every((fieldId) => (
       hasStableIdempotencyRole(index, fieldId, ["OBJECT_ID", "OBJECT_REF"])
     ));
@@ -420,11 +484,18 @@ function flowErrors(index) {
     );
     if (
       identityFieldIds.length === 0
-      || identityFieldIds.some((fieldId) => !fixedSourceFieldIds.has(fieldId))
+      || identityFieldIds.some((fieldId) => (
+        !fixedSourceFieldIds.has(fieldId) && !producerOutputFieldIds.has(fieldId)
+      ))
       || !identityRolesValid
-      || !setEquals(new Set(versionFieldIds), fixedSourceVersionFieldIds)
-      || !sourceFieldIds.has(keyParts?.fanoutFieldId)
+      || [...fixedSourceVersionFieldIds].some((fieldId) => !versionFieldIds.includes(fieldId))
+      || producedVersionFieldIds.some((fieldId) => !producerOutputFieldIds.has(fieldId))
+      || (
+        !sourceFieldIds.has(keyParts?.fanoutFieldId)
+        && !producerOutputFieldIds.has(keyParts?.fanoutFieldId)
+      )
       || !fanoutRoleValid
+      || !producerContractValid
     ) {
       errors.push(
         `INVALID_FLOW_IDEMPOTENCY ${formatValidationValue(flow?.id)} requires source identity, exact source versions, and a source fanout field`,

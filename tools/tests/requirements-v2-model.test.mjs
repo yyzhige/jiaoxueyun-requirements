@@ -1081,10 +1081,10 @@ test("classifies every phase-one object reference with a closed integrity mode",
       .filter(({ valueSource }) => valueSource?.kind === "OBJECT_REF")
       .map((field) => ({ module, object, field }))
   )));
-  assert.equal(objectRefs.length, 43);
+  assert.equal(objectRefs.length, 44);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "VERSION_PINNED"
-  )).length, 29);
+  )).length, 30);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "IDENTITY_ONLY"
   )).length, 14);
@@ -1330,7 +1330,7 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 47);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 48);
 
   const requiredPairs = [
     ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
@@ -2286,7 +2286,7 @@ test("declares the direct read mode for every phase-one object", () => {
     ))),
     {
       AUTHORIZED: 20,
-      NO_DIRECT_READ: 34,
+      NO_DIRECT_READ: 35,
       STUDENT_TIMED_RELEASE: 3,
     },
   );
@@ -2312,11 +2312,11 @@ test("declares the direct read mode for every phase-one object", () => {
   }
 });
 
-test("declares one standard system identity for all 57 phase-one objects", () => {
+test("declares one standard system identity for all 58 phase-one objects", () => {
   const phaseOneObjects = modules
     .filter(({ phase }) => phase === PHASE.FIRST)
     .flatMap(({ objects }) => objects);
-  assert.equal(phaseOneObjects.length, 57);
+  assert.equal(phaseOneObjects.length, 58);
 
   const violations = phaseOneObjects.flatMap((object) => {
     const identities = object.fields
@@ -3084,6 +3084,7 @@ test("models publication eligibility visibility correction and invalidation", ()
     "PUB-ACT-RETRY-FAILED",
     "PUB-ACT-RECONCILE-BATCH",
     "PUB-ACT-VIEW-RESULT",
+    "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT",
     "PUB-ACT-CORRECT-RESULT",
     "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
   ]);
@@ -3563,6 +3564,7 @@ test("revises confirmed decisions before correcting immutable published results"
 
   const correction = flows.find(({ id }) => id === "DF-009");
   assert.deepEqual(correction.steps.map(({ actionId }) => actionId), [
+    "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT",
     "GRD-ACT-OPEN-CONFIRMED-REVISION",
     "GRD-ACT-CONFIRM-REVISION",
     "PUB-ACT-CORRECT-RESULT",
@@ -3590,6 +3592,7 @@ test("routes published score correction through structured evidence plan and fut
     "CORR-001",
   ]);
   assert.deepEqual(correction.steps.map(({ actionId }) => actionId), [
+    "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT",
     "GRD-ACT-OPEN-CONFIRMED-REVISION",
     "GRD-ACT-CONFIRM-REVISION",
     "PUB-ACT-CORRECT-RESULT",
@@ -3627,12 +3630,14 @@ test("routes published score correction through structured evidence plan and fut
     identityFieldIds: [
       "GRD-DECISION-F-ID",
       "PUB-RESULT-F-ID",
+      "PUB-DEPENDENCY-SNAPSHOT-F-ID",
     ],
     versionFieldIds: [
       "GRD-DECISION-F-DECISION-VERSION",
       "PUB-RESULT-F-RESULT-VERSION",
+      "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
     ],
-    fanoutFieldId: "PUB-RESULT-F-DEPENDENCY-SET",
+    fanoutFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
   });
   assert.deepEqual(correction.retryPolicy.retryableFailureResults, [
     "STALE_DECISION_VERSION",
@@ -3664,13 +3669,143 @@ test("routes published score correction through structured evidence plan and fut
   ]);
 });
 
+test("resolves a fresh version-pinned dependency snapshot before DF-009 invalidation", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const publishedResult = publication.objects.find(({ id }) => id === "PUB-OBJ-RESULT");
+  assert.equal(publishedResult.fields.some(({ id }) => (
+    id === "PUB-RESULT-F-DEPENDENCY-SET"
+  )), false);
+
+  const snapshot = publication.objects.find(({ id }) => (
+    id === "PUB-OBJ-DEPENDENCY-SNAPSHOT"
+  ));
+  assert.ok(snapshot);
+  const snapshotFieldById = new Map(snapshot.fields.map((field) => [field.id, field]));
+  assert.deepEqual(snapshot.states, ["RESOLVED"]);
+  assert.deepEqual({
+    idRole: snapshotFieldById.get("PUB-DEPENDENCY-SNAPSHOT-F-ID")?.idempotencyRole,
+    setRole: snapshotFieldById.get("PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET")
+      ?.idempotencyRole,
+    setType: snapshotFieldById.get("PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET")?.dataType,
+    setMutability: snapshotFieldById.get("PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET")
+      ?.mutability,
+    versionType: snapshotFieldById.get("PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION")
+      ?.dataType,
+  }, {
+    idRole: "OBJECT_ID",
+    setRole: "FANOUT_SET",
+    setType: "JSON",
+    setMutability: "IMMUTABLE",
+    versionType: "INTEGER",
+  });
+  assert.match(
+    snapshotFieldById.get("PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET").validation,
+    /zero or more.*targetKind.*targetRef.*targetVersion/i,
+  );
+  assert.deepEqual(snapshot.lineageBindings, [{
+    refFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF",
+    versionFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
+    targetObjectId: "PUB-OBJ-RESULT",
+    targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+  }]);
+
+  const snapshotAction = publication.actions.find(({ id }) => (
+    id === "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT"
+  ));
+  assert.equal(snapshotAction.operationKind, "CREATE");
+  assert.equal(snapshotAction.targetObjectId, snapshot.id);
+  assert.equal(snapshotAction.executionMode, "FLOW_INTERNAL");
+  assert.deepEqual(snapshotAction.trigger, { kind: "FLOW", flowIds: ["DF-009"] });
+  assert.equal([
+    "PUB-DEPENDENCY-SNAPSHOT-F-ID",
+    "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF",
+    "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
+    "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
+    "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+  ].every((fieldId) => snapshotAction.outputFieldIds.includes(fieldId)), true);
+
+  const correction = flows.find(({ id }) => id === "DF-009");
+  assert.equal(correction.steps[0].actionId, snapshotAction.id);
+  const invalidationStepOrders = correction.steps.filter(({ actionId }) => [
+    "CORR-ACT-RECORD-INVALIDATION",
+    "INS-ACT-MARK-STALE",
+    "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
+  ].includes(actionId)).map(({ order }) => order);
+  assert.equal(invalidationStepOrders.every((order) => order > correction.steps[0].order), true);
+  assert.equal(correction.sourceDataRefs.some(({ objectId }) => objectId === snapshot.id), false);
+  assert.equal([
+    "PUB-DEPENDENCY-SNAPSHOT-F-ID",
+    "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF",
+    "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
+    "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
+    "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+  ].every((fieldId) => correction.targetDataRefs.some(({ objectId, fieldId: targetFieldId }) => (
+    objectId === snapshot.id && targetFieldId === fieldId
+  ))), true);
+  assert.deepEqual(correction.idempotencyKeyParts, {
+    identityFieldIds: [
+      "GRD-DECISION-F-ID",
+      "PUB-RESULT-F-ID",
+      "PUB-DEPENDENCY-SNAPSHOT-F-ID",
+    ],
+    versionFieldIds: [
+      "GRD-DECISION-F-DECISION-VERSION",
+      "PUB-RESULT-F-RESULT-VERSION",
+      "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+    ],
+    fanoutFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
+  });
+});
+
+test("fails closed when the DF-009 idempotency snapshot producer is corrupted", () => {
+  const mutations = [
+    ["deleted producer", (model) => {
+      const flow = model.flows.find(({ id }) => id === "DF-009");
+      flow.steps.shift();
+      flow.steps.forEach((step, index) => { step.order = index + 1; });
+    }],
+    ["late producer", (model) => {
+      const flow = model.flows.find(({ id }) => id === "DF-009");
+      const [producer] = flow.steps.splice(0, 1);
+      flow.steps.splice(5, 0, producer);
+      flow.steps.forEach((step, index) => { step.order = index + 1; });
+    }],
+    ["wrong source version", (model) => {
+      const snapshot = moduleById(model, "PUB-001").objects.find(({ id }) => (
+        id === "PUB-OBJ-DEPENDENCY-SNAPSHOT"
+      ));
+      snapshot.fields.find(({ id }) => (
+        id === "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF"
+      )).versionBinding.targetVersionFieldId = "PUB-RESULT-F-CORRECTION-VERSION";
+      snapshot.lineageBindings[0].targetVersionFieldId = "PUB-RESULT-F-CORRECTION-VERSION";
+    }],
+    ["wrong fanout", (model) => {
+      model.flows.find(({ id }) => id === "DF-009")
+        .idempotencyKeyParts.fanoutFieldId = "PUB-RESULT-F-ID";
+    }],
+    ["wrong producer", (model) => {
+      model.flows.find(({ id }) => id === "DF-009").steps[0].actionId = (
+        "PUB-ACT-CORRECT-RESULT"
+      );
+    }],
+  ];
+
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    const errors = validateRequirementModel(model);
+    assertHasCode(errors, "INVALID_FLOW_IDEMPOTENCY_PRODUCER");
+    assert.ok(errors.length > 0, name);
+  }
+});
+
 test("fans DF-009 out over zero or many structured dependency snapshots", () => {
   const correction = flows.find(({ id }) => id === "DF-009");
   const publication = moduleById(requirementModel, "PUB-001");
   const correctionModule = moduleById(requirementModel, "CORR-001");
   const dependencySet = publication.objects
-    .find(({ id }) => id === "PUB-OBJ-RESULT").fields
-    .find(({ id }) => id === "PUB-RESULT-F-DEPENDENCY-SET");
+    .find(({ id }) => id === "PUB-OBJ-DEPENDENCY-SNAPSHOT").fields
+    .find(({ id }) => id === "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET");
   assert.deepEqual({
     dataType: dependencySet.dataType,
     valueSource: dependencySet.valueSource,
@@ -3693,12 +3828,17 @@ test("fans DF-009 out over zero or many structured dependency snapshots", () => 
     objectId !== "INS-OBJ-EVIDENCE" && objectId !== "PLN-OBJ-PLAN"
   )).every(({ cardinality }) => cardinality === "ONE"), true);
   assert.deepEqual(correction.idempotencyKeyParts, {
-    identityFieldIds: ["GRD-DECISION-F-ID", "PUB-RESULT-F-ID"],
+    identityFieldIds: [
+      "GRD-DECISION-F-ID",
+      "PUB-RESULT-F-ID",
+      "PUB-DEPENDENCY-SNAPSHOT-F-ID",
+    ],
     versionFieldIds: [
       "GRD-DECISION-F-DECISION-VERSION",
       "PUB-RESULT-F-RESULT-VERSION",
+      "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
     ],
-    fanoutFieldId: "PUB-RESULT-F-DEPENDENCY-SET",
+    fanoutFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
   });
 
   const targetOutcomes = correctionModule.objects
@@ -3747,6 +3887,10 @@ test("defines DF-004 through DF-009 as a versioned retryable teaching loop with 
     const sourceVersionFieldIds = new Set(flow.sourceDataRefs
       .filter(({ cardinality }) => cardinality === "ONE")
       .map(({ version }) => version));
+    const firstStepAction = modules.flatMap((module) => module.actions)
+      .find(({ id }) => id === flow.steps[0].actionId);
+    const firstStepOutputFieldIds = new Set(firstStepAction?.outputFieldIds ?? []);
+    const availableKeyFieldIds = new Set([...sourceFieldIds, ...firstStepOutputFieldIds]);
     assert.ok(flow.idempotencyKeyParts, flow.id);
     assert.deepEqual(
       Object.keys(flow.idempotencyKeyParts).sort(),
@@ -3754,16 +3898,26 @@ test("defines DF-004 through DF-009 as a versioned retryable teaching loop with 
       flow.id,
     );
     assert.equal(
-      flow.idempotencyKeyParts.identityFieldIds.every((fieldId) => sourceFieldIds.has(fieldId)),
+      flow.idempotencyKeyParts.identityFieldIds.every((fieldId) => (
+        availableKeyFieldIds.has(fieldId)
+      )),
       true,
       flow.id,
     );
-    assert.deepEqual(
-      new Set(flow.idempotencyKeyParts.versionFieldIds),
-      sourceVersionFieldIds,
+    assert.equal(
+      [...sourceVersionFieldIds].every((fieldId) => (
+        flow.idempotencyKeyParts.versionFieldIds.includes(fieldId)
+      )) && flow.idempotencyKeyParts.versionFieldIds.every((fieldId) => (
+        sourceVersionFieldIds.has(fieldId) || firstStepOutputFieldIds.has(fieldId)
+      )),
+      true,
       flow.id,
     );
-    assert.equal(sourceFieldIds.has(flow.idempotencyKeyParts.fanoutFieldId), true, flow.id);
+    assert.equal(
+      availableKeyFieldIds.has(flow.idempotencyKeyParts.fanoutFieldId),
+      true,
+      flow.id,
+    );
     assert.match(flow.failureGranularity, /OBJECT/, flow.id);
     assert.ok(flow.retryPolicy.maxAttempts >= 2, flow.id);
     assert.ok(flow.retryPolicy.retryableFailureResults.length > 0, flow.id);
@@ -4554,6 +4708,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["PUB-ACT-PUBLISH-RESULT", "FLOW_INTERNAL"],
     ["PUB-ACT-FINALIZE-BATCH", "FLOW_INTERNAL"],
     ["PUB-ACT-RECONCILE-BATCH", "FLOW_INTERNAL"],
+    ["PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT", "FLOW_INTERNAL"],
     ["INS-ACT-CREATE-CANDIDATE", "FLOW_INTERNAL"],
     ["INS-ACT-MARK-STALE", "FLOW_INTERNAL"],
     ["PLN-ACT-CREATE-CANDIDATE", "FLOW_INTERNAL"],
@@ -4573,7 +4728,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 37);
+  assert.equal(expectedModes.size, 38);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);

@@ -2015,12 +2015,36 @@ const publishedResultFields = [
     mutability: "SYSTEM_MANAGED",
     required: "required when a published result correction invalidates dependent interpretations",
   }),
-  field("PUB-RESULT-F-DEPENDENCY-SET", "Published Result Dependency Set", {
+];
+
+const dependencySnapshotFields = [
+  field("PUB-DEPENDENCY-SNAPSHOT-F-ID", "Dependency Snapshot ID"),
+  field("PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF", "Dependency Snapshot Source Result", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+  }),
+  field("PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION", "Dependency Snapshot Source Result Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET", "Resolved Dependency Set", {
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
     idempotencyRole: "FANOUT_SET",
     validation: "zero or more structured records with targetKind, targetRef, and targetVersion; targetKind is EVIDENCE, MASTERY_INTERPRETATION, IMPROVEMENT_CANDIDATE, PLAN_EVALUATION, REPORT_INTERPRETATION, or LEARNING_PATH_EXPLANATION",
+  }),
+  field("PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION", "Dependency Snapshot Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
   }),
 ];
 
@@ -2136,7 +2160,6 @@ const publicationActions = [
       "PUB-RESULT-F-SCORE-VISIBLE-AT",
       "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
       "PUB-RESULT-F-NOTIFICATION-STATUS",
-      "PUB-RESULT-F-DEPENDENCY-SET",
       "PUB-RESULT-F-RESULT-VERSION",
     ],
     risk: RISK.HIGH,
@@ -2296,6 +2319,19 @@ const publicationActions = [
     successData: "returns only the student's own published answer, score, and feedback fields whose time gates have opened",
   }),
   action({
+    id: "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT",
+    label: "Resolve Current Result Dependencies",
+    operationKind: "CREATE",
+    targetObjectId: "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+    outputFieldIds: dependencySnapshotFields.map(({ id }) => id),
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-009"] },
+    permissions: systemFlowPermissions,
+    successState: "RESOLVED",
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "resolves zero or more current dependency records against the exact prior published result ID and version into one immutable versioned snapshot",
+  }),
+  action({
     id: "PUB-ACT-CORRECT-RESULT",
     label: "Correct Published Result",
     targetObjectId: "PUB-OBJ-RESULT",
@@ -2312,7 +2348,6 @@ const publicationActions = [
       "PUB-RESULT-F-INVALIDATION-VERSION",
       "PUB-RESULT-F-NOTIFICATION-STATUS",
       "PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS",
-      "PUB-RESULT-F-DEPENDENCY-SET",
     ],
     risk: RISK.HIGH,
     permissions: publicationTeacherPermissions,
@@ -2436,6 +2471,30 @@ const publicationModule = moduleFact({
         }],
       },
     ),
+    object(
+      "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+      "Published Result Dependency Snapshot",
+      {
+        dataSubject: "DERIVED_LEARNING_DEPENDENCY_SNAPSHOT",
+        controlSubject: "SCHOOL",
+        producerRef: "SYSTEM",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "ROLE-ACADEMIC",
+      },
+      ["RESOLVED"],
+      dependencySnapshotFields,
+      "PUB-DEPENDENCY-SNAPSHOT-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [{
+          refFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF",
+          versionFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
+          targetObjectId: "PUB-OBJ-RESULT",
+          targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+        }],
+      },
+    ),
   ],
   relationships: [
     {
@@ -2455,6 +2514,15 @@ const publicationModule = moduleFact({
       cardinality: "MANY_TO_ONE",
       ownershipScope: "SAME_SUBJECT",
       onSourceInvalidation: "expire the transient preview when its referenced batch configuration or selected scope changes",
+    },
+    {
+      id: "PUB-REL-DEPENDENCY-SNAPSHOT-RESULT",
+      fromObjectId: "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+      toObjectId: "PUB-OBJ-RESULT",
+      type: "DERIVED_FROM",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "retain the immutable snapshot against its exact prior result version and resolve a new snapshot for a later correction",
     },
   ],
   actions: publicationActions,
@@ -5508,13 +5576,14 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     phase: PHASE.FIRST,
     moduleIds: ["GRD-001", "PUB-001", "INS-001", "PLN-001", "CORR-001"],
     steps: [
-      { order: 1, actionId: "GRD-ACT-OPEN-CONFIRMED-REVISION", condition: "the corresponding subject teacher records the correction reason against the prior confirmed version" },
-      { order: 2, actionId: "GRD-ACT-CONFIRM-REVISION", condition: "the corresponding subject teacher confirms the revised score and feedback into a new decision version" },
-      { order: 3, actionId: "PUB-ACT-CORRECT-RESULT", condition: "the correction references the new confirmed decision version" },
-      { order: 4, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "the corrected result records every dependent target kind, source version, target version, and history-preservation outcome" },
-      { order: 5, actionId: "INS-ACT-MARK-STALE", condition: "evidence or mastery interpretation depends on the corrected result or decision version" },
-      { order: 6, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "an improvement candidate or plan evaluation depends on the invalidated evidence version" },
-      { order: 7, actionId: "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION", condition: "the publication-level explanation is regenerated and teacher-reconfirmed while future report and learning-path consumers remain versioned targets" },
+      { order: 1, actionId: "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT", condition: "resolve current dependencies against the exact prior published result ID and version before any correction or invalidation write" },
+      { order: 2, actionId: "GRD-ACT-OPEN-CONFIRMED-REVISION", condition: "the corresponding subject teacher records the correction reason against the prior confirmed version" },
+      { order: 3, actionId: "GRD-ACT-CONFIRM-REVISION", condition: "the corresponding subject teacher confirms the revised score and feedback into a new decision version" },
+      { order: 4, actionId: "PUB-ACT-CORRECT-RESULT", condition: "the correction references the new confirmed decision version" },
+      { order: 5, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "the corrected result records every dependent target kind, source version, target version, and history-preservation outcome" },
+      { order: 6, actionId: "INS-ACT-MARK-STALE", condition: "evidence or mastery interpretation depends on the corrected result or decision version" },
+      { order: 7, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "an improvement candidate or plan evaluation depends on the invalidated evidence version" },
+      { order: 8, actionId: "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION", condition: "the publication-level explanation is regenerated and teacher-reconfirmed while future report and learning-path consumers remain versioned targets" },
     ],
     sourceDataRefs: [
       {
@@ -5573,11 +5642,6 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
       {
-        objectId: "PUB-OBJ-RESULT",
-        fieldId: "PUB-RESULT-F-DEPENDENCY-SET",
-        version: "PUB-RESULT-F-RESULT-VERSION",
-      },
-      {
         objectId: "INS-OBJ-EVIDENCE",
         fieldId: "INS-EVIDENCE-F-ID",
         version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -5627,6 +5691,31 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       },
     ],
     targetDataRefs: [
+      {
+        objectId: "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+        fieldId: "PUB-DEPENDENCY-SNAPSHOT-F-ID",
+        version: "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+        fieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF",
+        version: "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+        fieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
+        version: "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+        fieldId: "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
+        version: "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+        fieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+        version: "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
+      },
       {
         objectId: "GRD-OBJ-DECISION",
         fieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -5742,12 +5831,14 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       identityFieldIds: [
         "GRD-DECISION-F-ID",
         "PUB-RESULT-F-ID",
+        "PUB-DEPENDENCY-SNAPSHOT-F-ID",
       ],
       versionFieldIds: [
         "GRD-DECISION-F-DECISION-VERSION",
         "PUB-RESULT-F-RESULT-VERSION",
+        "PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION",
       ],
-      fanoutFieldId: "PUB-RESULT-F-DEPENDENCY-SET",
+      fanoutFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
     },
     failureGranularity: "PUBLISHED_STUDENT_RESULT_AND_DEPENDENT_INTERPRETATION_OBJECT",
     retryPolicy: {
