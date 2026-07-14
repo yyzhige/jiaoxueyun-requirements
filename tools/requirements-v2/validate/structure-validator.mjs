@@ -7,6 +7,7 @@ const OPTION_SET_MODES = new Set(["STATIC", "RUNTIME_QUERY"]);
 const RUNTIME_QUERY_ID_KINDS = new Set(["OBJECT_ID", "ACTION_ID"]);
 const CLIENTS = new Set(["WEB", "APP"]);
 const RISKS = new Set(["READ", "LOW", "HIGH"]);
+const OPERATION_KINDS = new Set(["READ", "CREATE", "UPDATE"]);
 const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
 const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
 const OBJECT_SEMANTIC_TYPES = new Set(["AUDIT_EVENT_SINK"]);
@@ -399,6 +400,114 @@ function validateObject(errors, object, path, strict) {
       }
       if (isValidId(state)) seenStates.add(state);
     });
+    if (Object.hasOwn(object, "lineageBindings")) {
+      const lineageBindings = requireArray(errors, object, "lineageBindings", path);
+      validateObjectMembers(errors, lineageBindings, `${path}.lineageBindings`, "lineage binding");
+      const expectedKeys = new Set([
+        "refFieldId",
+        "versionFieldId",
+        "targetObjectId",
+        "targetVersionFieldId",
+      ]);
+      lineageBindings.forEach((binding, index) => {
+        if (!isRecord(binding)) return;
+        const bindingPath = `${path}.lineageBindings[${index}]`;
+        if (
+          Object.keys(binding).length !== expectedKeys.size
+          || Object.keys(binding).some((key) => !expectedKeys.has(key))
+        ) {
+          errors.push(`INVALID_LINEAGE_BINDING ${bindingPath} must use the closed lineage shape`);
+        }
+        for (const property of expectedKeys) {
+          contractString(errors, binding, property, bindingPath, "INVALID_LINEAGE_BINDING");
+        }
+      });
+    }
+    if (Object.hasOwn(object, "readPolicies")) {
+      const readPolicies = requireArray(errors, object, "readPolicies", path);
+      validateObjectMembers(errors, readPolicies, `${path}.readPolicies`, "read policy");
+      const expectedPolicyKeys = new Set([
+        "actionId",
+        "subject",
+        "scope",
+        "requiredState",
+        "timeGates",
+      ]);
+      readPolicies.forEach((policy, index) => {
+        if (!isRecord(policy)) return;
+        const policyPath = `${path}.readPolicies[${index}]`;
+        if (
+          Object.keys(policy).length !== expectedPolicyKeys.size
+          || Object.keys(policy).some((key) => !expectedPolicyKeys.has(key))
+        ) {
+          errors.push(`INVALID_READ_POLICY ${policyPath} must use the closed read-policy shape`);
+        }
+        contractString(errors, policy, "actionId", policyPath, "INVALID_READ_POLICY");
+        contractString(errors, policy, "requiredState", policyPath, "INVALID_READ_POLICY");
+
+        if (!isRecord(policy.subject)) {
+          errors.push(`INVALID_READ_POLICY ${policyPath}.subject must be an object`);
+        } else {
+          const subjectKeys = ["actorRef", "roleRef", "dutyRef"]
+            .filter((property) => Object.hasOwn(policy.subject, property));
+          if (
+            subjectKeys.length !== 1
+            || Object.keys(policy.subject).length !== 1
+            || !isValidId(policy.subject[subjectKeys[0]])
+          ) {
+            errors.push(`INVALID_READ_POLICY ${policyPath}.subject requires exactly one subject selector`);
+          }
+        }
+
+        if (!isRecord(policy.scope)) {
+          errors.push(`INVALID_READ_POLICY ${policyPath}.scope must be an object`);
+        } else {
+          const scopeKeys = Object.keys(policy.scope);
+          if (
+            scopeKeys.length !== 2
+            || !scopeKeys.includes("kind")
+            || !scopeKeys.includes("subjectFieldId")
+            || policy.scope.kind !== "OWN_RECORD"
+            || !isValidId(policy.scope.subjectFieldId)
+          ) {
+            errors.push(`INVALID_READ_POLICY ${policyPath}.scope must be an OWN_RECORD scope`);
+          }
+        }
+
+        const timeGates = requireArray(errors, policy, "timeGates", policyPath);
+        validateObjectMembers(errors, timeGates, `${policyPath}.timeGates`, "time gate");
+        if (timeGates.length === 0) {
+          errors.push(`INVALID_READ_POLICY ${policyPath}.timeGates must be non-empty`);
+        }
+        timeGates.forEach((timeGate, gateIndex) => {
+          if (!isRecord(timeGate)) return;
+          const gatePath = `${policyPath}.timeGates[${gateIndex}]`;
+          const gateKeys = Object.keys(timeGate);
+          if (
+            gateKeys.length !== 2
+            || !gateKeys.includes("visibleAtFieldId")
+            || !gateKeys.includes("protectedFieldIds")
+          ) {
+            errors.push(`INVALID_READ_POLICY ${gatePath} must use the closed time-gate shape`);
+          }
+          contractString(
+            errors,
+            timeGate,
+            "visibleAtFieldId",
+            gatePath,
+            "INVALID_READ_POLICY",
+          );
+          contractStringArray(
+            errors,
+            timeGate,
+            "protectedFieldIds",
+            gatePath,
+            "INVALID_READ_POLICY",
+            { nonEmpty: true },
+          );
+        });
+      });
+    }
   }
   validateEntities(errors, fields, `${path}.fields`, "field", (field, fieldPath) => {
     validateField(errors, field, fieldPath, strict);
@@ -467,10 +576,26 @@ function validateAction(errors, action, path, strict) {
   requireArray(errors, action, "scenarioIds", path);
   if (Object.hasOwn(action, "transition") && !isRecord(action.transition)) {
     errors.push(`INVALID_ENTITY_SHAPE ${path}.transition must be an object`);
+  } else if (isRecord(action.transition)) {
+    for (const property of ["from", "to"]) {
+      contractString(
+        errors,
+        action.transition,
+        property,
+        `${path}.transition`,
+        "INVALID_ACTION_CONTRACT",
+      );
+    }
   }
   if (!strict) return;
   for (const property of ["label", "targetObjectId"]) {
     contractString(errors, action, property, path, "INVALID_ACTION_CONTRACT");
+  }
+  contractString(errors, action, "operationKind", path, "INVALID_ACTION_CONTRACT");
+  if (isValidId(action.operationKind) && !OPERATION_KINDS.has(action.operationKind)) {
+    errors.push(
+      `INVALID_ACTION_OPERATION ${path}.operationKind must be READ, CREATE, or UPDATE`,
+    );
   }
   for (const property of ["inputFieldIds", "outputFieldIds"]) {
     contractStringArray(errors, action, property, path, "INVALID_ACTION_CONTRACT");
@@ -848,8 +973,64 @@ function validateFlow(errors, flow, path) {
       }
     });
   }
-  for (const property of ["idempotencyKey", "failureGranularity"]) {
-    contractString(errors, flow, property, path, "INVALID_FLOW_CONTRACT");
+  contractString(errors, flow, "failureGranularity", path, "INVALID_FLOW_CONTRACT");
+  if (Object.hasOwn(flow, "idempotencyKey")) {
+    errors.push(
+      `INVALID_FLOW_CONTRACT ${path}.idempotencyKey is obsolete; use idempotencyKeyParts`,
+    );
+  }
+  const idempotencyKeyParts = requireRecord(errors, flow, "idempotencyKeyParts", path);
+  if (!idempotencyKeyParts) {
+    errors.push(`INVALID_FLOW_CONTRACT ${path}.idempotencyKeyParts must be an object`);
+  } else {
+    const expectedKeys = new Set([
+      "identityFieldIds",
+      "versionFieldIds",
+      "fanoutFieldId",
+    ]);
+    if (
+      Object.keys(idempotencyKeyParts).length !== expectedKeys.size
+      || Object.keys(idempotencyKeyParts).some((key) => !expectedKeys.has(key))
+    ) {
+      errors.push(
+        `INVALID_FLOW_CONTRACT ${path}.idempotencyKeyParts must use the closed identity/version/fanout shape`,
+      );
+    }
+    const identityFieldIds = contractStringArray(
+      errors,
+      idempotencyKeyParts,
+      "identityFieldIds",
+      `${path}.idempotencyKeyParts`,
+      "INVALID_FLOW_CONTRACT",
+      { nonEmpty: true },
+    );
+    const versionFieldIds = contractStringArray(
+      errors,
+      idempotencyKeyParts,
+      "versionFieldIds",
+      `${path}.idempotencyKeyParts`,
+      "INVALID_FLOW_CONTRACT",
+      { nonEmpty: true },
+    );
+    validateUniqueStrings(
+      errors,
+      identityFieldIds,
+      `${path}.idempotencyKeyParts.identityFieldIds`,
+      "INVALID_FLOW_CONTRACT",
+    );
+    validateUniqueStrings(
+      errors,
+      versionFieldIds,
+      `${path}.idempotencyKeyParts.versionFieldIds`,
+      "INVALID_FLOW_CONTRACT",
+    );
+    contractString(
+      errors,
+      idempotencyKeyParts,
+      "fanoutFieldId",
+      `${path}.idempotencyKeyParts`,
+      "INVALID_FLOW_CONTRACT",
+    );
   }
   const retryPolicy = requireRecord(errors, flow, "retryPolicy", path);
   if (!retryPolicy) {

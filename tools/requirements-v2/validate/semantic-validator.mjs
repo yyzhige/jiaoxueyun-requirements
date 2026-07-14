@@ -44,6 +44,10 @@ function list(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function isPresent(value) {
   return value !== undefined
     && value !== null
@@ -57,6 +61,11 @@ function isValidId(value) {
 function setEquals(left, right) {
   if (left.size !== right.size) return false;
   return [...left].every((value) => right.has(value));
+}
+
+function hasExactKeys(value, expectedKeys) {
+  return isRecord(value)
+    && setEquals(new Set(Object.keys(value)), new Set(expectedKeys));
 }
 
 function actorIsValid(index, reference) {
@@ -130,6 +139,29 @@ function actionErrors(index) {
     const successScenarios = actionScenarios.filter(
       ({ value }) => value?.kind === "SUCCESS",
     );
+    const operationKind = action?.operationKind;
+    const hasTransition = action?.transition !== null
+      && typeof action?.transition === "object"
+      && !Array.isArray(action.transition);
+    const hasStateEffect = actionScenarios.some(
+      ({ value }) => value?.then?.expectedState?.mode !== "UNCHANGED",
+    );
+    const hasCreatedSuccessState = successScenarios.length > 0
+      && successScenarios.every(
+        ({ value }) => value?.then?.expectedState?.mode === "STATE",
+      );
+    if (
+      (operationKind === "READ" && (action?.writes !== false || hasTransition || hasStateEffect))
+      || (
+        operationKind === "CREATE"
+        && (action?.writes !== true || hasTransition || !hasCreatedSuccessState)
+      )
+      || (operationKind === "UPDATE" && (action?.writes !== true || !hasTransition))
+    ) {
+      errors.push(
+        `INVALID_ACTION_OPERATION ${formatValidationValue(action?.id)} has an inconsistent ${formatValidationValue(operationKind)} contract`,
+      );
+    }
     if (
       action?.transition
       && successScenarios.some(({ value }) => (
@@ -220,9 +252,13 @@ function flowErrors(index) {
       );
     }
     const actionModuleIds = new Set();
+    const stepActions = [];
     for (const step of list(flow?.steps)) {
       const actionEntry = index.actionById.get(step?.actionId);
-      if (actionEntry) actionModuleIds.add(actionEntry.moduleId);
+      if (actionEntry) {
+        actionModuleIds.add(actionEntry.moduleId);
+        stepActions.push(actionEntry.value);
+      }
     }
     if (!setEquals(declaredModuleIds, actionModuleIds)) {
       const declared = [...declaredModuleIds]
@@ -255,6 +291,46 @@ function flowErrors(index) {
         .join(",");
       errors.push(
         `FLOW_DATA_PARTICIPANT_MISMATCH ${formatValidationValue(flow?.id)} declared=${declared} actual=${actual}`,
+      );
+    }
+
+    for (const targetRef of list(flow?.targetDataRefs)) {
+      const produced = stepActions.some((action) => (
+        action?.targetObjectId === targetRef?.objectId
+        && list(action?.outputFieldIds).includes(targetRef?.fieldId)
+      ));
+      if (!produced) {
+        errors.push(
+          `INVALID_FLOW_TARGET_OUTPUT ${formatValidationValue(flow?.id)} -> ${formatValidationValue(targetRef?.objectId)}.${formatValidationValue(targetRef?.fieldId)}`,
+        );
+      }
+    }
+
+    const declaredFailureResults = new Set(
+      stepActions.flatMap((action) => list(action?.failureResults)),
+    );
+    for (const resultCode of list(flow?.retryPolicy?.retryableFailureResults)) {
+      if (!declaredFailureResults.has(resultCode)) {
+        errors.push(
+          `INVALID_FLOW_RETRY_RESULT ${formatValidationValue(flow?.id)} -> ${formatValidationValue(resultCode)}`,
+        );
+      }
+    }
+
+    const sourceRefs = list(flow?.sourceDataRefs);
+    const sourceFieldIds = new Set(sourceRefs.map(({ fieldId }) => fieldId));
+    const sourceVersionFieldIds = new Set(sourceRefs.map(({ version }) => version));
+    const keyParts = flow?.idempotencyKeyParts;
+    const identityFieldIds = list(keyParts?.identityFieldIds);
+    const versionFieldIds = list(keyParts?.versionFieldIds);
+    if (
+      identityFieldIds.length === 0
+      || identityFieldIds.some((fieldId) => !sourceFieldIds.has(fieldId))
+      || !setEquals(new Set(versionFieldIds), sourceVersionFieldIds)
+      || !sourceFieldIds.has(keyParts?.fanoutFieldId)
+    ) {
+      errors.push(
+        `INVALID_FLOW_IDEMPOTENCY ${formatValidationValue(flow?.id)} requires source identity, exact source versions, and a source fanout field`,
       );
     }
   }
@@ -396,7 +472,9 @@ function gradingCapabilityErrors(index) {
     const unsupportedDecision = unsupportedRule?.decision;
     const exceptCombinationIds = list(unsupportedRule?.exceptCombinationIds);
     const exactRulePriority = applicability?.exactRulePriority;
-    const optionSetBindings = applicability?.optionSetBindings;
+    const capabilityObjectId = applicability?.capabilityObjectId;
+    const capabilityObjectEntry = index.objectById.get(capabilityObjectId);
+    const fieldBindings = applicability?.fieldBindings;
     const optionProperties = [
       "subjectFamily",
       "questionType",
@@ -410,12 +488,31 @@ function gradingCapabilityErrors(index) {
     ];
     const allowedCodesByProperty = new Map();
     const optionSetsByProperty = new Map();
+    let fieldBindingsValid = hasExactKeys(fieldBindings, optionProperties)
+      && capabilityObjectEntry?.moduleId === moduleEntry.value?.id;
     for (const property of optionProperties) {
-      const optionSetId = optionSetBindings?.[property];
+      const binding = fieldBindings?.[property];
+      const fieldEntry = index.fieldById.get(binding?.fieldId);
+      const optionSetId = binding?.optionSetId;
       const optionSet = index.optionSetById.get(optionSetId)?.value;
       optionSetsByProperty.set(property, optionSet);
-      const codes = new Set(list(optionSet?.values).map(({ code }) => code));
-      if (optionSet?.mode !== "STATIC" || codes.size === 0) {
+      if (
+        !hasExactKeys(binding, ["fieldId", "optionSetId"])
+        || fieldEntry?.moduleId !== moduleEntry.value?.id
+        || fieldEntry?.objectId !== capabilityObjectId
+        || fieldEntry?.value?.valueSource?.kind !== "OPTION_SET"
+        || fieldEntry.value.valueSource.optionSetId !== optionSetId
+      ) {
+        fieldBindingsValid = false;
+      }
+      const optionValues = list(optionSet?.values);
+      const recordValues = optionValues.filter(isRecord);
+      const codes = new Set(recordValues.map(({ code }) => code).filter(isValidId));
+      if (
+        optionSet?.mode !== "STATIC"
+        || codes.size === 0
+        || recordValues.length !== optionValues.length
+      ) {
         allowedCodesByProperty.set(property, null);
       } else {
         allowedCodesByProperty.set(property, codes);
@@ -428,7 +525,7 @@ function gradingCapabilityErrors(index) {
       return values.length > 0 && values.every((entry) => allowedCodes.has(entry));
     };
     const questionTypeOptionSet = optionSetsByProperty.get("questionType");
-    const questionTypeValues = list(questionTypeOptionSet?.values);
+    const questionTypeValues = list(questionTypeOptionSet?.values).filter(isRecord);
     const subjectiveQuestionTypes = new Set(
       questionTypeValues
         .filter(({ isSubjective }) => isSubjective === true)
@@ -436,20 +533,48 @@ function gradingCapabilityErrors(index) {
     );
     let valid = Array.isArray(module?.capabilityMatrix)
       && matrix.length > 0
-      && applicability !== null
-      && typeof applicability === "object"
-      && !Array.isArray(applicability)
-      && dimensions !== null
-      && typeof dimensions === "object"
-      && !Array.isArray(dimensions)
+      && hasExactKeys(applicability, [
+        "exactRulePriority",
+        "capabilityObjectId",
+        "fieldBindings",
+        "dimensions",
+        "unsupportedRule",
+      ])
+      && hasExactKeys(dimensions, [
+        "subjectFamilies",
+        "questionTypes",
+        "submissionMethods",
+      ])
+      && fieldBindingsValid
       && Number.isInteger(exactRulePriority)
       && Number.isInteger(unsupportedRule?.priority)
       && unsupportedRule.priority < exactRulePriority
+      && hasExactKeys(unsupportedRule, [
+        "id",
+        "priority",
+        "match",
+        "exceptCombinationIds",
+        "decision",
+      ])
+      && hasExactKeys(unsupportedRule?.match, [
+        "subjectFamily",
+        "questionType",
+        "submissionMethod",
+      ])
+      && hasExactKeys(unsupportedDecision, [
+        "recognitionLevel",
+        "scoringLevel",
+        "requiredEvidence",
+        "teacherReviewRequired",
+        "batchConfirmEligibility",
+        "unavailableFallback",
+      ])
       && unsupportedRule?.match?.subjectFamily === "*"
       && unsupportedRule?.match?.questionType === "*"
       && unsupportedRule?.match?.submissionMethod === "*"
       && optionProperties.every((property) => (
-        isValidId(optionSetBindings?.[property])
+        isValidId(fieldBindings?.[property]?.fieldId)
+        && isValidId(fieldBindings?.[property]?.optionSetId)
         && allowedCodesByProperty.get(property) !== null
       ));
 
@@ -482,18 +607,34 @@ function gradingCapabilityErrors(index) {
     );
     const exactMatchCounts = new Map();
     const supportedCombinationIds = [];
+    const ruleIds = [];
+    const ruleKeys = [
+      "id",
+      "subjectFamily",
+      "questionType",
+      "submissionMethod",
+      "recognitionLevel",
+      "scoringLevel",
+      "requiredEvidence",
+      "teacherReviewRequired",
+      "batchConfirmEligibility",
+      "unavailableFallback",
+    ];
     for (const rule of matrix) {
       const subjectFamily = rule?.subjectFamily;
       const questionType = rule?.questionType;
       const submissionMethod = rule?.submissionMethod;
-      const ruleIsComplete = isValidId(rule?.id)
+      const requiredEvidence = list(rule?.requiredEvidence);
+      const ruleIsComplete = hasExactKeys(rule, ruleKeys)
+        && isValidId(rule?.id)
         && subjectFamilies.includes(subjectFamily)
         && questionTypes.includes(questionType)
         && submissionMethods.includes(submissionMethod)
         && isValidId(rule?.recognitionLevel)
         && isValidId(rule?.scoringLevel)
-        && list(rule?.requiredEvidence).length > 0
-        && list(rule?.requiredEvidence).every(isValidId)
+        && requiredEvidence.length > 0
+        && requiredEvidence.every(isValidId)
+        && new Set(requiredEvidence).size === requiredEvidence.length
         && isValidId(rule?.teacherReviewRequired)
         && isValidId(rule?.batchConfirmEligibility)
         && isValidId(rule?.unavailableFallback)
@@ -504,9 +645,11 @@ function gradingCapabilityErrors(index) {
           || (
             rule.teacherReviewRequired === "YES"
             && rule.batchConfirmEligibility === "INELIGIBLE"
+            && rule.scoringLevel !== "AUTO-SCORE"
           )
         );
       if (!ruleIsComplete) valid = false;
+      if (isValidId(rule?.id)) ruleIds.push(rule.id);
       if (
         isValidId(subjectFamily)
         && isValidId(questionType)
@@ -521,7 +664,9 @@ function gradingCapabilityErrors(index) {
     const supportedCombinationIdSet = new Set(supportedCombinationIds);
     const exceptCombinationIdSet = new Set(exceptCombinationIds);
     if (
-      supportedCombinationIdSet.size !== supportedCombinationIds.length
+      new Set(ruleIds).size !== ruleIds.length
+      || !isValidId(unsupportedRule?.id)
+      || supportedCombinationIdSet.size !== supportedCombinationIds.length
       || exceptCombinationIdSet.size !== exceptCombinationIds.length
       || !setEquals(supportedCombinationIdSet, exceptCombinationIdSet)
     ) {
@@ -535,6 +680,8 @@ function gradingCapabilityErrors(index) {
       || !isValidId(unsupportedDecision?.scoringLevel)
       || list(unsupportedDecision?.requiredEvidence).length === 0
       || !list(unsupportedDecision?.requiredEvidence).every(isValidId)
+      || new Set(list(unsupportedDecision?.requiredEvidence)).size
+        !== list(unsupportedDecision?.requiredEvidence).length
       || unsupportedDecision?.teacherReviewRequired !== "YES"
       || unsupportedDecision?.batchConfirmEligibility !== "INELIGIBLE"
       || !isValidId(unsupportedDecision?.unavailableFallback)

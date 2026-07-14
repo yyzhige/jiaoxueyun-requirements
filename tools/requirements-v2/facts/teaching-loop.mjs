@@ -2,6 +2,7 @@ import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 const USER_TASK = "USER_TASK";
+const SYSTEM_EVENT = "SYSTEM_EVENT";
 const FLOW_INTERNAL = "FLOW_INTERNAL";
 const AUDIT_REQUIRED = "REQUIRED";
 const AUDIT_NOT_REQUIRED = "NOT_REQUIRED";
@@ -60,8 +61,9 @@ function action({
   targetObjectId,
   inputFieldIds = [],
   outputFieldIds = [],
-  writes = true,
-  risk = writes ? RISK.LOW : RISK.READ,
+  operationKind,
+  writes,
+  risk,
   clients = WEB_APP,
   executionMode = USER_TASK,
   trigger,
@@ -69,15 +71,26 @@ function action({
   transition,
   successState,
   successData,
-  failureResults = writes
-    ? ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT"]
-    : ["PERMISSION_DENIED", "NOT_FOUND"],
+  failureResults,
   failureOutcomes = {},
   idempotencyKey = `${id}:school:object:source-version:request-id`,
 }) {
-  const effectiveFailureResults = risk === RISK.HIGH
-    ? [...new Set([...failureResults, "AUDIT_FAILED"])]
-    : failureResults;
+  const effectiveOperationKind = operationKind
+    ?? (writes === false ? "READ" : transition ? "UPDATE" : undefined);
+  if (!effectiveOperationKind) {
+    throw new Error(`${id} requires explicit operationKind CREATE for a write without transition`);
+  }
+  const effectiveWrites = effectiveOperationKind !== "READ";
+  if (writes !== undefined && writes !== effectiveWrites) {
+    throw new Error(`${id} writes conflicts with operationKind ${effectiveOperationKind}`);
+  }
+  const effectiveRisk = risk ?? (effectiveWrites ? RISK.LOW : RISK.READ);
+  const declaredFailureResults = failureResults ?? (effectiveWrites
+    ? ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT"]
+    : ["PERMISSION_DENIED", "NOT_FOUND"]);
+  const effectiveFailureResults = effectiveRisk === RISK.HIGH
+    ? [...new Set([...declaredFailureResults, "AUDIT_FAILED"])]
+    : declaredFailureResults;
   const stateOutcome = (state) => state
     ? { mode: "STATE", value: state }
     : { mode: "UNCHANGED" };
@@ -123,14 +136,15 @@ function action({
       inputFieldIds,
       outputFieldIds,
       ...(transition ? { transition } : {}),
-      writes,
-      risk,
+      operationKind: effectiveOperationKind,
+      writes: effectiveWrites,
+      risk: effectiveRisk,
       executionMode,
       ...(executionMode === USER_TASK ? { clients } : { trigger }),
       permissions,
       scenarioIds: [successScenario.id, ...failureScenarios.map(({ id: scenarioId }) => scenarioId)],
-      ...(writes ? { idempotencyKey } : {}),
-      auditMode: writes ? AUDIT_REQUIRED : AUDIT_NOT_REQUIRED,
+      ...(effectiveWrites ? { idempotencyKey } : {}),
+      auditMode: effectiveWrites ? AUDIT_REQUIRED : AUDIT_NOT_REQUIRED,
       failureResults: effectiveFailureResults,
     },
     scenarios: [successScenario, ...failureScenarios],
@@ -269,9 +283,32 @@ const hwItemFields = [
     dataType: "ID",
     valueSource: { kind: "RUNTIME_QUERY", queryId: "QUERY-AUTHORIZED-RUBRIC-VERSIONS" },
   }),
+  field("HW-ITEM-F-RUBRIC-REF", "Item Rubric Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-RUBRIC" },
+    mutability: "IMMUTABLE",
+  }),
   field("HW-ITEM-F-KNOWLEDGE-POINT-IDS", "Item Knowledge Points", {
     dataType: "STRING_ARRAY",
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-011" },
+  }),
+];
+
+const hwRubricFields = [
+  field("HW-RUBRIC-F-ID", "Rubric ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("HW-RUBRIC-F-RUBRIC-VERSION", "Rubric Version", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("HW-RUBRIC-F-CRITERIA", "Rubric Criteria", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
   }),
 ];
 
@@ -286,9 +323,20 @@ const hwActions = [
   action({
     id: "HW-ACT-CREATE-DRAFT",
     label: "Create Assignment Draft",
+    operationKind: "CREATE",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
     inputFieldIds: hwAssignmentInputIds.filter((id) => id !== "HW-ASSIGNMENT-F-REVISION-REASON"),
     outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    permissions: subjectTeacherPermissions,
+    successState: "DRAFT",
+  }),
+  action({
+    id: "HW-ACT-CREATE-ITEM",
+    label: "Create Assignment Item",
+    operationKind: "CREATE",
+    targetObjectId: "HW-OBJ-ITEM",
+    inputFieldIds: hwItemInputIds,
+    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION"],
     permissions: subjectTeacherPermissions,
     successState: "DRAFT",
   }),
@@ -299,7 +347,16 @@ const hwActions = [
     inputFieldIds: hwItemInputIds,
     outputFieldIds: ["HW-ITEM-F-ITEM-VERSION"],
     permissions: subjectTeacherPermissions,
-    successState: "DRAFT",
+    transition: { from: "DRAFT", to: "DRAFT" },
+  }),
+  action({
+    id: "HW-ACT-VALIDATE-ITEM",
+    label: "Validate Assignment Item Version",
+    targetObjectId: "HW-OBJ-ITEM",
+    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION"],
+    permissions: subjectTeacherPermissions,
+    transition: { from: "DRAFT", to: "VALIDATED" },
+    failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "INCOMPLETE_ITEM", "VERSION_CONFLICT"],
   }),
   action({
     id: "HW-ACT-VALIDATE",
@@ -311,6 +368,24 @@ const hwActions = [
     failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "INCOMPLETE_ITEM", "VERSION_CONFLICT"],
   }),
   action({
+    id: "HW-ACT-REVALIDATE-ITEM",
+    label: "Revalidate Revised Assignment Item",
+    targetObjectId: "HW-OBJ-ITEM",
+    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION"],
+    permissions: subjectTeacherPermissions,
+    transition: { from: "REVISION_DRAFT", to: "VALIDATED" },
+    failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "INCOMPLETE_ITEM", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "HW-ACT-REVALIDATE-REVISION",
+    label: "Revalidate Assignment Revision",
+    targetObjectId: "HW-OBJ-ASSIGNMENT",
+    outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    permissions: subjectTeacherPermissions,
+    transition: { from: "REVISION_DRAFT", to: "VALIDATED" },
+    failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "INCOMPLETE_ITEM", "VERSION_CONFLICT"],
+  }),
+  action({
     id: "HW-ACT-PREVIEW",
     label: "Preview Assignment as Student",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
@@ -318,6 +393,15 @@ const hwActions = [
     writes: false,
     permissions: subjectTeacherPermissions,
     successData: "returns the exact student-visible assignment preview without publishing",
+  }),
+  action({
+    id: "HW-ACT-PUBLISH-ITEM",
+    label: "Publish Validated Assignment Item",
+    targetObjectId: "HW-OBJ-ITEM",
+    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION"],
+    risk: RISK.HIGH,
+    permissions: subjectTeacherPermissions,
+    transition: { from: "VALIDATED", to: "PUBLISHED" },
   }),
   action({
     id: "HW-ACT-PUBLISH-NOW",
@@ -339,6 +423,21 @@ const hwActions = [
     transition: { from: "VALIDATED", to: "SCHEDULED" },
   }),
   action({
+    id: "HW-ACT-PUBLISH-SCHEDULED",
+    label: "Publish Scheduled Assignment at Open Time",
+    targetObjectId: "HW-OBJ-ASSIGNMENT",
+    inputFieldIds: ["HW-ASSIGNMENT-F-OPEN-AT"],
+    outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    risk: RISK.HIGH,
+    executionMode: SYSTEM_EVENT,
+    trigger: { kind: "EVENT", eventId: "EVT-HW-SCHEDULED-PUBLISH-DUE" },
+    permissions: [
+      permission("ALLOW", "SYSTEM", "the system publishes only the validated scheduled version at its configured open time"),
+      permission("DENY", "CURRENT_ACTOR", "a user cannot bypass the scheduled publication time"),
+    ],
+    transition: { from: "SCHEDULED", to: "PUBLISHED" },
+  }),
+  action({
     id: "HW-ACT-CLOSE",
     label: "Close Assignment",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
@@ -357,6 +456,17 @@ const hwActions = [
     permissions: subjectTeacherPermissions,
     transition: { from: "PUBLISHED", to: "REVISION_DRAFT" },
     successData: "creates a new revision draft linked to the immutable published version and reason",
+  }),
+  action({
+    id: "HW-ACT-REVISE-ITEM",
+    label: "Revise Published Assignment Item",
+    targetObjectId: "HW-OBJ-ITEM",
+    inputFieldIds: hwItemInputIds,
+    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION"],
+    risk: RISK.HIGH,
+    permissions: subjectTeacherPermissions,
+    transition: { from: "PUBLISHED", to: "REVISION_DRAFT" },
+    successData: "creates a revision draft while retaining the immutable published item version",
   }),
   action({
     id: "HW-ACT-OPEN-PUBLISHED",
@@ -388,7 +498,11 @@ const hwActions = [
     id: "HW-ACT-RESOLVE-GRADING-SNAPSHOT",
     label: "Resolve Published Item Grading Snapshot",
     targetObjectId: "HW-OBJ-ITEM",
-    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION", "HW-ITEM-F-RUBRIC-VERSION"],
+    outputFieldIds: [
+      "HW-ITEM-F-ITEM-VERSION",
+      "HW-ITEM-F-RUBRIC-REF",
+      "HW-ITEM-F-RUBRIC-VERSION",
+    ],
     writes: false,
     executionMode: FLOW_INTERNAL,
     trigger: { kind: "FLOW", flowIds: ["DF-006"] },
@@ -425,16 +539,34 @@ const hwModule = moduleFact({
       ["DRAFT", "VALIDATED", "PUBLISHED", "REVISION_DRAFT"],
       hwItemFields,
     ),
+    object(
+      "HW-OBJ-RUBRIC",
+      "Published Rubric Version",
+      subjectTeacherResponsibility,
+      ["PUBLISHED", "DEPRECATED"],
+      hwRubricFields,
+    ),
   ],
-  relationships: [{
-    id: "HW-REL-ASSIGNMENT-ITEM",
-    fromObjectId: "HW-OBJ-ASSIGNMENT",
-    toObjectId: "HW-OBJ-ITEM",
-    type: "CONTAINS",
-    cardinality: "ONE_TO_MANY",
-    ownershipScope: "SAME_SUBJECT",
-    onSourceInvalidation: "retain immutable published item versions and invalidate only unconfirmed revision drafts",
-  }],
+  relationships: [
+    {
+      id: "HW-REL-ASSIGNMENT-ITEM",
+      fromObjectId: "HW-OBJ-ASSIGNMENT",
+      toObjectId: "HW-OBJ-ITEM",
+      type: "CONTAINS",
+      cardinality: "ONE_TO_MANY",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "retain immutable published item versions and invalidate only unconfirmed revision drafts",
+    },
+    {
+      id: "HW-REL-ITEM-RUBRIC",
+      fromObjectId: "HW-OBJ-ITEM",
+      toObjectId: "HW-OBJ-RUBRIC",
+      type: "REFERENCES",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "retain the published Rubric version referenced by each immutable item version",
+    },
+  ],
   actions: hwActions,
   pages: [
     page(
@@ -442,7 +574,12 @@ const hwModule = moduleFact({
       "Assignment Authoring Workspace",
       ["HW-OBJ-ASSIGNMENT", "HW-OBJ-ITEM"],
       [...hwAssignmentFields, ...hwItemFields].map(({ id }) => id),
-      hwActions.slice(0, 8).map(({ action: actionValue }) => actionValue.id),
+      hwActions
+        .filter(({ action: actionValue }) => (
+          actionValue.executionMode === USER_TASK
+          && actionValue.id !== "HW-ACT-OPEN-PUBLISHED"
+        ))
+        .map(({ action: actionValue }) => actionValue.id),
     ),
     page(
       "HW-PAGE-STUDENT",
@@ -579,7 +716,7 @@ const submissionActions = [
       "SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT",
     ],
     permissions: studentSubmissionPermissions,
-    successState: "DRAFT",
+    transition: { from: "DRAFT", to: "DRAFT" },
     successData: "stores the versioned answer draft without claiming final submission",
   }),
   action({
@@ -616,6 +753,7 @@ const submissionActions = [
   action({
     id: "SUB-ACT-SUBMIT",
     label: "Submit Assignment Answers",
+    operationKind: "CREATE",
     targetObjectId: "SUB-OBJ-ATTEMPT",
     inputFieldIds: ["SUB-ATTEMPT-F-DRAFT-VERSION"],
     outputFieldIds: [
@@ -776,6 +914,16 @@ const submissionModule = moduleFact({
 });
 
 const capabilityMatrixFields = [
+  field("GRD-CAP-F-RULE-ID", "Capability Rule ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("GRD-CAP-F-RULE-VERSION", "Capability Rule Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
   field("GRD-CAP-F-SUBJECT-FAMILY", "Subject Family", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-003" },
     mutability: "READ_ONLY",
@@ -824,9 +972,19 @@ const gradingDecisionFields = [
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
   }),
+  field("GRD-DECISION-F-SUBMISSION-REF", "Input Submission Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "SUB-OBJ-ATTEMPT" },
+    mutability: "IMMUTABLE",
+  }),
   field("GRD-DECISION-F-SUBMISSION-VERSION", "Input Submission Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("GRD-DECISION-F-ITEM-REF", "Input Item Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-ITEM" },
     mutability: "IMMUTABLE",
   }),
   field("GRD-DECISION-F-ITEM-VERSION", "Input Item Version", {
@@ -834,8 +992,23 @@ const gradingDecisionFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
+  field("GRD-DECISION-F-RUBRIC-REF", "Input Rubric Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-RUBRIC" },
+    mutability: "IMMUTABLE",
+  }),
   field("GRD-DECISION-F-RUBRIC-VERSION", "Input Rubric Version", {
     dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("GRD-DECISION-F-CAPABILITY-RULE-REF", "Capability Rule Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-CAPABILITY-RULE" },
+    mutability: "IMMUTABLE",
+  }),
+  field("GRD-DECISION-F-CAPABILITY-RULE-VERSION", "Capability Rule Version", {
+    dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
@@ -1066,16 +1239,17 @@ const gradingCapabilityMatrix = [
 
 const gradingCapabilityApplicability = {
   exactRulePriority: 100,
-  optionSetBindings: {
-    subjectFamily: "OPT-TL-003",
-    questionType: "OPT-ENUM-003",
-    submissionMethod: "OPT-ENUM-031",
-    recognitionLevel: "OPT-TL-004",
-    scoringLevel: "OPT-TL-005",
-    requiredEvidence: "OPT-TL-006",
-    teacherReviewRequired: "OPT-ENUM-001",
-    batchConfirmEligibility: "OPT-TL-007",
-    unavailableFallback: "OPT-TL-008",
+  capabilityObjectId: "GRD-OBJ-CAPABILITY-RULE",
+  fieldBindings: {
+    subjectFamily: { fieldId: "GRD-CAP-F-SUBJECT-FAMILY", optionSetId: "OPT-TL-003" },
+    questionType: { fieldId: "GRD-CAP-F-QUESTION-TYPE", optionSetId: "OPT-ENUM-003" },
+    submissionMethod: { fieldId: "GRD-CAP-F-SUBMISSION-METHOD", optionSetId: "OPT-ENUM-031" },
+    recognitionLevel: { fieldId: "GRD-CAP-F-RECOGNITION-LEVEL", optionSetId: "OPT-TL-004" },
+    scoringLevel: { fieldId: "GRD-CAP-F-SCORING-LEVEL", optionSetId: "OPT-TL-005" },
+    requiredEvidence: { fieldId: "GRD-CAP-F-REQUIRED-EVIDENCE", optionSetId: "OPT-TL-006" },
+    teacherReviewRequired: { fieldId: "GRD-CAP-F-TEACHER-REVIEW", optionSetId: "OPT-ENUM-001" },
+    batchConfirmEligibility: { fieldId: "GRD-CAP-F-BATCH-CONFIRM", optionSetId: "OPT-TL-007" },
+    unavailableFallback: { fieldId: "GRD-CAP-F-UNAVAILABLE-FALLBACK", optionSetId: "OPT-TL-008" },
   },
   dimensions: {
     subjectFamilies: [
@@ -1167,11 +1341,17 @@ const gradingActions = [
   action({
     id: "GRD-ACT-ENQUEUE",
     label: "Enqueue Submission for Grading",
+    operationKind: "CREATE",
     targetObjectId: "GRD-OBJ-DECISION",
     outputFieldIds: [
+      "GRD-DECISION-F-SUBMISSION-REF",
       "GRD-DECISION-F-SUBMISSION-VERSION",
+      "GRD-DECISION-F-ITEM-REF",
       "GRD-DECISION-F-ITEM-VERSION",
+      "GRD-DECISION-F-RUBRIC-REF",
       "GRD-DECISION-F-RUBRIC-VERSION",
+      "GRD-DECISION-F-CAPABILITY-RULE-REF",
+      "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
       "GRD-DECISION-F-DECISION-VERSION",
     ],
     executionMode: FLOW_INTERNAL,
@@ -1256,7 +1436,7 @@ const gradingActions = [
     ],
     outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
     permissions: gradingTeacherPermissions,
-    successState: "ROUTED_REVIEW",
+    transition: { from: "ROUTED_REVIEW", to: "ROUTED_REVIEW" },
     failureOutcomes: gradingVersionConflictOutcome,
   }),
   action({
@@ -1264,7 +1444,11 @@ const gradingActions = [
     label: "Accept Suggested Score",
     targetObjectId: "GRD-OBJ-DECISION",
     inputFieldIds: ["GRD-DECISION-F-SUGGESTED-SCORE", "GRD-DECISION-F-TEACHER-FEEDBACK"],
-    outputFieldIds: ["GRD-DECISION-F-OFFICIAL-SCORE", "GRD-DECISION-F-DECISION-VERSION"],
+    outputFieldIds: [
+      "GRD-DECISION-F-OFFICIAL-SCORE",
+      "GRD-DECISION-F-TEACHER-FEEDBACK",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
     transition: { from: "ROUTED_REVIEW", to: "TEACHER_CONFIRMED" },
@@ -1280,7 +1464,11 @@ const gradingActions = [
       "GRD-DECISION-F-TEACHER-FEEDBACK",
       "GRD-DECISION-F-CORRECTION-REASON",
     ],
-    outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+    outputFieldIds: [
+      "GRD-DECISION-F-OFFICIAL-SCORE",
+      "GRD-DECISION-F-TEACHER-FEEDBACK",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
     transition: { from: "ROUTED_REVIEW", to: "TEACHER_CONFIRMED" },
@@ -1295,7 +1483,11 @@ const gradingActions = [
       "GRD-DECISION-F-OFFICIAL-SCORE",
       "GRD-DECISION-F-TEACHER-FEEDBACK",
     ],
-    outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+    outputFieldIds: [
+      "GRD-DECISION-F-OFFICIAL-SCORE",
+      "GRD-DECISION-F-TEACHER-FEEDBACK",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
     transition: { from: "ROUTED_MANUAL", to: "TEACHER_CONFIRMED" },
@@ -1352,9 +1544,14 @@ const gradingActions = [
     targetObjectId: "GRD-OBJ-DECISION",
     inputFieldIds: ["GRD-DECISION-F-CORRECTION-REASON"],
     outputFieldIds: [
+      "GRD-DECISION-F-SUBMISSION-REF",
       "GRD-DECISION-F-SUBMISSION-VERSION",
+      "GRD-DECISION-F-ITEM-REF",
       "GRD-DECISION-F-ITEM-VERSION",
+      "GRD-DECISION-F-RUBRIC-REF",
       "GRD-DECISION-F-RUBRIC-VERSION",
+      "GRD-DECISION-F-CAPABILITY-RULE-REF",
+      "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
       "GRD-DECISION-F-DECISION-VERSION",
     ],
     risk: RISK.HIGH,
@@ -1405,7 +1602,35 @@ const gradingModule = moduleFact({
       },
       ["QUEUED", "PROCESSING", "ROUTED_REVIEW", "ROUTED_MANUAL", "CONFLICT", "REVISION_PENDING", "TEACHER_CONFIRMED"],
       gradingDecisionFields,
-      { sensitivityId: "S3" },
+      {
+        sensitivityId: "S3",
+        lineageBindings: [
+          {
+            refFieldId: "GRD-DECISION-F-SUBMISSION-REF",
+            versionFieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
+            targetObjectId: "SUB-OBJ-ATTEMPT",
+            targetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+          },
+          {
+            refFieldId: "GRD-DECISION-F-ITEM-REF",
+            versionFieldId: "GRD-DECISION-F-ITEM-VERSION",
+            targetObjectId: "HW-OBJ-ITEM",
+            targetVersionFieldId: "HW-ITEM-F-ITEM-VERSION",
+          },
+          {
+            refFieldId: "GRD-DECISION-F-RUBRIC-REF",
+            versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
+            targetObjectId: "HW-OBJ-RUBRIC",
+            targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
+          },
+          {
+            refFieldId: "GRD-DECISION-F-CAPABILITY-RULE-REF",
+            versionFieldId: "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
+            targetObjectId: "GRD-OBJ-CAPABILITY-RULE",
+            targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
+          },
+        ],
+      },
     ),
   ],
   relationships: [{
@@ -1513,16 +1738,42 @@ const publishedResultFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
     mutability: "IMMUTABLE",
   }),
+  field("PUB-RESULT-F-SOURCE-DECISION-REF", "Source Decision Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
+    mutability: "IMMUTABLE",
+  }),
   field("PUB-RESULT-F-DECISION-VERSION", "Confirmed Decision Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+  }),
+  field("PUB-RESULT-F-CORRECTION-DECISION-REF", "Correction Decision Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when correcting a published result",
   }),
   field("PUB-RESULT-F-NEW-DECISION-VERSION", "New Confirmed Decision Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
     required: "required when correcting a published result",
+  }),
+  field("PUB-RESULT-F-ANSWER", "Published Answer", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PUB-RESULT-F-SCORE", "Published Score", {
+    dataType: "DECIMAL",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PUB-RESULT-F-FEEDBACK", "Published Feedback", {
+    dataType: "TEXT",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
   }),
   field("PUB-RESULT-F-ELIGIBILITY", "Publication Eligibility", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-009" },
@@ -1595,6 +1846,7 @@ const publicationActions = [
   action({
     id: "PUB-ACT-PREVIEW",
     label: "Preview Result Publication",
+    operationKind: "CREATE",
     targetObjectId: "PUB-OBJ-PREVIEW",
     inputFieldIds: [
       "PUB-PREVIEW-F-BATCH-REF",
@@ -1608,7 +1860,6 @@ const publicationActions = [
       "PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT",
       "PUB-PREVIEW-F-NOTIFICATION-PREVIEW",
     ],
-    writes: false,
     permissions: publicationTeacherPermissions,
     successState: "GENERATED",
     failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "VISIBILITY_POLICY_BLOCKED"],
@@ -1667,10 +1918,15 @@ const publicationActions = [
   action({
     id: "PUB-ACT-MATERIALIZE-RESULT",
     label: "Materialize Student Result Version",
+    operationKind: "CREATE",
     targetObjectId: "PUB-OBJ-RESULT",
     outputFieldIds: [
       "PUB-RESULT-F-STUDENT-REF",
+      "PUB-RESULT-F-SOURCE-DECISION-REF",
       "PUB-RESULT-F-DECISION-VERSION",
+      "PUB-RESULT-F-ANSWER",
+      "PUB-RESULT-F-SCORE",
+      "PUB-RESULT-F-FEEDBACK",
       "PUB-RESULT-F-ELIGIBILITY",
       "PUB-RESULT-F-BLOCKING-CODES",
       "PUB-RESULT-F-ANSWER-VISIBLE-AT",
@@ -1760,14 +2016,80 @@ const publicationActions = [
     ],
   }),
   action({
+    id: "PUB-ACT-RECONCILE-BATCH",
+    label: "Reconcile Retried Result Publication Batch",
+    targetObjectId: "PUB-OBJ-BATCH",
+    outputFieldIds: [
+      "PUB-BATCH-F-BATCH-VERSION",
+      "PUB-BATCH-F-OBJECT-RESULTS",
+      "PUB-BATCH-F-STATUS",
+    ],
+    risk: RISK.HIGH,
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-008"] },
+    permissions: systemFlowPermissions,
+    transition: { from: "PARTIAL_FAILED", to: "PUBLISHED" },
+    failureResults: ["PERMISSION_DENIED", "OBJECT_PUBLICATION_FAILED", "VERSION_CONFLICT"],
+    failureOutcomes: {
+      OBJECT_PUBLICATION_FAILED: {
+        kind: "BOUNDARY",
+        expectedState: "PARTIAL_FAILED",
+        expectedPermission: "ALLOW",
+        expectedData: "keeps the batch partial while any selected student result still has an object-level publication failure",
+      },
+    },
+  }),
+  action({
+    id: "PUB-ACT-VIEW-RESULT",
+    label: "View My Published Result",
+    targetObjectId: "PUB-OBJ-RESULT",
+    inputFieldIds: ["PUB-RESULT-F-STUDENT-REF"],
+    outputFieldIds: [
+      "PUB-RESULT-F-ANSWER",
+      "PUB-RESULT-F-SCORE",
+      "PUB-RESULT-F-FEEDBACK",
+    ],
+    writes: false,
+    permissions: [
+      permission("ALLOW", "ROLE-STUDENT", "the student reads only the student's own published result after each configured visibility time"),
+      permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to a student's answer, score, or feedback"),
+    ],
+    failureResults: [
+      "PERMISSION_DENIED",
+      "NOT_FOUND",
+      "RESULT_NOT_PUBLISHED",
+      "ANSWER_NOT_VISIBLE",
+      "FEEDBACK_NOT_VISIBLE",
+    ],
+    failureOutcomes: {
+      RESULT_NOT_PUBLISHED: {
+        expectedData: "returns no result until the owned result version reaches PUBLISHED",
+      },
+      ANSWER_NOT_VISIBLE: {
+        kind: "BOUNDARY",
+        expectedPermission: "ALLOW",
+        expectedData: "returns the visible score fields but withholds the answer until answerVisibleAt",
+      },
+      FEEDBACK_NOT_VISIBLE: {
+        kind: "BOUNDARY",
+        expectedPermission: "ALLOW",
+        expectedData: "returns the visible score fields but withholds feedback until feedbackVisibleAt",
+      },
+    },
+    successData: "returns only the student's own published answer, score, and feedback fields whose time gates have opened",
+  }),
+  action({
     id: "PUB-ACT-CORRECT-RESULT",
     label: "Correct Published Result",
     targetObjectId: "PUB-OBJ-RESULT",
     inputFieldIds: [
+      "PUB-RESULT-F-CORRECTION-DECISION-REF",
       "PUB-RESULT-F-NEW-DECISION-VERSION",
       "PUB-RESULT-F-PUBLIC-CORRECTION-NOTE",
     ],
     outputFieldIds: [
+      "PUB-RESULT-F-CORRECTION-DECISION-REF",
+      "PUB-RESULT-F-NEW-DECISION-VERSION",
       "PUB-RESULT-F-RESULT-VERSION",
       "PUB-RESULT-F-CORRECTION-VERSION",
       "PUB-RESULT-F-INVALIDATION-VERSION",
@@ -1808,9 +2130,6 @@ const publicationModule = moduleFact({
   exitConditions: ["each selected student has a published result or an object-level failure eligible for retry"],
   baselineDecisionIds: ["BASE-003", "BASE-007", "BASE-008", "BASE-010"],
   nfrIds: ["NFR-006", "NFR-008"],
-  permissions: {
-    studentRead: "students may read only published answers, scores, and feedback after the configured visible time",
-  },
   objects: [
     object(
       "PUB-OBJ-BATCH",
@@ -1855,7 +2174,39 @@ const publicationModule = moduleFact({
       },
       ["READY", "PUBLISHED", "PUBLISH_FAILED", "INVALIDATED"],
       publishedResultFields,
-      { sensitivityId: "S3" },
+      {
+        sensitivityId: "S3",
+        lineageBindings: [
+          {
+            refFieldId: "PUB-RESULT-F-SOURCE-DECISION-REF",
+            versionFieldId: "PUB-RESULT-F-DECISION-VERSION",
+            targetObjectId: "GRD-OBJ-DECISION",
+            targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+          },
+          {
+            refFieldId: "PUB-RESULT-F-CORRECTION-DECISION-REF",
+            versionFieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
+            targetObjectId: "GRD-OBJ-DECISION",
+            targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+          },
+        ],
+        readPolicies: [{
+          actionId: "PUB-ACT-VIEW-RESULT",
+          subject: { roleRef: "ROLE-STUDENT" },
+          scope: { kind: "OWN_RECORD", subjectFieldId: "PUB-RESULT-F-STUDENT-REF" },
+          requiredState: "PUBLISHED",
+          timeGates: [
+            {
+              visibleAtFieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+              protectedFieldIds: ["PUB-RESULT-F-ANSWER"],
+            },
+            {
+              visibleAtFieldId: "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+              protectedFieldIds: ["PUB-RESULT-F-FEEDBACK"],
+            },
+          ],
+        }],
+      },
     ),
   ],
   relationships: [
@@ -1899,6 +2250,21 @@ const publicationModule = moduleFact({
       ["PUB-OBJ-RESULT"],
       publishedResultFields.map(({ id }) => id),
       ["PUB-ACT-CORRECT-RESULT", "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION"],
+    ),
+    page(
+      "PUB-PAGE-STUDENT-RESULT",
+      "Student Published Result",
+      ["PUB-OBJ-RESULT"],
+      [
+        "PUB-RESULT-F-STUDENT-REF",
+        "PUB-RESULT-F-ANSWER",
+        "PUB-RESULT-F-SCORE",
+        "PUB-RESULT-F-FEEDBACK",
+        "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+        "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+        "PUB-RESULT-F-RESULT-VERSION",
+      ],
+      ["PUB-ACT-VIEW-RESULT"],
     ),
   ],
 });
@@ -1991,10 +2357,14 @@ export const teachingLoopFlows = deepFreeze([
     phase: PHASE.FIRST,
     moduleIds: ["HW-001"],
     steps: [
-      { order: 1, actionId: "HW-ACT-VALIDATE" },
-      { order: 2, actionId: "HW-ACT-PREVIEW" },
-      { order: 3, actionId: "HW-ACT-PUBLISH-NOW", condition: "the teacher selects immediate publication" },
-      { order: 4, actionId: "HW-ACT-SCHEDULE-PUBLISH", condition: "the teacher selects scheduled publication instead of immediate publication" },
+      { order: 1, actionId: "HW-ACT-VALIDATE-ITEM", condition: "an item is an initial draft" },
+      { order: 2, actionId: "HW-ACT-REVALIDATE-ITEM", condition: "an item is a revision draft" },
+      { order: 3, actionId: "HW-ACT-VALIDATE", condition: "the assignment is an initial draft" },
+      { order: 4, actionId: "HW-ACT-REVALIDATE-REVISION", condition: "the assignment is a revision draft" },
+      { order: 5, actionId: "HW-ACT-PREVIEW" },
+      { order: 6, actionId: "HW-ACT-PUBLISH-ITEM", condition: "every included item version is validated" },
+      { order: 7, actionId: "HW-ACT-PUBLISH-NOW", condition: "the teacher selects immediate publication" },
+      { order: 8, actionId: "HW-ACT-SCHEDULE-PUBLISH", condition: "the teacher selects scheduled publication instead of immediate publication" },
     ],
     sourceDataRefs: [
       {
@@ -2013,12 +2383,16 @@ export const teachingLoopFlows = deepFreeze([
       fieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
       version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
     }],
-    idempotencyKey: "DF-004:school:term:assignment-version:validation-version:request-id",
+    idempotencyKeyParts: {
+      identityFieldIds: ["HW-ASSIGNMENT-F-DUE-AT"],
+      versionFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION", "HW-ITEM-F-ITEM-VERSION"],
+      fanoutFieldId: "HW-ITEM-F-PROMPT",
+    },
     failureGranularity: "ASSIGNMENT_OBJECT_VERSION_WITH_NO_PARTIAL_ITEM_PUBLICATION",
     retryPolicy: {
       strategy: "REVALIDATE_STALE_ASSIGNMENT_THEN_RETRY",
       maxAttempts: 3,
-      retryableFailureResults: ["TRANSIENT_FAILURE", "VERSION_CONFLICT", "AUDIT_FAILED"],
+      retryableFailureResults: ["VERSION_CONFLICT", "AUDIT_FAILED"],
     },
     compensation: {
       strategy: "KEEP_PRIOR_PUBLICATION_VERSION",
@@ -2065,7 +2439,11 @@ export const teachingLoopFlows = deepFreeze([
         version: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
       },
     ],
-    idempotencyKey: "DF-005:school:term:assignment-publication-version:student:draft-version:request-id",
+    idempotencyKeyParts: {
+      identityFieldIds: ["HW-ASSIGNMENT-F-TITLE"],
+      versionFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION", "SUB-DRAFT-F-DRAFT-VERSION"],
+      fanoutFieldId: "SUB-DRAFT-F-ANSWER-PAYLOAD",
+    },
     failureGranularity: "STUDENT_SUBMISSION_OBJECT_AND_MEDIA_CHUNK",
     retryPolicy: {
       strategy: "RETRY_FAILED_CHUNKS_OR_UNRECEIPTED_SUBMISSION",
@@ -2107,15 +2485,30 @@ export const teachingLoopFlows = deepFreeze([
         version: "HW-ITEM-F-ITEM-VERSION",
       },
       {
-        objectId: "HW-OBJ-ITEM",
-        fieldId: "HW-ITEM-F-RUBRIC-VERSION",
-        version: "HW-ITEM-F-ITEM-VERSION",
+        objectId: "HW-OBJ-RUBRIC",
+        fieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
+        version: "HW-RUBRIC-F-RUBRIC-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-CAPABILITY-RULE",
+        fieldId: "GRD-CAP-F-RULE-ID",
+        version: "GRD-CAP-F-RULE-VERSION",
       },
     ],
     targetDataRefs: [
       {
         objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-SUBMISSION-REF",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
         fieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-ITEM-REF",
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
       {
@@ -2125,7 +2518,22 @@ export const teachingLoopFlows = deepFreeze([
       },
       {
         objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-RUBRIC-REF",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
         fieldId: "GRD-DECISION-F-RUBRIC-VERSION",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-CAPABILITY-RULE-REF",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
       {
@@ -2139,12 +2547,21 @@ export const teachingLoopFlows = deepFreeze([
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
     ],
-    idempotencyKey: "DF-006:school:term:submission-version:capability-matrix-version:request-id",
+    idempotencyKeyParts: {
+      identityFieldIds: ["SUB-ATTEMPT-F-SUBMISSION-VERSION"],
+      versionFieldIds: [
+        "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+        "HW-ITEM-F-ITEM-VERSION",
+        "HW-RUBRIC-F-RUBRIC-VERSION",
+        "GRD-CAP-F-RULE-VERSION",
+      ],
+      fanoutFieldId: "HW-ITEM-F-ITEM-VERSION",
+    },
     failureGranularity: "SUBMISSION_ITEM_OBJECT_WITH_INDEPENDENT_MANUAL_ROUTE",
     retryPolicy: {
       strategy: "RETRY_QUEUE_AND_PROCESSING_WITH_MANUAL_CUTOFF",
       maxAttempts: 3,
-      retryableFailureResults: ["TRANSIENT_FAILURE", "AI_UNAVAILABLE", "VERSION_CONFLICT"],
+      retryableFailureResults: ["AI_UNAVAILABLE", "VERSION_CONFLICT"],
     },
     compensation: {
       strategy: "ROUTE_MANUAL_WITHOUT_ROLLING_BACK_SUBMISSION",
@@ -2185,7 +2602,11 @@ export const teachingLoopFlows = deepFreeze([
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
     ],
-    idempotencyKey: "DF-007:school:term:grading-decision-version:teacher-confirmation-version:request-id",
+    idempotencyKeyParts: {
+      identityFieldIds: ["GRD-DECISION-F-SUGGESTED-SCORE"],
+      versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+      fanoutFieldId: "GRD-DECISION-F-SUGGESTED-SCORE",
+    },
     failureGranularity: "STUDENT_ITEM_GRADING_OBJECT",
     retryPolicy: {
       strategy: "REFRESH_SOURCE_VERSIONS_THEN_RECONFIRM",
@@ -2217,6 +2638,7 @@ export const teachingLoopFlows = deepFreeze([
       { order: 8, actionId: "PUB-ACT-PUBLISH-RESULT", condition: "the result is ready and its configured visibility policy permits publication" },
       { order: 9, actionId: "PUB-ACT-FINALIZE-BATCH", condition: "all student result attempts have an object-level outcome" },
       { order: 10, actionId: "PUB-ACT-RETRY-FAILED", condition: "only object-level failed student results are retried" },
+      { order: 11, actionId: "PUB-ACT-RECONCILE-BATCH", condition: "all retried student results now have a terminal object-level outcome" },
     ],
     sourceDataRefs: [
       {
@@ -2268,6 +2690,31 @@ export const teachingLoopFlows = deepFreeze([
       },
       {
         objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-SOURCE-DECISION-REF",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-DECISION-VERSION",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-ANSWER",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-SCORE",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-FEEDBACK",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
@@ -2282,12 +2729,16 @@ export const teachingLoopFlows = deepFreeze([
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
     ],
-    idempotencyKey: "DF-008:school:term:decision-version:selected-student-set:result-version:request-id",
+    idempotencyKeyParts: {
+      identityFieldIds: ["GRD-DECISION-F-OFFICIAL-SCORE"],
+      versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION", "PUB-BATCH-F-BATCH-VERSION"],
+      fanoutFieldId: "PUB-BATCH-F-SELECTED-STUDENT-IDS",
+    },
     failureGranularity: "SELECTED_STUDENT_RESULT_OBJECT_WITH_PARTIAL_SUCCESS",
     retryPolicy: {
       strategy: "RETRY_FAILED_STUDENT_RESULTS_ONLY",
       maxAttempts: 5,
-      retryableFailureResults: ["OBJECT_PUBLICATION_FAILED", "TRANSIENT_FAILURE", "AUDIT_FAILED"],
+      retryableFailureResults: ["OBJECT_PUBLICATION_FAILED", "AUDIT_FAILED"],
     },
     compensation: {
       strategy: "DO_NOT_UNPUBLISH_SUCCESSFUL_RESULTS",
@@ -2329,6 +2780,16 @@ export const teachingLoopFlows = deepFreeze([
       },
       {
         objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-CORRECTION-DECISION-REF",
+        version: "PUB-RESULT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
+        version: "PUB-RESULT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-CORRECTION-VERSION",
         version: "PUB-RESULT-F-CORRECTION-VERSION",
       },
@@ -2338,7 +2799,11 @@ export const teachingLoopFlows = deepFreeze([
         version: "PUB-RESULT-F-INVALIDATION-VERSION",
       },
     ],
-    idempotencyKey: "DF-009:school:term:decision-version:result-version:correction-version:request-id",
+    idempotencyKeyParts: {
+      identityFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+      versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION", "PUB-RESULT-F-RESULT-VERSION"],
+      fanoutFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
     failureGranularity: "PUBLISHED_STUDENT_RESULT_OBJECT",
     retryPolicy: {
       strategy: "REFRESH_DECISION_AND_RESULT_VERSIONS_THEN_RETRY",

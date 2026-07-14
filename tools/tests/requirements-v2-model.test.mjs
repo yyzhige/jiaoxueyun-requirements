@@ -94,6 +94,7 @@ function validAction(id, targetObjectId, inputFieldIds, scenarioIds, overrides =
     inputFieldIds,
     outputFieldIds: [],
     transition: { from: "DRAFT", to: "SUBMITTED" },
+    operationKind: "UPDATE",
     writes: true,
     risk: RISK.LOW,
     executionMode: "USER_TASK",
@@ -149,6 +150,11 @@ function validFixture() {
   const submissionField = validField("SUB-F001", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-BOOL" },
     mutability: "EDITABLE",
+  });
+  const submissionVersionField = validField("SUB-F002", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
   });
   const submissionScenarios = [
     validScenario("SUB-SCN-01", "SUB-ACT-01", "SUCCESS"),
@@ -223,13 +229,16 @@ function validFixture() {
       exitConditions: ["the accepted version is observable"],
       baselineDecisionIds: ["BASE-TEST"],
       nfrIds: ["NFR-TEST"],
-      objects: [validObject("DAT-SUB-01", "ROLE-STUDENT", submissionField)],
+      objects: [validObject("DAT-SUB-01", "ROLE-STUDENT", submissionField, {
+        fields: [submissionField, submissionVersionField],
+      })],
       relationships: [],
       actions: [validAction(
         "SUB-ACT-01",
         "DAT-SUB-01",
         ["SUB-F001"],
         submissionScenarios.map(({ id }) => id),
+        { outputFieldIds: ["SUB-F001", "SUB-F002"] },
       )],
       pages: [validPage(
         "SUB-PAGE-01",
@@ -271,14 +280,18 @@ function validFixture() {
       phase: PHASE.FIRST,
       moduleIds: ["SUB-001"],
       steps: [{ order: 1, actionId: "SUB-ACT-01" }],
-      sourceDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "CURRENT" }],
-      targetDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "ACCEPTED" }],
-      idempotencyKey: "DF-TEST:actor:target-version:request-id",
+      sourceDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "SUB-F002" }],
+      targetDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "SUB-F002" }],
+      idempotencyKeyParts: {
+        identityFieldIds: ["SUB-F001"],
+        versionFieldIds: ["SUB-F002"],
+        fanoutFieldId: "SUB-F001",
+      },
       failureGranularity: "STEP",
       retryPolicy: {
         strategy: "BOUNDED",
         maxAttempts: 3,
-        retryableFailureResults: ["TRANSIENT_FAILURE"],
+        retryableFailureResults: ["VERSION_CONFLICT"],
       },
       compensation: {
         strategy: "NO_ROLLBACK_AFTER_ACCEPTANCE",
@@ -292,6 +305,80 @@ function validFixture() {
     aiTasks: [],
     extensions: [],
   };
+}
+
+function addLineageBindingFixture(model) {
+  const submissionObject = moduleById(model, "SUB-001").objects[0];
+  const targetVersionField = moduleById(model, "HW-001").objects[0].fields[0];
+  Object.assign(targetVersionField, {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  });
+  submissionObject.fields.push(validField("SUB-F003", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
+    mutability: "IMMUTABLE",
+  }));
+  submissionObject.lineageBindings = [{
+    refFieldId: "SUB-F003",
+    versionFieldId: "SUB-F002",
+    targetObjectId: "DAT-HW-01",
+    targetVersionFieldId: "HW-F001",
+  }];
+}
+
+function addReadPolicyFixture(model) {
+  const module = moduleById(model, "SUB-001");
+  module.objects[0].fields.push(validField("SUB-F003", { dataType: "DATETIME" }));
+  const scenarios = [
+    validScenario("SUB-READ-SCN-SUCCESS", "SUB-ACT-READ", "SUCCESS", {
+      then: {
+        expectedData: "returns the visible owned record fields",
+        expectedState: { mode: "UNCHANGED" },
+        expectedPermission: "ALLOW",
+        expectedVisibility: "only the owned record is visible",
+      },
+    }),
+    validScenario("SUB-READ-SCN-DENIED", "SUB-ACT-READ", "FAILURE", {
+      resultCode: "PERMISSION_DENIED",
+      then: {
+        expectedData: "returns no record outside ownership",
+        expectedState: { mode: "UNCHANGED" },
+        expectedPermission: "DENY",
+        expectedVisibility: "no unauthorized record is visible",
+      },
+    }),
+  ];
+  const readAction = validAction(
+    "SUB-ACT-READ",
+    "DAT-SUB-01",
+    ["SUB-F001"],
+    scenarios.map(({ id }) => id),
+    {
+      outputFieldIds: ["SUB-F001"],
+      operationKind: "READ",
+      writes: false,
+      risk: RISK.READ,
+      auditMode: "NOT_REQUIRED",
+      failureResults: ["PERMISSION_DENIED"],
+    },
+  );
+  delete readAction.transition;
+  delete readAction.idempotencyKey;
+  module.actions.push(readAction);
+  module.scenarios.push(...scenarios);
+  module.pages[0].actionIds.push("SUB-ACT-READ");
+  module.objects[0].readPolicies = [{
+    actionId: "SUB-ACT-READ",
+    subject: { roleRef: "ROLE-STUDENT" },
+    scope: { kind: "OWN_RECORD", subjectFieldId: "SUB-F001" },
+    requiredState: "SUBMITTED",
+    timeGates: [{
+      visibleAtFieldId: "SUB-F003",
+      protectedFieldIds: ["SUB-F001"],
+    }],
+  }];
 }
 
 function validStaticOptionSet(overrides = {}) {
@@ -421,6 +508,54 @@ function assertHasCode(errors, code) {
     errorCodes(errors).includes(code),
     `expected ${code} in:\n${errors.join("\n")}`,
   );
+}
+
+function assertNoCode(errors, code) {
+  assert.equal(
+    errorCodes(errors).includes(code),
+    false,
+    `did not expect ${code} in:\n${errors.join("\n")}`,
+  );
+}
+
+function successScenario(model) {
+  return moduleById(model, "SUB-001").scenarios.find(({ kind }) => kind === "SUCCESS");
+}
+
+function reachableObjectStates(module, objectId, initialStates = []) {
+  const reachable = new Set(initialStates);
+  const successStateByActionId = new Map(module.scenarios
+    .filter(({ kind }) => kind === "SUCCESS")
+    .map((scenario) => [scenario.actionId, scenario.then.expectedState]));
+
+  for (const action of module.actions) {
+    if (action.targetObjectId !== objectId || action.operationKind !== "CREATE") continue;
+    const expectedState = successStateByActionId.get(action.id);
+    if (expectedState?.mode === "STATE") reachable.add(expectedState.value);
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const action of module.actions) {
+      if (
+        action.targetObjectId !== objectId
+        || !action.transition
+        || !reachable.has(action.transition.from)
+      ) continue;
+      const actionStates = module.scenarios
+        .filter(({ actionId }) => actionId === action.id)
+        .map(({ then }) => then.expectedState)
+        .filter(({ mode }) => mode === "STATE")
+        .map(({ value }) => value);
+      for (const state of actionStates) {
+        if (reachable.has(state)) continue;
+        reachable.add(state);
+        changed = true;
+      }
+    }
+  }
+  return reachable;
 }
 
 const ENTITY_CASES = [
@@ -663,12 +798,64 @@ test("rejects missing or unsupported relationship ownership scopes", () => {
   }
 });
 
+test("validates generic object lineage bindings without Field ID allowlists", () => {
+  const validModel = validFixture();
+  addLineageBindingFixture(validModel);
+  assert.deepEqual(validateRequirementModel(validModel), []);
+
+  const mutations = [
+    (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].legacy = true; },
+    (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].refFieldId = "SUB-F001"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].versionFieldId = "HW-F001"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].targetObjectId = "DAT-MISSING"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].targetVersionFieldId = "SUB-F002"; },
+    (model) => {
+      moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F003").valueSource.targetObjectId = "DAT-SUB-01";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    addLineageBindingFixture(model);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_LINEAGE_BINDING");
+  }
+});
+
+test("validates structured own-record read policies and time-gated outputs", () => {
+  const validModel = validFixture();
+  addReadPolicyFixture(validModel);
+  assert.deepEqual(validateRequirementModel(validModel), []);
+
+  const mutations = [
+    (policy) => { policy.legacy = true; },
+    (policy) => { policy.subject.dutyRef = "DUTY-SUBJECT-TEACHER"; },
+    (policy) => { policy.scope.kind = "ALL_RECORDS"; },
+    (policy) => { policy.actionId = "SUB-ACT-01"; },
+    (policy) => { policy.subject = { roleRef: "ROLE-TEACHER" }; },
+    (policy) => { policy.requiredState = "PUBLISHED"; },
+    (policy) => { policy.scope.subjectFieldId = "HW-F001"; },
+    (policy) => { policy.timeGates[0].visibleAtFieldId = "HW-F001"; },
+    (policy) => { policy.timeGates[0].protectedFieldIds = ["SUB-F002"]; },
+    (policy) => { policy.timeGates[0].legacy = true; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = validFixture();
+    addReadPolicyFixture(model);
+    mutate(moduleById(model, "SUB-001").objects[0].readPolicies[0]);
+    assertHasCode(validateRequirementModel(model), "INVALID_READ_POLICY");
+  }
+});
+
 test("rejects incomplete action execution contracts", () => {
   const properties = [
     ["label", "INVALID_ACTION_CONTRACT"],
     ["targetObjectId", "INVALID_ACTION_CONTRACT"],
     ["inputFieldIds", "INVALID_ACTION_CONTRACT"],
     ["outputFieldIds", "INVALID_ACTION_CONTRACT"],
+    ["operationKind", "INVALID_ACTION_CONTRACT"],
     ["writes", "INVALID_ACTION_CONTRACT"],
     ["risk", "INVALID_ACTION_CONTRACT"],
     ["executionMode", "INVALID_ACTION_CONTRACT"],
@@ -701,6 +888,52 @@ test("requires write idempotency and validates action clients, risk, audit, and 
 
     assertHasCode(validateRequirementModel(model), errorCode);
   }
+});
+
+test("enforces READ CREATE and UPDATE operation contracts without action allowlists", () => {
+  const mutations = [
+    [(action) => { action.operationKind = "UPSERT"; }],
+    [(action) => { action.operationKind = "READ"; }],
+    [(action) => {
+      action.operationKind = "READ";
+      action.writes = false;
+      action.risk = RISK.READ;
+      action.auditMode = "NOT_REQUIRED";
+      delete action.idempotencyKey;
+      delete action.transition;
+    }],
+    [(action) => {
+      action.operationKind = "CREATE";
+      delete action.transition;
+    }, (model) => {
+      successScenario(model).then.expectedState = { mode: "UNCHANGED" };
+    }],
+    [(action) => {
+      action.operationKind = "CREATE";
+    }],
+    [(action) => {
+      action.operationKind = "UPDATE";
+      delete action.transition;
+    }],
+    [(action) => {
+      action.operationKind = "UPDATE";
+      action.writes = false;
+    }],
+  ];
+
+  for (const [mutateAction, mutateModel] of mutations) {
+    const model = validFixture();
+    mutateAction(moduleById(model, "SUB-001").actions[0]);
+    mutateModel?.(model);
+
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_OPERATION");
+  }
+
+  const statePreservingUpdate = validFixture();
+  const action = moduleById(statePreservingUpdate, "SUB-001").actions[0];
+  action.transition = { from: "DRAFT", to: "DRAFT" };
+  successScenario(statePreservingUpdate).then.expectedState = { mode: "STATE", value: "DRAFT" };
+  assertNoCode(validateRequirementModel(statePreservingUpdate), "INVALID_ACTION_OPERATION");
 });
 
 test("requires fail-closed audit behavior for high-risk actions", () => {
@@ -910,7 +1143,7 @@ test("rejects incomplete page, scenario, and Flow contracts", () => {
     "steps",
     "sourceDataRefs",
     "targetDataRefs",
-    "idempotencyKey",
+    "idempotencyKeyParts",
     "failureGranularity",
     "retryPolicy",
     "compensation",
@@ -999,9 +1232,11 @@ test("rejects success scenario states that contradict the action transition", ()
   assertHasCode(validateRequirementModel(model), "SCENARIO_TRANSITION_MISMATCH");
 });
 
-test("accepts an explicit success state on a write action without a transition", () => {
+test("accepts a CREATE action with an explicit success state and no transition", () => {
   const model = validFixture();
-  delete moduleById(model, "SUB-001").actions[0].transition;
+  const action = moduleById(model, "SUB-001").actions[0];
+  action.operationKind = "CREATE";
+  delete action.transition;
 
   assert.deepEqual(validateRequirementModel(model), []);
 });
@@ -1032,6 +1267,49 @@ test("rejects invalid Flow data references, ordering, and participant symmetry",
       errors.join("\n"),
     );
   }
+});
+
+test("rejects invalid Flow versions outputs retries and idempotency parts", () => {
+  const mutations = [
+    ["missing version field", "INVALID_FLOW_VERSION_REFERENCE", (model) => {
+      model.flows[0].sourceDataRefs[0].version = "SUB-F999";
+    }],
+    ["cross-object version field", "INVALID_FLOW_VERSION_REFERENCE", (model) => {
+      model.flows[0].sourceDataRefs[0].version = "HW-F001";
+    }],
+    ["target not produced", "INVALID_FLOW_TARGET_OUTPUT", (model) => {
+      moduleById(model, "SUB-001").actions[0].outputFieldIds = ["SUB-F002"];
+    }],
+    ["unknown retry result", "INVALID_FLOW_RETRY_RESULT", (model) => {
+      model.flows[0].retryPolicy.retryableFailureResults.push("TRANSIENT_FAILURE");
+    }],
+    ["identity is not a source field", "INVALID_FLOW_IDEMPOTENCY", (model) => {
+      model.flows[0].idempotencyKeyParts.identityFieldIds = ["SUB-F002"];
+    }],
+    ["version coverage is weak", "INVALID_FLOW_IDEMPOTENCY", (model) => {
+      model.flows[0].idempotencyKeyParts.versionFieldIds.push("SUB-F001");
+    }],
+    ["fanout is not a source field", "INVALID_FLOW_IDEMPOTENCY", (model) => {
+      model.flows[0].idempotencyKeyParts.fanoutFieldId = "SUB-F002";
+    }],
+    ["unknown idempotency part", "INVALID_FLOW_CONTRACT", (model) => {
+      model.flows[0].idempotencyKeyParts.requestFieldId = "SUB-F001";
+    }],
+    ["legacy free-text key", "INVALID_FLOW_CONTRACT", (model) => {
+      model.flows[0].idempotencyKey = "weak-free-text-key";
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, errorCode, mutate] of mutations) {
+    const model = validFixture();
+    mutate(model);
+    const errors = validateRequirementModel(model);
+    if (!errors.some((error) => error.startsWith(errorCode))) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
 });
 
 test("rejects a Flow whose data-reference modules differ from declared participants", () => {
@@ -1185,13 +1463,20 @@ test("models assignment fields and task-specific lifecycle actions", () => {
   assert.equal(requiredFieldIds.every((fieldId) => fieldIds.has(fieldId)), true);
   assert.deepEqual(assignment.actions.map(({ id }) => id), [
     "HW-ACT-CREATE-DRAFT",
+    "HW-ACT-CREATE-ITEM",
     "HW-ACT-EDIT-ITEM",
+    "HW-ACT-VALIDATE-ITEM",
     "HW-ACT-VALIDATE",
+    "HW-ACT-REVALIDATE-ITEM",
+    "HW-ACT-REVALIDATE-REVISION",
     "HW-ACT-PREVIEW",
+    "HW-ACT-PUBLISH-ITEM",
     "HW-ACT-PUBLISH-NOW",
     "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-SCHEDULED",
     "HW-ACT-CLOSE",
     "HW-ACT-REVISE",
+    "HW-ACT-REVISE-ITEM",
     "HW-ACT-OPEN-PUBLISHED",
     "HW-ACT-RESOLVE-GRADING-SNAPSHOT",
   ]);
@@ -1200,6 +1485,57 @@ test("models assignment fields and task-specific lifecycle actions", () => {
     && toObjectId === "HW-OBJ-ITEM"
     && type === "CONTAINS"
   )));
+  const authoringPage = assignment.pages.find(({ id }) => id === "HW-PAGE-AUTHORING");
+  const studentPage = assignment.pages.find(({ id }) => id === "HW-PAGE-STUDENT");
+  assert.equal(authoringPage.actionIds.includes("HW-ACT-OPEN-PUBLISHED"), false);
+  assert.deepEqual(studentPage.actionIds, ["HW-ACT-OPEN-PUBLISHED"]);
+});
+
+test("closes assignment and item publication states through revision and scheduled release", () => {
+  const homework = moduleById(requirementModel, "HW-001");
+  const objectById = new Map(homework.objects.map((object) => [object.id, object]));
+  const actionById = new Map(homework.actions.map((action) => [action.id, action]));
+
+  for (const objectId of ["HW-OBJ-ASSIGNMENT", "HW-OBJ-ITEM"]) {
+    assert.deepEqual(
+      reachableObjectStates(homework, objectId),
+      new Set(objectById.get(objectId).states),
+      objectId,
+    );
+  }
+  assert.deepEqual(actionById.get("HW-ACT-REVALIDATE-REVISION").transition, {
+    from: "REVISION_DRAFT",
+    to: "VALIDATED",
+  });
+  assert.deepEqual(actionById.get("HW-ACT-REVALIDATE-ITEM").transition, {
+    from: "REVISION_DRAFT",
+    to: "VALIDATED",
+  });
+  assert.deepEqual(actionById.get("HW-ACT-PUBLISH-SCHEDULED").transition, {
+    from: "SCHEDULED",
+    to: "PUBLISHED",
+  });
+  assert.equal(actionById.get("HW-ACT-PUBLISH-SCHEDULED").executionMode, "SYSTEM_EVENT");
+  assert.deepEqual(actionById.get("HW-ACT-PUBLISH-SCHEDULED").trigger, {
+    kind: "EVENT",
+    eventId: "EVT-HW-SCHEDULED-PUBLISH-DUE",
+  });
+  assert.deepEqual(
+    events.find(({ id }) => id === "EVT-HW-SCHEDULED-PUBLISH-DUE").triggeredActionIds,
+    ["HW-ACT-PUBLISH-SCHEDULED"],
+  );
+
+  const publication = flows.find(({ id }) => id === "DF-004");
+  assert.deepEqual(publication.steps.map(({ actionId }) => actionId), [
+    "HW-ACT-VALIDATE-ITEM",
+    "HW-ACT-REVALIDATE-ITEM",
+    "HW-ACT-VALIDATE",
+    "HW-ACT-REVALIDATE-REVISION",
+    "HW-ACT-PREVIEW",
+    "HW-ACT-PUBLISH-ITEM",
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+  ]);
 });
 
 test("models submission payloads uploads receipts and App-first weak-network semantics", () => {
@@ -1339,17 +1675,25 @@ test("covers every declared grading combination with exactly one explicit decisi
   ));
 
   assert.equal(new Set(supportedIds).size, supportedIds.length);
-  assert.deepEqual(applicability.optionSetBindings, {
-    subjectFamily: "OPT-TL-003",
-    questionType: "OPT-ENUM-003",
-    submissionMethod: "OPT-ENUM-031",
-    recognitionLevel: "OPT-TL-004",
-    scoringLevel: "OPT-TL-005",
-    requiredEvidence: "OPT-TL-006",
-    teacherReviewRequired: "OPT-ENUM-001",
-    batchConfirmEligibility: "OPT-TL-007",
-    unavailableFallback: "OPT-TL-008",
+  assert.equal(applicability.capabilityObjectId, "GRD-OBJ-CAPABILITY-RULE");
+  assert.deepEqual(applicability.fieldBindings, {
+    subjectFamily: { fieldId: "GRD-CAP-F-SUBJECT-FAMILY", optionSetId: "OPT-TL-003" },
+    questionType: { fieldId: "GRD-CAP-F-QUESTION-TYPE", optionSetId: "OPT-ENUM-003" },
+    submissionMethod: { fieldId: "GRD-CAP-F-SUBMISSION-METHOD", optionSetId: "OPT-ENUM-031" },
+    recognitionLevel: { fieldId: "GRD-CAP-F-RECOGNITION-LEVEL", optionSetId: "OPT-TL-004" },
+    scoringLevel: { fieldId: "GRD-CAP-F-SCORING-LEVEL", optionSetId: "OPT-TL-005" },
+    requiredEvidence: { fieldId: "GRD-CAP-F-REQUIRED-EVIDENCE", optionSetId: "OPT-TL-006" },
+    teacherReviewRequired: { fieldId: "GRD-CAP-F-TEACHER-REVIEW", optionSetId: "OPT-ENUM-001" },
+    batchConfirmEligibility: { fieldId: "GRD-CAP-F-BATCH-CONFIRM", optionSetId: "OPT-TL-007" },
+    unavailableFallback: { fieldId: "GRD-CAP-F-UNAVAILABLE-FALLBACK", optionSetId: "OPT-TL-008" },
   });
+  const capabilityObject = grading.objects.find(({ id }) => (
+    id === applicability.capabilityObjectId
+  ));
+  for (const { fieldId, optionSetId } of Object.values(applicability.fieldBindings)) {
+    const field = capabilityObject.fields.find(({ id }) => id === fieldId);
+    assert.deepEqual(field.valueSource, { kind: "OPTION_SET", optionSetId });
+  }
   assert.equal(unsupportedRule.priority < applicability.exactRulePriority, true);
   assert.deepEqual(unsupportedRule.exceptCombinationIds.toSorted(), supportedIds.toSorted());
   assert.deepEqual(unsupportedRule.decision, {
@@ -1414,6 +1758,7 @@ test("derives grading dimensions and subjectivity only from central Option Sets"
   assert.equal(grading.capabilityMatrix.every((rule) => (
     !Object.hasOwn(rule, "isSubjective")
   )), true);
+  assert.ok(applicability.fieldBindings, "grading dimensions must bind through capability fields");
 
   for (const [dimension, property] of [
     ["subjectFamilies", "subjectFamily"],
@@ -1421,7 +1766,7 @@ test("derives grading dimensions and subjectivity only from central Option Sets"
     ["submissionMethods", "submissionMethod"],
   ]) {
     const optionSet = optionSets.find(({ id }) => (
-      id === applicability.optionSetBindings[property]
+      id === applicability.fieldBindings[property].optionSetId
     ));
     assert.deepEqual(
       new Set(applicability.dimensions[dimension]),
@@ -1433,60 +1778,97 @@ test("derives grading dimensions and subjectivity only from central Option Sets"
 
 test("rejects grading capability overlap, gaps, implicit fallback, and review bypass", () => {
   const mutations = [
-    (grading) => {
+    ["duplicate combination", (grading) => {
       grading.capabilityMatrix.push(structuredClone(grading.capabilityMatrix[0]));
-    },
-    (grading) => {
+    }],
+    ["missing fallback exclusion", (grading) => {
       grading.capabilityApplicability.unsupportedRule.exceptCombinationIds.pop();
-    },
-    (grading) => {
+    }],
+    ["extra fallback exclusion", (grading) => {
       grading.capabilityApplicability.unsupportedRule.exceptCombinationIds.push(
         "CHINESE|TRUE-FALSE|TEXT",
       );
-    },
-    (grading) => {
+    }],
+    ["missing fallback decision", (grading) => {
       delete grading.capabilityApplicability.unsupportedRule.decision.unavailableFallback;
-    },
-    (grading) => {
+    }],
+    ["subjective review bypass", (grading) => {
       grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
         .teacherReviewRequired = "NO";
-    },
-    (grading) => {
+    }],
+    ["subjective batch bypass", (grading) => {
       grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
         .batchConfirmEligibility = "ELIGIBLE";
-    },
-    (grading) => {
+    }],
+    ["unknown option code", (grading) => {
       grading.capabilityMatrix[0].recognitionLevel = "UNKNOWN-LEVEL";
-    },
-    (grading) => {
+    }],
+    ["dimension gap", (grading) => {
       grading.capabilityApplicability.dimensions.subjectFamilies = grading
         .capabilityApplicability.dimensions.subjectFamilies
         .filter((code) => code !== "ARTS");
-    },
-    (grading) => {
+    }],
+    ["missing exact rule", (grading) => {
       grading.capabilityMatrix.pop();
-    },
-    (grading) => {
+    }],
+    ["authored objective subjectivity", (grading) => {
       grading.capabilityMatrix.find(({ questionType }) => questionType === "SINGLE-CHOICE")
         .isSubjective = true;
-    },
-    (grading) => {
+    }],
+    ["authored subjective override", (grading) => {
       grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
         .isSubjective = false;
-    },
-    (grading) => {
+    }],
+    ["fallback batch bypass", (grading) => {
       grading.capabilityApplicability.unsupportedRule.decision.batchConfirmEligibility = "ELIGIBLE";
-    },
+    }],
+    ["unknown applicability key", (grading) => {
+      grading.capabilityApplicability.implicitDefault = true;
+    }],
+    ["unknown dimension key", (grading) => {
+      grading.capabilityApplicability.dimensions.mediaTypes = [];
+    }],
+    ["unknown binding key", (grading) => {
+      grading.capabilityApplicability.fieldBindings.subjectivity = structuredClone(
+        grading.capabilityApplicability.fieldBindings.questionType,
+      );
+    }],
+    ["unknown rule key", (grading) => {
+      grading.capabilityMatrix[0].implicitFallback = true;
+    }],
+    ["duplicate rule id", (grading) => {
+      grading.capabilityMatrix[1].id = grading.capabilityMatrix[0].id;
+    }],
+    ["duplicate required evidence", (grading) => {
+      grading.capabilityMatrix[0].requiredEvidence.push(
+        grading.capabilityMatrix[0].requiredEvidence[0],
+      );
+    }],
+    ["subjective auto score", (grading) => {
+      grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
+        .scoringLevel = "AUTO-SCORE";
+    }],
+    ["binding field drift", (grading) => {
+      grading.capabilityApplicability.fieldBindings.questionType.fieldId =
+        "GRD-CAP-F-SUBJECT-FAMILY";
+    }],
+    ["bound field value source drift", (grading) => {
+      grading.objects.find(({ id }) => id === "GRD-OBJ-CAPABILITY-RULE")
+        .fields.find(({ id }) => id === "GRD-CAP-F-QUESTION-TYPE")
+        .valueSource.optionSetId = "OPT-TL-003";
+    }],
   ];
 
-  for (const mutate of mutations) {
+  const missedMutations = [];
+  for (const [name, mutate] of mutations) {
     const model = structuredClone(requirementModel);
     mutate(moduleById(model, "GRD-001"));
-    assertHasCode(
-      validateRequirementModel(model),
-      "INVALID_GRADING_CAPABILITY_MATRIX",
-    );
+    const errors = validateRequirementModel(model);
+    if (!errors.some((error) => error.startsWith("INVALID_GRADING_CAPABILITY_MATRIX"))) {
+      missedMutations.push(name);
+    }
   }
+  assert.deepEqual(missedMutations, []);
 });
 
 test("rejects question type Option Sets without boolean subjectivity metadata", () => {
@@ -1498,6 +1880,29 @@ test("rejects question type Option Sets without boolean subjectivity metadata", 
     const questionType = model.optionSets.find(({ key }) => key === "questionType");
     mutate(questionType.values[0]);
     assertHasCode(validateRequirementModel(model), "INVALID_ENTITY_SHAPE");
+  }
+});
+
+test("returns stable validation errors for malformed grading Option Set values", () => {
+  const mutations = [
+    (values) => { values[0] = null; },
+    (values) => { values[0] = 7; },
+    (values) => { delete values[0]; },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    const questionType = model.optionSets.find(({ key }) => key === "questionType");
+    mutate(questionType.values);
+    let errors;
+    assert.doesNotThrow(() => {
+      errors = validateRequirementModel(model);
+    });
+    assert.equal(errors.length > 0, true);
+    assert.equal(errors.some((error) => (
+      error.startsWith("INVALID_ENTITY_SHAPE")
+      || error.startsWith("MALFORMED_MODEL")
+    )), true, errors.join("\n"));
   }
 });
 
@@ -1615,10 +2020,42 @@ test("makes supported, unsupported, and AI-unavailable grading routes state-reac
 test("writes grading lineage through system outputs and recovers conflicts through requeue", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   const actionById = new Map(grading.actions.map((action) => [action.id, action]));
+  const decision = grading.objects.find(({ id }) => id === "GRD-OBJ-DECISION");
+  assert.deepEqual(decision.lineageBindings, [
+    {
+      refFieldId: "GRD-DECISION-F-SUBMISSION-REF",
+      versionFieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
+      targetObjectId: "SUB-OBJ-ATTEMPT",
+      targetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+    },
+    {
+      refFieldId: "GRD-DECISION-F-ITEM-REF",
+      versionFieldId: "GRD-DECISION-F-ITEM-VERSION",
+      targetObjectId: "HW-OBJ-ITEM",
+      targetVersionFieldId: "HW-ITEM-F-ITEM-VERSION",
+    },
+    {
+      refFieldId: "GRD-DECISION-F-RUBRIC-REF",
+      versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
+      targetObjectId: "HW-OBJ-RUBRIC",
+      targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
+    },
+    {
+      refFieldId: "GRD-DECISION-F-CAPABILITY-RULE-REF",
+      versionFieldId: "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
+      targetObjectId: "GRD-OBJ-CAPABILITY-RULE",
+      targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
+    },
+  ]);
   const lineageFieldIds = [
+    "GRD-DECISION-F-SUBMISSION-REF",
     "GRD-DECISION-F-SUBMISSION-VERSION",
+    "GRD-DECISION-F-ITEM-REF",
     "GRD-DECISION-F-ITEM-VERSION",
+    "GRD-DECISION-F-RUBRIC-REF",
     "GRD-DECISION-F-RUBRIC-VERSION",
+    "GRD-DECISION-F-CAPABILITY-RULE-REF",
+    "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
   ];
   const enqueue = actionById.get("GRD-ACT-ENQUEUE");
   assert.equal(lineageFieldIds.every((fieldId) => enqueue.outputFieldIds.includes(fieldId)), true);
@@ -1659,9 +2096,14 @@ test("writes grading lineage through system outputs and recovers conflicts throu
     && version === "HW-ITEM-F-ITEM-VERSION"
   )), true);
   assert.equal(routing.sourceDataRefs.some(({ objectId, fieldId, version }) => (
-    objectId === "HW-OBJ-ITEM"
-    && fieldId === "HW-ITEM-F-RUBRIC-VERSION"
-    && version === "HW-ITEM-F-ITEM-VERSION"
+    objectId === "HW-OBJ-RUBRIC"
+    && fieldId === "HW-RUBRIC-F-RUBRIC-VERSION"
+    && version === "HW-RUBRIC-F-RUBRIC-VERSION"
+  )), true);
+  assert.equal(routing.sourceDataRefs.some(({ objectId, fieldId, version }) => (
+    objectId === "GRD-OBJ-CAPABILITY-RULE"
+    && fieldId === "GRD-CAP-F-RULE-ID"
+    && version === "GRD-CAP-F-RULE-VERSION"
   )), true);
   const flowActionOutputIds = new Set(routing.steps.flatMap(({ actionId }) => (
     actionById.get(actionId)?.outputFieldIds ?? []
@@ -1697,14 +2139,90 @@ test("models publication eligibility visibility correction and invalidation", ()
     "PUB-ACT-PUBLISH-RESULT",
     "PUB-ACT-FINALIZE-BATCH",
     "PUB-ACT-RETRY-FAILED",
+    "PUB-ACT-RECONCILE-BATCH",
+    "PUB-ACT-VIEW-RESULT",
     "PUB-ACT-CORRECT-RESULT",
     "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
   ]);
   const publish = publication.actions.find(({ id }) => id === "PUB-ACT-PUBLISH-SELECTED");
   assert.ok(publish.failureResults.includes("UNCONFIRMED_SUBJECTIVE_SCORE"));
   assert.ok(publish.failureResults.includes("VISIBILITY_POLICY_BLOCKED"));
-  const studentRead = publication.permissions.studentRead;
-  assert.match(studentRead, /published.*visible time/i);
+  assert.equal(Object.hasOwn(publication, "permissions"), false);
+});
+
+test("records result decision lineage and enforces structured student visibility", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const result = publication.objects.find(({ id }) => id === "PUB-OBJ-RESULT");
+  assert.deepEqual(result.lineageBindings, [
+    {
+      refFieldId: "PUB-RESULT-F-SOURCE-DECISION-REF",
+      versionFieldId: "PUB-RESULT-F-DECISION-VERSION",
+      targetObjectId: "GRD-OBJ-DECISION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
+    {
+      refFieldId: "PUB-RESULT-F-CORRECTION-DECISION-REF",
+      versionFieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
+      targetObjectId: "GRD-OBJ-DECISION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
+  ]);
+  assert.deepEqual(result.readPolicies, [{
+    actionId: "PUB-ACT-VIEW-RESULT",
+    subject: { roleRef: "ROLE-STUDENT" },
+    scope: { kind: "OWN_RECORD", subjectFieldId: "PUB-RESULT-F-STUDENT-REF" },
+    requiredState: "PUBLISHED",
+    timeGates: [
+      {
+        visibleAtFieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+        protectedFieldIds: ["PUB-RESULT-F-ANSWER"],
+      },
+      {
+        visibleAtFieldId: "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+        protectedFieldIds: ["PUB-RESULT-F-FEEDBACK"],
+      },
+    ],
+  }]);
+
+  const viewResult = publication.actions.find(({ id }) => id === "PUB-ACT-VIEW-RESULT");
+  assert.ok(viewResult);
+  assert.equal(viewResult.operationKind, "READ");
+  assert.deepEqual(viewResult.inputFieldIds, ["PUB-RESULT-F-STUDENT-REF"]);
+  assert.deepEqual(viewResult.outputFieldIds, [
+    "PUB-RESULT-F-ANSWER",
+    "PUB-RESULT-F-SCORE",
+    "PUB-RESULT-F-FEEDBACK",
+  ]);
+  assert.deepEqual(viewResult.failureResults, [
+    "PERMISSION_DENIED",
+    "NOT_FOUND",
+    "RESULT_NOT_PUBLISHED",
+    "ANSWER_NOT_VISIBLE",
+    "FEEDBACK_NOT_VISIBLE",
+  ]);
+  assert.ok(viewResult.permissions.some(({ effect, roleRef }) => (
+    effect === "ALLOW" && roleRef === "ROLE-STUDENT"
+  )));
+  for (const resultCode of [
+    "RESULT_NOT_PUBLISHED",
+    "ANSWER_NOT_VISIBLE",
+    "FEEDBACK_NOT_VISIBLE",
+  ]) {
+    const scenario = publication.scenarios.find(({ actionId, resultCode: code }) => (
+      actionId === viewResult.id && code === resultCode
+    ));
+    assert.deepEqual(scenario.then.expectedState, { mode: "UNCHANGED" }, resultCode);
+  }
+  const studentPage = publication.pages.find(({ id }) => id === "PUB-PAGE-STUDENT-RESULT");
+  assert.deepEqual(studentPage.fieldIds, [
+    "PUB-RESULT-F-STUDENT-REF",
+    "PUB-RESULT-F-ANSWER",
+    "PUB-RESULT-F-SCORE",
+    "PUB-RESULT-F-FEEDBACK",
+    "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+    "PUB-RESULT-F-RESULT-VERSION",
+  ]);
 });
 
 test("makes publication batch and student-result state chains reachable", () => {
@@ -1750,6 +2268,19 @@ test("makes publication batch and student-result state chains reachable", () => 
     from: "PUBLISH_FAILED",
     to: "PUBLISHED",
   });
+  const reconcile = actionById.get("PUB-ACT-RECONCILE-BATCH");
+  assert.ok(reconcile);
+  assert.deepEqual(reconcile.transition, {
+    from: "PARTIAL_FAILED",
+    to: "PUBLISHED",
+  });
+  const reconcileFailure = publication.scenarios.find(({ actionId, resultCode }) => (
+    actionId === "PUB-ACT-RECONCILE-BATCH" && resultCode === "OBJECT_PUBLICATION_FAILED"
+  ));
+  assert.deepEqual(reconcileFailure.then.expectedState, {
+    mode: "STATE",
+    value: "PARTIAL_FAILED",
+  });
   assert.deepEqual(actionById.get("PUB-ACT-CORRECT-RESULT").transition, {
     from: "PUBLISHED",
     to: "INVALIDATED",
@@ -1758,6 +2289,14 @@ test("makes publication batch and student-result state chains reachable", () => 
     from: "INVALIDATED",
     to: "PUBLISHED",
   });
+  assert.deepEqual(
+    reachableObjectStates(publication, "PUB-OBJ-BATCH", ["DRAFT"]),
+    new Set(publication.objects.find(({ id }) => id === "PUB-OBJ-BATCH").states),
+  );
+  assert.deepEqual(
+    reachableObjectStates(publication, "PUB-OBJ-RESULT"),
+    new Set(publication.objects.find(({ id }) => id === "PUB-OBJ-RESULT").states),
+  );
   const publishFailure = publication.scenarios.find(({ actionId, resultCode }) => (
     actionId === "PUB-ACT-PUBLISH-RESULT" && resultCode === "OBJECT_PUBLICATION_FAILED"
   ));
@@ -1778,6 +2317,7 @@ test("makes publication batch and student-result state chains reachable", () => 
     "PUB-ACT-PUBLISH-RESULT",
     "PUB-ACT-FINALIZE-BATCH",
     "PUB-ACT-RETRY-FAILED",
+    "PUB-ACT-RECONCILE-BATCH",
   ]);
   assert.equal(release.targetDataRefs.some(({ objectId, fieldId }) => (
     objectId === "PUB-OBJ-RESULT" && fieldId === "PUB-RESULT-F-RESULT-VERSION"
@@ -1986,7 +2526,25 @@ test("defines DF-004 through DF-009 as a versioned retryable teaching loop with 
     for (const ref of [...flow.sourceDataRefs, ...flow.targetDataRefs]) {
       assert.equal(fieldIds.has(ref.version), true, `${flow.id}:${ref.version}`);
     }
-    assert.match(flow.idempotencyKey, /school:term:.*version.*request-id/i, flow.id);
+    const sourceFieldIds = new Set(flow.sourceDataRefs.map(({ fieldId }) => fieldId));
+    const sourceVersionFieldIds = new Set(flow.sourceDataRefs.map(({ version }) => version));
+    assert.ok(flow.idempotencyKeyParts, flow.id);
+    assert.deepEqual(
+      Object.keys(flow.idempotencyKeyParts).sort(),
+      ["fanoutFieldId", "identityFieldIds", "versionFieldIds"],
+      flow.id,
+    );
+    assert.equal(
+      flow.idempotencyKeyParts.identityFieldIds.every((fieldId) => sourceFieldIds.has(fieldId)),
+      true,
+      flow.id,
+    );
+    assert.deepEqual(
+      new Set(flow.idempotencyKeyParts.versionFieldIds),
+      sourceVersionFieldIds,
+      flow.id,
+    );
+    assert.equal(sourceFieldIds.has(flow.idempotencyKeyParts.fanoutFieldId), true, flow.id);
     assert.match(flow.failureGranularity, /OBJECT/, flow.id);
     assert.ok(flow.retryPolicy.maxAttempts >= 2, flow.id);
     assert.ok(flow.retryPolicy.retryableFailureResults.length > 0, flow.id);
@@ -2061,6 +2619,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["AUD-ACT-APPEND-EVENT", "SYSTEM_EVENT"],
     ["AUD-ACT-OPEN-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-SESSION", "SYSTEM_EVENT"],
+    ["HW-ACT-PUBLISH-SCHEDULED", "SYSTEM_EVENT"],
     ["HW-ACT-RESOLVE-GRADING-SNAPSHOT", "FLOW_INTERNAL"],
     ["SUB-ACT-HANDOFF-ACCEPTED", "FLOW_INTERNAL"],
     ["GRD-ACT-ENQUEUE", "FLOW_INTERNAL"],
@@ -2071,12 +2630,13 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["PUB-ACT-MATERIALIZE-RESULT", "FLOW_INTERNAL"],
     ["PUB-ACT-PUBLISH-RESULT", "FLOW_INTERNAL"],
     ["PUB-ACT-FINALIZE-BATCH", "FLOW_INTERNAL"],
+    ["PUB-ACT-RECONCILE-BATCH", "FLOW_INTERNAL"],
   ]);
   const actions = modules.flatMap((module) => module.actions);
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 21);
+  assert.equal(expectedModes.size, 23);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -3981,19 +4541,18 @@ test("rejects page references owned by another module", () => {
 test("rejects a page field owned by a different object in the same module", () => {
   const model = validFixture();
   const submissionModule = moduleById(model, "SUB-001");
-  submissionModule.objects.push({
-    id: "DAT-SUB-02",
-    ownerRef: "ROLE-STUDENT",
-    confirmerRef: "ROLE-STUDENT",
-    states: ["DRAFT"],
-    fields: [{ id: "SUB-F002", valueSource: { kind: "SYSTEM" } }],
-  });
-  submissionModule.pages.push({
-    id: "SUB-W01",
-    objectId: "DAT-SUB-01",
-    fieldIds: ["SUB-F002"],
-    actionIds: [],
-  });
+  submissionModule.objects.push(validObject(
+    "DAT-SUB-02",
+    "ROLE-STUDENT",
+    validField("SUB-F003"),
+    { states: ["DRAFT"] },
+  ));
+  submissionModule.pages.push(validPage(
+    "SUB-W01",
+    { objectId: "DAT-SUB-01" },
+    ["SUB-F003"],
+    [],
+  ));
 
   const errors = validateRequirementModel(model);
 
@@ -4006,13 +4565,13 @@ test("accepts page fields owned by one of its declared objects", () => {
   submissionModule.objects.push(validObject(
     "DAT-SUB-02",
     "ROLE-STUDENT",
-    validField("SUB-F002"),
+    validField("SUB-F003"),
     { states: ["DRAFT"] },
   ));
   submissionModule.pages.push(validPage(
     "SUB-W01",
     { objectIds: ["DAT-SUB-01", "DAT-SUB-02"] },
-    ["SUB-F002"],
+    ["SUB-F003"],
     [],
   ));
 
@@ -4594,17 +5153,14 @@ test("rejects AI confirmation by a duty not attached to a login role", () => {
   assertHasCode(errors, "AI_WRITE_WITHOUT_CONFIRMATION");
 });
 
-for (const previewFieldId of ["SUB-F002", "HW-F001"]) {
+for (const previewFieldId of ["SUB-F003", "HW-F001"]) {
   test(`rejects unrelated AI write preview field ${previewFieldId}`, () => {
     const model = validFixture();
     model.duties.push({
       id: "DUTY-SUBJECT-TEACHER",
       roleId: "ROLE-TEACHER",
     });
-    moduleById(model, "SUB-001").objects[0].fields.push({
-      id: "SUB-F002",
-      valueSource: { kind: "SYSTEM" },
-    });
+    moduleById(model, "SUB-001").objects[0].fields.push(validField("SUB-F003"));
     model.aiTasks.push({
       id: "AI-TASK-01",
       actionId: "SUB-ACT-01",
@@ -4628,8 +5184,7 @@ test("accepts AI write preview fields from action inputs and outputs", () => {
     roleId: "ROLE-TEACHER",
   });
   const submissionModule = moduleById(model, "SUB-001");
-  submissionModule.objects[0].fields.push(validField("SUB-F002"));
-  submissionModule.actions[0].outputFieldIds = ["SUB-F002"];
+  submissionModule.actions[0].outputFieldIds = ["SUB-F001", "SUB-F002"];
   model.aiTasks.push({
     id: "AI-TASK-01",
     actionId: "SUB-ACT-01",

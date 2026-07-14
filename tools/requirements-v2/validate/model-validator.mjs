@@ -489,6 +489,61 @@ export function validateModelReferences(model) {
         `MISSING_SENSITIVITY_REFERENCE ${formatValidationValue(objectEntry.value?.id)} -> ${formatValidationValue(objectEntry.value?.sensitivityId)}`,
       );
     }
+    for (const binding of list(objectEntry.value?.lineageBindings)) {
+      const refField = index.fieldById.get(binding?.refFieldId);
+      const versionField = index.fieldById.get(binding?.versionFieldId);
+      const targetObject = index.objectById.get(binding?.targetObjectId);
+      const targetVersionField = index.fieldById.get(binding?.targetVersionFieldId);
+      const valid = (
+        refField?.objectId === objectEntry.value?.id
+        && versionField?.objectId === objectEntry.value?.id
+        && refField?.value?.valueSource?.kind === "OBJECT_REF"
+        && refField.value.valueSource.targetObjectId === binding?.targetObjectId
+        && targetObject
+        && targetVersionField?.objectId === targetObject.value?.id
+      );
+      if (!valid) {
+        errors.push(
+          `INVALID_LINEAGE_BINDING ${formatValidationValue(objectEntry.value?.id)} -> ${formatValidationValue(binding?.refFieldId)}@${formatValidationValue(binding?.versionFieldId)}`,
+        );
+      }
+    }
+    for (const policy of list(objectEntry.value?.readPolicies)) {
+      const action = index.actionById.get(policy?.actionId)?.value;
+      const subjectEntries = Object.entries(policy?.subject ?? {})
+        .filter(([property]) => ["actorRef", "roleRef", "dutyRef"].includes(property));
+      const [subjectProperty, subjectReference] = subjectEntries[0] ?? [];
+      const matchingPermission = list(action?.permissions).some((permission) => (
+        permission?.effect === "ALLOW"
+        && permission?.[subjectProperty] === subjectReference
+      ));
+      const subjectField = index.fieldById.get(policy?.scope?.subjectFieldId);
+      const protectedFieldIds = list(policy?.timeGates)
+        .flatMap((timeGate) => list(timeGate?.protectedFieldIds));
+      const localTimeGateFields = list(policy?.timeGates).every((timeGate) => (
+        index.fieldById.get(timeGate?.visibleAtFieldId)?.objectId === objectEntry.value?.id
+        && list(timeGate?.protectedFieldIds).every((fieldId) => (
+          index.fieldById.get(fieldId)?.objectId === objectEntry.value?.id
+        ))
+      ));
+      const valid = (
+        action?.targetObjectId === objectEntry.value?.id
+        && action?.operationKind === "READ"
+        && subjectEntries.length === 1
+        && actorReferenceIsValid(index, subjectReference, subjectProperty)
+        && matchingPermission
+        && list(objectEntry.value?.states).includes(policy?.requiredState)
+        && policy?.scope?.kind === "OWN_RECORD"
+        && subjectField?.objectId === objectEntry.value?.id
+        && localTimeGateFields
+        && protectedFieldIds.every((fieldId) => list(action?.outputFieldIds).includes(fieldId))
+      );
+      if (!valid) {
+        errors.push(
+          `INVALID_READ_POLICY ${formatValidationValue(objectEntry.value?.id)} -> ${formatValidationValue(policy?.actionId)}`,
+        );
+      }
+    }
   }
 
   for (const moduleEntry of index.modules) {
@@ -783,6 +838,7 @@ export function validateModelReferences(model) {
       list(flow?.[property]).forEach((dataRef, dataRefIndex) => {
         const objectEntry = index.objectById.get(dataRef?.objectId);
         const fieldEntry = index.fieldById.get(dataRef?.fieldId);
+        const versionFieldEntry = index.fieldById.get(dataRef?.version);
         if (!objectEntry || !fieldEntry) {
           errors.push(
             `MISSING_FLOW_DATA_REFERENCE ${formatValidationValue(flow?.id)}.${property}[${dataRefIndex}] -> ${formatValidationValue(dataRef?.objectId)}.${formatValidationValue(dataRef?.fieldId)}`,
@@ -790,6 +846,15 @@ export function validateModelReferences(model) {
         } else if (fieldEntry.objectId !== objectEntry.value.id) {
           errors.push(
             `INVALID_OBJECT_OWNERSHIP ${formatValidationValue(flow?.id)}.${property}[${dataRefIndex}] -> field ${formatValidationValue(dataRef?.fieldId)} belongs to ${formatValidationValue(fieldEntry.objectId)}`,
+          );
+        }
+        if (!objectEntry || !versionFieldEntry) {
+          errors.push(
+            `INVALID_FLOW_VERSION_REFERENCE ${formatValidationValue(flow?.id)}.${property}[${dataRefIndex}] -> ${formatValidationValue(dataRef?.version)}`,
+          );
+        } else if (versionFieldEntry.objectId !== objectEntry.value.id) {
+          errors.push(
+            `INVALID_FLOW_VERSION_REFERENCE ${formatValidationValue(flow?.id)}.${property}[${dataRefIndex}] -> version field ${formatValidationValue(dataRef?.version)} belongs to ${formatValidationValue(versionFieldEntry.objectId)}`,
           );
         }
       });

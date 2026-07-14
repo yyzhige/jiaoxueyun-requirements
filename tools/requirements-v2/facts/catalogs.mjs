@@ -280,6 +280,12 @@ export const events = [
     triggeredActionIds: ["IAM-ACT-EXPIRE-GRANT"],
   },
   {
+    id: "EVT-HW-SCHEDULED-PUBLISH-DUE",
+    label: "定时作业到达发布时间",
+    definition: "已验证作业版本到达配置的开放时间时触发定时发布动作。",
+    triggeredActionIds: ["HW-ACT-PUBLISH-SCHEDULED"],
+  },
+  {
     id: "EVT-EXPORT-APPROVAL-RECORDED",
     label: "敏感导出批准已记录",
     definition: "学校批准的不可变导出范围、用途和期限完成记录后触发导出生成动作。",
