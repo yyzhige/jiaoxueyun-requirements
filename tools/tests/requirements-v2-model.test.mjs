@@ -141,6 +141,7 @@ function nonUserActionFixture(executionMode, trigger) {
     { effect: "ALLOW", actorRef: "SYSTEM", condition: "the verified trigger invokes it" },
     { effect: "DENY", actorRef: "CURRENT_ACTOR", condition: "users cannot invoke it" },
   ];
+  model.flows[0].steps[0].providedInputs[0].provider = { actorRef: "SYSTEM" };
   module.pages[0].actionIds = [];
   for (const scenario of module.scenarios) {
     delete scenario.pageId;
@@ -298,13 +299,20 @@ function validFixture() {
       label: "Fixture submission flow",
       phase: PHASE.FIRST,
       moduleIds: ["SUB-001"],
-      steps: [{ order: 1, actionId: "SUB-ACT-01" }],
-      systemProvidedInputs: [{
-        stepOrder: 1,
-        provider: "SYSTEM",
-        fieldIds: ["SUB-F001"],
+      steps: [{
+        order: 1,
+        actionId: "SUB-ACT-01",
+        providedInputs: [{
+          fieldId: "SUB-F001",
+          provider: { roleRef: "ROLE-STUDENT" },
+        }],
       }],
-      sourceDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F000", version: "SUB-F002" }],
+      sourceDataRefs: [{
+        objectId: "DAT-SUB-01",
+        fieldId: "SUB-F000",
+        version: "SUB-F002",
+        cardinality: "ONE",
+      }],
       targetDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "SUB-F002" }],
       idempotencyKeyParts: {
         identityFieldIds: ["SUB-F000"],
@@ -404,6 +412,10 @@ function addFutureFlowOutputFixture(model) {
   submission.scenarios.push(...scenarios);
   submission.pages[0].actionIds.push("SUB-ACT-FUTURE");
   model.flows[0].steps.push({ order: 2, actionId: "SUB-ACT-FUTURE" });
+}
+
+function actorProvidedInputFixture() {
+  return validFixture();
 }
 
 function addReadPolicyFixture(model) {
@@ -1318,7 +1330,7 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 46);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 47);
 
   const requiredPairs = [
     ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
@@ -1665,6 +1677,9 @@ test("accepts every supported user ALLOW subject for USER_TASK actions", () => {
     actorRef: "CURRENT_ACTOR",
     condition: "the current actor owns the target object",
   };
+  models[1].flows[0].steps[0].providedInputs[0].provider = {
+    actorRef: "CURRENT_ACTOR",
+  };
   models[2].duties.push({
     id: "DUTY-FIXTURE",
     roleId: "ROLE-TEACHER",
@@ -1674,6 +1689,9 @@ test("accepts every supported user ALLOW subject for USER_TASK actions", () => {
     effect: "ALLOW",
     dutyRef: "DUTY-FIXTURE",
     condition: "the assigned duty may execute the task",
+  };
+  models[2].flows[0].steps[0].providedInputs[0].provider = {
+    dutyRef: "DUTY-FIXTURE",
   };
   moduleById(models[3], "SUB-001").actions[0].permissions.unshift({
     effect: "ALLOW",
@@ -1842,24 +1860,127 @@ test("rejects empty optional Flow step conditions", () => {
   assertHasCode(validateRequirementModel(model), "INVALID_FLOW_CONTRACT");
 });
 
-test("requires closed step-scoped system-provided Flow inputs", () => {
-  const validModel = validFixture();
+test("requires closed actor-aware step input providers and rejects legacy bindings", () => {
+  const validModel = actorProvidedInputFixture();
   assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_CONTRACT");
 
   const mutations = [
-    (flow) => { delete flow.systemProvidedInputs; },
-    (flow) => { flow.systemProvidedInputs[0].legacy = true; },
-    (flow) => { flow.systemProvidedInputs[0].stepOrder = 0; },
-    (flow) => { flow.systemProvidedInputs[0].provider = "USER"; },
-    (flow) => { flow.systemProvidedInputs[0].fieldIds = []; },
-    (flow) => { flow.systemProvidedInputs[0].fieldIds.push("SUB-F001"); },
-    (flow) => { flow.systemProvidedInputs.push(structuredClone(flow.systemProvidedInputs[0])); },
+    (flow) => { flow.systemProvidedInputs = []; },
+    (flow) => { flow.steps[0].providedInputs = {}; },
+    (flow) => { flow.steps[0].providedInputs[0].legacy = true; },
+    (flow) => { flow.steps[0].providedInputs[0].fieldId = ""; },
+    (flow) => { flow.steps[0].providedInputs[0].provider = "SYSTEM"; },
+    (flow) => { flow.steps[0].providedInputs[0].provider = { userRef: "ROLE-STUDENT" }; },
+    (flow) => {
+      flow.steps[0].providedInputs[0].provider = {
+        roleRef: "ROLE-STUDENT",
+        actorRef: "CURRENT_ACTOR",
+      };
+    },
   ];
   for (const mutate of mutations) {
     const model = structuredClone(validModel);
     mutate(model.flows[0]);
     assertHasCode(validateRequirementModel(model), "INVALID_FLOW_CONTRACT");
   }
+});
+
+test("matches every provided Flow input to the step action ALLOW subject", () => {
+  const validModel = actorProvidedInputFixture();
+  assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_INPUT_PROVIDER");
+  assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_INPUT_RESOLUTION");
+
+  const permissionMismatch = structuredClone(validModel);
+  permissionMismatch.flows[0].steps[0].providedInputs[0].provider = {
+    roleRef: "ROLE-TEACHER",
+  };
+  assertHasCode(validateRequirementModel(permissionMismatch), "INVALID_FLOW_INPUT_PROVIDER");
+
+  const systemProvidesUserField = structuredClone(validModel);
+  systemProvidesUserField.flows[0].steps[0].providedInputs[0].provider = {
+    actorRef: "SYSTEM",
+  };
+  assertHasCode(validateRequirementModel(systemProvidesUserField), "INVALID_FLOW_INPUT_PROVIDER");
+
+  const missingProvider = structuredClone(validModel);
+  delete missingProvider.flows[0].steps[0].providedInputs;
+  assertHasCode(validateRequirementModel(missingProvider), "INVALID_FLOW_INPUT_RESOLUTION");
+
+  const crossObjectProvider = structuredClone(validModel);
+  crossObjectProvider.flows[0].steps[0].providedInputs[0].fieldId = "HW-F001";
+  assertHasCode(validateRequirementModel(crossObjectProvider), "INVALID_FLOW_INPUT_RESOLUTION");
+});
+
+test("keeps candidate generation separate from teacher-provided final learning fields", () => {
+  for (const flow of flows) {
+    assert.equal(Object.hasOwn(flow, "systemProvidedInputs"), false, flow.id);
+  }
+
+  const flowById = new Map(flows.map((flow) => [flow.id, flow]));
+  const moduleActions = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+  const providerFields = (flowId, stepOrder) => new Map(
+    flowById.get(flowId).steps.find(({ order }) => order === stepOrder)
+      .providedInputs.map(({ fieldId, provider }) => [fieldId, provider]),
+  );
+
+  const evidenceProviders = providerFields("DF-010", 8);
+  assert.deepEqual(evidenceProviders, new Map([
+    ["INS-EVIDENCE-F-MASTERY-INTERPRETATION", { dutyRef: "DUTY-SUBJECT-TEACHER" }],
+    ["INS-EVIDENCE-F-TEACHER-CONFIRMATION", { dutyRef: "DUTY-SUBJECT-TEACHER" }],
+  ]));
+  const evidenceCandidate = moduleActions.get("INS-ACT-CREATE-CANDIDATE");
+  assert.ok(evidenceCandidate.outputFieldIds.includes("INS-EVIDENCE-F-MASTERY-CANDIDATE"));
+  assert.equal(
+    evidenceCandidate.outputFieldIds.includes("INS-EVIDENCE-F-MASTERY-INTERPRETATION"),
+    false,
+  );
+
+  const planCandidateFieldIds = [
+    "PLN-PLAN-F-GOAL-CANDIDATE",
+    "PLN-PLAN-F-TASK-CONTENT-CANDIDATE",
+    "PLN-PLAN-F-WORKLOAD-CANDIDATE",
+    "PLN-PLAN-F-DUE-AT-CANDIDATE",
+    "PLN-PLAN-F-SUCCESS-CONDITION-CANDIDATE",
+    "PLN-PLAN-F-EVIDENCE-REQUIREMENT-CANDIDATE",
+    "PLN-PLAN-F-REVALIDATION-METHOD-CANDIDATE",
+  ];
+  const planCandidate = moduleActions.get("PLN-ACT-CREATE-CANDIDATE");
+  assert.equal(
+    planCandidateFieldIds.every((fieldId) => planCandidate.outputFieldIds.includes(fieldId)),
+    true,
+  );
+  const finalPlanFieldIds = [
+    "PLN-PLAN-F-GOAL",
+    "PLN-PLAN-F-TASK-CONTENT",
+    "PLN-PLAN-F-WORKLOAD",
+    "PLN-PLAN-F-DUE-AT",
+    "PLN-PLAN-F-SUCCESS-CONDITION",
+    "PLN-PLAN-F-EVIDENCE-REQUIREMENT",
+    "PLN-PLAN-F-REVALIDATION-METHOD",
+    "PLN-PLAN-F-TEACHER-CONFIRMER-REF",
+  ];
+  const planProviders = providerFields("DF-012", 3);
+  assert.deepEqual(
+    [...planProviders.keys()],
+    finalPlanFieldIds,
+  );
+  assert.equal(
+    finalPlanFieldIds.every((fieldId) => (
+      planProviders.get(fieldId)?.dutyRef === "DUTY-SUBJECT-TEACHER"
+    )),
+    true,
+  );
+
+  const correctionFlow = flowById.get("DF-010");
+  assert.equal(correctionFlow.sourceDataRefs.some(({ fieldId }) => (
+    fieldId === "CORR-ATTEMPT-F-TEACHER-JUDGMENT"
+  )), false);
+  assert.deepEqual(providerFields("DF-010", 3), new Map([[
+    "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+    { dutyRef: "DUTY-SUBJECT-TEACHER" },
+  ]]));
 });
 
 test("resolves Flow inputs only from sources prior outputs or the current system provider", () => {
@@ -1872,7 +1993,7 @@ test("resolves Flow inputs only from sources prior outputs or the current system
   assertHasCode(validateRequirementModel(missingSource), "INVALID_FLOW_INPUT_RESOLUTION");
 
   const missingProvider = structuredClone(validModel);
-  missingProvider.flows[0].systemProvidedInputs = [];
+  delete missingProvider.flows[0].steps[0].providedInputs;
   assertHasCode(validateRequirementModel(missingProvider), "INVALID_FLOW_INPUT_RESOLUTION");
 
   const futureOutput = structuredClone(validModel);
@@ -1880,7 +2001,7 @@ test("resolves Flow inputs only from sources prior outputs or the current system
   assertHasCode(validateRequirementModel(futureOutput), "INVALID_FLOW_INPUT_RESOLUTION");
 
   const crossObjectProvider = structuredClone(validModel);
-  crossObjectProvider.flows[0].systemProvidedInputs[0].fieldIds = ["HW-F001"];
+  crossObjectProvider.flows[0].steps[0].providedInputs[0].fieldId = "HW-F001";
   assertHasCode(validateRequirementModel(crossObjectProvider), "INVALID_FLOW_INPUT_RESOLUTION");
 });
 
@@ -1893,12 +2014,9 @@ test("resolves every executable Flow input in step order", () => {
     const available = new Set(flow.sourceDataRefs.flatMap(({ fieldId, version }) => (
       [fieldId, version]
     )));
-    const providedByStep = new Map((flow.systemProvidedInputs ?? []).map(({ stepOrder, fieldIds }) => (
-      [stepOrder, new Set(fieldIds)]
-    )));
     for (const step of flow.steps) {
       const action = actionById.get(step.actionId);
-      const provided = providedByStep.get(step.order) ?? new Set();
+      const provided = new Set((step.providedInputs ?? []).map(({ fieldId }) => fieldId));
       for (const fieldId of action.inputFieldIds) {
         if (!available.has(fieldId) && !provided.has(fieldId)) {
           violations.push(`${flow.id}:${step.order}:${action.id}:${fieldId}`);
@@ -1930,6 +2048,23 @@ test("rejects invalid Flow data references, ordering, and participant symmetry",
       errors.join("\n"),
     );
   }
+});
+
+test("requires every Flow source reference to declare ONE or ZERO_MANY cardinality", () => {
+  const validModel = validFixture();
+  assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_CONTRACT");
+
+  const missingCardinality = structuredClone(validModel);
+  delete missingCardinality.flows[0].sourceDataRefs[0].cardinality;
+  assertHasCode(validateRequirementModel(missingCardinality), "INVALID_FLOW_CONTRACT");
+
+  const invalidCardinality = structuredClone(validModel);
+  invalidCardinality.flows[0].sourceDataRefs[0].cardinality = "ONE_MANY";
+  assertHasCode(validateRequirementModel(invalidCardinality), "INVALID_FLOW_CONTRACT");
+
+  const zeroManyContract = structuredClone(validModel);
+  zeroManyContract.flows[0].sourceDataRefs[0].cardinality = "ZERO_MANY";
+  assertNoCode(validateRequirementModel(zeroManyContract), "INVALID_FLOW_CONTRACT");
 });
 
 test("rejects invalid Flow versions outputs retries and idempotency parts", () => {
@@ -3254,6 +3389,7 @@ test("makes publication batch and student-result state chains reachable", () => 
     "PUB-ACT-PUBLISH-SELECTED",
     "PUB-ACT-MATERIALIZE-RESULT",
     "PUB-ACT-PUBLISH-RESULT",
+    "CORR-ACT-AUTO-CREATE-TASK",
     "PUB-ACT-FINALIZE-BATCH",
     "PUB-ACT-RETRY-FAILED",
     "PUB-ACT-RECONCILE-BATCH",
@@ -3491,16 +3627,12 @@ test("routes published score correction through structured evidence plan and fut
     identityFieldIds: [
       "GRD-DECISION-F-ID",
       "PUB-RESULT-F-ID",
-      "INS-EVIDENCE-F-ID",
-      "PLN-PLAN-F-ID",
     ],
     versionFieldIds: [
       "GRD-DECISION-F-DECISION-VERSION",
       "PUB-RESULT-F-RESULT-VERSION",
-      "INS-EVIDENCE-F-EVIDENCE-VERSION",
-      "PLN-PLAN-F-PLAN-VERSION",
     ],
-    fanoutFieldId: "PUB-RESULT-F-ID",
+    fanoutFieldId: "PUB-RESULT-F-DEPENDENCY-SET",
   });
   assert.deepEqual(correction.retryPolicy.retryableFailureResults, [
     "STALE_DECISION_VERSION",
@@ -3532,6 +3664,60 @@ test("routes published score correction through structured evidence plan and fut
   ]);
 });
 
+test("fans DF-009 out over zero or many structured dependency snapshots", () => {
+  const correction = flows.find(({ id }) => id === "DF-009");
+  const publication = moduleById(requirementModel, "PUB-001");
+  const correctionModule = moduleById(requirementModel, "CORR-001");
+  const dependencySet = publication.objects
+    .find(({ id }) => id === "PUB-OBJ-RESULT").fields
+    .find(({ id }) => id === "PUB-RESULT-F-DEPENDENCY-SET");
+  assert.deepEqual({
+    dataType: dependencySet.dataType,
+    valueSource: dependencySet.valueSource,
+    mutability: dependencySet.mutability,
+    idempotencyRole: dependencySet.idempotencyRole,
+  }, {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "FANOUT_SET",
+  });
+  assert.match(dependencySet.validation, /zero or more.*targetKind.*targetRef.*targetVersion/i);
+
+  const dependencyRefs = correction.sourceDataRefs.filter(({ objectId }) => (
+    objectId === "INS-OBJ-EVIDENCE" || objectId === "PLN-OBJ-PLAN"
+  ));
+  assert.ok(dependencyRefs.length > 0);
+  assert.equal(dependencyRefs.every(({ cardinality }) => cardinality === "ZERO_MANY"), true);
+  assert.equal(correction.sourceDataRefs.filter(({ objectId }) => (
+    objectId !== "INS-OBJ-EVIDENCE" && objectId !== "PLN-OBJ-PLAN"
+  )).every(({ cardinality }) => cardinality === "ONE"), true);
+  assert.deepEqual(correction.idempotencyKeyParts, {
+    identityFieldIds: ["GRD-DECISION-F-ID", "PUB-RESULT-F-ID"],
+    versionFieldIds: [
+      "GRD-DECISION-F-DECISION-VERSION",
+      "PUB-RESULT-F-RESULT-VERSION",
+    ],
+    fanoutFieldId: "PUB-RESULT-F-DEPENDENCY-SET",
+  });
+
+  const targetOutcomes = correctionModule.objects
+    .find(({ id }) => id === "CORR-OBJ-INVALIDATION").fields
+    .find(({ id }) => id === "CORR-INVALIDATION-F-TARGET-OUTCOMES");
+  assert.equal(targetOutcomes.dataType, "JSON");
+  assert.equal(targetOutcomes.mutability, "IMMUTABLE");
+  assert.match(
+    targetOutcomes.validation,
+    /each dependency.*outcome.*retry provenance.*preserve.*successful.*retry.*failed/i,
+  );
+  assert.match(dependencySet.validation, /REPORT_INTERPRETATION.*LEARNING_PATH_EXPLANATION/i);
+
+  const fixedDependency = structuredClone(requirementModel);
+  fixedDependency.flows.find(({ id }) => id === "DF-009").sourceDataRefs
+    .find(({ cardinality }) => cardinality === "ZERO_MANY").cardinality = "ONE";
+  assertHasCode(validateRequirementModel(fixedDependency), "INVALID_FLOW_IDEMPOTENCY");
+});
+
 test("defines DF-004 through DF-009 as a versioned retryable teaching loop with manual fallback", () => {
   const teachingFlows = flows.filter(({ id }) => /^DF-00[4-9]$/.test(id));
   assert.deepEqual(teachingFlows.map(({ id }) => id), [
@@ -3558,7 +3744,9 @@ test("defines DF-004 through DF-009 as a versioned retryable teaching loop with 
       assert.equal(fieldIds.has(ref.version), true, `${flow.id}:${ref.version}`);
     }
     const sourceFieldIds = new Set(flow.sourceDataRefs.map(({ fieldId }) => fieldId));
-    const sourceVersionFieldIds = new Set(flow.sourceDataRefs.map(({ version }) => version));
+    const sourceVersionFieldIds = new Set(flow.sourceDataRefs
+      .filter(({ cardinality }) => cardinality === "ONE")
+      .map(({ version }) => version));
     assert.ok(flow.idempotencyKeyParts, flow.id);
     assert.deepEqual(
       Object.keys(flow.idempotencyKeyParts).sort(),
@@ -3935,12 +4123,17 @@ test("models student todo navigation and correction judgment without creating se
     "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
     "CORR-ATTEMPT-F-OVERDUE-HANDLING",
   ].every((fieldId) => attemptFieldIds.has(fieldId)), true);
-  const submit = correction.actions.find(({ id }) => id === "CORR-ACT-OPEN-TASK");
+  const create = correction.actions.find(({ id }) => id === "CORR-ACT-CREATE-TASK");
   const judge = correction.actions.find(({ id }) => id === "CORR-ACT-CONFIRM-JUDGMENT");
-  assert.equal(submit.operationKind, "CREATE");
-  assert.ok(submit.permissions.some(({ effect, roleRef }) => (
-    effect === "ALLOW" && roleRef === "ROLE-STUDENT"
+  assert.equal(create.operationKind, "CREATE");
+  assert.ok(create.permissions.some(({ effect, dutyRef }) => (
+    effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
   )));
+  assert.equal(correction.actions.some(({ operationKind, permissions }) => (
+    operationKind === "CREATE" && permissions.some(({ effect, roleRef }) => (
+      effect === "ALLOW" && roleRef === "ROLE-STUDENT"
+    ))
+  )), false);
   assert.ok(judge.permissions.some(({ effect, dutyRef }) => (
     effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
   )));
@@ -3971,15 +4164,17 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
   });
 
   const actionById = new Map(correction.actions.map((action) => [action.id, action]));
-  const open = actionById.get("CORR-ACT-OPEN-TASK");
-  assert.equal(open.operationKind, "CREATE");
-  assert.ok(open.outputFieldIds.includes("CORR-ATTEMPT-F-DUE-AT"));
-  assert.deepEqual(
-    correction.scenarios.find(({ actionId, kind }) => (
-      actionId === open.id && kind === "SUCCESS"
-    )).then.expectedState,
-    { mode: "STATE", value: "OPEN" },
-  );
+  for (const actionId of ["CORR-ACT-CREATE-TASK", "CORR-ACT-AUTO-CREATE-TASK"]) {
+    const open = actionById.get(actionId);
+    assert.equal(open.operationKind, "CREATE");
+    assert.ok(open.outputFieldIds.includes("CORR-ATTEMPT-F-DUE-AT"));
+    assert.deepEqual(
+      correction.scenarios.find(({ actionId: scenarioActionId, kind }) => (
+        scenarioActionId === open.id && kind === "SUCCESS"
+      )).then.expectedState,
+      { mode: "STATE", value: "OPEN" },
+    );
+  }
 
   const expectedTransitions = new Map([
     ["CORR-ACT-MARK-OVERDUE", { from: "OPEN", to: "OVERDUE" }],
@@ -4050,6 +4245,84 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
     "CORR-ACT-SUBMIT-LATE",
     "CORR-ACT-RESUBMIT",
   ].includes(actionId)), false);
+});
+
+test("keeps correction task creation teacher or system owned and reachable from DF-008", () => {
+  const correction = moduleById(requirementModel, "CORR-001");
+  const actionById = new Map(correction.actions.map((action) => [action.id, action]));
+  const createActions = correction.actions.filter(({ targetObjectId, operationKind }) => (
+    targetObjectId === "CORR-OBJ-ATTEMPT" && operationKind === "CREATE"
+  ));
+  assert.deepEqual(createActions.map(({ id }) => id), [
+    "CORR-ACT-CREATE-TASK",
+    "CORR-ACT-AUTO-CREATE-TASK",
+  ]);
+  assert.equal(createActions.some(({ permissions }) => permissions.some((permission) => (
+    permission.effect === "ALLOW" && permission.roleRef === "ROLE-STUDENT"
+  ))), false);
+
+  const teacherCreate = actionById.get("CORR-ACT-CREATE-TASK");
+  assert.equal(teacherCreate.executionMode, "USER_TASK");
+  assert.ok(teacherCreate.permissions.some(({ effect, dutyRef }) => (
+    effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+  )));
+  const autoCreate = actionById.get("CORR-ACT-AUTO-CREATE-TASK");
+  assert.equal(autoCreate.executionMode, "FLOW_INTERNAL");
+  assert.deepEqual(autoCreate.trigger, { kind: "FLOW", flowIds: ["DF-008"] });
+  assert.ok(autoCreate.permissions.some(({ effect, actorRef }) => (
+    effect === "ALLOW" && actorRef === "SYSTEM"
+  )));
+  assert.match(autoCreate.idempotencyKey, /published-result-version/i);
+  for (const createAction of createActions) {
+    assert.ok(createAction.outputFieldIds.includes("CORR-ATTEMPT-F-DUE-AT"));
+    assert.deepEqual(
+      correction.scenarios.find(({ actionId, kind }) => (
+        actionId === createAction.id && kind === "SUCCESS"
+      )).then.expectedState,
+      { mode: "STATE", value: "OPEN" },
+    );
+  }
+
+  const release = flows.find(({ id }) => id === "DF-008");
+  assert.deepEqual(new Set(release.moduleIds), new Set(["GRD-001", "PUB-001", "CORR-001"]));
+  const publishOrder = release.steps.find(({ actionId }) => (
+    actionId === "PUB-ACT-PUBLISH-RESULT"
+  )).order;
+  const autoCreateStep = release.steps.find(({ actionId }) => (
+    actionId === "CORR-ACT-AUTO-CREATE-TASK"
+  ));
+  assert.ok(autoCreateStep.order > publishOrder);
+  assert.match(autoCreateStep.condition, /published result.*requires correction/i);
+  assert.equal([
+    "CORR-ATTEMPT-F-ID",
+    "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
+    "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
+    "CORR-ATTEMPT-F-DUE-AT",
+    "CORR-ATTEMPT-F-CORRECTION-VERSION",
+  ].every((fieldId) => release.targetDataRefs.some(({ objectId, fieldId: targetFieldId }) => (
+    objectId === "CORR-OBJ-ATTEMPT" && targetFieldId === fieldId
+  ))), true);
+  assert.equal([
+    "SOURCE_VERSION_STALE",
+    "VERSION_CONFLICT",
+  ].every((resultCode) => (
+    release.retryPolicy.retryableFailureResults.includes(resultCode)
+  )), true);
+  assert.match(release.retryPolicy.strategy, /CORRECTION_TASK/i);
+  assert.match(release.compensation.description, /retain successful.*correction task/i);
+
+  assert.deepEqual(actionById.get("CORR-ACT-MARK-OVERDUE").transition, {
+    from: "OPEN",
+    to: "OVERDUE",
+  });
+  assert.deepEqual(actionById.get("CORR-ACT-SUBMIT-LATE").transition, {
+    from: "OVERDUE",
+    to: "SUBMITTED",
+  });
+  assert.deepEqual(actionById.get("CORR-ACT-RESUBMIT").transition, {
+    from: "NEEDS_RETRY",
+    to: "SUBMITTED",
+  });
 });
 
 test("records the closed result-correction invalidation chain with source and target history", () => {
@@ -4291,6 +4564,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["APP-ACT-CREATE-HOMEWORK-TODO", "FLOW_INTERNAL"],
     ["APP-ACT-REFRESH-TODOS", "FLOW_INTERNAL"],
     ["CORR-ACT-MARK-OVERDUE", "SYSTEM_EVENT"],
+    ["CORR-ACT-AUTO-CREATE-TASK", "FLOW_INTERNAL"],
     ["CORR-ACT-NORMALIZE-SUBMISSION", "FLOW_INTERNAL"],
     ["CORR-ACT-RECORD-INVALIDATION", "FLOW_INTERNAL"],
     ["STU-ACT-BUILD-PROFILE", "FLOW_INTERNAL"],
@@ -4299,7 +4573,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 36);
+  assert.equal(expectedModes.size, 37);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -4677,7 +4951,11 @@ test("binds foundation business choices to centralized Option Sets", () => {
 
 test("orders DF-001 through explicit school, login, activation, identity, term, and permission steps", () => {
   const flow = flows.find(({ id }) => id === "DF-001");
-  assert.deepEqual(flow.steps, [
+  assert.deepEqual(flow.steps.map(({ order, actionId, condition }) => ({
+    order,
+    actionId,
+    ...(condition ? { condition } : {}),
+  })), [
     { order: 1, actionId: "ACC-ACT-SEARCH-SCHOOL" },
     { order: 2, actionId: "ACC-ACT-SELECT-SCHOOL" },
     { order: 3, actionId: "ACC-ACT-FIRST-ACTIVATION", condition: "membership state is INVITED" },
@@ -7088,8 +7366,9 @@ test("returns deterministic errors and does not stop at the first failure", () =
   const secondErrors = validateRequirementModel(model);
 
   const expectedErrors = [
+    "INVALID_FLOW_INPUT_PROVIDER DF-TEST step=1 field=SUB-F001 provider must match an ALLOW subject for the step action",
     "INVALID_FLOW_INPUT_RESOLUTION DF-TEST step=1 action=SUB-ACT-01 missing SUB-F999",
-    "INVALID_FLOW_INPUT_RESOLUTION DF-TEST step=1 system field SUB-F001 must be an input owned by the step target",
+    "INVALID_FLOW_INPUT_RESOLUTION DF-TEST step=1 provided field SUB-F001 must be an input owned by the step target",
     "INVALID_PERMISSION_SUBJECT SUB-ACT-01 requires user ALLOW for USER_TASK execution",
     "MISSING_ACTION_FIELD SUB-ACT-01 -> SUB-F999",
     "MISSING_ACTION_PERMISSION SUB-ACT-01 requires ALLOW and DENY",

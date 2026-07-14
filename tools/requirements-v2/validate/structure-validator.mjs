@@ -15,6 +15,7 @@ const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
 const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
 const OBJECT_SEMANTIC_TYPES = new Set(["AUDIT_EVENT_SINK"]);
 const SYSTEM_ACTOR_CATEGORIES = new Set(["SYSTEM", "AI", "CURRENT_ACTOR"]);
+const SOURCE_DATA_CARDINALITIES = new Set(["ONE", "ZERO_MANY"]);
 const PERMISSION_ALLOWED_KEYS = new Set([
   "effect",
   "condition",
@@ -1122,57 +1123,84 @@ function validateFlow(errors, flow, path) {
         `INVALID_FLOW_CONTRACT ${stepPath}.condition must be a non-empty string when present`,
       );
     }
-  });
-  const systemProvidedInputs = contractArray(
-    errors,
-    flow,
-    "systemProvidedInputs",
-    path,
-    "INVALID_FLOW_CONTRACT",
-  );
-  const expectedSystemInputKeys = new Set(["stepOrder", "provider", "fieldIds"]);
-  const validStepOrders = new Set(steps
-    .map((step) => step?.order)
-    .filter(Number.isInteger));
-  const seenSystemInputStepOrders = new Set();
-  systemProvidedInputs.forEach((binding, index) => {
-    const bindingPath = `${path}.systemProvidedInputs[${index}]`;
-    if (!isRecord(binding)) {
-      errors.push(`INVALID_FLOW_CONTRACT ${bindingPath} must be an object`);
-      return;
-    }
-    if (
-      Object.keys(binding).length !== expectedSystemInputKeys.size
-      || Object.keys(binding).some((key) => !expectedSystemInputKeys.has(key))
-    ) {
-      errors.push(
-        `INVALID_FLOW_CONTRACT ${bindingPath} must use the closed stepOrder, provider, and fieldIds shape`,
-      );
-    }
-    if (
-      !Number.isInteger(binding.stepOrder)
-      || !validStepOrders.has(binding.stepOrder)
-      || seenSystemInputStepOrders.has(binding.stepOrder)
-    ) {
-      errors.push(
-        `INVALID_FLOW_CONTRACT ${bindingPath}.stepOrder must reference one unique Flow step`,
-      );
-    }
-    if (Number.isInteger(binding.stepOrder)) {
-      seenSystemInputStepOrders.add(binding.stepOrder);
-    }
-    if (binding.provider !== "SYSTEM") {
-      errors.push(`INVALID_FLOW_CONTRACT ${bindingPath}.provider must be SYSTEM`);
-    }
-    contractStringArray(
+    if (!Object.hasOwn(step, "providedInputs")) return;
+    const providedInputs = contractArray(
       errors,
-      binding,
-      "fieldIds",
-      bindingPath,
+      step,
+      "providedInputs",
+      stepPath,
       "INVALID_FLOW_CONTRACT",
-      { nonEmpty: true },
     );
+    const seenFieldIds = new Set();
+    providedInputs.forEach((providedInput, providedInputIndex) => {
+      const providedInputPath = `${stepPath}.providedInputs[${providedInputIndex}]`;
+      if (!isRecord(providedInput)) {
+        errors.push(`INVALID_FLOW_CONTRACT ${providedInputPath} must be an object`);
+        return;
+      }
+      const expectedInputKeys = new Set(["fieldId", "provider"]);
+      if (
+        Object.keys(providedInput).length !== expectedInputKeys.size
+        || Object.keys(providedInput).some((key) => !expectedInputKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_FLOW_CONTRACT ${providedInputPath} must use the closed fieldId and provider shape`,
+        );
+      }
+      contractString(
+        errors,
+        providedInput,
+        "fieldId",
+        providedInputPath,
+        "INVALID_FLOW_CONTRACT",
+      );
+      if (seenFieldIds.has(providedInput.fieldId)) {
+        errors.push(
+          `INVALID_FLOW_CONTRACT ${providedInputPath}.fieldId must be unique within the step`,
+        );
+      }
+      seenFieldIds.add(providedInput.fieldId);
+
+      const provider = providedInput.provider;
+      if (!isRecord(provider)) {
+        errors.push(`INVALID_FLOW_CONTRACT ${providedInputPath}.provider must be an object`);
+        return;
+      }
+      const subjectProperties = ["actorRef", "roleRef", "dutyRef"]
+        .filter((property) => Object.hasOwn(provider, property));
+      if (Object.keys(provider).length !== 1 || subjectProperties.length !== 1) {
+        errors.push(
+          `INVALID_FLOW_CONTRACT ${providedInputPath}.provider requires exactly one actorRef, roleRef, or dutyRef`,
+        );
+        return;
+      }
+      const subjectProperty = subjectProperties[0];
+      const subject = provider[subjectProperty];
+      const validNamespace = (
+        (subjectProperty === "actorRef" && SYSTEM_ACTOR_CATEGORIES.has(subject))
+        || (
+          subjectProperty === "roleRef"
+          && typeof subject === "string"
+          && subject.startsWith("ROLE-")
+        )
+        || (
+          subjectProperty === "dutyRef"
+          && typeof subject === "string"
+          && subject.startsWith("DUTY-")
+        )
+      );
+      if (!validNamespace) {
+        errors.push(
+          `INVALID_FLOW_CONTRACT ${providedInputPath}.provider.${subjectProperty} has the wrong namespace`,
+        );
+      }
+    });
   });
+  if (Object.hasOwn(flow, "systemProvidedInputs")) {
+    errors.push(
+      `INVALID_FLOW_CONTRACT ${path}.systemProvidedInputs is obsolete; use steps[].providedInputs`,
+    );
+  }
   for (const property of ["sourceDataRefs", "targetDataRefs"]) {
     const dataRefs = contractArray(
       errors,
@@ -1196,6 +1224,22 @@ function validateFlow(errors, flow, path) {
           dataRefPath,
           "INVALID_FLOW_CONTRACT",
         );
+      }
+      if (property === "sourceDataRefs") {
+        const expectedKeys = new Set(["objectId", "fieldId", "version", "cardinality"]);
+        if (
+          Object.keys(dataRef).length !== expectedKeys.size
+          || Object.keys(dataRef).some((key) => !expectedKeys.has(key))
+        ) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${dataRefPath} must use the closed objectId, fieldId, version, and cardinality shape`,
+          );
+        }
+        if (!SOURCE_DATA_CARDINALITIES.has(dataRef.cardinality)) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${dataRefPath}.cardinality must be ONE or ZERO_MANY`,
+          );
+        }
       }
     });
   }

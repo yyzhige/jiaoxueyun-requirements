@@ -475,7 +475,7 @@ export function validateModelReferences(model) {
         && index.objectById.has(valueSource.targetObjectId)
       ) || (
         idempotencyRole === "FANOUT_SET"
-        && fieldEntry.value?.dataType === "STRING_ARRAY"
+        && ["STRING_ARRAY", "JSON"].includes(fieldEntry.value?.dataType)
         && fieldEntry.value?.mutability === "IMMUTABLE"
         && valueSource?.kind === "SYSTEM"
       );

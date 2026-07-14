@@ -74,7 +74,7 @@ function hasStableIdempotencyRole(index, fieldId, allowedRoles) {
   const field = index.fieldById.get(fieldId)?.value;
   if (!allowedRoles.includes(field?.idempotencyRole)) return false;
   if (field.idempotencyRole === "FANOUT_SET") {
-    return field.dataType === "STRING_ARRAY"
+    return ["STRING_ARRAY", "JSON"].includes(field.dataType)
       && field.mutability === "IMMUTABLE"
       && field.valueSource?.kind === "SYSTEM";
   }
@@ -323,14 +323,16 @@ function flowErrors(index) {
     const steps = [...list(flow?.steps)].sort((left, right) => (
       (left?.order ?? 0) - (right?.order ?? 0)
     ));
-    const systemInputsByStepOrder = new Map();
-    for (const binding of list(flow?.systemProvidedInputs)) {
-      const fieldIds = list(binding?.fieldIds);
-      systemInputsByStepOrder.set(binding?.stepOrder, new Set(fieldIds));
-      const action = index.actionById.get(
-        steps.find((step) => step?.order === binding?.stepOrder)?.actionId,
-      )?.value;
-      for (const fieldId of fieldIds) {
+    const providedInputsByStepOrder = new Map();
+    for (const step of steps) {
+      const action = index.actionById.get(step?.actionId)?.value;
+      const providedInputs = list(step?.providedInputs);
+      providedInputsByStepOrder.set(
+        step?.order,
+        new Set(providedInputs.map(({ fieldId }) => fieldId)),
+      );
+      for (const providedInput of providedInputs) {
+        const { fieldId, provider } = providedInput ?? {};
         const fieldEntry = index.fieldById.get(fieldId);
         if (
           !action
@@ -338,7 +340,23 @@ function flowErrors(index) {
           || fieldEntry?.objectId !== action.targetObjectId
         ) {
           errors.push(
-            `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} step=${formatValidationValue(binding?.stepOrder)} system field ${formatValidationValue(fieldId)} must be an input owned by the step target`,
+            `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} step=${formatValidationValue(step?.order)} provided field ${formatValidationValue(fieldId)} must be an input owned by the step target`,
+          );
+        }
+        const providerEntries = Object.entries(provider ?? {});
+        const matchesAllowSubject = list(action?.permissions).some((permission) => (
+          permission?.effect === "ALLOW"
+          && providerEntries.length === 1
+          && permission?.[providerEntries[0][0]] === providerEntries[0][1]
+        ));
+        const nonUserProviderIsSystemActor = (
+          action?.executionMode === "USER_TASK"
+          || provider?.actorRef === "SYSTEM"
+          || provider?.actorRef === "AI"
+        );
+        if (!matchesAllowSubject || !nonUserProviderIsSystemActor) {
+          errors.push(
+            `INVALID_FLOW_INPUT_PROVIDER ${formatValidationValue(flow?.id)} step=${formatValidationValue(step?.order)} field=${formatValidationValue(fieldId)} provider must match an ALLOW subject for the step action`,
           );
         }
       }
@@ -349,9 +367,9 @@ function flowErrors(index) {
     for (const step of steps) {
       const action = index.actionById.get(step?.actionId)?.value;
       if (!action) continue;
-      const systemFieldIds = systemInputsByStepOrder.get(step?.order) ?? new Set();
+      const providedFieldIds = providedInputsByStepOrder.get(step?.order) ?? new Set();
       const missingInputFieldIds = list(action.inputFieldIds).filter((fieldId) => (
-        !availableFieldIds.has(fieldId) && !systemFieldIds.has(fieldId)
+        !availableFieldIds.has(fieldId) && !providedFieldIds.has(fieldId)
       ));
       if (missingInputFieldIds.length > 0) {
         errors.push(
@@ -386,7 +404,9 @@ function flowErrors(index) {
 
     const sourceRefs = list(flow?.sourceDataRefs);
     const sourceFieldIds = new Set(sourceRefs.map(({ fieldId }) => fieldId));
-    const sourceVersionFieldIds = new Set(sourceRefs.map(({ version }) => version));
+    const fixedSourceRefs = sourceRefs.filter(({ cardinality }) => cardinality === "ONE");
+    const fixedSourceFieldIds = new Set(fixedSourceRefs.map(({ fieldId }) => fieldId));
+    const fixedSourceVersionFieldIds = new Set(fixedSourceRefs.map(({ version }) => version));
     const keyParts = flow?.idempotencyKeyParts;
     const identityFieldIds = list(keyParts?.identityFieldIds);
     const versionFieldIds = list(keyParts?.versionFieldIds);
@@ -400,9 +420,9 @@ function flowErrors(index) {
     );
     if (
       identityFieldIds.length === 0
-      || identityFieldIds.some((fieldId) => !sourceFieldIds.has(fieldId))
+      || identityFieldIds.some((fieldId) => !fixedSourceFieldIds.has(fieldId))
       || !identityRolesValid
-      || !setEquals(new Set(versionFieldIds), sourceVersionFieldIds)
+      || !setEquals(new Set(versionFieldIds), fixedSourceVersionFieldIds)
       || !sourceFieldIds.has(keyParts?.fanoutFieldId)
       || !fanoutRoleValid
     ) {

@@ -110,6 +110,20 @@ function actorReference(actorRef) {
   return { actorRef };
 }
 
+function provideInputs(actorRef, ...fieldIds) {
+  return fieldIds.map((fieldId) => ({ fieldId, provider: actorReference(actorRef) }));
+}
+
+function declareSourceCardinalities(flowDefinitions) {
+  return flowDefinitions.map((flowDefinition) => ({
+    ...flowDefinition,
+    sourceDataRefs: flowDefinition.sourceDataRefs.map((sourceDataRef) => ({
+      cardinality: "ONE",
+      ...sourceDataRef,
+    })),
+  }));
+}
+
 function permissions(allowRef, denyRef, allowCondition, denyCondition) {
   return [
     { effect: "ALLOW", ...actorReference(allowRef), condition: allowCondition },
@@ -1143,78 +1157,84 @@ export const foundationModules = deepFreeze([
   teaModule,
 ]);
 
-export const foundationFlows = deepFreeze([
+export const foundationFlows = deepFreeze(declareSourceCardinalities([
   {
     id: "DF-001",
     label: "School Context Establishment",
     phase: PHASE.FIRST,
     moduleIds: ["ACC-001", "ORG-001", "IAM-001"],
     steps: [
-      { order: 1, actionId: "ACC-ACT-SEARCH-SCHOOL" },
-      { order: 2, actionId: "ACC-ACT-SELECT-SCHOOL" },
-      { order: 3, actionId: "ACC-ACT-FIRST-ACTIVATION", condition: "membership state is INVITED" },
-      { order: 4, actionId: "ACC-ACT-LOGIN", condition: "membership state is ACTIVE after optional activation" },
-      { order: 5, actionId: "ACC-ACT-SELECT-IDENTITY" },
-      { order: 6, actionId: "ACC-ACT-SELECT-TERM" },
-      { order: 7, actionId: "ORG-ACT-RESOLVE-CONTEXT-SCOPE" },
-      { order: 8, actionId: "IAM-ACT-EVALUATE-PERMISSION" },
-      { order: 9, actionId: "ACC-ACT-SWITCH-CONTEXT" },
-    ],
-    systemProvidedInputs: [
       {
-        stepOrder: 1,
-        provider: "SYSTEM",
-        fieldIds: ["ACC-SCHOOL-F-REGION", "ACC-SCHOOL-F-NAME"],
+        order: 1,
+        actionId: "ACC-ACT-SEARCH-SCHOOL",
+        providedInputs: provideInputs(
+          "CURRENT_ACTOR",
+          "ACC-SCHOOL-F-REGION",
+          "ACC-SCHOOL-F-NAME",
+        ),
       },
+      { order: 2, actionId: "ACC-ACT-SELECT-SCHOOL" },
       {
-        stepOrder: 3,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 3,
+        actionId: "ACC-ACT-FIRST-ACTIVATION",
+        condition: "membership state is INVITED",
+        providedInputs: provideInputs(
+          "CURRENT_ACTOR",
           "ACC-MEMBER-F-ACTIVATION",
           "ACC-MEMBER-F-ACCOUNT-ID-TYPE",
           "ACC-MEMBER-F-ACCOUNT-ID",
-        ],
+        ),
       },
       {
-        stepOrder: 4,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 4,
+        actionId: "ACC-ACT-LOGIN",
+        condition: "membership state is ACTIVE after optional activation",
+        providedInputs: provideInputs(
+          "CURRENT_ACTOR",
           "ACC-MEMBER-F-ACCOUNT-ID-TYPE",
           "ACC-MEMBER-F-ACCOUNT-ID",
           "ACC-MEMBER-F-SCHOOL-ID",
-        ],
+        ),
       },
       {
-        stepOrder: 5,
-        provider: "SYSTEM",
-        fieldIds: ["ACC-IDENTITY-F-ROLE", "ACC-IDENTITY-F-DUTIES"],
+        order: 5,
+        actionId: "ACC-ACT-SELECT-IDENTITY",
+        providedInputs: provideInputs(
+          "CURRENT_ACTOR",
+          "ACC-IDENTITY-F-ROLE",
+          "ACC-IDENTITY-F-DUTIES",
+        ),
       },
       {
-        stepOrder: 6,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 6,
+        actionId: "ACC-ACT-SELECT-TERM",
+        providedInputs: provideInputs(
+          "CURRENT_ACTOR",
           "ACC-CONTEXT-F-SCHOOL-ID",
           "ACC-CONTEXT-F-IDENTITY-ID",
           "ACC-CONTEXT-F-TERM-ID",
-        ],
+        ),
       },
+      { order: 7, actionId: "ORG-ACT-RESOLVE-CONTEXT-SCOPE" },
       {
-        stepOrder: 8,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 8,
+        actionId: "IAM-ACT-EVALUATE-PERMISSION",
+        providedInputs: provideInputs(
+          "SYSTEM",
           "IAM-DECISION-F-SUBJECT",
           "IAM-DECISION-F-ACTION",
           "IAM-DECISION-F-SCOPE",
-        ],
+        ),
       },
       {
-        stepOrder: 9,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 9,
+        actionId: "ACC-ACT-SWITCH-CONTEXT",
+        providedInputs: provideInputs(
+          "CURRENT_ACTOR",
           "ACC-CONTEXT-F-SCHOOL-ID",
           "ACC-CONTEXT-F-IDENTITY-ID",
           "ACC-CONTEXT-F-TERM-ID",
-        ],
+        ),
       },
     ],
     sourceDataRefs: [
@@ -1246,62 +1266,60 @@ export const foundationFlows = deepFreeze([
     phase: PHASE.FIRST,
     moduleIds: ["ORG-001", "IAM-001", "AUD-001"],
     steps: [
-      { order: 1, actionId: "ORG-ACT-UPLOAD-IMPORT" },
-      { order: 2, actionId: "ORG-ACT-MAP-IMPORT-FIELDS" },
-      { order: 3, actionId: "ORG-ACT-VALIDATE-IMPORT" },
-      { order: 4, actionId: "IAM-ACT-EVALUATE-PERMISSION", condition: "import validation passed for the affected object rows" },
-      { order: 5, actionId: "AUD-ACT-APPEND-EVENT", condition: "audit gate records intended object-level writes before acceptance" },
-      { order: 6, actionId: "ORG-ACT-CONFIRM-IMPORT", condition: "permission and audit gate succeeded; accepted rows remain provisional until outcome audit" },
-      { order: 7, actionId: "AUD-ACT-APPEND-EVENT", condition: "outcome audit records accepted, rejected, and partial-success rows before final acceptance" },
-      { order: 8, actionId: "ORG-ACT-FINALIZE-AUDITED-IMPORT", condition: "outcome audit succeeded and the batch has no rejected rows" },
-      { order: 9, actionId: "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", condition: "partial result outcome audit succeeded and rejected rows remain for correction" },
-      { order: 10, actionId: "IAM-ACT-RECALCULATE-PERMISSIONS", condition: "audited import was finalized and accepted organization rows changed permission sources" },
-    ],
-    systemProvidedInputs: [
       {
-        stepOrder: 1,
-        provider: "SYSTEM",
-        fieldIds: ["ORG-IMPORT-F-OBJECT-TYPE"],
+        order: 1,
+        actionId: "ORG-ACT-UPLOAD-IMPORT",
+        providedInputs: provideInputs("ROLE-ACADEMIC", "ORG-IMPORT-F-OBJECT-TYPE"),
       },
       {
-        stepOrder: 2,
-        provider: "SYSTEM",
-        fieldIds: ["ORG-IMPORT-F-MAPPING"],
+        order: 2,
+        actionId: "ORG-ACT-MAP-IMPORT-FIELDS",
+        providedInputs: provideInputs("ROLE-ACADEMIC", "ORG-IMPORT-F-MAPPING"),
       },
       {
-        stepOrder: 3,
-        provider: "SYSTEM",
-        fieldIds: ["ORG-IMPORT-ROW-F-BATCH-ID"],
+        order: 3,
+        actionId: "ORG-ACT-VALIDATE-IMPORT",
+        providedInputs: provideInputs("ROLE-ACADEMIC", "ORG-IMPORT-ROW-F-BATCH-ID"),
       },
       {
-        stepOrder: 4,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 4,
+        actionId: "IAM-ACT-EVALUATE-PERMISSION",
+        condition: "import validation passed for the affected object rows",
+        providedInputs: provideInputs(
+          "SYSTEM",
           "IAM-DECISION-F-SUBJECT",
           "IAM-DECISION-F-ACTION",
           "IAM-DECISION-F-SCOPE",
-        ],
+        ),
       },
       {
-        stepOrder: 5,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 5,
+        actionId: "AUD-ACT-APPEND-EVENT",
+        condition: "audit gate records intended object-level writes before acceptance",
+        providedInputs: provideInputs(
+          "SYSTEM",
           "AUD-EVENT-F-ACTOR",
           "AUD-EVENT-F-ACTION",
           "AUD-EVENT-F-SCOPE",
           "AUD-EVENT-F-RESULT",
-        ],
+        ),
       },
+      { order: 6, actionId: "ORG-ACT-CONFIRM-IMPORT", condition: "permission and audit gate succeeded; accepted rows remain provisional until outcome audit" },
       {
-        stepOrder: 7,
-        provider: "SYSTEM",
-        fieldIds: [
+        order: 7,
+        actionId: "AUD-ACT-APPEND-EVENT",
+        condition: "outcome audit records accepted, rejected, and partial-success rows before final acceptance",
+        providedInputs: provideInputs(
+          "SYSTEM",
           "AUD-EVENT-F-ACTOR",
           "AUD-EVENT-F-ACTION",
           "AUD-EVENT-F-SCOPE",
           "AUD-EVENT-F-RESULT",
-        ],
+        ),
       },
+      { order: 8, actionId: "ORG-ACT-FINALIZE-AUDITED-IMPORT", condition: "outcome audit succeeded and the batch has no rejected rows" },
+      { order: 9, actionId: "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", condition: "partial result outcome audit succeeded and rejected rows remain for correction" },
+      { order: 10, actionId: "IAM-ACT-RECALCULATE-PERMISSIONS", condition: "audited import was finalized and accepted organization rows changed permission sources" },
     ],
     sourceDataRefs: [
       { objectId: "ORG-OBJ-IMPORT-BATCH", fieldId: "ORG-IMPORT-F-ID", version: "ORG-IMPORT-F-BATCH-VERSION" },
@@ -1337,7 +1355,6 @@ export const foundationFlows = deepFreeze([
       { order: 3, actionId: "CURR-ACT-PUBLISH-MAPPING" },
       { order: 4, actionId: "CURR-ACT-PUBLISH-VERSION" },
     ],
-    systemProvidedInputs: [],
     sourceDataRefs: [
       { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-ID", version: "CURR-CURRICULUM-F-VERSION" },
       { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-VALIDATION", version: "CURR-CURRICULUM-F-VERSION" },
@@ -1359,4 +1376,4 @@ export const foundationFlows = deepFreeze([
     compensation: { strategy: "KEEP_PRIOR_PUBLISHED_VERSION", description: "failed publication leaves the prior published version active and the draft unreferenced by new work" },
     downstreamInvalidation: { strategy: "NEW_WORK_ONLY", targets: ["new assignment curriculum selectors", "new knowledge-path selectors", "historical assignment and evidence references are immutable and never rewritten"] },
   },
-]);
+]));
