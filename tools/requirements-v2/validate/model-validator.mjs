@@ -354,6 +354,14 @@ function checkPermissionSubject(errors, index, permission, path) {
   }
 }
 
+function permissionAllowsUser(index, permission) {
+  return permission?.effect === "ALLOW" && (
+    permission.actorRef === "CURRENT_ACTOR"
+    || index.roleIds.has(permission.roleRef)
+    || index.dutyIds.has(permission.dutyRef)
+  );
+}
+
 export function validateModelReferences(model) {
   const index = buildModelIndex(model);
   const errors = duplicateIdErrors(index);
@@ -557,7 +565,8 @@ export function validateModelReferences(model) {
         }
       });
     }
-    list(action?.permissions).forEach((permission, permissionIndex) => {
+    const permissions = list(action?.permissions);
+    permissions.forEach((permission, permissionIndex) => {
       checkPermissionSubject(
         errors,
         index,
@@ -572,8 +581,15 @@ export function validateModelReferences(model) {
       );
     });
     if (
+      action?.executionMode === "USER_TASK"
+      && !permissions.some((permission) => permissionAllowsUser(index, permission))
+    ) {
+      errors.push(
+        `INVALID_PERMISSION_SUBJECT ${formatValidationValue(action?.id)} requires user ALLOW for USER_TASK execution`,
+      );
+    } else if (
       action?.executionMode !== "USER_TASK"
-      && !list(action?.permissions).some((permission) => (
+      && !permissions.some((permission) => (
         permission?.effect === "ALLOW" && permission?.actorRef === "SYSTEM"
       ))
     ) {

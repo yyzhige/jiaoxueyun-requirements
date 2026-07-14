@@ -807,6 +807,59 @@ test("rejects non-user actions without a SYSTEM allow subject", () => {
   assertHasCode(validateRequirementModel(model), "INVALID_PERMISSION_SUBJECT");
 });
 
+test("rejects USER_TASK actions whose ALLOW subjects are not users", () => {
+  for (const actorRef of ["SYSTEM", "AI"]) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").actions[0].permissions = [
+      {
+        effect: "ALLOW",
+        actorRef,
+        condition: "the platform attempts to execute a user task",
+      },
+      {
+        effect: "DENY",
+        roleRef: "ROLE-TEACHER",
+        condition: "outside assigned scope",
+      },
+    ];
+
+    assertHasCode(validateRequirementModel(model), "INVALID_PERMISSION_SUBJECT");
+  }
+});
+
+test("accepts every supported user ALLOW subject for USER_TASK actions", () => {
+  const models = [
+    validFixture(),
+    validFixture(),
+    validFixture(),
+    validFixture(),
+  ];
+  moduleById(models[1], "SUB-001").actions[0].permissions[0] = {
+    effect: "ALLOW",
+    actorRef: "CURRENT_ACTOR",
+    condition: "the current actor owns the target object",
+  };
+  models[2].duties.push({
+    id: "DUTY-FIXTURE",
+    roleId: "ROLE-TEACHER",
+    label: "fixture duty",
+  });
+  moduleById(models[2], "SUB-001").actions[0].permissions[0] = {
+    effect: "ALLOW",
+    dutyRef: "DUTY-FIXTURE",
+    condition: "the assigned duty may execute the task",
+  };
+  moduleById(models[3], "SUB-001").actions[0].permissions.unshift({
+    effect: "ALLOW",
+    actorRef: "SYSTEM",
+    condition: "the platform may assist the user task",
+  });
+
+  for (const model of models) {
+    assert.deepEqual(validateRequirementModel(model), []);
+  }
+});
+
 test("rejects legacy audit fields and atomic self-recording outside an audit sink", () => {
   const legacyModel = validFixture();
   moduleById(legacyModel, "SUB-001").actions[0].auditRequired = true;
@@ -3242,6 +3295,31 @@ test("rejects permission subjects that combine or cross actor namespaces", () =>
   }
 });
 
+test("rejects every permission key outside the closed permission shape", () => {
+  const invalidProperties = [
+    ["actorRefs", ["CURRENT_ACTOR"]],
+    ["roleRefs", ["ROLE-STUDENT"]],
+    ["dutyRefs", ["DUTY-FIXTURE"]],
+    ["ownerRef", "ROLE-STUDENT"],
+    ["producerRef", "ROLE-STUDENT"],
+    ["confirmerRef", "ROLE-TEACHER"],
+    ["stewardRef", "ROLE-TEACHER"],
+    ["unknownKey", "unexpected"],
+  ];
+
+  for (const [property, value] of invalidProperties) {
+    const model = validFixture();
+    model.duties.push({
+      id: "DUTY-FIXTURE",
+      roleId: "ROLE-TEACHER",
+      label: "fixture duty",
+    });
+    moduleById(model, "SUB-001").actions[0].permissions[0][property] = value;
+
+    assertHasCode(validateRequirementModel(model), "INVALID_PERMISSION_SUBJECT");
+  }
+});
+
 test("rejects role and duty references from the wrong actor namespace", () => {
   const model = validFixture();
   model.duties.push({
@@ -3833,6 +3911,7 @@ test("returns deterministic errors and does not stop at the first failure", () =
   const secondErrors = validateRequirementModel(model);
 
   const expectedErrors = [
+    "INVALID_PERMISSION_SUBJECT SUB-ACT-01 requires user ALLOW for USER_TASK execution",
     "MISSING_ACTION_FIELD SUB-ACT-01 -> SUB-F999",
     "MISSING_ACTION_PERMISSION SUB-ACT-01 requires ALLOW and DENY",
     "MISSING_METRIC_EVENT MET-TEST requires events, scope, aggregation, Owner, and target",

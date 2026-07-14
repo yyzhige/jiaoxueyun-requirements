@@ -11,6 +11,13 @@ const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
 const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
 const OBJECT_SEMANTIC_TYPES = new Set(["AUDIT_EVENT_SINK"]);
 const SYSTEM_ACTOR_CATEGORIES = new Set(["SYSTEM", "AI", "CURRENT_ACTOR"]);
+const PERMISSION_ALLOWED_KEYS = new Set([
+  "effect",
+  "condition",
+  "actorRef",
+  "roleRef",
+  "dutyRef",
+]);
 const SCENARIO_KINDS = new Set(["SUCCESS", "FAILURE", "BOUNDARY"]);
 const DATA_TYPES = new Set([
   "STRING",
@@ -518,6 +525,13 @@ function validateAction(errors, action, path, strict) {
   permissions.forEach((permission, index) => {
     if (!isRecord(permission)) return;
     const permissionPath = `${path}.permissions[${index}]`;
+    for (const property of Object.keys(permission)) {
+      if (!PERMISSION_ALLOWED_KEYS.has(property)) {
+        errors.push(
+          `INVALID_PERMISSION_SUBJECT ${permissionPath}.${property} is not allowed`,
+        );
+      }
+    }
     if (!["ALLOW", "DENY"].includes(permission.effect)) {
       errors.push(
         `INVALID_ACTION_CONTRACT ${permissionPath}.effect must be ALLOW or DENY`,
