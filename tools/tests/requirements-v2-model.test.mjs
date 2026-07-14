@@ -1015,13 +1015,13 @@ test("classifies every phase-one object reference with a closed integrity mode",
       .filter(({ valueSource }) => valueSource?.kind === "OBJECT_REF")
       .map((field) => ({ module, object, field }))
   )));
-  assert.equal(objectRefs.length, 11);
+  assert.equal(objectRefs.length, 43);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "VERSION_PINNED"
-  )).length, 6);
+  )).length, 29);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "IDENTITY_ONLY"
-  )).length, 5);
+  )).length, 14);
 
   const missingPinnedBinding = structuredClone(requirementModel);
   const gradingDecision = moduleById(missingPinnedBinding, "GRD-001").objects
@@ -1264,7 +1264,7 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 34);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 45);
 
   const requiredPairs = [
     ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
@@ -1936,13 +1936,21 @@ test("declares the direct read mode for every phase-one object", () => {
       [mode, objects.length]
     ))),
     {
-      AUTHORIZED: 15,
-      NO_DIRECT_READ: 30,
-      STUDENT_TIMED_RELEASE: 1,
+      AUTHORIZED: 20,
+      NO_DIRECT_READ: 34,
+      STUDENT_TIMED_RELEASE: 3,
     },
   );
   assert.equal(
     phaseOneObjects.find(({ id }) => id === "PUB-OBJ-RESULT")?.readMode,
+    "STUDENT_TIMED_RELEASE",
+  );
+  assert.equal(
+    phaseOneObjects.find(({ id }) => id === "INS-OBJ-EVIDENCE")?.readMode,
+    "STUDENT_TIMED_RELEASE",
+  );
+  assert.equal(
+    phaseOneObjects.find(({ id }) => id === "APP-OBJ-TODO")?.readMode,
     "STUDENT_TIMED_RELEASE",
   );
 
@@ -1955,11 +1963,11 @@ test("declares the direct read mode for every phase-one object", () => {
   }
 });
 
-test("declares one standard system identity for all 46 phase-one objects", () => {
+test("declares one standard system identity for all 57 phase-one objects", () => {
   const phaseOneObjects = modules
     .filter(({ phase }) => phase === PHASE.FIRST)
     .flatMap(({ objects }) => objects);
-  assert.equal(phaseOneObjects.length, 46);
+  assert.equal(phaseOneObjects.length, 57);
 
   const violations = phaseOneObjects.flatMap((object) => {
     const identities = object.fields
@@ -1975,7 +1983,7 @@ test("declares one standard system identity for all 46 phase-one objects", () =>
   assert.deepEqual(violations, []);
 });
 
-test("defines the seven foundation modules plus the four teaching-loop modules and nine Flows", () => {
+test("defines the seven foundation modules plus ten teaching-loop modules and twelve Flows", () => {
   assert.deepEqual(
     modules.map(({ id }) => id),
     [
@@ -1990,11 +1998,30 @@ test("defines the seven foundation modules plus the four teaching-loop modules a
       "SUB-001",
       "GRD-001",
       "PUB-001",
+      "SCO-001",
+      "INS-001",
+      "PLN-001",
+      "APP-001",
+      "CORR-001",
+      "STU-001",
     ],
   );
   assert.deepEqual(
     flows.map(({ id }) => id),
-    ["DF-001", "DF-002", "DF-003", "DF-004", "DF-005", "DF-006", "DF-007", "DF-008", "DF-009"],
+    [
+      "DF-001",
+      "DF-002",
+      "DF-003",
+      "DF-004",
+      "DF-005",
+      "DF-006",
+      "DF-007",
+      "DF-008",
+      "DF-009",
+      "DF-010",
+      "DF-012",
+      "DF-014",
+    ],
   );
   assert.equal(modules.every(({ phase, priority }) => phase === 1 && priority === "P0"), true);
 });
@@ -3258,6 +3285,446 @@ test("defines DF-004 through DF-009 as a versioned retryable teaching loop with 
   assert.ok(correction.steps.some(({ actionId }) => actionId === "PUB-ACT-CORRECT-RESULT"));
 });
 
+test("defines score evidence plan student execution and correction modules with the three phase-one Flows", () => {
+  assert.deepEqual(
+    modules.map(({ id }) => id),
+    [
+      "ACC-001",
+      "ORG-001",
+      "IAM-001",
+      "DGV-001",
+      "AUD-001",
+      "CURR-001",
+      "TEA-001",
+      "HW-001",
+      "SUB-001",
+      "GRD-001",
+      "PUB-001",
+      "SCO-001",
+      "INS-001",
+      "PLN-001",
+      "APP-001",
+      "CORR-001",
+      "STU-001",
+    ],
+  );
+  assert.deepEqual(
+    flows.map(({ id }) => id),
+    [
+      "DF-001",
+      "DF-002",
+      "DF-003",
+      "DF-004",
+      "DF-005",
+      "DF-006",
+      "DF-007",
+      "DF-008",
+      "DF-009",
+      "DF-010",
+      "DF-012",
+      "DF-014",
+    ],
+  );
+});
+
+test("keeps score and student profile views source-pinned without copying official facts", () => {
+  const projectionModules = [
+    moduleById(requirementModel, "SCO-001"),
+    moduleById(requirementModel, "STU-001"),
+  ];
+  const requiredTargets = new Set([
+    "PUB-OBJ-RESULT",
+    "INS-OBJ-EVIDENCE",
+    "PLN-OBJ-PLAN",
+  ]);
+
+  for (const module of projectionModules) {
+    const projectionObject = module.objects.find(({ id }) => (
+      id === "SCO-OBJ-VIEW" || id === "STU-OBJ-PROFILE"
+    ));
+    const fields = projectionObject.fields;
+    const copiedFacts = fields.filter(({ label }) => (
+      /official score|published score|evidence result|mastery interpretation|plan content|task content|improvement goal/i
+        .test(label)
+    ));
+    assert.deepEqual(copiedFacts, [], module.id);
+
+    const sourceDataIds = fields.filter(({ id }) => id.endsWith("-DATA-ID"));
+    assert.equal(sourceDataIds.length, 3, module.id);
+    assert.equal(sourceDataIds.every((field) => (
+      field.dataType === "ID"
+      && field.valueSource.kind === "SYSTEM"
+      && field.mutability === "IMMUTABLE"
+    )), true, module.id);
+
+    const pinnedRefs = fields.filter(({ referenceIntegrity }) => (
+      referenceIntegrity === "VERSION_PINNED"
+    ));
+    assert.deepEqual(
+      new Set(pinnedRefs.map(({ valueSource }) => valueSource.targetObjectId)),
+      requiredTargets,
+      module.id,
+    );
+    assert.equal(projectionObject.lineageBindings.length, pinnedRefs.length, projectionObject.id);
+  }
+});
+
+test("enforces subject-teacher mutation and homeroom read-only coordination boundaries", () => {
+  const readActionIds = [
+    "SCO-ACT-READ-GRADEBOOK",
+    "SCO-ACT-VIEW-FOLLOW-UP",
+    "PLN-ACT-VIEW-HOMEROOM-COORDINATION",
+    "STU-ACT-OPEN-PROFILE",
+    "STU-ACT-VIEW-ATTENTION",
+  ];
+  const mutationActionIds = [
+    "SCO-ACT-CREATE-VIEW",
+    "SCO-ACT-CREATE-FOLLOW-UP",
+    "INS-ACT-CONFIRM-MASTERY",
+    "INS-ACT-PUBLISH-INTERPRETATION",
+    "PLN-ACT-CONFIRM-PLAN",
+    "PLN-ACT-ADJUST-PLAN",
+    "PLN-ACT-CLOSE-PLAN",
+    "CORR-ACT-CONFIRM-JUDGMENT",
+    "CORR-ACT-HANDLE-OVERDUE",
+    "STU-ACT-SAVE-VIEW",
+    "STU-ACT-CREATE-ATTENTION",
+  ];
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+
+  for (const actionId of readActionIds) {
+    const action = actionById.get(actionId);
+    assert.equal(action.operationKind, "READ", actionId);
+    assert.ok(action.permissions.some(({ effect, dutyRef }) => (
+      effect === "ALLOW" && dutyRef === "DUTY-HOMEROOM"
+    )), actionId);
+    assert.ok(action.permissions.some(({ effect, roleRef }) => (
+      effect === "DENY" && roleRef === "ROLE-SCHOOL-ADMIN"
+    )), actionId);
+    assert.ok(action.permissions.some(({ effect, roleRef }) => (
+      effect === "DENY" && roleRef === "ROLE-PLATFORM-OPS"
+    )), actionId);
+  }
+
+  for (const actionId of mutationActionIds) {
+    const action = actionById.get(actionId);
+    assert.notEqual(action.operationKind, "READ", actionId);
+    assert.ok(action.permissions.some(({ effect, dutyRef }) => (
+      effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+    )), actionId);
+    assert.ok(action.permissions.some(({ effect, dutyRef }) => (
+      effect === "DENY" && dutyRef === "DUTY-HOMEROOM"
+    )), actionId);
+  }
+
+  const professionalActions = ["SCO-001", "INS-001", "PLN-001", "CORR-001", "STU-001"]
+    .flatMap((moduleId) => moduleById(requirementModel, moduleId).actions);
+  assert.equal(professionalActions.some((action) => (
+    action.operationKind !== "READ"
+    && action.permissions.some(({ effect, dutyRef }) => (
+      effect === "ALLOW" && dutyRef === "DUTY-HOMEROOM"
+    ))
+  )), false);
+});
+
+test("models evidence candidates teacher confirmation student visibility and immutable invalidation history", () => {
+  const insight = moduleById(requirementModel, "INS-001");
+  const evidence = insight.objects.find(({ id }) => id === "INS-OBJ-EVIDENCE");
+  const fieldById = new Map(evidence.fields.map((field) => [field.id, field]));
+  const requiredFieldIds = [
+    "INS-EVIDENCE-F-SOURCE-DATA-ID",
+    "INS-EVIDENCE-F-EVIDENCE-SOURCE",
+    "INS-EVIDENCE-F-STAGE",
+    "INS-EVIDENCE-F-KNOWLEDGE-POINT-REF",
+    "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION",
+    "INS-EVIDENCE-F-RESULT",
+    "INS-EVIDENCE-F-ERROR-TYPE",
+    "INS-EVIDENCE-F-WEIGHT",
+    "INS-EVIDENCE-F-VALIDITY",
+    "INS-EVIDENCE-F-TEACHER-CONFIRMATION",
+    "INS-EVIDENCE-F-INVALIDATION-REASON",
+    "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+    "INS-EVIDENCE-F-EVIDENCE-VERSION",
+  ];
+  assert.equal(requiredFieldIds.every((fieldId) => fieldById.has(fieldId)), true);
+  assert.deepEqual(
+    evidence.states,
+    ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "STALE"],
+  );
+
+  const actionById = new Map(insight.actions.map((action) => [action.id, action]));
+  const createCandidate = actionById.get("INS-ACT-CREATE-CANDIDATE");
+  const confirm = actionById.get("INS-ACT-CONFIRM-MASTERY");
+  const publish = actionById.get("INS-ACT-PUBLISH-INTERPRETATION");
+  const invalidate = actionById.get("INS-ACT-MARK-STALE");
+  const studentRead = actionById.get("INS-ACT-VIEW-MASTERY");
+  assert.equal(createCandidate.operationKind, "CREATE");
+  assert.deepEqual(createCandidate.trigger, { kind: "FLOW", flowIds: ["DF-010"] });
+  assert.deepEqual(confirm.transition, { from: "CANDIDATE", to: "TEACHER_CONFIRMED" });
+  assert.deepEqual(publish.transition, { from: "TEACHER_CONFIRMED", to: "STUDENT_VISIBLE" });
+  assert.deepEqual(invalidate.transition, { from: "STUDENT_VISIBLE", to: "STALE" });
+  assert.equal(studentRead.operationKind, "READ");
+  assert.equal(evidence.readMode, "STUDENT_TIMED_RELEASE");
+  assert.equal(evidence.readPolicies.length, 1);
+  assert.equal(fieldById.get("INS-EVIDENCE-F-MASTERY-INTERPRETATION").releaseRequirement.readPolicyId, "INS-RP-STUDENT-MASTERY");
+  assert.ok(fieldById.get("INS-EVIDENCE-F-PRIOR-EVIDENCE-REF"));
+  assert.equal(fieldById.get("INS-EVIDENCE-F-PRIOR-EVIDENCE-REF").referenceIntegrity, "VERSION_PINNED");
+
+  for (const action of [confirm, publish]) {
+    assert.ok(action.permissions.some(({ effect, actorRef }) => (
+      effect === "DENY" && actorRef === "AI"
+    )), action.id);
+    assert.equal(action.permissions.some(({ effect, actorRef }) => (
+      effect === "ALLOW" && actorRef === "AI"
+    )), false, action.id);
+  }
+});
+
+test("models subject-owned improvement plans and explicit teacher and homeroom Flow outputs", () => {
+  const planModule = moduleById(requirementModel, "PLN-001");
+  const plan = planModule.objects.find(({ id }) => id === "PLN-OBJ-PLAN");
+  const fieldIds = new Set(plan.fields.map(({ id }) => id));
+  const requiredFieldIds = [
+    "PLN-PLAN-F-GOAL",
+    "PLN-PLAN-F-SUBJECT",
+    "PLN-PLAN-F-KNOWLEDGE-POINT-REF",
+    "PLN-PLAN-F-PRIORITY",
+    "PLN-PLAN-F-TASK-CONTENT",
+    "PLN-PLAN-F-WORKLOAD",
+    "PLN-PLAN-F-DUE-AT",
+    "PLN-PLAN-F-SUCCESS-CONDITION",
+    "PLN-PLAN-F-EVIDENCE-REQUIREMENT",
+    "PLN-PLAN-F-REVALIDATION-METHOD",
+    "PLN-PLAN-F-TEACHER-CONFIRMER-REF",
+    "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF",
+    "PLN-PLAN-F-ADJUSTMENT-REASON",
+    "PLN-PLAN-F-CLOSE-REASON",
+    "PLN-PLAN-F-INVALIDATION-REF",
+    "PLN-PLAN-F-INVALIDATION-VERSION",
+    "PLN-PLAN-F-EVALUATION-STATE",
+    "PLN-PLAN-F-EVALUATION-VERSION",
+    "PLN-PLAN-F-PLAN-VERSION",
+  ];
+  assert.equal(requiredFieldIds.every((fieldId) => fieldIds.has(fieldId)), true);
+
+  const confirm = planModule.actions.find(({ id }) => id === "PLN-ACT-CONFIRM-PLAN");
+  assert.deepEqual(confirm.transition, { from: "CANDIDATE", to: "ACTIVE" });
+  assert.ok(confirm.permissions.some(({ effect, dutyRef }) => (
+    effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+  )));
+
+  const flow = flows.find(({ id }) => id === "DF-012");
+  assert.deepEqual(flow.steps.map(({ actionId }) => actionId), [
+    "INS-ACT-READ-CONFIRMED-EVIDENCE",
+    "PLN-ACT-CREATE-CANDIDATE",
+    "PLN-ACT-CONFIRM-PLAN",
+    "PLN-ACT-SYNC-SUBJECT-TEACHER",
+    "PLN-ACT-SYNC-HOMEROOM-COORDINATION",
+    "APP-ACT-CREATE-TODO-LINK",
+  ]);
+  assert.ok(flow.targetDataRefs.some(({ objectId, fieldId }) => (
+    objectId === "PLN-OBJ-SUBJECT-SYNC"
+    && fieldId === "PLN-SUBJECT-SYNC-F-OUTPUT-VERSION"
+  )));
+  assert.ok(flow.targetDataRefs.some(({ objectId, fieldId }) => (
+    objectId === "PLN-OBJ-HOMEROOM-COORDINATION"
+    && fieldId === "PLN-HOMEROOM-F-OUTPUT-VERSION"
+  )));
+  assert.equal(JSON.stringify(flow.targetDataRefs).includes("recipient"), false);
+});
+
+test("models student todo navigation and correction judgment without creating second task owners", () => {
+  const app = moduleById(requirementModel, "APP-001");
+  const todo = app.objects.find(({ id }) => id === "APP-OBJ-TODO");
+  const todoFields = new Set(todo.fields.map(({ id }) => id));
+  assert.equal([
+    "APP-TODO-F-SOURCE-PLAN-REF",
+    "APP-TODO-F-SOURCE-PLAN-VERSION",
+    "APP-TODO-F-SOURCE-ASSIGNMENT-REF",
+    "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
+    "APP-TODO-F-TASK-DEEP-LINK",
+    "APP-TODO-F-LOCAL-PROGRESS",
+    "APP-TODO-F-COMPLETION-EVIDENCE",
+    "APP-TODO-F-DIFFICULTY-FEEDBACK",
+  ].every((fieldId) => todoFields.has(fieldId)), true);
+  assert.equal(todo.fields.some(({ label }) => /task content|plan content/i.test(label)), false);
+  assert.deepEqual(
+    new Set(todo.lineageBindings.map(({ targetObjectId }) => targetObjectId)),
+    new Set(["PLN-OBJ-PLAN", "HW-OBJ-ASSIGNMENT"]),
+  );
+
+  const correction = moduleById(requirementModel, "CORR-001");
+  const attempt = correction.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
+  const attemptFieldIds = new Set(attempt.fields.map(({ id }) => id));
+  assert.equal([
+    "CORR-ATTEMPT-F-CORRECTION-ANSWER",
+    "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+    "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
+    "CORR-ATTEMPT-F-OVERDUE-HANDLING",
+  ].every((fieldId) => attemptFieldIds.has(fieldId)), true);
+  const submit = correction.actions.find(({ id }) => id === "CORR-ACT-SUBMIT");
+  const judge = correction.actions.find(({ id }) => id === "CORR-ACT-CONFIRM-JUDGMENT");
+  assert.equal(submit.operationKind, "CREATE");
+  assert.ok(submit.permissions.some(({ effect, roleRef }) => (
+    effect === "ALLOW" && roleRef === "ROLE-STUDENT"
+  )));
+  assert.ok(judge.permissions.some(({ effect, dutyRef }) => (
+    effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+  )));
+  assert.ok(judge.permissions.some(({ effect, actorRef }) => (
+    effect === "DENY" && actorRef === "AI"
+  )));
+});
+
+test("records the closed result-correction invalidation chain with source and target history", () => {
+  const correction = moduleById(requirementModel, "CORR-001");
+  const invalidation = correction.objects.find(({ id }) => id === "CORR-OBJ-INVALIDATION");
+  assert.deepEqual(invalidation.targetKindContract, [
+    "EVIDENCE",
+    "MASTERY_INTERPRETATION",
+    "IMPROVEMENT_CANDIDATE",
+    "PLAN_EVALUATION",
+    "REPORT_INTERPRETATION",
+    "LEARNING_PATH_EXPLANATION",
+  ]);
+  assert.deepEqual(invalidation.targetStateContract, [
+    "STALE",
+    "INVALIDATED",
+    "PENDING_RECONFIRM",
+  ]);
+  assert.equal(invalidation.historyPreservation, "RETAIN_ALL_PRIOR_VERSIONS");
+  const fieldIds = new Set(invalidation.fields.map(({ id }) => id));
+  assert.equal([
+    "CORR-INVALIDATION-F-SOURCE-RESULT-REF",
+    "CORR-INVALIDATION-F-SOURCE-RESULT-VERSION",
+    "CORR-INVALIDATION-F-SOURCE-DECISION-REF",
+    "CORR-INVALIDATION-F-SOURCE-DECISION-VERSION",
+    "CORR-INVALIDATION-F-TARGET-KINDS",
+    "CORR-INVALIDATION-F-TARGET-TRANSITIONS",
+    "CORR-INVALIDATION-F-TARGET-VERSIONS",
+    "CORR-INVALIDATION-F-HISTORY-PRESERVATION",
+    "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+  ].every((fieldId) => fieldIds.has(fieldId)), true);
+  assert.equal(invalidation.lineageBindings.length, 2);
+
+  const planModule = moduleById(requirementModel, "PLN-001");
+  const plan = planModule.objects.find(({ id }) => id === "PLN-OBJ-PLAN");
+  const markPending = planModule.actions.find(({ id }) => (
+    id === "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM"
+  ));
+  assert.ok(plan.states.includes("PENDING_RECONFIRM"));
+  assert.deepEqual(markPending.transition, { from: "ACTIVE", to: "PENDING_RECONFIRM" });
+  assert.deepEqual(markPending.trigger, { kind: "FLOW", flowIds: ["DF-010"] });
+  assert.ok(markPending.outputFieldIds.includes("PLN-PLAN-F-INVALIDATION-REF"));
+  assert.ok(markPending.outputFieldIds.includes("PLN-PLAN-F-EVALUATION-STATE"));
+  assert.ok(plan.lineageBindings.some(({ refFieldId, targetObjectId }) => (
+    refFieldId === "PLN-PLAN-F-INVALIDATION-REF"
+    && targetObjectId === "CORR-OBJ-INVALIDATION"
+  )));
+});
+
+test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidation contracts", () => {
+  const expected = {
+    "DF-010": {
+      modules: ["PUB-001", "INS-001", "PLN-001", "CORR-001"],
+      actions: [
+        "PUB-ACT-VIEW-RESULT",
+        "CORR-ACT-SUBMIT",
+        "CORR-ACT-CONFIRM-JUDGMENT",
+        "CORR-ACT-RECORD-INVALIDATION",
+        "INS-ACT-MARK-STALE",
+        "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
+        "INS-ACT-CREATE-CANDIDATE",
+        "INS-ACT-CONFIRM-MASTERY",
+        "INS-ACT-PUBLISH-INTERPRETATION",
+      ],
+      identities: ["PUB-RESULT-F-ID", "INS-EVIDENCE-F-ID", "PLN-PLAN-F-ID"],
+      versions: [
+        "PUB-RESULT-F-RESULT-VERSION",
+        "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        "PLN-PLAN-F-PLAN-VERSION",
+      ],
+      fanout: "INS-EVIDENCE-F-ID",
+      retry: ["VERSION_CONFLICT", "AUDIT_FAILED"],
+    },
+    "DF-012": {
+      modules: ["INS-001", "PLN-001", "APP-001"],
+      actions: [
+        "INS-ACT-READ-CONFIRMED-EVIDENCE",
+        "PLN-ACT-CREATE-CANDIDATE",
+        "PLN-ACT-CONFIRM-PLAN",
+        "PLN-ACT-SYNC-SUBJECT-TEACHER",
+        "PLN-ACT-SYNC-HOMEROOM-COORDINATION",
+        "APP-ACT-CREATE-TODO-LINK",
+      ],
+      identities: ["INS-EVIDENCE-F-ID", "INS-EVIDENCE-F-STUDENT-REF"],
+      versions: ["INS-EVIDENCE-F-EVIDENCE-VERSION"],
+      fanout: "INS-EVIDENCE-F-STUDENT-REF",
+      retry: ["SYNC_DELIVERY_FAILED", "VERSION_CONFLICT", "AUDIT_FAILED"],
+    },
+    "DF-014": {
+      modules: ["SCO-001", "INS-001", "PLN-001", "APP-001", "STU-001"],
+      actions: [
+        "SCO-ACT-READ-GRADEBOOK",
+        "INS-ACT-READ-CONFIRMED-EVIDENCE",
+        "PLN-ACT-VIEW-HOMEROOM-COORDINATION",
+        "APP-ACT-REFRESH-TODOS",
+        "STU-ACT-BUILD-PROFILE",
+      ],
+      identities: [
+        "SCO-VIEW-F-ID",
+        "INS-EVIDENCE-F-ID",
+        "PLN-PLAN-F-ID",
+        "APP-TODO-F-ID",
+      ],
+      versions: [
+        "SCO-VIEW-F-VIEW-VERSION",
+        "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        "PLN-PLAN-F-PLAN-VERSION",
+        "APP-TODO-F-AGGREGATION-VERSION",
+      ],
+      fanout: "APP-TODO-F-STUDENT-REF",
+      retry: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT", "AUDIT_FAILED"],
+    },
+  };
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+
+  for (const [flowId, contract] of Object.entries(expected)) {
+    const flow = flows.find(({ id }) => id === flowId);
+    assert.deepEqual(flow.moduleIds, contract.modules, flowId);
+    assert.deepEqual(flow.steps.map(({ actionId }) => actionId), contract.actions, flowId);
+    assert.deepEqual(flow.idempotencyKeyParts, {
+      identityFieldIds: contract.identities,
+      versionFieldIds: contract.versions,
+      fanoutFieldId: contract.fanout,
+    });
+    assert.deepEqual(flow.retryPolicy.retryableFailureResults, contract.retry);
+    assert.match(flow.failureGranularity, /OBJECT/, flowId);
+    assert.ok(flow.downstreamInvalidation.targets.length > 0, flowId);
+
+    const stepActions = flow.steps.map(({ actionId }) => actionById.get(actionId));
+    for (const target of flow.targetDataRefs) {
+      assert.ok(stepActions.some((action) => (
+        action.targetObjectId === target.objectId
+        && action.outputFieldIds.includes(target.fieldId)
+      )), `${flowId}:${target.objectId}.${target.fieldId}`);
+    }
+  }
+
+  assert.deepEqual(
+    reachableObjectStates(moduleById(requirementModel, "INS-001"), "INS-OBJ-EVIDENCE"),
+    new Set(["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "STALE"]),
+  );
+  assert.deepEqual(
+    reachableObjectStates(moduleById(requirementModel, "PLN-001"), "PLN-OBJ-PLAN"),
+    new Set(["CANDIDATE", "ACTIVE", "CLOSED", "PENDING_RECONFIRM"]),
+  );
+});
+
 test("publishes task-specific actions, pages, and complete scenario coverage", () => {
   const genericActionLabels = new Set([
     "对象查询与范围筛选",
@@ -3268,7 +3735,7 @@ test("publishes task-specific actions, pages, and complete scenario coverage", (
   ]);
   const genericPageLabels = new Set(["列表/工作台", "详情/处理页", "预览/确认页", "历史/审计页"]);
 
-  assert.equal(modules.length, 11);
+  assert.equal(modules.length, 17);
   for (const module of modules) {
     assert.equal(module.actions.length > 0, true, module.id);
     assert.equal(module.pages.length > 0, true, module.id);
@@ -3329,12 +3796,22 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["PUB-ACT-PUBLISH-RESULT", "FLOW_INTERNAL"],
     ["PUB-ACT-FINALIZE-BATCH", "FLOW_INTERNAL"],
     ["PUB-ACT-RECONCILE-BATCH", "FLOW_INTERNAL"],
+    ["INS-ACT-CREATE-CANDIDATE", "FLOW_INTERNAL"],
+    ["INS-ACT-MARK-STALE", "FLOW_INTERNAL"],
+    ["PLN-ACT-CREATE-CANDIDATE", "FLOW_INTERNAL"],
+    ["PLN-ACT-SYNC-SUBJECT-TEACHER", "FLOW_INTERNAL"],
+    ["PLN-ACT-SYNC-HOMEROOM-COORDINATION", "FLOW_INTERNAL"],
+    ["PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", "FLOW_INTERNAL"],
+    ["APP-ACT-CREATE-TODO-LINK", "FLOW_INTERNAL"],
+    ["APP-ACT-REFRESH-TODOS", "FLOW_INTERNAL"],
+    ["CORR-ACT-RECORD-INVALIDATION", "FLOW_INTERNAL"],
+    ["STU-ACT-BUILD-PROFILE", "FLOW_INTERNAL"],
   ]);
   const actions = modules.flatMap((module) => module.actions);
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 23);
+  assert.equal(expectedModes.size, 33);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -3926,7 +4403,7 @@ test("keeps every Flow action participant and data reference valid and symmetric
     module.objects.map((object) => [object.id, { moduleId: module.id, object }])
   )));
 
-  assert.equal(flows.length, 9);
+  assert.equal(flows.length, 12);
   for (const flow of flows) {
     const actionModuleIds = new Set(flow.steps.map(({ actionId }) => moduleByActionId.get(actionId)));
     assert.deepEqual(new Set(flow.moduleIds), actionModuleIds, flow.id);
@@ -3941,13 +4418,13 @@ test("keeps every Flow action participant and data reference valid and symmetric
   }
 });
 
-test("the validation CLI reports eleven modules and nine Flows", () => {
+test("the validation CLI reports seventeen modules and twelve Flows", () => {
   const output = execFileSync(
     process.execPath,
     ["tools/validate_v2_requirements.mjs"],
     { cwd: new URL("../..", import.meta.url), encoding: "utf8" },
   );
-  assert.equal(output, "validated modules=11 flows=9\n");
+  assert.equal(output, "validated modules=17 flows=12\n");
 });
 
 test("defines the immutable baseline decisions and teacher duty model", () => {

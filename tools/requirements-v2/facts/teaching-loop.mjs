@@ -2446,6 +2446,2051 @@ const publicationModule = moduleFact({
   ],
 });
 
+const subjectTeacherWritePermissions = [
+  permission(
+    "ALLOW",
+    "DUTY-SUBJECT-TEACHER",
+    "the corresponding subject teacher writes only inside the assigned subject, class, and student scope",
+  ),
+  permission(
+    "DENY",
+    "DUTY-HOMEROOM",
+    "a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts",
+  ),
+  permission(
+    "DENY",
+    "ROLE-SCHOOL-ADMIN",
+    "a school administrator attempts to read or mutate student learning detail without a separately authorized case",
+  ),
+  permission(
+    "DENY",
+    "ROLE-PLATFORM-OPS",
+    "platform operations has no default access to student learning detail",
+  ),
+];
+
+const teacherAndHomeroomReadPermissions = [
+  permission(
+    "ALLOW",
+    "DUTY-SUBJECT-TEACHER",
+    "the corresponding subject teacher reads only the assigned subject, class, and student scope",
+  ),
+  permission(
+    "ALLOW",
+    "DUTY-HOMEROOM",
+    "the homeroom teacher reads the assigned class across subjects for read-only coordination",
+  ),
+  permission(
+    "DENY",
+    "ROLE-SCHOOL-ADMIN",
+    "a school administrator has no default permission to read student learning detail",
+  ),
+  permission(
+    "DENY",
+    "ROLE-PLATFORM-OPS",
+    "platform operations has no default permission to read student learning detail",
+  ),
+];
+
+const scoreViewFields = [
+  field("SCO-VIEW-F-ID", "Gradebook View ID"),
+  field("SCO-VIEW-F-STUDENT-REF", "Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+  }),
+  field("SCO-VIEW-F-RESULT-DATA-ID", "Source Result Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SCO-VIEW-F-RESULT-REF", "Source Result Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "SCO-VIEW-F-RESULT-VERSION",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+  }),
+  field("SCO-VIEW-F-RESULT-VERSION", "Source Result Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SCO-VIEW-F-EVIDENCE-DATA-ID", "Source Evidence Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SCO-VIEW-F-EVIDENCE-REF", "Source Evidence Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "SCO-VIEW-F-EVIDENCE-VERSION",
+      targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    },
+  }),
+  field("SCO-VIEW-F-EVIDENCE-VERSION", "Source Evidence Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SCO-VIEW-F-PLAN-DATA-ID", "Source Plan Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SCO-VIEW-F-PLAN-REF", "Source Plan Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "SCO-VIEW-F-PLAN-VERSION",
+      targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+    },
+  }),
+  field("SCO-VIEW-F-PLAN-VERSION", "Source Plan Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SCO-VIEW-F-QUERY-DEFINITION", "Gradebook Query Definition", { dataType: "JSON" }),
+  field("SCO-VIEW-F-COLUMN-DEFINITION", "Gradebook Column Definition", { dataType: "JSON" }),
+  field("SCO-VIEW-F-SAVED-VIEW-DEFINITION", "Saved Gradebook View Definition", { dataType: "JSON" }),
+  field("SCO-VIEW-F-VIEW-VERSION", "Gradebook View Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const scoreFollowUpFields = [
+  field("SCO-FOLLOW-UP-F-ID", "Gradebook Follow-up ID"),
+  field("SCO-FOLLOW-UP-F-VIEW-REF", "Gradebook View Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "SCO-OBJ-VIEW" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "SCO-FOLLOW-UP-F-VIEW-VERSION",
+      targetVersionFieldId: "SCO-VIEW-F-VIEW-VERSION",
+    },
+  }),
+  field("SCO-FOLLOW-UP-F-VIEW-VERSION", "Gradebook View Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SCO-FOLLOW-UP-F-ATTENTION-KIND", "Attention Event Kind"),
+  field("SCO-FOLLOW-UP-F-NOTE", "Follow-up Note", { dataType: "TEXT" }),
+  field("SCO-FOLLOW-UP-F-VERSION", "Follow-up Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const scoreActions = [
+  action({
+    id: "SCO-ACT-CREATE-VIEW",
+    label: "Create a Source-pinned Gradebook View",
+    operationKind: "CREATE",
+    targetObjectId: "SCO-OBJ-VIEW",
+    inputFieldIds: [
+      "SCO-VIEW-F-STUDENT-REF",
+      "SCO-VIEW-F-RESULT-REF",
+      "SCO-VIEW-F-RESULT-VERSION",
+      "SCO-VIEW-F-EVIDENCE-REF",
+      "SCO-VIEW-F-EVIDENCE-VERSION",
+      "SCO-VIEW-F-PLAN-REF",
+      "SCO-VIEW-F-PLAN-VERSION",
+      "SCO-VIEW-F-QUERY-DEFINITION",
+      "SCO-VIEW-F-COLUMN-DEFINITION",
+      "SCO-VIEW-F-SAVED-VIEW-DEFINITION",
+    ],
+    outputFieldIds: [
+      "SCO-VIEW-F-ID",
+      "SCO-VIEW-F-RESULT-DATA-ID",
+      "SCO-VIEW-F-EVIDENCE-DATA-ID",
+      "SCO-VIEW-F-PLAN-DATA-ID",
+      "SCO-VIEW-F-VIEW-VERSION",
+    ],
+    permissions: subjectTeacherWritePermissions,
+    successState: "ACTIVE",
+    successData: "creates only a view definition and version-pinned source links without copying score, evidence, or plan content",
+  }),
+  action({
+    id: "SCO-ACT-READ-GRADEBOOK",
+    label: "Read the Authorized Gradebook Projection",
+    targetObjectId: "SCO-OBJ-VIEW",
+    inputFieldIds: ["SCO-VIEW-F-ID"],
+    outputFieldIds: scoreViewFields.map(({ id }) => id),
+    writes: false,
+    permissions: teacherAndHomeroomReadPermissions,
+    successData: "resolves current projection columns through the pinned PUB, INS, and PLN source versions",
+  }),
+  action({
+    id: "SCO-ACT-CREATE-FOLLOW-UP",
+    label: "Create a Gradebook Follow-up Record",
+    operationKind: "CREATE",
+    targetObjectId: "SCO-OBJ-FOLLOW-UP",
+    inputFieldIds: [
+      "SCO-FOLLOW-UP-F-VIEW-REF",
+      "SCO-FOLLOW-UP-F-VIEW-VERSION",
+      "SCO-FOLLOW-UP-F-ATTENTION-KIND",
+      "SCO-FOLLOW-UP-F-NOTE",
+    ],
+    outputFieldIds: ["SCO-FOLLOW-UP-F-ID", "SCO-FOLLOW-UP-F-VERSION"],
+    permissions: subjectTeacherWritePermissions,
+    successState: "OPEN",
+  }),
+  action({
+    id: "SCO-ACT-VIEW-FOLLOW-UP",
+    label: "View Gradebook Follow-up Records",
+    targetObjectId: "SCO-OBJ-FOLLOW-UP",
+    inputFieldIds: ["SCO-FOLLOW-UP-F-ID"],
+    outputFieldIds: scoreFollowUpFields.map(({ id }) => id),
+    writes: false,
+    permissions: teacherAndHomeroomReadPermissions,
+  }),
+];
+
+const scoreModule = moduleFact({
+  id: "SCO-001",
+  phase: PHASE.FIRST,
+  priority: "P0",
+  title: "Source-pinned Gradebook Views",
+  objective: "Define authorized score views and follow-up records without owning a second official score, evidence, or plan fact",
+  entryConditions: ["published result, evidence, and plan versions are available as independently owned sources"],
+  exitConditions: ["every displayed value resolves through its source Data ID, object reference, and pinned version"],
+  baselineDecisionIds: ["BASE-003", "BASE-008", "BASE-010"],
+  nfrIds: ["NFR-008"],
+  objects: [
+    object(
+      "SCO-OBJ-VIEW",
+      "Gradebook Query Column and Saved View Definition",
+      {
+        dataSubject: "GRADEBOOK_VIEW_DEFINITION",
+        controlSubject: "SCHOOL",
+        producerRef: "DUTY-SUBJECT-TEACHER",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-HOMEROOM",
+      },
+      ["ACTIVE"],
+      scoreViewFields,
+      "SCO-VIEW-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [
+          {
+            refFieldId: "SCO-VIEW-F-RESULT-REF",
+            versionFieldId: "SCO-VIEW-F-RESULT-VERSION",
+            targetObjectId: "PUB-OBJ-RESULT",
+            targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+          },
+          {
+            refFieldId: "SCO-VIEW-F-EVIDENCE-REF",
+            versionFieldId: "SCO-VIEW-F-EVIDENCE-VERSION",
+            targetObjectId: "INS-OBJ-EVIDENCE",
+            targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+          },
+          {
+            refFieldId: "SCO-VIEW-F-PLAN-REF",
+            versionFieldId: "SCO-VIEW-F-PLAN-VERSION",
+            targetObjectId: "PLN-OBJ-PLAN",
+            targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+          },
+        ],
+      },
+    ),
+    object(
+      "SCO-OBJ-FOLLOW-UP",
+      "Gradebook Follow-up and Attention Record",
+      {
+        dataSubject: "GRADEBOOK_COORDINATION",
+        controlSubject: "SCHOOL",
+        producerRef: "DUTY-SUBJECT-TEACHER",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-HOMEROOM",
+      },
+      ["OPEN"],
+      scoreFollowUpFields,
+      "SCO-FOLLOW-UP-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [{
+          refFieldId: "SCO-FOLLOW-UP-F-VIEW-REF",
+          versionFieldId: "SCO-FOLLOW-UP-F-VIEW-VERSION",
+          targetObjectId: "SCO-OBJ-VIEW",
+          targetVersionFieldId: "SCO-VIEW-F-VIEW-VERSION",
+        }],
+      },
+    ),
+  ],
+  relationships: [{
+    id: "SCO-REL-FOLLOW-UP-VIEW",
+    fromObjectId: "SCO-OBJ-FOLLOW-UP",
+    toObjectId: "SCO-OBJ-VIEW",
+    type: "REFERENCES",
+    cardinality: "MANY_TO_ONE",
+    ownershipScope: "SAME_STUDENT",
+    onSourceInvalidation: "retain follow-up history and mark the referenced view version stale",
+  }],
+  actions: scoreActions,
+  pages: [
+    page(
+      "SCO-PAGE-GRADEBOOK",
+      "Authorized Gradebook Projection",
+      ["SCO-OBJ-VIEW"],
+      scoreViewFields.map(({ id }) => id),
+      ["SCO-ACT-CREATE-VIEW", "SCO-ACT-READ-GRADEBOOK"],
+    ),
+    page(
+      "SCO-PAGE-FOLLOW-UP",
+      "Gradebook Follow-up Workspace",
+      ["SCO-OBJ-FOLLOW-UP"],
+      scoreFollowUpFields.map(({ id }) => id),
+      ["SCO-ACT-CREATE-FOLLOW-UP", "SCO-ACT-VIEW-FOLLOW-UP"],
+    ),
+  ],
+});
+
+const evidenceFields = [
+  field("INS-EVIDENCE-F-ID", "Evidence Version ID"),
+  field("INS-EVIDENCE-F-STUDENT-REF", "Evidence Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+    idempotencyRole: "OBJECT_REF",
+  }),
+  field("INS-EVIDENCE-F-SOURCE-DATA-ID", "Evidence Source Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("INS-EVIDENCE-F-SOURCE-RESULT-REF", "Source Published Result Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
+    mutability: "IMMUTABLE",
+    required: "required for evidence derived from a published result",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+  }),
+  field("INS-EVIDENCE-F-SOURCE-RESULT-VERSION", "Source Published Result Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    required: "required for evidence derived from a published result",
+  }),
+  field("INS-EVIDENCE-F-SOURCE-CORRECTION-REF", "Source Correction Attempt Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-ATTEMPT" },
+    mutability: "IMMUTABLE",
+    required: "required for correction-stage evidence",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION",
+      targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    },
+  }),
+  field("INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION", "Source Correction Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    required: "required for correction-stage evidence",
+  }),
+  field("INS-EVIDENCE-F-EVIDENCE-SOURCE", "Evidence Source", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("INS-EVIDENCE-F-STAGE", "Evidence Stage", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-008" },
+    mutability: "IMMUTABLE",
+  }),
+  field("INS-EVIDENCE-F-KNOWLEDGE-POINT-REF", "Knowledge Point Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION",
+      targetVersionFieldId: "CURR-KP-F-ID",
+    },
+  }),
+  field("INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION", "Knowledge Point Version", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("INS-EVIDENCE-F-RESULT", "Answer Result", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-009" },
+    mutability: "SYSTEM_MANAGED",
+    releaseRequirement: {
+      readPolicyId: "INS-RP-STUDENT-MASTERY",
+      requiredState: "STUDENT_VISIBLE",
+      visibleAtFieldId: "INS-EVIDENCE-F-STUDENT-VISIBLE-AT",
+    },
+  }),
+  field("INS-EVIDENCE-F-ERROR-TYPE", "Error Type", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-010" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("INS-EVIDENCE-F-WEIGHT", "Evidence Weight", {
+    dataType: "DECIMAL",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("INS-EVIDENCE-F-VALIDITY", "Evidence Validity", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("INS-EVIDENCE-F-MASTERY-CANDIDATE", "Mastery Interpretation Candidate", {
+    dataType: "TEXT",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("INS-EVIDENCE-F-MASTERY-INTERPRETATION", "Teacher-confirmed Mastery Interpretation", {
+    dataType: "TEXT",
+    releaseRequirement: {
+      readPolicyId: "INS-RP-STUDENT-MASTERY",
+      requiredState: "STUDENT_VISIBLE",
+      visibleAtFieldId: "INS-EVIDENCE-F-STUDENT-VISIBLE-AT",
+    },
+  }),
+  field("INS-EVIDENCE-F-TEACHER-CONFIRMATION", "Teacher Confirmation", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("INS-EVIDENCE-F-STUDENT-VISIBLE-AT", "Student Visible At", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("INS-EVIDENCE-F-INVALIDATION-REASON", "Evidence Invalidation Reason", {
+    dataType: "TEXT",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when evidence becomes stale",
+  }),
+  field("INS-EVIDENCE-F-PRIOR-EVIDENCE-REF", "Prior Evidence Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
+    mutability: "IMMUTABLE",
+    required: "required when a new evidence version supersedes prior evidence",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION",
+      targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    },
+  }),
+  field("INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION", "Prior Evidence Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    required: "required when a new evidence version supersedes prior evidence",
+  }),
+  field("INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION", "Mastery Interpretation Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("INS-EVIDENCE-F-EVIDENCE-VERSION", "Evidence Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const evidenceTeacherPermissions = [
+  ...subjectTeacherWritePermissions,
+  permission("DENY", "AI", "AI may create only an attribution or mastery candidate and cannot confirm or publish the student-visible interpretation"),
+];
+
+const evidenceFlowPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified correction Flow creates or invalidates only versioned evidence candidates"),
+  permission("DENY", "AI", "AI cannot directly confirm evidence or publish a student-visible mastery interpretation"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot invoke an internal evidence candidate or invalidation step directly"),
+];
+
+const evidenceActions = [
+  action({
+    id: "INS-ACT-CREATE-CANDIDATE",
+    label: "Create a Correction Evidence Candidate",
+    operationKind: "CREATE",
+    targetObjectId: "INS-OBJ-EVIDENCE",
+    outputFieldIds: [
+      "INS-EVIDENCE-F-ID",
+      "INS-EVIDENCE-F-STUDENT-REF",
+      "INS-EVIDENCE-F-SOURCE-DATA-ID",
+      "INS-EVIDENCE-F-SOURCE-CORRECTION-REF",
+      "INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION",
+      "INS-EVIDENCE-F-EVIDENCE-SOURCE",
+      "INS-EVIDENCE-F-STAGE",
+      "INS-EVIDENCE-F-KNOWLEDGE-POINT-REF",
+      "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION",
+      "INS-EVIDENCE-F-RESULT",
+      "INS-EVIDENCE-F-ERROR-TYPE",
+      "INS-EVIDENCE-F-WEIGHT",
+      "INS-EVIDENCE-F-VALIDITY",
+      "INS-EVIDENCE-F-MASTERY-CANDIDATE",
+      "INS-EVIDENCE-F-PRIOR-EVIDENCE-REF",
+      "INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION",
+      "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+      "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    ],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    permissions: evidenceFlowPermissions,
+    successState: "CANDIDATE",
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "creates only an attribution and mastery candidate from the confirmed correction version while retaining the prior evidence reference",
+  }),
+  action({
+    id: "INS-ACT-MARK-STALE",
+    label: "Mark Prior Evidence and Interpretation Stale",
+    targetObjectId: "INS-OBJ-EVIDENCE",
+    outputFieldIds: [
+      "INS-EVIDENCE-F-VALIDITY",
+      "INS-EVIDENCE-F-INVALIDATION-REASON",
+      "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+      "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    ],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    permissions: evidenceFlowPermissions,
+    transition: { from: "STUDENT_VISIBLE", to: "STALE" },
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "creates a stale evidence version with a reason while retaining the prior student-visible evidence and interpretation versions",
+  }),
+  action({
+    id: "INS-ACT-CONFIRM-MASTERY",
+    label: "Confirm the Evidence and Mastery Interpretation",
+    targetObjectId: "INS-OBJ-EVIDENCE",
+    inputFieldIds: ["INS-EVIDENCE-F-MASTERY-INTERPRETATION"],
+    outputFieldIds: [
+      "INS-EVIDENCE-F-MASTERY-INTERPRETATION",
+      "INS-EVIDENCE-F-TEACHER-CONFIRMATION",
+      "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+      "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: evidenceTeacherPermissions,
+    transition: { from: "CANDIDATE", to: "TEACHER_CONFIRMED" },
+    failureResults: ["PERMISSION_DENIED", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
+    successData: "the corresponding subject teacher confirms the evidence interpretation into a new immutable version",
+  }),
+  action({
+    id: "INS-ACT-PUBLISH-INTERPRETATION",
+    label: "Publish the Teacher-confirmed Mastery Interpretation",
+    targetObjectId: "INS-OBJ-EVIDENCE",
+    outputFieldIds: [
+      "INS-EVIDENCE-F-STUDENT-VISIBLE-AT",
+      "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+      "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: evidenceTeacherPermissions,
+    transition: { from: "TEACHER_CONFIRMED", to: "STUDENT_VISIBLE" },
+    failureResults: ["PERMISSION_DENIED", "TEACHER_CONFIRMATION_REQUIRED", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "INS-ACT-READ-CONFIRMED-EVIDENCE",
+    label: "Read Confirmed Evidence for Authorized Coordination",
+    targetObjectId: "INS-OBJ-EVIDENCE",
+    inputFieldIds: ["INS-EVIDENCE-F-ID"],
+    outputFieldIds: [
+      "INS-EVIDENCE-F-ID",
+      "INS-EVIDENCE-F-STUDENT-REF",
+      "INS-EVIDENCE-F-STAGE",
+      "INS-EVIDENCE-F-KNOWLEDGE-POINT-REF",
+      "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION",
+      "INS-EVIDENCE-F-RESULT",
+      "INS-EVIDENCE-F-ERROR-TYPE",
+      "INS-EVIDENCE-F-WEIGHT",
+      "INS-EVIDENCE-F-VALIDITY",
+      "INS-EVIDENCE-F-TEACHER-CONFIRMATION",
+      "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+      "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    ],
+    writes: false,
+    permissions: teacherAndHomeroomReadPermissions,
+  }),
+  action({
+    id: "INS-ACT-VIEW-MASTERY",
+    label: "View My Teacher-confirmed Mastery Interpretation",
+    targetObjectId: "INS-OBJ-EVIDENCE",
+    inputFieldIds: ["INS-EVIDENCE-F-STUDENT-REF"],
+    outputFieldIds: [
+      "INS-EVIDENCE-F-STUDENT-REF",
+      "INS-EVIDENCE-F-RESULT",
+      "INS-EVIDENCE-F-MASTERY-INTERPRETATION",
+      "INS-EVIDENCE-F-STUDENT-VISIBLE-AT",
+    ],
+    writes: false,
+    permissions: [
+      permission("ALLOW", "ROLE-STUDENT", "the student reads only the student's own teacher-confirmed interpretation after its release time"),
+      permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to student evidence or mastery interpretation"),
+    ],
+    failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "NOT_TEACHER_CONFIRMED", "NOT_YET_VISIBLE"],
+  }),
+];
+
+const evidenceModule = moduleFact({
+  id: "INS-001",
+  phase: PHASE.FIRST,
+  priority: "P0",
+  title: "Evidence and Mastery Interpretation",
+  objective: "Preserve versioned evidence lineage and require subject-teacher confirmation before a mastery interpretation becomes student-visible",
+  entryConditions: ["a published result or confirmed correction provides an immutable source version"],
+  exitConditions: ["the evidence remains a candidate, becomes teacher-confirmed and student-visible, or is versioned as stale with history preserved"],
+  baselineDecisionIds: ["BASE-003", "BASE-007", "BASE-008", "BASE-010"],
+  nfrIds: ["NFR-006", "NFR-008"],
+  objects: [object(
+    "INS-OBJ-EVIDENCE",
+    "Evidence and Mastery Interpretation Version",
+    {
+      dataSubject: "STUDENT_EVIDENCE_AND_MASTERY",
+      controlSubject: "SCHOOL",
+      producerRef: "SYSTEM",
+      ownerRef: "DUTY-SUBJECT-TEACHER",
+      confirmerRef: "DUTY-SUBJECT-TEACHER",
+      stewardRef: "DUTY-SUBJECT-TEACHER",
+    },
+    ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "STALE"],
+    evidenceFields,
+    "INS-EVIDENCE-F-ID",
+    {
+      sensitivityId: "S3",
+      readMode: "STUDENT_TIMED_RELEASE",
+      lineageBindings: [
+        {
+          refFieldId: "INS-EVIDENCE-F-SOURCE-RESULT-REF",
+          versionFieldId: "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
+          targetObjectId: "PUB-OBJ-RESULT",
+          targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+        },
+        {
+          refFieldId: "INS-EVIDENCE-F-SOURCE-CORRECTION-REF",
+          versionFieldId: "INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION",
+          targetObjectId: "CORR-OBJ-ATTEMPT",
+          targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        },
+        {
+          refFieldId: "INS-EVIDENCE-F-KNOWLEDGE-POINT-REF",
+          versionFieldId: "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION",
+          targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT",
+          targetVersionFieldId: "CURR-KP-F-ID",
+        },
+        {
+          refFieldId: "INS-EVIDENCE-F-PRIOR-EVIDENCE-REF",
+          versionFieldId: "INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION",
+          targetObjectId: "INS-OBJ-EVIDENCE",
+          targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        },
+      ],
+      readPolicies: [{
+        id: "INS-RP-STUDENT-MASTERY",
+        actionId: "INS-ACT-VIEW-MASTERY",
+        subject: { roleRef: "ROLE-STUDENT" },
+        scope: {
+          kind: "OWN_RECORD",
+          subjectFieldId: "INS-EVIDENCE-F-STUDENT-REF",
+        },
+        requiredState: "STUDENT_VISIBLE",
+        timeGates: [{
+          visibleAtFieldId: "INS-EVIDENCE-F-STUDENT-VISIBLE-AT",
+          protectedFieldIds: [
+            "INS-EVIDENCE-F-RESULT",
+            "INS-EVIDENCE-F-MASTERY-INTERPRETATION",
+          ],
+        }],
+      }],
+    },
+  )],
+  relationships: [],
+  actions: evidenceActions,
+  pages: [
+    page(
+      "INS-PAGE-EVIDENCE-REVIEW",
+      "Evidence and Mastery Review",
+      ["INS-OBJ-EVIDENCE"],
+      evidenceFields.map(({ id }) => id),
+      [
+        "INS-ACT-CONFIRM-MASTERY",
+        "INS-ACT-PUBLISH-INTERPRETATION",
+        "INS-ACT-READ-CONFIRMED-EVIDENCE",
+      ],
+    ),
+    page(
+      "INS-PAGE-STUDENT-MASTERY",
+      "Student Mastery Interpretation",
+      ["INS-OBJ-EVIDENCE"],
+      [
+        "INS-EVIDENCE-F-STUDENT-REF",
+        "INS-EVIDENCE-F-RESULT",
+        "INS-EVIDENCE-F-MASTERY-INTERPRETATION",
+        "INS-EVIDENCE-F-STUDENT-VISIBLE-AT",
+      ],
+      ["INS-ACT-VIEW-MASTERY"],
+    ),
+  ],
+});
+
+const planFields = [
+  field("PLN-PLAN-F-ID", "Improvement Plan ID"),
+  field("PLN-PLAN-F-STUDENT-REF", "Plan Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+    idempotencyRole: "OBJECT_REF",
+  }),
+  field("PLN-PLAN-F-SOURCE-DATA-ID", "Source Evidence Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PLN-PLAN-F-SOURCE-EVIDENCE-REF", "Source Evidence Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
+      targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    },
+  }),
+  field("PLN-PLAN-F-SOURCE-EVIDENCE-VERSION", "Source Evidence Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PLN-PLAN-F-GOAL", "Improvement Goal", { dataType: "TEXT" }),
+  field("PLN-PLAN-F-SUBJECT", "Improvement Subject", {
+    dataType: "ID",
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" },
+  }),
+  field("PLN-PLAN-F-KNOWLEDGE-POINT-REF", "Plan Knowledge Point Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "PLN-PLAN-F-KNOWLEDGE-POINT-VERSION",
+      targetVersionFieldId: "CURR-KP-F-ID",
+    },
+  }),
+  field("PLN-PLAN-F-KNOWLEDGE-POINT-VERSION", "Plan Knowledge Point Version", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PLN-PLAN-F-PRIORITY", "Improvement Priority", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-012" },
+  }),
+  field("PLN-PLAN-F-TASK-CONTENT", "Improvement Task Content", { dataType: "TEXT" }),
+  field("PLN-PLAN-F-WORKLOAD", "Planned Workload", { dataType: "DECIMAL" }),
+  field("PLN-PLAN-F-DUE-AT", "Plan Due Time", { dataType: "DATETIME" }),
+  field("PLN-PLAN-F-SUCCESS-CONDITION", "Plan Success Condition", { dataType: "TEXT" }),
+  field("PLN-PLAN-F-EVIDENCE-REQUIREMENT", "Completion Evidence Requirement", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-034" },
+  }),
+  field("PLN-PLAN-F-REVALIDATION-METHOD", "Plan Revalidation Method", { dataType: "TEXT" }),
+  field("PLN-PLAN-F-TEACHER-CONFIRMER-REF", "Plan Teacher Confirmer Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-TEACHER" },
+    mutability: "SYSTEM_MANAGED",
+    referenceIntegrity: "IDENTITY_ONLY",
+  }),
+  field("PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF", "Student Difficulty Feedback Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "APP-OBJ-TODO" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when a student difficulty report changes the plan",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION",
+      targetVersionFieldId: "APP-TODO-F-AGGREGATION-VERSION",
+    },
+  }),
+  field("PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION", "Student Difficulty Feedback Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when a student difficulty report changes the plan",
+  }),
+  field("PLN-PLAN-F-ADJUSTMENT-REASON", "Plan Adjustment Reason", {
+    dataType: "TEXT",
+    required: "required when plan content or workload changes",
+  }),
+  field("PLN-PLAN-F-CLOSE-REASON", "Plan Close Reason", {
+    dataType: "TEXT",
+    required: "required when the plan closes",
+  }),
+  field("PLN-PLAN-F-INVALIDATION-REF", "Plan Evaluation Invalidation Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-INVALIDATION" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when the plan evaluation enters pending reconfirmation",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "PLN-PLAN-F-INVALIDATION-VERSION",
+      targetVersionFieldId: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+    },
+  }),
+  field("PLN-PLAN-F-INVALIDATION-VERSION", "Plan Evaluation Invalidation Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when the plan evaluation enters pending reconfirmation",
+  }),
+  field("PLN-PLAN-F-EVALUATION-STATE", "Plan Evaluation State", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PLN-PLAN-F-EVALUATION-VERSION", "Plan Evaluation Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PLN-PLAN-F-PLAN-VERSION", "Improvement Plan Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const subjectSyncFields = [
+  field("PLN-SUBJECT-SYNC-F-ID", "Subject Teacher Sync Output ID"),
+  field("PLN-SUBJECT-SYNC-F-PLAN-REF", "Synced Plan Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "PLN-SUBJECT-SYNC-F-PLAN-VERSION",
+      targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+    },
+  }),
+  field("PLN-SUBJECT-SYNC-F-PLAN-VERSION", "Synced Plan Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PLN-SUBJECT-SYNC-F-SUBJECT", "Synced Subject", {
+    dataType: "ID",
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PLN-SUBJECT-SYNC-F-TEACHER-CONFIRMER-REF", "Confirmed Subject Teacher Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-TEACHER" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+  }),
+  field("PLN-SUBJECT-SYNC-F-STATUS", "Subject Teacher Sync Status", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PLN-SUBJECT-SYNC-F-OUTPUT-VERSION", "Subject Teacher Sync Output Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const homeroomCoordinationFields = [
+  field("PLN-HOMEROOM-F-ID", "Homeroom Coordination Output ID"),
+  field("PLN-HOMEROOM-F-PLAN-REF", "Coordinated Plan Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "PLN-HOMEROOM-F-PLAN-VERSION",
+      targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+    },
+  }),
+  field("PLN-HOMEROOM-F-PLAN-VERSION", "Coordinated Plan Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PLN-HOMEROOM-F-CLASS-SCOPE", "Homeroom Class Scope", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PLN-HOMEROOM-F-LOAD-SUMMARY", "Read-only Cross-subject Coordination Load", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PLN-HOMEROOM-F-STATUS", "Homeroom Coordination Status", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PLN-HOMEROOM-F-OUTPUT-VERSION", "Homeroom Coordination Output Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const planFlowPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified improvement Flow creates the candidate and explicit synchronization outputs"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot invoke internal plan materialization or synchronization directly"),
+];
+
+const planActions = [
+  action({
+    id: "PLN-ACT-CREATE-CANDIDATE",
+    label: "Create an Improvement Plan Candidate",
+    operationKind: "CREATE",
+    targetObjectId: "PLN-OBJ-PLAN",
+    outputFieldIds: [
+      "PLN-PLAN-F-ID",
+      "PLN-PLAN-F-STUDENT-REF",
+      "PLN-PLAN-F-SOURCE-DATA-ID",
+      "PLN-PLAN-F-SOURCE-EVIDENCE-REF",
+      "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
+      "PLN-PLAN-F-SUBJECT",
+      "PLN-PLAN-F-KNOWLEDGE-POINT-REF",
+      "PLN-PLAN-F-KNOWLEDGE-POINT-VERSION",
+      "PLN-PLAN-F-PRIORITY",
+      "PLN-PLAN-F-PLAN-VERSION",
+    ],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-012"] },
+    permissions: planFlowPermissions,
+    successState: "CANDIDATE",
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "creates a candidate from the teacher-confirmed evidence version without making the generated content official",
+  }),
+  action({
+    id: "PLN-ACT-CONFIRM-PLAN",
+    label: "Confirm the Subject Improvement Plan",
+    targetObjectId: "PLN-OBJ-PLAN",
+    inputFieldIds: [
+      "PLN-PLAN-F-GOAL",
+      "PLN-PLAN-F-SUBJECT",
+      "PLN-PLAN-F-KNOWLEDGE-POINT-REF",
+      "PLN-PLAN-F-KNOWLEDGE-POINT-VERSION",
+      "PLN-PLAN-F-PRIORITY",
+      "PLN-PLAN-F-TASK-CONTENT",
+      "PLN-PLAN-F-WORKLOAD",
+      "PLN-PLAN-F-DUE-AT",
+      "PLN-PLAN-F-SUCCESS-CONDITION",
+      "PLN-PLAN-F-EVIDENCE-REQUIREMENT",
+      "PLN-PLAN-F-REVALIDATION-METHOD",
+    ],
+    outputFieldIds: [
+      "PLN-PLAN-F-TEACHER-CONFIRMER-REF",
+      "PLN-PLAN-F-PLAN-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: subjectTeacherWritePermissions,
+    transition: { from: "CANDIDATE", to: "ACTIVE" },
+    failureResults: ["PERMISSION_DENIED", "MISSING_SUCCESS_CONDITION", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
+    successData: "the corresponding subject teacher confirms the goal, task, workload, due time, evidence requirement, and revalidation method",
+  }),
+  action({
+    id: "PLN-ACT-SYNC-SUBJECT-TEACHER",
+    label: "Create the Subject Teacher Plan Sync Output",
+    operationKind: "CREATE",
+    targetObjectId: "PLN-OBJ-SUBJECT-SYNC",
+    outputFieldIds: subjectSyncFields.map(({ id }) => id),
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-012"] },
+    permissions: planFlowPermissions,
+    successState: "DELIVERED",
+    failureResults: ["PERMISSION_DENIED", "SYNC_DELIVERY_FAILED", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "PLN-ACT-SYNC-HOMEROOM-COORDINATION",
+    label: "Create the Homeroom Read-only Coordination Output",
+    operationKind: "CREATE",
+    targetObjectId: "PLN-OBJ-HOMEROOM-COORDINATION",
+    outputFieldIds: homeroomCoordinationFields.map(({ id }) => id),
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-012"] },
+    permissions: planFlowPermissions,
+    successState: "AVAILABLE",
+    failureResults: ["PERMISSION_DENIED", "SYNC_DELIVERY_FAILED", "VERSION_CONFLICT"],
+    successData: "creates a distinct class-level read-only coordination output without granting plan-content mutation",
+  }),
+  action({
+    id: "PLN-ACT-ADJUST-PLAN",
+    label: "Adjust an Active Subject Improvement Plan",
+    targetObjectId: "PLN-OBJ-PLAN",
+    inputFieldIds: [
+      "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF",
+      "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION",
+      "PLN-PLAN-F-TASK-CONTENT",
+      "PLN-PLAN-F-WORKLOAD",
+      "PLN-PLAN-F-DUE-AT",
+      "PLN-PLAN-F-ADJUSTMENT-REASON",
+    ],
+    outputFieldIds: ["PLN-PLAN-F-PLAN-VERSION"],
+    risk: RISK.HIGH,
+    permissions: subjectTeacherWritePermissions,
+    transition: { from: "ACTIVE", to: "ACTIVE" },
+    failureResults: ["PERMISSION_DENIED", "ADJUSTMENT_REASON_REQUIRED", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "PLN-ACT-CLOSE-PLAN",
+    label: "Close an Improvement Plan",
+    targetObjectId: "PLN-OBJ-PLAN",
+    inputFieldIds: ["PLN-PLAN-F-CLOSE-REASON"],
+    outputFieldIds: ["PLN-PLAN-F-PLAN-VERSION"],
+    risk: RISK.HIGH,
+    permissions: subjectTeacherWritePermissions,
+    transition: { from: "ACTIVE", to: "CLOSED" },
+    failureResults: ["PERMISSION_DENIED", "CLOSE_REASON_REQUIRED", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
+    label: "Mark Plan Evaluation Pending Reconfirmation",
+    targetObjectId: "PLN-OBJ-PLAN",
+    outputFieldIds: [
+      "PLN-PLAN-F-INVALIDATION-REF",
+      "PLN-PLAN-F-INVALIDATION-VERSION",
+      "PLN-PLAN-F-EVALUATION-STATE",
+      "PLN-PLAN-F-EVALUATION-VERSION",
+      "PLN-PLAN-F-PLAN-VERSION",
+    ],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    permissions: planFlowPermissions,
+    transition: { from: "ACTIVE", to: "PENDING_RECONFIRM" },
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "records the CORR invalidation version and moves only the dependent plan evaluation to pending reconfirmation while preserving the active plan history",
+  }),
+  action({
+    id: "PLN-ACT-VIEW-HOMEROOM-COORDINATION",
+    label: "View the Read-only Homeroom Plan Coordination",
+    targetObjectId: "PLN-OBJ-HOMEROOM-COORDINATION",
+    inputFieldIds: ["PLN-HOMEROOM-F-ID"],
+    outputFieldIds: homeroomCoordinationFields.map(({ id }) => id),
+    writes: false,
+    permissions: teacherAndHomeroomReadPermissions,
+  }),
+];
+
+const planModule = moduleFact({
+  id: "PLN-001",
+  phase: PHASE.FIRST,
+  priority: "P0",
+  title: "Improvement Plans and Explicit Coordination Outputs",
+  objective: "Keep plan content under the corresponding subject teacher while producing explicit subject and homeroom coordination outputs",
+  entryConditions: ["a teacher-confirmed evidence version supports an improvement candidate"],
+  exitConditions: ["the subject teacher confirms, adjusts, or closes the plan and the Flow records distinct synchronization outputs"],
+  baselineDecisionIds: ["BASE-003", "BASE-007", "BASE-008", "BASE-010"],
+  nfrIds: ["NFR-006", "NFR-008"],
+  objects: [
+    object(
+      "PLN-OBJ-PLAN",
+      "Subject Improvement Plan Version",
+      {
+        dataSubject: "STUDENT_IMPROVEMENT_PLAN",
+        controlSubject: "SCHOOL",
+        producerRef: "SYSTEM",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-SUBJECT-TEACHER",
+      },
+      ["CANDIDATE", "ACTIVE", "CLOSED", "PENDING_RECONFIRM"],
+      planFields,
+      "PLN-PLAN-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [
+          {
+            refFieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-REF",
+            versionFieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
+            targetObjectId: "INS-OBJ-EVIDENCE",
+            targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+          },
+          {
+            refFieldId: "PLN-PLAN-F-KNOWLEDGE-POINT-REF",
+            versionFieldId: "PLN-PLAN-F-KNOWLEDGE-POINT-VERSION",
+            targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT",
+            targetVersionFieldId: "CURR-KP-F-ID",
+          },
+          {
+            refFieldId: "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF",
+            versionFieldId: "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION",
+            targetObjectId: "APP-OBJ-TODO",
+            targetVersionFieldId: "APP-TODO-F-AGGREGATION-VERSION",
+          },
+          {
+            refFieldId: "PLN-PLAN-F-INVALIDATION-REF",
+            versionFieldId: "PLN-PLAN-F-INVALIDATION-VERSION",
+            targetObjectId: "CORR-OBJ-INVALIDATION",
+            targetVersionFieldId: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+          },
+        ],
+      },
+    ),
+    object(
+      "PLN-OBJ-SUBJECT-SYNC",
+      "Subject Teacher Plan Sync Output",
+      {
+        dataSubject: "SUBJECT_PLAN_SYNC",
+        controlSubject: "SCHOOL",
+        producerRef: "SYSTEM",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-SUBJECT-TEACHER",
+      },
+      ["DELIVERED"],
+      subjectSyncFields,
+      "PLN-SUBJECT-SYNC-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [{
+          refFieldId: "PLN-SUBJECT-SYNC-F-PLAN-REF",
+          versionFieldId: "PLN-SUBJECT-SYNC-F-PLAN-VERSION",
+          targetObjectId: "PLN-OBJ-PLAN",
+          targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+        }],
+      },
+    ),
+    object(
+      "PLN-OBJ-HOMEROOM-COORDINATION",
+      "Homeroom Cross-subject Coordination Output",
+      {
+        dataSubject: "HOMEROOM_PLAN_COORDINATION",
+        controlSubject: "SCHOOL",
+        producerRef: "SYSTEM",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-HOMEROOM",
+      },
+      ["AVAILABLE"],
+      homeroomCoordinationFields,
+      "PLN-HOMEROOM-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [{
+          refFieldId: "PLN-HOMEROOM-F-PLAN-REF",
+          versionFieldId: "PLN-HOMEROOM-F-PLAN-VERSION",
+          targetObjectId: "PLN-OBJ-PLAN",
+          targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+        }],
+      },
+    ),
+  ],
+  relationships: [
+    {
+      id: "PLN-REL-SUBJECT-SYNC-PLAN",
+      fromObjectId: "PLN-OBJ-SUBJECT-SYNC",
+      toObjectId: "PLN-OBJ-PLAN",
+      type: "DERIVED_FROM",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "mark the sync output stale and retain its referenced plan version",
+    },
+    {
+      id: "PLN-REL-HOMEROOM-PLAN",
+      fromObjectId: "PLN-OBJ-HOMEROOM-COORDINATION",
+      toObjectId: "PLN-OBJ-PLAN",
+      type: "APPEARS_IN",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_CONTEXT",
+      onSourceInvalidation: "mark only the coordination output stale without granting plan mutation",
+    },
+  ],
+  actions: planActions,
+  pages: [
+    page(
+      "PLN-PAGE-PLAN",
+      "Subject Improvement Plan Workspace",
+      ["PLN-OBJ-PLAN"],
+      planFields.map(({ id }) => id),
+      ["PLN-ACT-CONFIRM-PLAN", "PLN-ACT-ADJUST-PLAN", "PLN-ACT-CLOSE-PLAN"],
+    ),
+    page(
+      "PLN-PAGE-HOMEROOM",
+      "Read-only Homeroom Plan Coordination",
+      ["PLN-OBJ-HOMEROOM-COORDINATION"],
+      homeroomCoordinationFields.map(({ id }) => id),
+      ["PLN-ACT-VIEW-HOMEROOM-COORDINATION"],
+    ),
+  ],
+});
+
+const studentTodoFields = [
+  field("APP-TODO-F-ID", "Student Todo Aggregation ID"),
+  field("APP-TODO-F-STUDENT-REF", "Todo Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+    idempotencyRole: "OBJECT_REF",
+  }),
+  field("APP-TODO-F-SOURCE-PLAN-REF", "Source Improvement Plan Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "APP-TODO-F-SOURCE-PLAN-VERSION",
+      targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+    },
+  }),
+  field("APP-TODO-F-SOURCE-PLAN-VERSION", "Source Improvement Plan Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("APP-TODO-F-SOURCE-ASSIGNMENT-REF", "Source Assignment Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-ASSIGNMENT" },
+    mutability: "IMMUTABLE",
+    required: "required when the todo links to homework",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
+      targetVersionFieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    },
+  }),
+  field("APP-TODO-F-SOURCE-ASSIGNMENT-VERSION", "Source Assignment Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    required: "required when the todo links to homework",
+  }),
+  field("APP-TODO-F-TASK-DEEP-LINK", "Task Deep Link", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    releaseRequirement: {
+      readPolicyId: "APP-RP-STUDENT-TODO",
+      requiredState: "READY",
+      visibleAtFieldId: "APP-TODO-F-STUDENT-VISIBLE-AT",
+    },
+  }),
+  field("APP-TODO-F-LOCAL-PROGRESS", "Student Local Progress", {
+    dataType: "JSON",
+    releaseRequirement: {
+      readPolicyId: "APP-RP-STUDENT-TODO",
+      requiredState: "READY",
+      visibleAtFieldId: "APP-TODO-F-STUDENT-VISIBLE-AT",
+    },
+  }),
+  field("APP-TODO-F-COMPLETION-EVIDENCE", "Student Completion Evidence", {
+    dataType: "JSON",
+    releaseRequirement: {
+      readPolicyId: "APP-RP-STUDENT-TODO",
+      requiredState: "READY",
+      visibleAtFieldId: "APP-TODO-F-STUDENT-VISIBLE-AT",
+    },
+  }),
+  field("APP-TODO-F-DIFFICULTY-FEEDBACK", "Student Difficulty Feedback", {
+    dataType: "TEXT",
+    releaseRequirement: {
+      readPolicyId: "APP-RP-STUDENT-TODO",
+      requiredState: "READY",
+      visibleAtFieldId: "APP-TODO-F-STUDENT-VISIBLE-AT",
+    },
+  }),
+  field("APP-TODO-F-STUDENT-VISIBLE-AT", "Todo Student Visible At", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("APP-TODO-F-AGGREGATION-VERSION", "Todo Aggregation Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const studentTodoPermissions = [
+  permission("ALLOW", "ROLE-STUDENT", "the student reads or updates only local progress, completion evidence, and difficulty feedback on the student's own todo"),
+  permission("DENY", "DUTY-SUBJECT-TEACHER", "a teacher cannot submit or rewrite student-local execution state on the student's behalf"),
+  permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to student todo execution detail"),
+];
+
+const todoFlowPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified Flow materializes or refreshes only source-pinned todo links"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot invoke internal todo aggregation directly"),
+];
+
+const studentTodoActions = [
+  action({
+    id: "APP-ACT-CREATE-TODO-LINK",
+    label: "Create a Source-pinned Student Todo Link",
+    operationKind: "CREATE",
+    targetObjectId: "APP-OBJ-TODO",
+    outputFieldIds: [
+      "APP-TODO-F-ID",
+      "APP-TODO-F-STUDENT-REF",
+      "APP-TODO-F-SOURCE-PLAN-REF",
+      "APP-TODO-F-SOURCE-PLAN-VERSION",
+      "APP-TODO-F-TASK-DEEP-LINK",
+      "APP-TODO-F-STUDENT-VISIBLE-AT",
+      "APP-TODO-F-AGGREGATION-VERSION",
+    ],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-012"] },
+    permissions: todoFlowPermissions,
+    successState: "READY",
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "creates only navigation and local execution state while PLN and HW retain task ownership",
+  }),
+  action({
+    id: "APP-ACT-REFRESH-TODOS",
+    label: "Refresh Student Todo Aggregation",
+    targetObjectId: "APP-OBJ-TODO",
+    outputFieldIds: [
+      "APP-TODO-F-TASK-DEEP-LINK",
+      "APP-TODO-F-AGGREGATION-VERSION",
+    ],
+    risk: RISK.HIGH,
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-014"] },
+    permissions: todoFlowPermissions,
+    transition: { from: "READY", to: "READY" },
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "APP-ACT-VIEW-TODOS",
+    label: "View My Student Todo Aggregation",
+    targetObjectId: "APP-OBJ-TODO",
+    inputFieldIds: ["APP-TODO-F-STUDENT-REF"],
+    outputFieldIds: [
+      "APP-TODO-F-STUDENT-REF",
+      "APP-TODO-F-TASK-DEEP-LINK",
+      "APP-TODO-F-LOCAL-PROGRESS",
+      "APP-TODO-F-COMPLETION-EVIDENCE",
+      "APP-TODO-F-DIFFICULTY-FEEDBACK",
+      "APP-TODO-F-STUDENT-VISIBLE-AT",
+    ],
+    writes: false,
+    permissions: [
+      permission("ALLOW", "ROLE-STUDENT", "the student reads only the student's own released todo aggregation"),
+      permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to student todo execution detail"),
+    ],
+    failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "NOT_YET_VISIBLE"],
+  }),
+  action({
+    id: "APP-ACT-UPDATE-LOCAL-PROGRESS",
+    label: "Update My Local Todo Progress and Evidence",
+    targetObjectId: "APP-OBJ-TODO",
+    inputFieldIds: [
+      "APP-TODO-F-LOCAL-PROGRESS",
+      "APP-TODO-F-COMPLETION-EVIDENCE",
+      "APP-TODO-F-DIFFICULTY-FEEDBACK",
+    ],
+    outputFieldIds: [
+      "APP-TODO-F-LOCAL-PROGRESS",
+      "APP-TODO-F-COMPLETION-EVIDENCE",
+      "APP-TODO-F-DIFFICULTY-FEEDBACK",
+      "APP-TODO-F-AGGREGATION-VERSION",
+    ],
+    permissions: studentTodoPermissions,
+    transition: { from: "READY", to: "READY" },
+  }),
+];
+
+const studentExecutionModule = moduleFact({
+  id: "APP-001",
+  phase: PHASE.FIRST,
+  priority: "P0",
+  title: "Student Todo Aggregation and Local Execution",
+  objective: "Aggregate deep links and local execution state without becoming a second homework or improvement-plan owner",
+  entryConditions: ["an authorized source assignment or teacher-confirmed plan version can be resolved"],
+  exitConditions: ["the student can navigate, record local progress, attach completion evidence, and report difficulty against pinned sources"],
+  baselineDecisionIds: ["BASE-003", "BASE-008", "BASE-010"],
+  nfrIds: ["NFR-005", "NFR-008"],
+  objects: [object(
+    "APP-OBJ-TODO",
+    "Student Todo Link and Local Execution State",
+    {
+      dataSubject: "STUDENT_LOCAL_TASK_EXECUTION",
+      controlSubject: "SCHOOL",
+      producerRef: "SYSTEM",
+      ownerRef: "ROLE-STUDENT",
+      confirmerRef: "DUTY-SUBJECT-TEACHER",
+      stewardRef: "ROLE-STUDENT",
+    },
+    ["READY"],
+    studentTodoFields,
+    "APP-TODO-F-ID",
+    {
+      sensitivityId: "S3",
+      readMode: "STUDENT_TIMED_RELEASE",
+      lineageBindings: [
+        {
+          refFieldId: "APP-TODO-F-SOURCE-PLAN-REF",
+          versionFieldId: "APP-TODO-F-SOURCE-PLAN-VERSION",
+          targetObjectId: "PLN-OBJ-PLAN",
+          targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+        },
+        {
+          refFieldId: "APP-TODO-F-SOURCE-ASSIGNMENT-REF",
+          versionFieldId: "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
+          targetObjectId: "HW-OBJ-ASSIGNMENT",
+          targetVersionFieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+        },
+      ],
+      readPolicies: [{
+        id: "APP-RP-STUDENT-TODO",
+        actionId: "APP-ACT-VIEW-TODOS",
+        subject: { roleRef: "ROLE-STUDENT" },
+        scope: {
+          kind: "OWN_RECORD",
+          subjectFieldId: "APP-TODO-F-STUDENT-REF",
+        },
+        requiredState: "READY",
+        timeGates: [{
+          visibleAtFieldId: "APP-TODO-F-STUDENT-VISIBLE-AT",
+          protectedFieldIds: [
+            "APP-TODO-F-TASK-DEEP-LINK",
+            "APP-TODO-F-LOCAL-PROGRESS",
+            "APP-TODO-F-COMPLETION-EVIDENCE",
+            "APP-TODO-F-DIFFICULTY-FEEDBACK",
+          ],
+        }],
+      }],
+    },
+  )],
+  relationships: [],
+  actions: studentTodoActions,
+  pages: [page(
+    "APP-PAGE-TODOS",
+    "Student Todo Execution",
+    ["APP-OBJ-TODO"],
+    [
+      "APP-TODO-F-STUDENT-REF",
+      "APP-TODO-F-TASK-DEEP-LINK",
+      "APP-TODO-F-LOCAL-PROGRESS",
+      "APP-TODO-F-COMPLETION-EVIDENCE",
+      "APP-TODO-F-DIFFICULTY-FEEDBACK",
+      "APP-TODO-F-STUDENT-VISIBLE-AT",
+    ],
+    ["APP-ACT-VIEW-TODOS", "APP-ACT-UPDATE-LOCAL-PROGRESS"],
+  )],
+});
+
+const correctionAttemptFields = [
+  field("CORR-ATTEMPT-F-ID", "Correction Attempt ID"),
+  field("CORR-ATTEMPT-F-STUDENT-REF", "Correction Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+    idempotencyRole: "OBJECT_REF",
+  }),
+  field("CORR-ATTEMPT-F-SOURCE-DATA-ID", "Correction Source Result Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("CORR-ATTEMPT-F-SOURCE-RESULT-REF", "Correction Source Result Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+  }),
+  field("CORR-ATTEMPT-F-SOURCE-RESULT-VERSION", "Correction Source Result Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("CORR-ATTEMPT-F-CORRECTION-ANSWER", "Student Correction Answer", { dataType: "JSON" }),
+  field("CORR-ATTEMPT-F-TEACHER-JUDGMENT", "Teacher Correction Judgment", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-028" },
+  }),
+  field("CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF", "Correction Teacher Confirmer Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-TEACHER" },
+    mutability: "SYSTEM_MANAGED",
+    referenceIntegrity: "IDENTITY_ONLY",
+  }),
+  field("CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT", "Repeated Correction Count", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("CORR-ATTEMPT-F-OVERDUE-HANDLING", "Correction Overdue Handling", {
+    dataType: "TEXT",
+    required: "required when the correction is overdue",
+  }),
+  field("CORR-ATTEMPT-F-CORRECTION-VERSION", "Correction Attempt Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const invalidationFields = [
+  field("CORR-INVALIDATION-F-ID", "Correction Invalidation Record ID"),
+  field("CORR-INVALIDATION-F-SOURCE-DATA-ID", "Invalidated Source Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("CORR-INVALIDATION-F-SOURCE-RESULT-REF", "Invalidated Source Result Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "CORR-INVALIDATION-F-SOURCE-RESULT-VERSION",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+  }),
+  field("CORR-INVALIDATION-F-SOURCE-RESULT-VERSION", "Invalidated Source Result Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("CORR-INVALIDATION-F-SOURCE-DECISION-REF", "Invalidated Source Decision Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "CORR-INVALIDATION-F-SOURCE-DECISION-VERSION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
+  }),
+  field("CORR-INVALIDATION-F-SOURCE-DECISION-VERSION", "Invalidated Source Decision Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("CORR-INVALIDATION-F-TARGET-KINDS", "Invalidation Target Kinds", {
+    dataType: "STRING_ARRAY",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must contain only EVIDENCE, MASTERY_INTERPRETATION, IMPROVEMENT_CANDIDATE, PLAN_EVALUATION, REPORT_INTERPRETATION, and LEARNING_PATH_EXPLANATION",
+  }),
+  field("CORR-INVALIDATION-F-TARGET-TRANSITIONS", "Per-target Invalidation Transitions", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "each target kind must enter STALE, INVALIDATED, or PENDING_RECONFIRM independently",
+  }),
+  field("CORR-INVALIDATION-F-TARGET-VERSIONS", "Invalidation Target Versions", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "each target records its source version, target version, object-level outcome, and retry provenance",
+  }),
+  field("CORR-INVALIDATION-F-HISTORY-PRESERVATION", "Invalidation History Preservation", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must be RETAIN_ALL_PRIOR_VERSIONS",
+  }),
+  field("CORR-INVALIDATION-F-INVALIDATION-VERSION", "Invalidation Record Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const correctionStudentPermissions = [
+  permission("ALLOW", "ROLE-STUDENT", "the student submits or resubmits only the student's own correction answer against a visible result version"),
+  permission("DENY", "DUTY-SUBJECT-TEACHER", "a teacher cannot submit a correction answer on the student's behalf"),
+  permission("DENY", "AI", "AI may suggest a correction but cannot submit it or confirm the formal judgment"),
+  permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to correction answers"),
+];
+
+const correctionTeacherPermissions = [
+  ...subjectTeacherWritePermissions,
+  permission("DENY", "AI", "AI may suggest a judgment but cannot confirm the formal correction decision"),
+];
+
+const invalidationFlowPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified correction Flow records the object-level invalidation chain and retry provenance"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot bypass the correction judgment to create invalidation records directly"),
+];
+
+const correctionActions = [
+  action({
+    id: "CORR-ACT-SUBMIT",
+    label: "Submit a Correction Answer",
+    operationKind: "CREATE",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    inputFieldIds: [
+      "CORR-ATTEMPT-F-STUDENT-REF",
+      "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
+      "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
+      "CORR-ATTEMPT-F-CORRECTION-ANSWER",
+    ],
+    outputFieldIds: [
+      "CORR-ATTEMPT-F-ID",
+      "CORR-ATTEMPT-F-SOURCE-DATA-ID",
+      "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
+      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    ],
+    permissions: correctionStudentPermissions,
+    successState: "SUBMITTED",
+  }),
+  action({
+    id: "CORR-ACT-CONFIRM-JUDGMENT",
+    label: "Confirm the Formal Correction Judgment",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    inputFieldIds: ["CORR-ATTEMPT-F-TEACHER-JUDGMENT"],
+    outputFieldIds: [
+      "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+      "CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF",
+      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: correctionTeacherPermissions,
+    transition: { from: "SUBMITTED", to: "TEACHER_CONFIRMED" },
+    failureResults: ["PERMISSION_DENIED", "STALE_RESULT_VERSION", "VERSION_CONFLICT"],
+    successData: "the corresponding subject teacher confirms the official correction judgment; AI suggestions remain non-authoritative",
+  }),
+  action({
+    id: "CORR-ACT-RESUBMIT",
+    label: "Resubmit a Repeated Correction",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
+    outputFieldIds: [
+      "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
+      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    ],
+    permissions: correctionStudentPermissions,
+    transition: { from: "TEACHER_CONFIRMED", to: "SUBMITTED" },
+  }),
+  action({
+    id: "CORR-ACT-HANDLE-OVERDUE",
+    label: "Record Correction Overdue Handling",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    inputFieldIds: ["CORR-ATTEMPT-F-OVERDUE-HANDLING"],
+    outputFieldIds: [
+      "CORR-ATTEMPT-F-OVERDUE-HANDLING",
+      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: correctionTeacherPermissions,
+    transition: { from: "SUBMITTED", to: "SUBMITTED" },
+  }),
+  action({
+    id: "CORR-ACT-RECORD-INVALIDATION",
+    label: "Record the Result Correction Invalidation Chain",
+    operationKind: "CREATE",
+    targetObjectId: "CORR-OBJ-INVALIDATION",
+    outputFieldIds: invalidationFields.map(({ id }) => id),
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    permissions: invalidationFlowPermissions,
+    successState: "RECORDED",
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "records old result and decision versions, per-target new versions and states, retry provenance, and RETAIN_ALL_PRIOR_VERSIONS",
+  }),
+];
+
+const correctionModule = moduleFact({
+  id: "CORR-001",
+  phase: PHASE.FIRST,
+  priority: "P0",
+  title: "Student Correction and Versioned Invalidation",
+  objective: "Keep correction answers student-submitted, judgments teacher-confirmed, and every dependent invalidation versioned with history preserved",
+  entryConditions: ["the student can reference a visible published result version"],
+  exitConditions: ["the correction has a formal teacher judgment and every dependency has an object-level invalidation outcome"],
+  baselineDecisionIds: ["BASE-003", "BASE-007", "BASE-008", "BASE-010"],
+  nfrIds: ["NFR-006", "NFR-008"],
+  objects: [
+    object(
+      "CORR-OBJ-ATTEMPT",
+      "Student Correction Attempt Version",
+      {
+        dataSubject: "STUDENT_CORRECTION_ANSWER",
+        controlSubject: "SCHOOL",
+        producerRef: "ROLE-STUDENT",
+        ownerRef: "ROLE-STUDENT",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-SUBJECT-TEACHER",
+      },
+      ["SUBMITTED", "TEACHER_CONFIRMED"],
+      correctionAttemptFields,
+      "CORR-ATTEMPT-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [{
+          refFieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
+          versionFieldId: "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
+          targetObjectId: "PUB-OBJ-RESULT",
+          targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+        }],
+      },
+    ),
+    object(
+      "CORR-OBJ-INVALIDATION",
+      "Result Correction Invalidation Record",
+      {
+        dataSubject: "DERIVED_LEARNING_INTERPRETATION_INVALIDATION",
+        controlSubject: "SCHOOL",
+        producerRef: "SYSTEM",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "ROLE-ACADEMIC",
+      },
+      ["RECORDED"],
+      invalidationFields,
+      "CORR-INVALIDATION-F-ID",
+      {
+        sensitivityId: "S3",
+        targetKindContract: [
+          "EVIDENCE",
+          "MASTERY_INTERPRETATION",
+          "IMPROVEMENT_CANDIDATE",
+          "PLAN_EVALUATION",
+          "REPORT_INTERPRETATION",
+          "LEARNING_PATH_EXPLANATION",
+        ],
+        targetStateContract: ["STALE", "INVALIDATED", "PENDING_RECONFIRM"],
+        historyPreservation: "RETAIN_ALL_PRIOR_VERSIONS",
+        lineageBindings: [
+          {
+            refFieldId: "CORR-INVALIDATION-F-SOURCE-RESULT-REF",
+            versionFieldId: "CORR-INVALIDATION-F-SOURCE-RESULT-VERSION",
+            targetObjectId: "PUB-OBJ-RESULT",
+            targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+          },
+          {
+            refFieldId: "CORR-INVALIDATION-F-SOURCE-DECISION-REF",
+            versionFieldId: "CORR-INVALIDATION-F-SOURCE-DECISION-VERSION",
+            targetObjectId: "GRD-OBJ-DECISION",
+            targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+          },
+        ],
+      },
+    ),
+  ],
+  relationships: [],
+  actions: correctionActions,
+  pages: [page(
+    "CORR-PAGE-ATTEMPT",
+    "Student Correction and Teacher Judgment",
+    ["CORR-OBJ-ATTEMPT"],
+    correctionAttemptFields.map(({ id }) => id),
+    [
+      "CORR-ACT-SUBMIT",
+      "CORR-ACT-CONFIRM-JUDGMENT",
+      "CORR-ACT-RESUBMIT",
+      "CORR-ACT-HANDLE-OVERDUE",
+    ],
+  )],
+});
+
+const studentProfileViewFields = [
+  field("STU-PROFILE-F-ID", "Student Management Profile View ID"),
+  field("STU-PROFILE-F-STUDENT-REF", "Managed Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+  }),
+  field("STU-PROFILE-F-RESULT-DATA-ID", "Source Result Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("STU-PROFILE-F-RESULT-REF", "Source Result Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "STU-PROFILE-F-RESULT-VERSION",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+  }),
+  field("STU-PROFILE-F-RESULT-VERSION", "Source Result Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("STU-PROFILE-F-EVIDENCE-DATA-ID", "Source Evidence Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("STU-PROFILE-F-EVIDENCE-REF", "Source Evidence Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "STU-PROFILE-F-EVIDENCE-VERSION",
+      targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    },
+  }),
+  field("STU-PROFILE-F-EVIDENCE-VERSION", "Source Evidence Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("STU-PROFILE-F-PLAN-DATA-ID", "Source Plan Data ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("STU-PROFILE-F-PLAN-REF", "Source Plan Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "STU-PROFILE-F-PLAN-VERSION",
+      targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+    },
+  }),
+  field("STU-PROFILE-F-PLAN-VERSION", "Source Plan Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("STU-PROFILE-F-QUERY-DEFINITION", "Student Profile Query Definition", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("STU-PROFILE-F-COLUMN-DEFINITION", "Student Profile Column Definition", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("STU-PROFILE-F-SAVED-VIEW-DEFINITION", "Saved Student Profile View Definition", { dataType: "JSON" }),
+  field("STU-PROFILE-F-PROFILE-VERSION", "Student Profile View Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const studentAttentionFields = [
+  field("STU-ATTENTION-F-ID", "Student Attention Record ID"),
+  field("STU-ATTENTION-F-PROFILE-REF", "Student Profile View Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "STU-OBJ-PROFILE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    versionBinding: {
+      versionFieldId: "STU-ATTENTION-F-PROFILE-VERSION",
+      targetVersionFieldId: "STU-PROFILE-F-PROFILE-VERSION",
+    },
+  }),
+  field("STU-ATTENTION-F-PROFILE-VERSION", "Student Profile View Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("STU-ATTENTION-F-KIND", "Student Attention Event Kind"),
+  field("STU-ATTENTION-F-FOLLOW-UP-NOTE", "Student Attention Follow-up Note", { dataType: "TEXT" }),
+  field("STU-ATTENTION-F-VERSION", "Student Attention Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
+const studentProfileFlowPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified aggregation Flow builds only source-pinned profile view definitions"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot invoke internal student profile materialization directly"),
+];
+
+const studentProfileActions = [
+  action({
+    id: "STU-ACT-BUILD-PROFILE",
+    label: "Build a Source-pinned Student Management Profile",
+    operationKind: "CREATE",
+    targetObjectId: "STU-OBJ-PROFILE",
+    outputFieldIds: [
+      "STU-PROFILE-F-ID",
+      "STU-PROFILE-F-STUDENT-REF",
+      "STU-PROFILE-F-RESULT-DATA-ID",
+      "STU-PROFILE-F-RESULT-REF",
+      "STU-PROFILE-F-RESULT-VERSION",
+      "STU-PROFILE-F-EVIDENCE-DATA-ID",
+      "STU-PROFILE-F-EVIDENCE-REF",
+      "STU-PROFILE-F-EVIDENCE-VERSION",
+      "STU-PROFILE-F-PLAN-DATA-ID",
+      "STU-PROFILE-F-PLAN-REF",
+      "STU-PROFILE-F-PLAN-VERSION",
+      "STU-PROFILE-F-QUERY-DEFINITION",
+      "STU-PROFILE-F-COLUMN-DEFINITION",
+      "STU-PROFILE-F-PROFILE-VERSION",
+    ],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-014"] },
+    permissions: studentProfileFlowPermissions,
+    successState: "READY",
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "builds only query, column, view, and pinned lineage definitions without copying source score, evidence, or plan content",
+  }),
+  action({
+    id: "STU-ACT-OPEN-PROFILE",
+    label: "Open the Authorized Student Management Profile",
+    targetObjectId: "STU-OBJ-PROFILE",
+    inputFieldIds: ["STU-PROFILE-F-ID"],
+    outputFieldIds: studentProfileViewFields.map(({ id }) => id),
+    writes: false,
+    permissions: teacherAndHomeroomReadPermissions,
+  }),
+  action({
+    id: "STU-ACT-SAVE-VIEW",
+    label: "Save a Student Profile View Definition",
+    targetObjectId: "STU-OBJ-PROFILE",
+    inputFieldIds: ["STU-PROFILE-F-SAVED-VIEW-DEFINITION"],
+    outputFieldIds: [
+      "STU-PROFILE-F-SAVED-VIEW-DEFINITION",
+      "STU-PROFILE-F-PROFILE-VERSION",
+    ],
+    permissions: subjectTeacherWritePermissions,
+    transition: { from: "READY", to: "READY" },
+  }),
+  action({
+    id: "STU-ACT-CREATE-ATTENTION",
+    label: "Create a Student Attention Record",
+    operationKind: "CREATE",
+    targetObjectId: "STU-OBJ-ATTENTION",
+    inputFieldIds: [
+      "STU-ATTENTION-F-PROFILE-REF",
+      "STU-ATTENTION-F-PROFILE-VERSION",
+      "STU-ATTENTION-F-KIND",
+      "STU-ATTENTION-F-FOLLOW-UP-NOTE",
+    ],
+    outputFieldIds: ["STU-ATTENTION-F-ID", "STU-ATTENTION-F-VERSION"],
+    permissions: subjectTeacherWritePermissions,
+    successState: "OPEN",
+  }),
+  action({
+    id: "STU-ACT-VIEW-ATTENTION",
+    label: "View Student Attention Records",
+    targetObjectId: "STU-OBJ-ATTENTION",
+    inputFieldIds: ["STU-ATTENTION-F-ID"],
+    outputFieldIds: studentAttentionFields.map(({ id }) => id),
+    writes: false,
+    permissions: teacherAndHomeroomReadPermissions,
+  }),
+];
+
+const studentProfileModule = moduleFact({
+  id: "STU-001",
+  phase: PHASE.FIRST,
+  priority: "P0",
+  title: "Source-pinned Student Management Profile",
+  objective: "Aggregate authorized profile view definitions and attention records without owning a second score, evidence, or plan fact",
+  entryConditions: ["the authorized teacher scope resolves source result, evidence, plan, and todo versions"],
+  exitConditions: ["the profile and attention records retain exact source lineage and read-only homeroom coordination"],
+  baselineDecisionIds: ["BASE-003", "BASE-008", "BASE-010"],
+  nfrIds: ["NFR-008"],
+  objects: [
+    object(
+      "STU-OBJ-PROFILE",
+      "Student Profile Query Column and Saved View Definition",
+      {
+        dataSubject: "STUDENT_MANAGEMENT_VIEW_DEFINITION",
+        controlSubject: "SCHOOL",
+        producerRef: "SYSTEM",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-HOMEROOM",
+      },
+      ["READY"],
+      studentProfileViewFields,
+      "STU-PROFILE-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [
+          {
+            refFieldId: "STU-PROFILE-F-RESULT-REF",
+            versionFieldId: "STU-PROFILE-F-RESULT-VERSION",
+            targetObjectId: "PUB-OBJ-RESULT",
+            targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+          },
+          {
+            refFieldId: "STU-PROFILE-F-EVIDENCE-REF",
+            versionFieldId: "STU-PROFILE-F-EVIDENCE-VERSION",
+            targetObjectId: "INS-OBJ-EVIDENCE",
+            targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+          },
+          {
+            refFieldId: "STU-PROFILE-F-PLAN-REF",
+            versionFieldId: "STU-PROFILE-F-PLAN-VERSION",
+            targetObjectId: "PLN-OBJ-PLAN",
+            targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
+          },
+        ],
+      },
+    ),
+    object(
+      "STU-OBJ-ATTENTION",
+      "Student Attention and Follow-up Record",
+      {
+        dataSubject: "STUDENT_ATTENTION_COORDINATION",
+        controlSubject: "SCHOOL",
+        producerRef: "DUTY-SUBJECT-TEACHER",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "DUTY-HOMEROOM",
+      },
+      ["OPEN"],
+      studentAttentionFields,
+      "STU-ATTENTION-F-ID",
+      {
+        sensitivityId: "S3",
+        lineageBindings: [{
+          refFieldId: "STU-ATTENTION-F-PROFILE-REF",
+          versionFieldId: "STU-ATTENTION-F-PROFILE-VERSION",
+          targetObjectId: "STU-OBJ-PROFILE",
+          targetVersionFieldId: "STU-PROFILE-F-PROFILE-VERSION",
+        }],
+      },
+    ),
+  ],
+  relationships: [{
+    id: "STU-REL-ATTENTION-PROFILE",
+    fromObjectId: "STU-OBJ-ATTENTION",
+    toObjectId: "STU-OBJ-PROFILE",
+    type: "REFERENCES",
+    cardinality: "MANY_TO_ONE",
+    ownershipScope: "SAME_STUDENT",
+    onSourceInvalidation: "retain attention history and mark the source profile view version stale",
+  }],
+  actions: studentProfileActions,
+  pages: [
+    page(
+      "STU-PAGE-PROFILE",
+      "Authorized Student Management Profile",
+      ["STU-OBJ-PROFILE"],
+      studentProfileViewFields.map(({ id }) => id),
+      ["STU-ACT-OPEN-PROFILE", "STU-ACT-SAVE-VIEW"],
+    ),
+    page(
+      "STU-PAGE-ATTENTION",
+      "Student Attention Follow-up Workspace",
+      ["STU-OBJ-ATTENTION"],
+      studentAttentionFields.map(({ id }) => id),
+      ["STU-ACT-CREATE-ATTENTION", "STU-ACT-VIEW-ATTENTION"],
+    ),
+  ],
+});
+
 export const teachingLoopOptionSets = deepFreeze([
   optionSet("OPT-TL-001", "questionOrder", "题目顺序", [
     ["FIXED", "固定顺序"],
@@ -2526,6 +4571,12 @@ export const teachingLoopModules = deepFreeze([
   submissionModule,
   gradingModule,
   publicationModule,
+  scoreModule,
+  evidenceModule,
+  planModule,
+  studentExecutionModule,
+  correctionModule,
+  studentProfileModule,
 ]);
 export const teachingLoopFlows = deepFreeze([
   {
@@ -3063,6 +5114,445 @@ export const teachingLoopFlows = deepFreeze([
     downstreamInvalidation: {
       strategy: "INVALIDATE_AND_REQUIRE_RECONFIRMATION",
       targets: ["score explanation", "knowledge evidence", "mastery projection", "improvement recommendation"],
+    },
+  },
+  {
+    id: "DF-010",
+    label: "Correction Submission Judgment and New Evidence",
+    phase: PHASE.FIRST,
+    moduleIds: ["PUB-001", "INS-001", "PLN-001", "CORR-001"],
+    steps: [
+      { order: 1, actionId: "PUB-ACT-VIEW-RESULT", condition: "the student's published result and source decision versions are visible" },
+      { order: 2, actionId: "CORR-ACT-SUBMIT", condition: "the student submits a correction answer against the visible result version" },
+      { order: 3, actionId: "CORR-ACT-CONFIRM-JUDGMENT", condition: "the corresponding subject teacher confirms the formal correction judgment" },
+      { order: 4, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "dependent versions receive object-level invalidation outcomes with history retained" },
+      { order: 5, actionId: "INS-ACT-MARK-STALE", condition: "the prior evidence depends on the corrected result or decision version" },
+      { order: 6, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "a plan evaluation depends on the corrected result, decision, evidence, or mastery version" },
+      { order: 7, actionId: "INS-ACT-CREATE-CANDIDATE", condition: "the confirmed correction produces a new evidence and mastery candidate" },
+      { order: 8, actionId: "INS-ACT-CONFIRM-MASTERY", condition: "the corresponding subject teacher confirms the candidate interpretation" },
+      { order: 9, actionId: "INS-ACT-PUBLISH-INTERPRETATION", condition: "only the teacher-confirmed interpretation becomes student-visible" },
+    ],
+    sourceDataRefs: [
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-ID",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-SOURCE-DECISION-REF",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-DECISION-VERSION",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-ID",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-SOURCE-RESULT-REF",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-ID",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-PLAN-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+    ],
+    targetDataRefs: [
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-ID",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-ID",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-TARGET-KINDS",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-TARGET-TRANSITIONS",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-TARGET-VERSIONS",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-HISTORY-PRESERVATION",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-ID",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-VALIDITY",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-RESULT",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-TEACHER-CONFIRMATION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-STUDENT-VISIBLE-AT",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-INVALIDATION-REF",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-EVALUATION-STATE",
+        version: "PLN-PLAN-F-EVALUATION-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-EVALUATION-VERSION",
+        version: "PLN-PLAN-F-EVALUATION-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-PLAN-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+    ],
+    idempotencyKeyParts: {
+      identityFieldIds: ["PUB-RESULT-F-ID", "INS-EVIDENCE-F-ID", "PLN-PLAN-F-ID"],
+      versionFieldIds: [
+        "PUB-RESULT-F-RESULT-VERSION",
+        "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        "PLN-PLAN-F-PLAN-VERSION",
+      ],
+      fanoutFieldId: "INS-EVIDENCE-F-ID",
+    },
+    failureGranularity: "CORRECTION_AND_DEPENDENT_EVIDENCE_OBJECT",
+    retryPolicy: {
+      strategy: "REFRESH_RESULT_EVIDENCE_AND_CORRECTION_VERSIONS_THEN_RETRY_FAILED_OBJECTS",
+      maxAttempts: 3,
+      retryableFailureResults: ["VERSION_CONFLICT", "AUDIT_FAILED"],
+    },
+    compensation: {
+      strategy: "KEEP_PRIOR_VISIBLE_RESULT_AND_EVIDENCE_HISTORY",
+      description: "a failed correction or invalidation leaves prior visible versions intact and retries only failed dependent objects",
+    },
+    downstreamInvalidation: {
+      strategy: "VERSION_AND_RECONFIRM_EVERY_DEPENDENT_INTERPRETATION",
+      targets: [
+        "EVIDENCE",
+        "MASTERY_INTERPRETATION",
+        "IMPROVEMENT_CANDIDATE",
+        "PLAN_EVALUATION",
+        "REPORT_INTERPRETATION",
+        "LEARNING_PATH_EXPLANATION",
+      ],
+    },
+  },
+  {
+    id: "DF-012",
+    label: "Improvement Candidate to Subject Plan and Cross-subject Coordination",
+    phase: PHASE.FIRST,
+    moduleIds: ["INS-001", "PLN-001", "APP-001"],
+    steps: [
+      { order: 1, actionId: "INS-ACT-READ-CONFIRMED-EVIDENCE", condition: "the evidence and mastery interpretation are teacher-confirmed and current" },
+      { order: 2, actionId: "PLN-ACT-CREATE-CANDIDATE", condition: "the evidence supports a versioned improvement candidate" },
+      { order: 3, actionId: "PLN-ACT-CONFIRM-PLAN", condition: "the corresponding subject teacher confirms the plan content" },
+      { order: 4, actionId: "PLN-ACT-SYNC-SUBJECT-TEACHER", condition: "the confirmed plan creates a subject-teacher synchronization output" },
+      { order: 5, actionId: "PLN-ACT-SYNC-HOMEROOM-COORDINATION", condition: "the confirmed plan creates a distinct read-only homeroom coordination output" },
+      { order: 6, actionId: "APP-ACT-CREATE-TODO-LINK", condition: "the student todo receives only a source-pinned plan deep link and local execution state" },
+    ],
+    sourceDataRefs: [
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-ID",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-STUDENT-REF",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-KNOWLEDGE-POINT-REF",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-RESULT",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-TEACHER-CONFIRMATION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+    ],
+    targetDataRefs: [
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-ID",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-REF",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-PLAN-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-SUBJECT-SYNC",
+        fieldId: "PLN-SUBJECT-SYNC-F-OUTPUT-VERSION",
+        version: "PLN-SUBJECT-SYNC-F-OUTPUT-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-HOMEROOM-COORDINATION",
+        fieldId: "PLN-HOMEROOM-F-OUTPUT-VERSION",
+        version: "PLN-HOMEROOM-F-OUTPUT-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-ID",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-TASK-DEEP-LINK",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-AGGREGATION-VERSION",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+    ],
+    idempotencyKeyParts: {
+      identityFieldIds: ["INS-EVIDENCE-F-ID", "INS-EVIDENCE-F-STUDENT-REF"],
+      versionFieldIds: ["INS-EVIDENCE-F-EVIDENCE-VERSION"],
+      fanoutFieldId: "INS-EVIDENCE-F-STUDENT-REF",
+    },
+    failureGranularity: "STUDENT_SUBJECT_PLAN_AND_SYNC_OUTPUT_OBJECT",
+    retryPolicy: {
+      strategy: "RETRY_FAILED_SYNC_OR_TODO_OUTPUT_AFTER_SOURCE_VERSION_REFRESH",
+      maxAttempts: 4,
+      retryableFailureResults: ["SYNC_DELIVERY_FAILED", "VERSION_CONFLICT", "AUDIT_FAILED"],
+    },
+    compensation: {
+      strategy: "KEEP_CONFIRMED_PLAN_AND_RETRY_ONLY_FAILED_OUTPUTS",
+      description: "a sync failure never rolls back the teacher-confirmed plan and never grants homeroom plan-content mutation",
+    },
+    downstreamInvalidation: {
+      strategy: "INVALIDATE_STALE_PLAN_OUTPUTS_BY_OBJECT_VERSION",
+      targets: ["subject teacher sync output", "homeroom coordination output", "student todo deep link"],
+    },
+  },
+  {
+    id: "DF-014",
+    label: "Student Management Profile Aggregation",
+    phase: PHASE.FIRST,
+    moduleIds: ["SCO-001", "INS-001", "PLN-001", "APP-001", "STU-001"],
+    steps: [
+      { order: 1, actionId: "SCO-ACT-READ-GRADEBOOK", condition: "the score view resolves exact PUB, INS, and PLN source versions" },
+      { order: 2, actionId: "INS-ACT-READ-CONFIRMED-EVIDENCE", condition: "the authorized evidence version is current" },
+      { order: 3, actionId: "PLN-ACT-VIEW-HOMEROOM-COORDINATION", condition: "the coordination output remains read-only and version-pinned" },
+      { order: 4, actionId: "APP-ACT-REFRESH-TODOS", condition: "student todo links refresh without copying source task content" },
+      { order: 5, actionId: "STU-ACT-BUILD-PROFILE", condition: "the profile materializes only query, column, saved-view, and source-lineage definitions" },
+    ],
+    sourceDataRefs: [
+      {
+        objectId: "SCO-OBJ-VIEW",
+        fieldId: "SCO-VIEW-F-ID",
+        version: "SCO-VIEW-F-VIEW-VERSION",
+      },
+      {
+        objectId: "SCO-OBJ-VIEW",
+        fieldId: "SCO-VIEW-F-RESULT-REF",
+        version: "SCO-VIEW-F-VIEW-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-ID",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-ID",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-PLAN-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-ID",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-STUDENT-REF",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+    ],
+    targetDataRefs: [
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-AGGREGATION-VERSION",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-ID",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-RESULT-REF",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-RESULT-VERSION",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-EVIDENCE-REF",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-EVIDENCE-VERSION",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-PLAN-REF",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-PLAN-VERSION",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-QUERY-DEFINITION",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-COLUMN-DEFINITION",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+      {
+        objectId: "STU-OBJ-PROFILE",
+        fieldId: "STU-PROFILE-F-PROFILE-VERSION",
+        version: "STU-PROFILE-F-PROFILE-VERSION",
+      },
+    ],
+    idempotencyKeyParts: {
+      identityFieldIds: [
+        "SCO-VIEW-F-ID",
+        "INS-EVIDENCE-F-ID",
+        "PLN-PLAN-F-ID",
+        "APP-TODO-F-ID",
+      ],
+      versionFieldIds: [
+        "SCO-VIEW-F-VIEW-VERSION",
+        "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        "PLN-PLAN-F-PLAN-VERSION",
+        "APP-TODO-F-AGGREGATION-VERSION",
+      ],
+      fanoutFieldId: "APP-TODO-F-STUDENT-REF",
+    },
+    failureGranularity: "STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT",
+    retryPolicy: {
+      strategy: "REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS",
+      maxAttempts: 3,
+      retryableFailureResults: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT", "AUDIT_FAILED"],
+    },
+    compensation: {
+      strategy: "KEEP_PRIOR_PROFILE_AND_TODO_VIEW_VERSIONS",
+      description: "a failed aggregation preserves the prior view definitions and retries only stale or failed student objects",
+    },
+    downstreamInvalidation: {
+      strategy: "INVALIDATE_ONLY_STALE_PROFILE_AND_TODO_PROJECTIONS",
+      targets: ["gradebook view definition", "student profile view definition", "student todo aggregation"],
     },
   },
 ]);
