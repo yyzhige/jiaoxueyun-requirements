@@ -387,6 +387,30 @@ function addLineageBindingFixture(model) {
   }];
 }
 
+function guardedLineageFixture(stateGuardPolicy, operationKind) {
+  const model = validFixture();
+  addLineageBindingFixture(model);
+  const action = moduleById(model, "SUB-001").actions[0];
+  const refField = model.modules[0].objects[0].fields
+    .find(({ id }) => id === "SUB-F003");
+  refField.stateGuardPolicy = stateGuardPolicy;
+  refField.actionApplicability.requiredActionIds = [action.id];
+  action.operationKind = operationKind;
+  action.outputFieldIds.push("SUB-F003");
+  action.relatedStateGuards = [{
+    refFieldId: "SUB-F003",
+    versionFieldId: "SUB-F002",
+    targetObjectId: "DAT-HW-01",
+    requiredState: "DRAFT",
+  }];
+  if (operationKind === "CREATE") {
+    delete action.transition;
+    action.successState = "SUBMITTED";
+    action.outputFieldIds.push("SUB-F000");
+  }
+  return model;
+}
+
 function addExclusiveSourceGroupsFixture(model) {
   const submission = moduleById(model, "SUB-001");
   const submissionObject = submission.objects[0];
@@ -1361,23 +1385,8 @@ test("requires closed accepted Option Set values on action inputs", () => {
 });
 
 test("requires closed version-pinned related state guards on actions", () => {
-  const validModel = validFixture();
-  addLineageBindingFixture(validModel);
+  const validModel = guardedLineageFixture("CREATE_REQUIRED", "CREATE");
   const action = moduleById(validModel, "SUB-001").actions[0];
-  const refField = validModel.modules[0].objects[0].fields
-    .find(({ id }) => id === "SUB-F003");
-  refField.stateGuardPolicy = "CREATE_REQUIRED";
-  refField.actionApplicability.requiredActionIds = [action.id];
-  action.operationKind = "CREATE";
-  delete action.transition;
-  action.successState = "SUBMITTED";
-  action.outputFieldIds.push("SUB-F000", "SUB-F003");
-  action.relatedStateGuards = [{
-    refFieldId: "SUB-F003",
-    versionFieldId: "SUB-F002",
-    targetObjectId: "DAT-HW-01",
-    requiredState: "DRAFT",
-  }];
   assertNoCode(validateRequirementModel(validModel), "INVALID_ACTION_CONTRACT");
   assertNoCode(validateRequirementModel(validModel), "INVALID_ACTION_STATE_GUARD");
 
@@ -1400,6 +1409,31 @@ test("requires closed version-pinned related state guards on actions", () => {
   for (const mutate of mutations) {
     const model = structuredClone(validModel);
     mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_STATE_GUARD");
+  }
+});
+
+test("accepts action applicability for every compatible state guard policy operation", () => {
+  const rejectedCombinations = [];
+  for (const [stateGuardPolicy, operationKind] of [
+    ["UPDATE_REQUIRED", "UPDATE"],
+    ["ALWAYS_REQUIRED", "CREATE"],
+    ["ALWAYS_REQUIRED", "UPDATE"],
+  ]) {
+    const model = guardedLineageFixture(stateGuardPolicy, operationKind);
+    if (errorCodes(validateRequirementModel(model)).includes("INVALID_ACTION_STATE_GUARD")) {
+      rejectedCombinations.push(`${stateGuardPolicy}/${operationKind}`);
+    }
+  }
+  assert.deepEqual(rejectedCombinations, []);
+});
+
+test("rejects action applicability when operation does not match guard policy", () => {
+  for (const [stateGuardPolicy, operationKind] of [
+    ["UPDATE_REQUIRED", "CREATE"],
+    ["CREATE_REQUIRED", "UPDATE"],
+  ]) {
+    const model = guardedLineageFixture(stateGuardPolicy, operationKind);
     assertHasCode(validateRequirementModel(model), "INVALID_ACTION_STATE_GUARD");
   }
 });

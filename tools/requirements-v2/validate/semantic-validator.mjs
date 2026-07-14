@@ -437,7 +437,7 @@ function actionApplicabilityErrors(index) {
     const requiredActionIds = list(refField?.actionApplicability?.requiredActionIds);
     const requiredActionIdSet = new Set(requiredActionIds);
     const requiredPolicyMatches = requiredActionIds.length > 0
-      ? refField?.stateGuardPolicy === "CREATE_REQUIRED"
+      ? refField?.stateGuardPolicy !== "NONE"
       : refField?.stateGuardPolicy === "NONE";
     let valid = requiredPolicyMatches;
 
