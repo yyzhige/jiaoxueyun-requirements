@@ -16,6 +16,8 @@ const FORBIDDEN_PAGE_NAMES = new Set([
   "历史/审计页",
 ]);
 
+const MIXED_CREATE_SEMANTICS = /(?:\bupdate\b|\bmaintain\b|\bsave\b|\breorder\b|(?:^|-)manage(?:-|$))/i;
+
 const METRIC_EVENT_COUNTS = new Map([
   ["duration", 2],
   ["ratio", 2],
@@ -66,6 +68,22 @@ function setEquals(left, right) {
 function hasExactKeys(value, expectedKeys) {
   return isRecord(value)
     && setEquals(new Set(Object.keys(value)), new Set(expectedKeys));
+}
+
+function hasStableIdempotencyRole(index, fieldId, allowedRoles) {
+  const field = index.fieldById.get(fieldId)?.value;
+  if (!allowedRoles.includes(field?.idempotencyRole)) return false;
+  if (field.idempotencyRole === "FANOUT_SET") {
+    return field.dataType === "STRING_ARRAY"
+      && field.mutability === "IMMUTABLE"
+      && field.valueSource?.kind === "SYSTEM";
+  }
+  if (field.dataType !== "ID" || field.mutability !== "IMMUTABLE") return false;
+  if (field.idempotencyRole === "OBJECT_ID") {
+    return field.valueSource?.kind === "SYSTEM";
+  }
+  return field.valueSource?.kind === "OBJECT_REF"
+    && index.objectById.has(field.valueSource.targetObjectId);
 }
 
 function actorIsValid(index, reference) {
@@ -160,6 +178,14 @@ function actionErrors(index) {
     ) {
       errors.push(
         `INVALID_ACTION_OPERATION ${formatValidationValue(action?.id)} has an inconsistent ${formatValidationValue(operationKind)} contract`,
+      );
+    }
+    if (
+      operationKind === "CREATE"
+      && MIXED_CREATE_SEMANTICS.test(`${action?.id ?? ""} ${action?.label ?? ""}`)
+    ) {
+      errors.push(
+        `INVALID_ACTION_OPERATION ${formatValidationValue(action?.id)} mixes CREATE with update semantics`,
       );
     }
     if (
@@ -323,11 +349,21 @@ function flowErrors(index) {
     const keyParts = flow?.idempotencyKeyParts;
     const identityFieldIds = list(keyParts?.identityFieldIds);
     const versionFieldIds = list(keyParts?.versionFieldIds);
+    const identityRolesValid = identityFieldIds.every((fieldId) => (
+      hasStableIdempotencyRole(index, fieldId, ["OBJECT_ID", "OBJECT_REF"])
+    ));
+    const fanoutRoleValid = hasStableIdempotencyRole(
+      index,
+      keyParts?.fanoutFieldId,
+      ["OBJECT_ID", "OBJECT_REF", "FANOUT_SET"],
+    );
     if (
       identityFieldIds.length === 0
       || identityFieldIds.some((fieldId) => !sourceFieldIds.has(fieldId))
+      || !identityRolesValid
       || !setEquals(new Set(versionFieldIds), sourceVersionFieldIds)
       || !sourceFieldIds.has(keyParts?.fanoutFieldId)
+      || !fanoutRoleValid
     ) {
       errors.push(
         `INVALID_FLOW_IDEMPOTENCY ${formatValidationValue(flow?.id)} requires source identity, exact source versions, and a source fanout field`,

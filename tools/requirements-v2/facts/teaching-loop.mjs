@@ -213,6 +213,12 @@ const subjectTeacherPermissions = [
 ];
 
 const hwAssignmentFields = [
+  field("HW-ASSIGNMENT-F-ID", "Assignment ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
   field("HW-ASSIGNMENT-F-TITLE", "Assignment Title"),
   field("HW-ASSIGNMENT-F-INSTRUCTIONS", "Assignment Instructions", { dataType: "TEXT" }),
   field("HW-ASSIGNMENT-F-SUBJECT-ID", "Subject", {
@@ -267,6 +273,12 @@ const hwAssignmentFields = [
 ];
 
 const hwItemFields = [
+  field("HW-ITEM-F-ID", "Assignment Item ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
   field("HW-ITEM-F-ITEM-VERSION", "Item Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -299,6 +311,7 @@ const hwRubricFields = [
     dataType: "ID",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
   }),
   field("HW-RUBRIC-F-RUBRIC-VERSION", "Rubric Version", {
     dataType: "ID",
@@ -326,7 +339,7 @@ const hwActions = [
     operationKind: "CREATE",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
     inputFieldIds: hwAssignmentInputIds.filter((id) => id !== "HW-ASSIGNMENT-F-REVISION-REASON"),
-    outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    outputFieldIds: ["HW-ASSIGNMENT-F-ID", "HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
     permissions: subjectTeacherPermissions,
     successState: "DRAFT",
   }),
@@ -336,7 +349,7 @@ const hwActions = [
     operationKind: "CREATE",
     targetObjectId: "HW-OBJ-ITEM",
     inputFieldIds: hwItemInputIds,
-    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION"],
+    outputFieldIds: ["HW-ITEM-F-ID", "HW-ITEM-F-ITEM-VERSION"],
     permissions: subjectTeacherPermissions,
     successState: "DRAFT",
   }),
@@ -625,6 +638,12 @@ const studentSubmissionPermissions = [
 ];
 
 const submissionDraftFields = [
+  field("SUB-DRAFT-F-ID", "Submission Draft ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
   field("SUB-DRAFT-F-ANSWER-PAYLOAD", "Answer Payload by Question Type", {
     dataType: "JSON",
     validation: "must use the payload schema registered for each assignment item question type",
@@ -668,6 +687,12 @@ const submissionDraftFields = [
 ];
 
 const submissionAttemptFields = [
+  field("SUB-ATTEMPT-F-ID", "Submission Attempt ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
   field("SUB-ATTEMPT-F-DRAFT-VERSION", "Submitted Draft Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -757,6 +782,7 @@ const submissionActions = [
     targetObjectId: "SUB-OBJ-ATTEMPT",
     inputFieldIds: ["SUB-ATTEMPT-F-DRAFT-VERSION"],
     outputFieldIds: [
+      "SUB-ATTEMPT-F-ID",
       "SUB-ATTEMPT-F-SUBMISSION-VERSION",
       "SUB-ATTEMPT-F-LATE-FLAG",
       "SUB-ATTEMPT-F-RECEIPT-ID",
@@ -918,6 +944,7 @@ const capabilityMatrixFields = [
     dataType: "ID",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
   }),
   field("GRD-CAP-F-RULE-VERSION", "Capability Rule Version", {
     dataType: "INTEGER",
@@ -964,6 +991,12 @@ const capabilityMatrixFields = [
 ];
 
 const gradingDecisionFields = [
+  field("GRD-DECISION-F-ID", "Grading Decision ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
   field("GRD-DECISION-F-RECOGNIZED-ANSWER", "Recognized Answer", {
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
@@ -976,6 +1009,10 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "SUB-OBJ-ATTEMPT" },
     mutability: "IMMUTABLE",
+    versionBinding: {
+      versionFieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
+      targetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+    },
   }),
   field("GRD-DECISION-F-SUBMISSION-VERSION", "Input Submission Version", {
     dataType: "INTEGER",
@@ -986,6 +1023,10 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-ITEM" },
     mutability: "IMMUTABLE",
+    versionBinding: {
+      versionFieldId: "GRD-DECISION-F-ITEM-VERSION",
+      targetVersionFieldId: "HW-ITEM-F-ITEM-VERSION",
+    },
   }),
   field("GRD-DECISION-F-ITEM-VERSION", "Input Item Version", {
     dataType: "INTEGER",
@@ -996,6 +1037,10 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-RUBRIC" },
     mutability: "IMMUTABLE",
+    versionBinding: {
+      versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
+      targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
+    },
   }),
   field("GRD-DECISION-F-RUBRIC-VERSION", "Input Rubric Version", {
     dataType: "ID",
@@ -1006,6 +1051,10 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-CAPABILITY-RULE" },
     mutability: "IMMUTABLE",
+    versionBinding: {
+      versionFieldId: "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
+      targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
+    },
   }),
   field("GRD-DECISION-F-CAPABILITY-RULE-VERSION", "Capability Rule Version", {
     dataType: "INTEGER",
@@ -1344,6 +1393,7 @@ const gradingActions = [
     operationKind: "CREATE",
     targetObjectId: "GRD-OBJ-DECISION",
     outputFieldIds: [
+      "GRD-DECISION-F-ID",
       "GRD-DECISION-F-SUBMISSION-REF",
       "GRD-DECISION-F-SUBMISSION-VERSION",
       "GRD-DECISION-F-ITEM-REF",
@@ -1657,6 +1707,12 @@ const gradingModule = moduleFact({
 });
 
 const publicationBatchFields = [
+  field("PUB-BATCH-F-ID", "Publication Batch ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
   field("PUB-BATCH-F-SELECTED-STUDENT-IDS", "Selected Student Scope", {
     dataType: "STRING_ARRAY",
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-010" },
@@ -1677,6 +1733,12 @@ const publicationBatchFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT", "Immutable Selected Student Scope", {
+    dataType: "STRING_ARRAY",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "FANOUT_SET",
   }),
   field("PUB-BATCH-F-OBJECT-RESULTS", "Student-level Publication Results", {
     dataType: "JSON",
@@ -1733,6 +1795,12 @@ const publicationPreviewFields = [
 ];
 
 const publishedResultFields = [
+  field("PUB-RESULT-F-ID", "Published Result ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
   field("PUB-RESULT-F-STUDENT-REF", "Selected Student Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
@@ -1742,6 +1810,10 @@ const publishedResultFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "IMMUTABLE",
+    versionBinding: {
+      versionFieldId: "PUB-RESULT-F-DECISION-VERSION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
   }),
   field("PUB-RESULT-F-DECISION-VERSION", "Confirmed Decision Version", {
     dataType: "INTEGER",
@@ -1753,6 +1825,10 @@ const publishedResultFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "SYSTEM_MANAGED",
     required: "required when correcting a published result",
+    versionBinding: {
+      versionFieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
   }),
   field("PUB-RESULT-F-NEW-DECISION-VERSION", "New Confirmed Decision Version", {
     dataType: "INTEGER",
@@ -1764,16 +1840,31 @@ const publishedResultFields = [
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    releaseRequirement: {
+      readPolicyId: "PUB-RP-STUDENT-RESULT",
+      requiredState: "PUBLISHED",
+      visibleAtFieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    },
   }),
   field("PUB-RESULT-F-SCORE", "Published Score", {
     dataType: "DECIMAL",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    releaseRequirement: {
+      readPolicyId: "PUB-RP-STUDENT-RESULT",
+      requiredState: "PUBLISHED",
+      visibleAtFieldId: "PUB-RESULT-F-SCORE-VISIBLE-AT",
+    },
   }),
   field("PUB-RESULT-F-FEEDBACK", "Published Feedback", {
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    releaseRequirement: {
+      readPolicyId: "PUB-RP-STUDENT-RESULT",
+      requiredState: "PUBLISHED",
+      visibleAtFieldId: "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+    },
   }),
   field("PUB-RESULT-F-ELIGIBILITY", "Publication Eligibility", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-009" },
@@ -1785,6 +1876,11 @@ const publishedResultFields = [
     mutability: "SYSTEM_MANAGED",
   }),
   field("PUB-RESULT-F-ANSWER-VISIBLE-AT", "Answer Visible Time", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-RESULT-F-SCORE-VISIBLE-AT", "Score Visible Time", {
     dataType: "DATETIME",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
@@ -1885,6 +1981,7 @@ const publicationActions = [
     ],
     outputFieldIds: [
       "PUB-BATCH-F-BATCH-VERSION",
+      "PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT",
       "PUB-BATCH-F-OBJECT-RESULTS",
       "PUB-BATCH-F-STATUS",
     ],
@@ -1921,6 +2018,7 @@ const publicationActions = [
     operationKind: "CREATE",
     targetObjectId: "PUB-OBJ-RESULT",
     outputFieldIds: [
+      "PUB-RESULT-F-ID",
       "PUB-RESULT-F-STUDENT-REF",
       "PUB-RESULT-F-SOURCE-DECISION-REF",
       "PUB-RESULT-F-DECISION-VERSION",
@@ -1930,6 +2028,7 @@ const publicationActions = [
       "PUB-RESULT-F-ELIGIBILITY",
       "PUB-RESULT-F-BLOCKING-CODES",
       "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+      "PUB-RESULT-F-SCORE-VISIBLE-AT",
       "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
       "PUB-RESULT-F-NOTIFICATION-STATUS",
       "PUB-RESULT-F-RESULT-VERSION",
@@ -1950,6 +2049,7 @@ const publicationActions = [
       "PUB-RESULT-F-ELIGIBILITY",
       "PUB-RESULT-F-BLOCKING-CODES",
       "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+      "PUB-RESULT-F-SCORE-VISIBLE-AT",
       "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
       "PUB-RESULT-F-NOTIFICATION-STATUS",
     ],
@@ -2059,6 +2159,7 @@ const publicationActions = [
       "NOT_FOUND",
       "RESULT_NOT_PUBLISHED",
       "ANSWER_NOT_VISIBLE",
+      "SCORE_NOT_VISIBLE",
       "FEEDBACK_NOT_VISIBLE",
     ],
     failureOutcomes: {
@@ -2069,6 +2170,11 @@ const publicationActions = [
         kind: "BOUNDARY",
         expectedPermission: "ALLOW",
         expectedData: "returns the visible score fields but withholds the answer until answerVisibleAt",
+      },
+      SCORE_NOT_VISIBLE: {
+        kind: "BOUNDARY",
+        expectedPermission: "ALLOW",
+        expectedData: "withholds the score until scoreVisibleAt while preserving the owned published result",
       },
       FEEDBACK_NOT_VISIBLE: {
         kind: "BOUNDARY",
@@ -2191,6 +2297,7 @@ const publicationModule = moduleFact({
           },
         ],
         readPolicies: [{
+          id: "PUB-RP-STUDENT-RESULT",
           actionId: "PUB-ACT-VIEW-RESULT",
           subject: { roleRef: "ROLE-STUDENT" },
           scope: { kind: "OWN_RECORD", subjectFieldId: "PUB-RESULT-F-STUDENT-REF" },
@@ -2199,6 +2306,10 @@ const publicationModule = moduleFact({
             {
               visibleAtFieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
               protectedFieldIds: ["PUB-RESULT-F-ANSWER"],
+            },
+            {
+              visibleAtFieldId: "PUB-RESULT-F-SCORE-VISIBLE-AT",
+              protectedFieldIds: ["PUB-RESULT-F-SCORE"],
             },
             {
               visibleAtFieldId: "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
@@ -2261,6 +2372,7 @@ const publicationModule = moduleFact({
         "PUB-RESULT-F-SCORE",
         "PUB-RESULT-F-FEEDBACK",
         "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+        "PUB-RESULT-F-SCORE-VISIBLE-AT",
         "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
         "PUB-RESULT-F-RESULT-VERSION",
       ],
@@ -2369,8 +2481,18 @@ export const teachingLoopFlows = deepFreeze([
     sourceDataRefs: [
       {
         objectId: "HW-OBJ-ASSIGNMENT",
+        fieldId: "HW-ASSIGNMENT-F-ID",
+        version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-ASSIGNMENT",
         fieldId: "HW-ASSIGNMENT-F-DUE-AT",
         version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-ITEM",
+        fieldId: "HW-ITEM-F-ID",
+        version: "HW-ITEM-F-ITEM-VERSION",
       },
       {
         objectId: "HW-OBJ-ITEM",
@@ -2384,9 +2506,9 @@ export const teachingLoopFlows = deepFreeze([
       version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
     }],
     idempotencyKeyParts: {
-      identityFieldIds: ["HW-ASSIGNMENT-F-DUE-AT"],
+      identityFieldIds: ["HW-ASSIGNMENT-F-ID"],
       versionFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION", "HW-ITEM-F-ITEM-VERSION"],
-      fanoutFieldId: "HW-ITEM-F-PROMPT",
+      fanoutFieldId: "HW-ITEM-F-ID",
     },
     failureGranularity: "ASSIGNMENT_OBJECT_VERSION_WITH_NO_PARTIAL_ITEM_PUBLICATION",
     retryPolicy: {
@@ -2418,8 +2540,18 @@ export const teachingLoopFlows = deepFreeze([
     sourceDataRefs: [
       {
         objectId: "HW-OBJ-ASSIGNMENT",
+        fieldId: "HW-ASSIGNMENT-F-ID",
+        version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-ASSIGNMENT",
         fieldId: "HW-ASSIGNMENT-F-TITLE",
         version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      },
+      {
+        objectId: "SUB-OBJ-DRAFT",
+        fieldId: "SUB-DRAFT-F-ID",
+        version: "SUB-DRAFT-F-DRAFT-VERSION",
       },
       {
         objectId: "SUB-OBJ-DRAFT",
@@ -2440,9 +2572,9 @@ export const teachingLoopFlows = deepFreeze([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["HW-ASSIGNMENT-F-TITLE"],
+      identityFieldIds: ["HW-ASSIGNMENT-F-ID", "SUB-DRAFT-F-ID"],
       versionFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION", "SUB-DRAFT-F-DRAFT-VERSION"],
-      fanoutFieldId: "SUB-DRAFT-F-ANSWER-PAYLOAD",
+      fanoutFieldId: "SUB-DRAFT-F-ID",
     },
     failureGranularity: "STUDENT_SUBMISSION_OBJECT_AND_MEDIA_CHUNK",
     retryPolicy: {
@@ -2476,13 +2608,28 @@ export const teachingLoopFlows = deepFreeze([
     sourceDataRefs: [
       {
         objectId: "SUB-OBJ-ATTEMPT",
+        fieldId: "SUB-ATTEMPT-F-ID",
+        version: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+      },
+      {
+        objectId: "SUB-OBJ-ATTEMPT",
         fieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
         version: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
       },
       {
         objectId: "HW-OBJ-ITEM",
+        fieldId: "HW-ITEM-F-ID",
+        version: "HW-ITEM-F-ITEM-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-ITEM",
         fieldId: "HW-ITEM-F-ITEM-VERSION",
         version: "HW-ITEM-F-ITEM-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-RUBRIC",
+        fieldId: "HW-RUBRIC-F-ID",
+        version: "HW-RUBRIC-F-RUBRIC-VERSION",
       },
       {
         objectId: "HW-OBJ-RUBRIC",
@@ -2548,14 +2695,14 @@ export const teachingLoopFlows = deepFreeze([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["SUB-ATTEMPT-F-SUBMISSION-VERSION"],
+      identityFieldIds: ["SUB-ATTEMPT-F-ID", "HW-RUBRIC-F-ID", "GRD-CAP-F-RULE-ID"],
       versionFieldIds: [
         "SUB-ATTEMPT-F-SUBMISSION-VERSION",
         "HW-ITEM-F-ITEM-VERSION",
         "HW-RUBRIC-F-RUBRIC-VERSION",
         "GRD-CAP-F-RULE-VERSION",
       ],
-      fanoutFieldId: "HW-ITEM-F-ITEM-VERSION",
+      fanoutFieldId: "HW-ITEM-F-ID",
     },
     failureGranularity: "SUBMISSION_ITEM_OBJECT_WITH_INDEPENDENT_MANUAL_ROUTE",
     retryPolicy: {
@@ -2587,6 +2734,10 @@ export const teachingLoopFlows = deepFreeze([
     ],
     sourceDataRefs: [{
       objectId: "GRD-OBJ-DECISION",
+      fieldId: "GRD-DECISION-F-ID",
+      version: "GRD-DECISION-F-DECISION-VERSION",
+    }, {
+      objectId: "GRD-OBJ-DECISION",
       fieldId: "GRD-DECISION-F-SUGGESTED-SCORE",
       version: "GRD-DECISION-F-DECISION-VERSION",
     }],
@@ -2603,9 +2754,9 @@ export const teachingLoopFlows = deepFreeze([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["GRD-DECISION-F-SUGGESTED-SCORE"],
+      identityFieldIds: ["GRD-DECISION-F-ID"],
       versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
-      fanoutFieldId: "GRD-DECISION-F-SUGGESTED-SCORE",
+      fanoutFieldId: "GRD-DECISION-F-ID",
     },
     failureGranularity: "STUDENT_ITEM_GRADING_OBJECT",
     retryPolicy: {
@@ -2643,12 +2794,27 @@ export const teachingLoopFlows = deepFreeze([
     sourceDataRefs: [
       {
         objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-ID",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
         fieldId: "GRD-DECISION-F-OFFICIAL-SCORE",
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
       {
         objectId: "PUB-OBJ-BATCH",
+        fieldId: "PUB-BATCH-F-ID",
+        version: "PUB-BATCH-F-BATCH-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-BATCH",
         fieldId: "PUB-BATCH-F-SELECTED-STUDENT-IDS",
+        version: "PUB-BATCH-F-BATCH-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-BATCH",
+        fieldId: "PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT",
         version: "PUB-BATCH-F-BATCH-VERSION",
       },
       {
@@ -2720,6 +2886,11 @@ export const teachingLoopFlows = deepFreeze([
       },
       {
         objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-SCORE-VISIBLE-AT",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
@@ -2730,9 +2901,9 @@ export const teachingLoopFlows = deepFreeze([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["GRD-DECISION-F-OFFICIAL-SCORE"],
+      identityFieldIds: ["GRD-DECISION-F-ID", "PUB-BATCH-F-ID"],
       versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION", "PUB-BATCH-F-BATCH-VERSION"],
-      fanoutFieldId: "PUB-BATCH-F-SELECTED-STUDENT-IDS",
+      fanoutFieldId: "PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT",
     },
     failureGranularity: "SELECTED_STUDENT_RESULT_OBJECT_WITH_PARTIAL_SUCCESS",
     retryPolicy: {
@@ -2763,8 +2934,18 @@ export const teachingLoopFlows = deepFreeze([
     sourceDataRefs: [
       {
         objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-ID",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
         fieldId: "GRD-DECISION-F-DECISION-VERSION",
         version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-ID",
+        version: "PUB-RESULT-F-RESULT-VERSION",
       },
       {
         objectId: "PUB-OBJ-RESULT",
@@ -2800,9 +2981,9 @@ export const teachingLoopFlows = deepFreeze([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+      identityFieldIds: ["GRD-DECISION-F-ID", "PUB-RESULT-F-ID"],
       versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION", "PUB-RESULT-F-RESULT-VERSION"],
-      fanoutFieldId: "PUB-RESULT-F-RESULT-VERSION",
+      fanoutFieldId: "PUB-RESULT-F-ID",
     },
     failureGranularity: "PUBLISHED_STUDENT_RESULT_OBJECT",
     retryPolicy: {

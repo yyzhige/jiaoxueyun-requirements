@@ -8,6 +8,7 @@ const RUNTIME_QUERY_ID_KINDS = new Set(["OBJECT_ID", "ACTION_ID"]);
 const CLIENTS = new Set(["WEB", "APP"]);
 const RISKS = new Set(["READ", "LOW", "HIGH"]);
 const OPERATION_KINDS = new Set(["READ", "CREATE", "UPDATE"]);
+const IDEMPOTENCY_ROLES = new Set(["OBJECT_ID", "OBJECT_REF", "FANOUT_SET"]);
 const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
 const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
 const OBJECT_SEMANTIC_TYPES = new Set(["AUDIT_EVENT_SINK"]);
@@ -360,6 +361,54 @@ function validateField(errors, field, path, strict) {
   ) {
     errors.push(`INVALID_FIELD_CONTRACT ${path}.referenceType is unsupported`);
   }
+  if (
+    Object.hasOwn(field, "idempotencyRole")
+    && !IDEMPOTENCY_ROLES.has(field.idempotencyRole)
+  ) {
+    errors.push(`INVALID_FIELD_CONTRACT ${path}.idempotencyRole is unsupported`);
+  }
+  if (Object.hasOwn(field, "versionBinding")) {
+    const versionBinding = field.versionBinding;
+    const expectedKeys = new Set(["versionFieldId", "targetVersionFieldId"]);
+    if (
+      !isRecord(versionBinding)
+      || Object.keys(versionBinding).length !== expectedKeys.size
+      || Object.keys(versionBinding).some((key) => !expectedKeys.has(key))
+    ) {
+      errors.push(`INVALID_LINEAGE_BINDING ${path}.versionBinding must use the closed version-binding shape`);
+    } else {
+      for (const property of expectedKeys) {
+        contractString(
+          errors,
+          versionBinding,
+          property,
+          `${path}.versionBinding`,
+          "INVALID_LINEAGE_BINDING",
+        );
+      }
+    }
+  }
+  if (Object.hasOwn(field, "releaseRequirement")) {
+    const releaseRequirement = field.releaseRequirement;
+    const expectedKeys = new Set(["readPolicyId", "requiredState", "visibleAtFieldId"]);
+    if (
+      !isRecord(releaseRequirement)
+      || Object.keys(releaseRequirement).length !== expectedKeys.size
+      || Object.keys(releaseRequirement).some((key) => !expectedKeys.has(key))
+    ) {
+      errors.push(`INVALID_READ_POLICY ${path}.releaseRequirement must use the closed release shape`);
+    } else {
+      for (const property of expectedKeys) {
+        contractString(
+          errors,
+          releaseRequirement,
+          property,
+          `${path}.releaseRequirement`,
+          "INVALID_READ_POLICY",
+        );
+      }
+    }
+  }
 }
 
 function validateObject(errors, object, path, strict) {
@@ -427,6 +476,7 @@ function validateObject(errors, object, path, strict) {
       const readPolicies = requireArray(errors, object, "readPolicies", path);
       validateObjectMembers(errors, readPolicies, `${path}.readPolicies`, "read policy");
       const expectedPolicyKeys = new Set([
+        "id",
         "actionId",
         "subject",
         "scope",
@@ -442,6 +492,7 @@ function validateObject(errors, object, path, strict) {
         ) {
           errors.push(`INVALID_READ_POLICY ${policyPath} must use the closed read-policy shape`);
         }
+        contractString(errors, policy, "id", policyPath, "INVALID_READ_POLICY");
         contractString(errors, policy, "actionId", policyPath, "INVALID_READ_POLICY");
         contractString(errors, policy, "requiredState", policyPath, "INVALID_READ_POLICY");
 

@@ -147,6 +147,12 @@ function nonUserActionFixture(executionMode, trigger) {
 }
 
 function validFixture() {
+  const submissionIdentityField = validField("SUB-F000", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  });
   const submissionField = validField("SUB-F001", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-BOOL" },
     mutability: "EDITABLE",
@@ -230,7 +236,7 @@ function validFixture() {
       baselineDecisionIds: ["BASE-TEST"],
       nfrIds: ["NFR-TEST"],
       objects: [validObject("DAT-SUB-01", "ROLE-STUDENT", submissionField, {
-        fields: [submissionField, submissionVersionField],
+        fields: [submissionIdentityField, submissionField, submissionVersionField],
       })],
       relationships: [],
       actions: [validAction(
@@ -280,12 +286,12 @@ function validFixture() {
       phase: PHASE.FIRST,
       moduleIds: ["SUB-001"],
       steps: [{ order: 1, actionId: "SUB-ACT-01" }],
-      sourceDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "SUB-F002" }],
+      sourceDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F000", version: "SUB-F002" }],
       targetDataRefs: [{ objectId: "DAT-SUB-01", fieldId: "SUB-F001", version: "SUB-F002" }],
       idempotencyKeyParts: {
-        identityFieldIds: ["SUB-F001"],
+        identityFieldIds: ["SUB-F000"],
         versionFieldIds: ["SUB-F002"],
-        fanoutFieldId: "SUB-F001",
+        fanoutFieldId: "SUB-F000",
       },
       failureGranularity: "STEP",
       retryPolicy: {
@@ -319,6 +325,10 @@ function addLineageBindingFixture(model) {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
     mutability: "IMMUTABLE",
+    versionBinding: {
+      versionFieldId: "SUB-F002",
+      targetVersionFieldId: "HW-F001",
+    },
   }));
   submissionObject.lineageBindings = [{
     refFieldId: "SUB-F003",
@@ -331,6 +341,12 @@ function addLineageBindingFixture(model) {
 function addReadPolicyFixture(model) {
   const module = moduleById(model, "SUB-001");
   module.objects[0].fields.push(validField("SUB-F003", { dataType: "DATETIME" }));
+  module.objects[0].fields
+    .find(({ id }) => id === "SUB-F001").releaseRequirement = {
+      readPolicyId: "SUB-RP-OWNED-RESULT",
+      requiredState: "SUBMITTED",
+      visibleAtFieldId: "SUB-F003",
+    };
   const scenarios = [
     validScenario("SUB-READ-SCN-SUCCESS", "SUB-ACT-READ", "SUCCESS", {
       then: {
@@ -370,6 +386,7 @@ function addReadPolicyFixture(model) {
   module.scenarios.push(...scenarios);
   module.pages[0].actionIds.push("SUB-ACT-READ");
   module.objects[0].readPolicies = [{
+    id: "SUB-RP-OWNED-RESULT",
     actionId: "SUB-ACT-READ",
     subject: { roleRef: "ROLE-STUDENT" },
     scope: { kind: "OWN_RECORD", subjectFieldId: "SUB-F001" },
@@ -804,6 +821,24 @@ test("validates generic object lineage bindings without Field ID allowlists", ()
   assert.deepEqual(validateRequirementModel(validModel), []);
 
   const mutations = [
+    (model) => { delete moduleById(model, "SUB-001").objects[0].lineageBindings; },
+    (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings = []; },
+    (model) => {
+      const object = moduleById(model, "SUB-001").objects[0];
+      object.lineageBindings.push(structuredClone(object.lineageBindings[0]));
+    },
+    (model) => {
+      moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F003").versionBinding.versionFieldId = "SUB-F001";
+    },
+    (model) => {
+      moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F003").versionBinding.targetVersionFieldId = "HW-F999";
+    },
+    (model) => {
+      delete moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F003").versionBinding;
+    },
     (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].legacy = true; },
     (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].refFieldId = "SUB-F001"; },
     (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings[0].versionFieldId = "HW-F001"; },
@@ -823,28 +858,75 @@ test("validates generic object lineage bindings without Field ID allowlists", ()
   }
 });
 
+test("covers every GRD and PUB versioned reference with one field-declared lineage binding", () => {
+  const expectedRefs = new Map([
+    ["GRD-OBJ-DECISION", [
+      "GRD-DECISION-F-SUBMISSION-REF",
+      "GRD-DECISION-F-ITEM-REF",
+      "GRD-DECISION-F-RUBRIC-REF",
+      "GRD-DECISION-F-CAPABILITY-RULE-REF",
+    ]],
+    ["PUB-OBJ-RESULT", [
+      "PUB-RESULT-F-SOURCE-DECISION-REF",
+      "PUB-RESULT-F-CORRECTION-DECISION-REF",
+    ]],
+  ]);
+
+  for (const moduleId of ["GRD-001", "PUB-001"]) {
+    for (const object of moduleById(requirementModel, moduleId).objects) {
+      if (!expectedRefs.has(object.id)) continue;
+      const markedRefs = object.fields
+        .filter(({ versionBinding }) => versionBinding)
+        .map(({ id }) => id)
+        .sort();
+      assert.deepEqual(markedRefs, expectedRefs.get(object.id).toSorted(), object.id);
+      const bindingRefs = object.lineageBindings.map(({ refFieldId }) => refFieldId).sort();
+      assert.deepEqual(bindingRefs, markedRefs, object.id);
+    }
+  }
+});
+
 test("validates structured own-record read policies and time-gated outputs", () => {
   const validModel = validFixture();
   addReadPolicyFixture(validModel);
   assert.deepEqual(validateRequirementModel(validModel), []);
 
   const mutations = [
-    (policy) => { policy.legacy = true; },
-    (policy) => { policy.subject.dutyRef = "DUTY-SUBJECT-TEACHER"; },
-    (policy) => { policy.scope.kind = "ALL_RECORDS"; },
-    (policy) => { policy.actionId = "SUB-ACT-01"; },
-    (policy) => { policy.subject = { roleRef: "ROLE-TEACHER" }; },
-    (policy) => { policy.requiredState = "PUBLISHED"; },
-    (policy) => { policy.scope.subjectFieldId = "HW-F001"; },
-    (policy) => { policy.timeGates[0].visibleAtFieldId = "HW-F001"; },
-    (policy) => { policy.timeGates[0].protectedFieldIds = ["SUB-F002"]; },
-    (policy) => { policy.timeGates[0].legacy = true; },
+    (model) => { delete moduleById(model, "SUB-001").objects[0].readPolicies; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies = []; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].legacy = true; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].subject.dutyRef = "DUTY-SUBJECT-TEACHER"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].scope.kind = "ALL_RECORDS"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].actionId = "SUB-ACT-01"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].subject = { roleRef: "ROLE-TEACHER" }; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].requiredState = "DRAFT"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].scope.subjectFieldId = "HW-F001"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].timeGates[0].visibleAtFieldId = "SUB-F002"; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].timeGates[0].protectedFieldIds = ["SUB-F002"]; },
+    (model) => {
+      const policy = moduleById(model, "SUB-001").objects[0].readPolicies[0];
+      policy.timeGates.push(structuredClone(policy.timeGates[0]));
+    },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].timeGates[0].legacy = true; },
+    (model) => {
+      moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F003").dataType = "INTEGER";
+    },
+    (model) => {
+      moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F001").releaseRequirement.readPolicyId = "SUB-RP-MISSING";
+    },
+    (model) => {
+      delete moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F001").releaseRequirement;
+    },
+    (model) => { moduleById(model, "SUB-001").pages[0].fieldIds = []; },
   ];
 
   for (const mutate of mutations) {
     const model = validFixture();
     addReadPolicyFixture(model);
-    mutate(moduleById(model, "SUB-001").objects[0].readPolicies[0]);
+    mutate(model);
     assertHasCode(validateRequirementModel(model), "INVALID_READ_POLICY");
   }
 });
@@ -934,6 +1016,61 @@ test("enforces READ CREATE and UPDATE operation contracts without action allowli
   action.transition = { from: "DRAFT", to: "DRAFT" };
   successScenario(statePreservingUpdate).then.expectedState = { mode: "STATE", value: "DRAFT" };
   assertNoCode(validateRequirementModel(statePreservingUpdate), "INVALID_ACTION_OPERATION");
+});
+
+test("rejects CREATE actions whose generic command semantics also express updates", () => {
+  const mixedCommandNames = [
+    "Create or Update a Record",
+    "Maintain the Record Catalog",
+    "Save Record Preferences",
+    "Create or Reorder Record Items",
+  ];
+
+  for (const label of mixedCommandNames) {
+    const model = validFixture();
+    const action = moduleById(model, "SUB-001").actions[0];
+    action.label = label;
+    action.id = "SUB-ACT-MANAGE-RECORD";
+    action.operationKind = "CREATE";
+    delete action.transition;
+    for (const scenario of moduleById(model, "SUB-001").scenarios) {
+      scenario.actionId = action.id;
+    }
+    action.scenarioIds = moduleById(model, "SUB-001").scenarios.map(({ id }) => id);
+    moduleById(model, "SUB-001").pages[0].actionIds = [action.id];
+    model.flows[0].steps[0].actionId = action.id;
+
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_OPERATION");
+  }
+});
+
+test("uses task-specific CREATE and UPDATE actions for every mixed command surface", () => {
+  const mixedCreatePattern = /(?:\bupdate\b|\bmaintain\b|\bsave\b|\breorder\b|(?:^|-)manage(?:-|$))/i;
+  const mixedCreates = modules.flatMap((module) => (
+    module.actions
+      .filter(({ operationKind, id, label }) => (
+        operationKind === "CREATE" && mixedCreatePattern.test(`${id} ${label}`)
+      ))
+      .map(({ id }) => `${module.id}:${id}`)
+  ));
+  assert.deepEqual(mixedCreates, []);
+
+  const requiredPairs = [
+    ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
+    ["ORG-001", "ORG-ACT-CREATE-CLASS", "ORG-ACT-UPDATE-CLASS"],
+    ["ORG-001", "ORG-ACT-CREATE-SUBJECT", "ORG-ACT-UPDATE-SUBJECT"],
+    ["ORG-001", "ORG-ACT-CREATE-COURSE", "ORG-ACT-UPDATE-COURSE"],
+    ["ORG-001", "ORG-ACT-CREATE-TEACHER", "ORG-ACT-UPDATE-TEACHER"],
+    ["ORG-001", "ORG-ACT-CREATE-STUDENT", "ORG-ACT-UPDATE-STUDENT"],
+    ["CURR-001", "CURR-ACT-CREATE-CHAPTER", "CURR-ACT-REORDER-CHAPTER"],
+    ["TEA-001", "TEA-ACT-CREATE-PREFERENCE", "TEA-ACT-UPDATE-PREFERENCE"],
+  ];
+  for (const [moduleId, createActionId, updateActionId] of requiredPairs) {
+    const actionById = new Map(moduleById(requirementModel, moduleId).actions
+      .map((action) => [action.id, action]));
+    assert.equal(actionById.get(createActionId)?.operationKind, "CREATE", createActionId);
+    assert.equal(actionById.get(updateActionId)?.operationKind, "UPDATE", updateActionId);
+  }
 });
 
 test("requires fail-closed audit behavior for high-risk actions", () => {
@@ -1310,6 +1447,74 @@ test("rejects invalid Flow versions outputs retries and idempotency parts", () =
     }
   }
   assert.deepEqual(missedMutations, []);
+});
+
+test("requires stable business-key roles for Flow identity and fanout fields", () => {
+  const stableModel = validFixture();
+  const stableField = moduleById(stableModel, "SUB-001").objects[0].fields
+    .find(({ id }) => id === "SUB-F000");
+  assert.deepEqual(validateRequirementModel(stableModel), []);
+
+  const mutations = [
+    ["missing role", (field) => { delete field.idempotencyRole; }],
+    ["prompt value", (field) => {
+      field.dataType = "TEXT";
+      field.idempotencyRole = "OBJECT_ID";
+    }],
+    ["due time", (field) => {
+      field.dataType = "DATETIME";
+      field.idempotencyRole = "OBJECT_ID";
+    }],
+    ["score value", (field) => {
+      field.dataType = "DECIMAL";
+      field.idempotencyRole = "OBJECT_ID";
+    }],
+    ["status value", (field) => {
+      field.valueSource = { kind: "OPTION_SET", optionSetId: "OPT-BOOL" };
+      field.idempotencyRole = "OBJECT_ID";
+    }],
+    ["mutable object ID", (field) => { field.mutability = "EDITABLE"; }],
+    ["fanout-only identity", (field) => { field.idempotencyRole = "FANOUT_SET"; }],
+    ["object reference without a target", (field) => {
+      field.idempotencyRole = "OBJECT_REF";
+      field.valueSource = { kind: "SYSTEM" };
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(stableModel);
+    const field = moduleById(model, "SUB-001").objects[0].fields
+      .find(({ id }) => id === "SUB-F000");
+    mutate(field);
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_FLOW_IDEMPOTENCY")) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("uses stable object identities and fanout sets in every executable Flow key", () => {
+  const fieldById = new Map(modules.flatMap((module) => (
+    module.objects.flatMap((object) => object.fields.map((field) => [field.id, field]))
+  )));
+  const unstableKeys = [];
+
+  for (const flow of flows) {
+    for (const fieldId of flow.idempotencyKeyParts.identityFieldIds) {
+      const fieldRole = fieldById.get(fieldId)?.idempotencyRole;
+      if (!["OBJECT_ID", "OBJECT_REF"].includes(fieldRole)) {
+        unstableKeys.push(`${flow.id}:identity:${fieldId}`);
+      }
+    }
+    const fanoutFieldId = flow.idempotencyKeyParts.fanoutFieldId;
+    const fanoutRole = fieldById.get(fanoutFieldId)?.idempotencyRole;
+    if (!["OBJECT_ID", "OBJECT_REF", "FANOUT_SET"].includes(fanoutRole)) {
+      unstableKeys.push(`${flow.id}:fanout:${fanoutFieldId}`);
+    }
+  }
+
+  assert.deepEqual(unstableKeys, []);
 });
 
 test("rejects a Flow whose data-reference modules differ from declared participants", () => {
@@ -2168,6 +2373,7 @@ test("records result decision lineage and enforces structured student visibility
     },
   ]);
   assert.deepEqual(result.readPolicies, [{
+    id: "PUB-RP-STUDENT-RESULT",
     actionId: "PUB-ACT-VIEW-RESULT",
     subject: { roleRef: "ROLE-STUDENT" },
     scope: { kind: "OWN_RECORD", subjectFieldId: "PUB-RESULT-F-STUDENT-REF" },
@@ -2176,6 +2382,10 @@ test("records result decision lineage and enforces structured student visibility
       {
         visibleAtFieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
         protectedFieldIds: ["PUB-RESULT-F-ANSWER"],
+      },
+      {
+        visibleAtFieldId: "PUB-RESULT-F-SCORE-VISIBLE-AT",
+        protectedFieldIds: ["PUB-RESULT-F-SCORE"],
       },
       {
         visibleAtFieldId: "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
@@ -2198,6 +2408,7 @@ test("records result decision lineage and enforces structured student visibility
     "NOT_FOUND",
     "RESULT_NOT_PUBLISHED",
     "ANSWER_NOT_VISIBLE",
+    "SCORE_NOT_VISIBLE",
     "FEEDBACK_NOT_VISIBLE",
   ]);
   assert.ok(viewResult.permissions.some(({ effect, roleRef }) => (
@@ -2206,6 +2417,7 @@ test("records result decision lineage and enforces structured student visibility
   for (const resultCode of [
     "RESULT_NOT_PUBLISHED",
     "ANSWER_NOT_VISIBLE",
+    "SCORE_NOT_VISIBLE",
     "FEEDBACK_NOT_VISIBLE",
   ]) {
     const scenario = publication.scenarios.find(({ actionId, resultCode: code }) => (
@@ -2220,9 +2432,69 @@ test("records result decision lineage and enforces structured student visibility
     "PUB-RESULT-F-SCORE",
     "PUB-RESULT-F-FEEDBACK",
     "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    "PUB-RESULT-F-SCORE-VISIBLE-AT",
     "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
     "PUB-RESULT-F-RESULT-VERSION",
   ]);
+});
+
+test("drives student answer score and feedback release from protected field contracts", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const result = publication.objects.find(({ id }) => id === "PUB-OBJ-RESULT");
+  const fieldById = new Map(result.fields.map((field) => [field.id, field]));
+  const expectedRelease = new Map([
+    ["PUB-RESULT-F-ANSWER", "PUB-RESULT-F-ANSWER-VISIBLE-AT"],
+    ["PUB-RESULT-F-SCORE", "PUB-RESULT-F-SCORE-VISIBLE-AT"],
+    ["PUB-RESULT-F-FEEDBACK", "PUB-RESULT-F-FEEDBACK-VISIBLE-AT"],
+  ]);
+
+  for (const [fieldId, visibleAtFieldId] of expectedRelease) {
+    assert.deepEqual(fieldById.get(fieldId).releaseRequirement, {
+      readPolicyId: "PUB-RP-STUDENT-RESULT",
+      requiredState: "PUBLISHED",
+      visibleAtFieldId,
+    });
+    assert.equal(fieldById.get(visibleAtFieldId)?.dataType, "DATETIME", visibleAtFieldId);
+  }
+
+  const policy = result.readPolicies.find(({ id }) => id === "PUB-RP-STUDENT-RESULT");
+  const protectedFieldIds = policy.timeGates
+    .flatMap(({ protectedFieldIds: fieldIds }) => fieldIds)
+    .toSorted();
+  assert.deepEqual(protectedFieldIds, [...expectedRelease.keys()].toSorted());
+});
+
+test("rejects fail-open student result release policy mutations", () => {
+  const mutations = [
+    (result) => { delete result.readPolicies; },
+    (result) => { result.readPolicies[0].requiredState = "READY"; },
+    (result) => {
+      result.readPolicies[0].timeGates[0].visibleAtFieldId = "PUB-RESULT-F-RESULT-VERSION";
+    },
+    (result) => {
+      result.readPolicies[0].timeGates[0].protectedFieldIds = ["PUB-RESULT-F-FEEDBACK"];
+    },
+    (result) => { result.readPolicies[0].timeGates.splice(1, 1); },
+    (result) => {
+      result.readPolicies[0].timeGates.push(structuredClone(result.readPolicies[0].timeGates[0]));
+    },
+    (result) => {
+      result.fields.find(({ id }) => id === "PUB-RESULT-F-ANSWER")
+        .releaseRequirement.visibleAtFieldId = "PUB-RESULT-F-FEEDBACK-VISIBLE-AT";
+    },
+    (_result, publication) => {
+      const page = publication.pages.find(({ id }) => id === "PUB-PAGE-STUDENT-RESULT");
+      page.fieldIds = page.fieldIds.filter((fieldId) => fieldId !== "PUB-RESULT-F-SCORE");
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    const publication = moduleById(model, "PUB-001");
+    const result = publication.objects.find(({ id }) => id === "PUB-OBJ-RESULT");
+    mutate(result, publication);
+    assertHasCode(validateRequirementModel(model), "INVALID_READ_POLICY");
+  }
 });
 
 test("makes publication batch and student-result state chains reachable", () => {
@@ -2741,19 +3013,28 @@ test("models object-level organization import results and partial success", () =
   });
 });
 
-test("exposes explicit grade maintenance in the organization workspace", () => {
+test("exposes separate grade creation and update tasks in the organization workspace", () => {
   const organization = moduleById(requirementModel, "ORG-001");
-  const gradeAction = organization.actions.find(({ id }) => id === "ORG-ACT-MANAGE-GRADE");
-  assert.ok(gradeAction);
-  assert.deepEqual(gradeAction.inputFieldIds, ["ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID"]);
-  assert.deepEqual(gradeAction.outputFieldIds, ["ORG-GRADE-F-STATUS"]);
-  assert.ok(organization.pages.some(({ actionIds }) => actionIds.includes(gradeAction.id)));
-  const scenarios = organization.scenarios.filter(({ actionId }) => actionId === gradeAction.id);
-  assert.equal(scenarios.length, 1 + gradeAction.failureResults.length);
-  assert.deepEqual(
-    scenarios.find(({ kind }) => kind === "SUCCESS").then.expectedState,
-    { mode: "STATE", value: "ACTIVE" },
-  );
+  const actionById = new Map(organization.actions.map((action) => [action.id, action]));
+  const createGrade = actionById.get("ORG-ACT-CREATE-GRADE");
+  const updateGrade = actionById.get("ORG-ACT-UPDATE-GRADE");
+  assert.deepEqual(createGrade.inputFieldIds, ["ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID"]);
+  assert.deepEqual(createGrade.outputFieldIds, ["ORG-GRADE-F-ID", "ORG-GRADE-F-STATUS"]);
+  assert.deepEqual(updateGrade.inputFieldIds, [
+    "ORG-GRADE-F-ID",
+    "ORG-GRADE-F-NAME",
+    "ORG-GRADE-F-TERM-ID",
+  ]);
+  assert.deepEqual(updateGrade.transition, { from: "ACTIVE", to: "ACTIVE" });
+  for (const gradeAction of [createGrade, updateGrade]) {
+    assert.ok(organization.pages.some(({ actionIds }) => actionIds.includes(gradeAction.id)));
+    const scenarios = organization.scenarios.filter(({ actionId }) => actionId === gradeAction.id);
+    assert.equal(scenarios.length, 1 + gradeAction.failureResults.length);
+    assert.deepEqual(
+      scenarios.find(({ kind }) => kind === "SUCCESS").then.expectedState,
+      { mode: "STATE", value: "ACTIVE" },
+    );
+  }
 });
 
 test("declares complete grant authority inputs for every IAM grant action", () => {
@@ -4414,7 +4695,8 @@ test("accepts every supported field value-source kind", () => {
 
   for (const valueSource of valueSources) {
     const model = validFixture();
-    moduleById(model, "SUB-001").objects[0].fields[0].valueSource = valueSource;
+    moduleById(model, "SUB-001").objects[0].fields
+      .find(({ id }) => id === "SUB-F001").valueSource = valueSource;
 
     assert.deepEqual(validateRequirementModel(model), []);
   }

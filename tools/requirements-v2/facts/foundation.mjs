@@ -441,7 +441,7 @@ const accModule = moduleFact({
       "S2",
       ["ACTIVE", "SUSPENDED", "CLOSED"],
       [
-        field("ACC-SCHOOL-F-ID", "School ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+        field("ACC-SCHOOL-F-ID", "School ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
         field("ACC-SCHOOL-F-NAME", "School Name"),
         field("ACC-SCHOOL-F-REGION", "School Region", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-001" } }),
         field("ACC-SCHOOL-F-TYPE", "School Type"),
@@ -484,7 +484,7 @@ const accModule = moduleFact({
       "S4",
       ["PENDING", "EFFECTIVE", "EXPIRED", "REVOKED"],
       [
-        field("ACC-IDENTITY-F-ID", "Identity Assignment ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+        field("ACC-IDENTITY-F-ID", "Identity Assignment ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
         field("ACC-IDENTITY-F-ROLE", "Login Role", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-003" } }),
         field("ACC-IDENTITY-F-DUTIES", "Assigned Duties", { dataType: "STRING_ARRAY", required: false, valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-042" } }),
         field("ACC-IDENTITY-F-SCOPES", "Effective Data Scopes", { dataType: "STRING_ARRAY", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
@@ -549,7 +549,7 @@ const accModule = moduleFact({
 
 const orgObjects = [
   object("ORG-OBJ-TERM", "Term", responsibility("SCHOOL_TERM", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["DRAFT", "CURRENT", "HISTORICAL", "ARCHIVED"], [
-    field("ORG-TERM-F-ID", "Term ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("ORG-TERM-F-ID", "Term ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("ORG-TERM-F-NAME", "Term Name"),
     field("ORG-TERM-F-START", "Start Date", { dataType: "DATE" }),
     field("ORG-TERM-F-END", "End Date", { dataType: "DATE" }),
@@ -578,6 +578,7 @@ const orgObjects = [
     field("ORG-COURSE-F-NAME", "Course Name"),
     field("ORG-COURSE-F-SUBJECT-ID", "Subject ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" } }),
     field("ORG-COURSE-F-TERM-ID", "Term ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-004" } }),
+    field("ORG-COURSE-F-STATUS", "Course Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ]),
   object("ORG-OBJ-TEACHER", "Teacher Profile", responsibility("TEACHER", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-002", "S3", ["ACTIVE", "SUSPENDED", "DEACTIVATED"], [
     field("ORG-TEACHER-F-ID", "Teacher ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -604,7 +605,7 @@ const orgObjects = [
     field("ORG-HOMEROOM-F-EFFECTIVE", "Effective Range"),
   ]),
   object("ORG-OBJ-IMPORT-BATCH", "Import Batch", responsibility("ORGANIZATION_IMPORT", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"), "LIFE-002", "S3", ["UPLOADED", "MAPPED", "VALIDATED", "PENDING_OUTCOME_AUDIT", "PENDING_PARTIAL_OUTCOME_AUDIT", "PARTIAL_SUCCESS", "COMPLETED", "REJECTED"], [
-    field("ORG-IMPORT-F-ID", "Import Batch ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("ORG-IMPORT-F-ID", "Import Batch ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("ORG-IMPORT-F-OBJECT-TYPE", "Import Object Type", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-020" } }),
     field("ORG-IMPORT-F-TEMPLATE-VERSION", "Template Version"),
     field("ORG-IMPORT-F-MAPPING", "Field Mapping", { dataType: "JSON", required: false }),
@@ -612,7 +613,7 @@ const orgObjects = [
     field("ORG-IMPORT-F-STATUS", "Import Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ]),
   object("ORG-OBJ-IMPORT-ROW", "Import Row Result", responsibility("ORGANIZATION_IMPORT_OBJECT", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"), "LIFE-002", "S3", ["PENDING", "VALIDATED", "CREATE", "UPDATE", "NO_CHANGE", "REJECT", "DEACTIVATE", "RETRYABLE"], [
-    field("ORG-IMPORT-ROW-F-ID", "Import Row ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("ORG-IMPORT-ROW-F-ID", "Import Row ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("ORG-IMPORT-ROW-F-BATCH-ID", "Import Batch ID", { valueSource: { kind: "SYSTEM" } }),
     field("ORG-IMPORT-ROW-F-ROW-VERSION", "Import Row Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
     field("ORG-IMPORT-ROW-F-RESULT-TYPE", "Object Result Type", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-021" }, mutability: "READ_ONLY", validation: "must be CREATE, UPDATE, NO_CHANGE, REJECT, or DEACTIVATE" }),
@@ -633,13 +634,19 @@ const orgAdminPermissions = permissions(
 );
 
 const orgActions = [
-  action({ id: "ORG-ACT-MANAGE-TERM", label: "Create or Version a School Term", operationKind: "CREATE", targetObjectId: "ORG-OBJ-TERM", inputFieldIds: ["ORG-TERM-F-NAME", "ORG-TERM-F-START", "ORG-TERM-F-END"], outputFieldIds: ["ORG-TERM-F-STATUS"], permissions: orgAdminPermissions, successState: "DRAFT" }),
-  action({ id: "ORG-ACT-MANAGE-GRADE", label: "Create or Update a Term Grade", operationKind: "CREATE", targetObjectId: "ORG-OBJ-GRADE", inputFieldIds: ["ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID"], outputFieldIds: ["ORG-GRADE-F-STATUS"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
-  action({ id: "ORG-ACT-MANAGE-CLASS", label: "Create or Update a Term Class", operationKind: "CREATE", targetObjectId: "ORG-OBJ-CLASS", inputFieldIds: ["ORG-CLASS-F-NAME", "ORG-CLASS-F-GRADE-ID"], outputFieldIds: ["ORG-CLASS-F-STATUS"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
-  action({ id: "ORG-ACT-MANAGE-SUBJECT", label: "Maintain the School Subject Catalog", operationKind: "CREATE", targetObjectId: "ORG-OBJ-SUBJECT", inputFieldIds: ["ORG-SUBJECT-F-NAME"], outputFieldIds: ["ORG-SUBJECT-F-STATUS"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
-  action({ id: "ORG-ACT-MANAGE-COURSE", label: "Create or Update a Term Course", operationKind: "CREATE", targetObjectId: "ORG-OBJ-COURSE", inputFieldIds: ["ORG-COURSE-F-NAME", "ORG-COURSE-F-SUBJECT-ID", "ORG-COURSE-F-TERM-ID"], permissions: orgAdminPermissions, successState: "DRAFT" }),
-  action({ id: "ORG-ACT-MANAGE-TEACHER", label: "Create or Update a Teacher Profile", operationKind: "CREATE", targetObjectId: "ORG-OBJ-TEACHER", inputFieldIds: ["ORG-TEACHER-F-NAME"], outputFieldIds: ["ORG-TEACHER-F-MEMBER-STATE"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
-  action({ id: "ORG-ACT-MANAGE-STUDENT", label: "Create or Update a Student Profile", operationKind: "CREATE", targetObjectId: "ORG-OBJ-STUDENT", inputFieldIds: ["ORG-STUDENT-F-NAME", "ORG-STUDENT-F-CLASS-ID"], outputFieldIds: ["ORG-STUDENT-F-MEMBER-STATE"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
+  action({ id: "ORG-ACT-CREATE-TERM-VERSION", label: "Create a School Term Version", operationKind: "CREATE", targetObjectId: "ORG-OBJ-TERM", inputFieldIds: ["ORG-TERM-F-NAME", "ORG-TERM-F-START", "ORG-TERM-F-END"], outputFieldIds: ["ORG-TERM-F-ID", "ORG-TERM-F-TERM-VERSION", "ORG-TERM-F-STATUS"], permissions: orgAdminPermissions, successState: "DRAFT" }),
+  action({ id: "ORG-ACT-CREATE-GRADE", label: "Create a Term Grade", operationKind: "CREATE", targetObjectId: "ORG-OBJ-GRADE", inputFieldIds: ["ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID"], outputFieldIds: ["ORG-GRADE-F-ID", "ORG-GRADE-F-STATUS"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
+  action({ id: "ORG-ACT-UPDATE-GRADE", label: "Update an Active Term Grade", targetObjectId: "ORG-OBJ-GRADE", inputFieldIds: ["ORG-GRADE-F-ID", "ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID"], outputFieldIds: ["ORG-GRADE-F-STATUS"], permissions: orgAdminPermissions, transition: { from: "ACTIVE", to: "ACTIVE" } }),
+  action({ id: "ORG-ACT-CREATE-CLASS", label: "Create a Term Class", operationKind: "CREATE", targetObjectId: "ORG-OBJ-CLASS", inputFieldIds: ["ORG-CLASS-F-NAME", "ORG-CLASS-F-GRADE-ID"], outputFieldIds: ["ORG-CLASS-F-ID", "ORG-CLASS-F-STATUS"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
+  action({ id: "ORG-ACT-UPDATE-CLASS", label: "Update an Active Term Class", targetObjectId: "ORG-OBJ-CLASS", inputFieldIds: ["ORG-CLASS-F-ID", "ORG-CLASS-F-NAME", "ORG-CLASS-F-GRADE-ID"], outputFieldIds: ["ORG-CLASS-F-STATUS"], permissions: orgAdminPermissions, transition: { from: "ACTIVE", to: "ACTIVE" } }),
+  action({ id: "ORG-ACT-CREATE-SUBJECT", label: "Create a School Subject", operationKind: "CREATE", targetObjectId: "ORG-OBJ-SUBJECT", inputFieldIds: ["ORG-SUBJECT-F-NAME"], outputFieldIds: ["ORG-SUBJECT-F-ID", "ORG-SUBJECT-F-STATUS"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
+  action({ id: "ORG-ACT-UPDATE-SUBJECT", label: "Update an Active School Subject", targetObjectId: "ORG-OBJ-SUBJECT", inputFieldIds: ["ORG-SUBJECT-F-ID", "ORG-SUBJECT-F-NAME"], outputFieldIds: ["ORG-SUBJECT-F-STATUS"], permissions: orgAdminPermissions, transition: { from: "ACTIVE", to: "ACTIVE" } }),
+  action({ id: "ORG-ACT-CREATE-COURSE", label: "Create a Term Course", operationKind: "CREATE", targetObjectId: "ORG-OBJ-COURSE", inputFieldIds: ["ORG-COURSE-F-NAME", "ORG-COURSE-F-SUBJECT-ID", "ORG-COURSE-F-TERM-ID"], outputFieldIds: ["ORG-COURSE-F-ID", "ORG-COURSE-F-STATUS"], permissions: orgAdminPermissions, successState: "DRAFT" }),
+  action({ id: "ORG-ACT-UPDATE-COURSE", label: "Update a Draft Term Course", targetObjectId: "ORG-OBJ-COURSE", inputFieldIds: ["ORG-COURSE-F-ID", "ORG-COURSE-F-NAME", "ORG-COURSE-F-SUBJECT-ID", "ORG-COURSE-F-TERM-ID"], outputFieldIds: ["ORG-COURSE-F-STATUS"], permissions: orgAdminPermissions, transition: { from: "DRAFT", to: "DRAFT" } }),
+  action({ id: "ORG-ACT-CREATE-TEACHER", label: "Create a Teacher Profile", operationKind: "CREATE", targetObjectId: "ORG-OBJ-TEACHER", inputFieldIds: ["ORG-TEACHER-F-NAME"], outputFieldIds: ["ORG-TEACHER-F-ID", "ORG-TEACHER-F-MEMBER-STATE"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
+  action({ id: "ORG-ACT-UPDATE-TEACHER", label: "Update an Active Teacher Profile", targetObjectId: "ORG-OBJ-TEACHER", inputFieldIds: ["ORG-TEACHER-F-ID", "ORG-TEACHER-F-NAME"], outputFieldIds: ["ORG-TEACHER-F-MEMBER-STATE"], permissions: orgAdminPermissions, transition: { from: "ACTIVE", to: "ACTIVE" } }),
+  action({ id: "ORG-ACT-CREATE-STUDENT", label: "Create a Student Profile", operationKind: "CREATE", targetObjectId: "ORG-OBJ-STUDENT", inputFieldIds: ["ORG-STUDENT-F-NAME", "ORG-STUDENT-F-CLASS-ID"], outputFieldIds: ["ORG-STUDENT-F-ID", "ORG-STUDENT-F-MEMBER-STATE"], permissions: orgAdminPermissions, successState: "ACTIVE" }),
+  action({ id: "ORG-ACT-UPDATE-STUDENT", label: "Update an Active Student Profile", targetObjectId: "ORG-OBJ-STUDENT", inputFieldIds: ["ORG-STUDENT-F-ID", "ORG-STUDENT-F-NAME", "ORG-STUDENT-F-CLASS-ID"], outputFieldIds: ["ORG-STUDENT-F-MEMBER-STATE"], permissions: orgAdminPermissions, transition: { from: "ACTIVE", to: "ACTIVE" } }),
   action({ id: "ORG-ACT-ASSIGN-SUBJECT-TEACHER", label: "Assign a Subject Teacher to Course and Class", operationKind: "CREATE", targetObjectId: "ORG-OBJ-TEACHING-ASSIGNMENT", inputFieldIds: ["ORG-TEACHING-F-TEACHER-ID", "ORG-TEACHING-F-COURSE-ID", "ORG-TEACHING-F-CLASS-ID", "ORG-TEACHING-F-EFFECTIVE"], permissions: permissions("ROLE-ACADEMIC", "DUTY-SUBJECT-LEAD", "academic staff owns assignment changes", "subject lead may review subject scope but cannot grant organization duties"), successState: "PLANNED" }),
   action({ id: "ORG-ACT-ASSIGN-HOMEROOM", label: "Assign a Homeroom Teacher to a Class", operationKind: "CREATE", targetObjectId: "ORG-OBJ-HOMEROOM-ASSIGNMENT", inputFieldIds: ["ORG-HOMEROOM-F-TEACHER-ID", "ORG-HOMEROOM-F-CLASS-ID", "ORG-HOMEROOM-F-EFFECTIVE"], permissions: orgAdminPermissions, successState: "PLANNED" }),
   action({ id: "ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE", label: "Download Object-specific Import Template", targetObjectId: "ORG-OBJ-IMPORT-BATCH", inputFieldIds: ["ORG-IMPORT-F-OBJECT-TYPE"], outputFieldIds: ["ORG-IMPORT-F-TEMPLATE-VERSION"], writes: false, permissions: orgAdminPermissions, auditMode: AUDIT_NOT_REQUIRED }),
@@ -676,8 +683,8 @@ const orgModule = moduleFact({
   ],
   actions: orgActions,
   pages: [
-    page("ORG-PAGE-TREE", "Term Grade Class Subject and Course Organization Tree", ["ORG-OBJ-TERM", "ORG-OBJ-GRADE", "ORG-OBJ-CLASS", "ORG-OBJ-SUBJECT", "ORG-OBJ-COURSE"], ["ORG-TERM-F-NAME", "ORG-TERM-F-START", "ORG-TERM-F-END", "ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID", "ORG-GRADE-F-STATUS", "ORG-CLASS-F-NAME", "ORG-CLASS-F-GRADE-ID", "ORG-SUBJECT-F-NAME", "ORG-COURSE-F-NAME", "ORG-COURSE-F-SUBJECT-ID", "ORG-COURSE-F-TERM-ID"], ["ORG-ACT-MANAGE-TERM", "ORG-ACT-MANAGE-GRADE", "ORG-ACT-MANAGE-CLASS", "ORG-ACT-MANAGE-SUBJECT", "ORG-ACT-MANAGE-COURSE", "ORG-ACT-RESOLVE-CONTEXT-SCOPE"]),
-    page("ORG-PAGE-MEMBERS", "Teacher and Student Member Management", ["ORG-OBJ-TEACHER", "ORG-OBJ-STUDENT"], ["ORG-TEACHER-F-NAME", "ORG-TEACHER-F-MEMBER-STATE", "ORG-STUDENT-F-NAME", "ORG-STUDENT-F-CLASS-ID", "ORG-STUDENT-F-MEMBER-STATE"], ["ORG-ACT-MANAGE-TEACHER", "ORG-ACT-MANAGE-STUDENT", "ORG-ACT-DEACTIVATE-MEMBER"]),
+    page("ORG-PAGE-TREE", "Term Grade Class Subject and Course Organization Tree", ["ORG-OBJ-TERM", "ORG-OBJ-GRADE", "ORG-OBJ-CLASS", "ORG-OBJ-SUBJECT", "ORG-OBJ-COURSE"], ["ORG-TERM-F-ID", "ORG-TERM-F-NAME", "ORG-TERM-F-START", "ORG-TERM-F-END", "ORG-GRADE-F-ID", "ORG-GRADE-F-NAME", "ORG-GRADE-F-TERM-ID", "ORG-GRADE-F-STATUS", "ORG-CLASS-F-ID", "ORG-CLASS-F-NAME", "ORG-CLASS-F-GRADE-ID", "ORG-SUBJECT-F-ID", "ORG-SUBJECT-F-NAME", "ORG-COURSE-F-ID", "ORG-COURSE-F-NAME", "ORG-COURSE-F-SUBJECT-ID", "ORG-COURSE-F-TERM-ID", "ORG-COURSE-F-STATUS"], ["ORG-ACT-CREATE-TERM-VERSION", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE", "ORG-ACT-CREATE-CLASS", "ORG-ACT-UPDATE-CLASS", "ORG-ACT-CREATE-SUBJECT", "ORG-ACT-UPDATE-SUBJECT", "ORG-ACT-CREATE-COURSE", "ORG-ACT-UPDATE-COURSE", "ORG-ACT-RESOLVE-CONTEXT-SCOPE"]),
+    page("ORG-PAGE-MEMBERS", "Teacher and Student Member Management", ["ORG-OBJ-TEACHER", "ORG-OBJ-STUDENT"], ["ORG-TEACHER-F-ID", "ORG-TEACHER-F-NAME", "ORG-TEACHER-F-MEMBER-STATE", "ORG-STUDENT-F-ID", "ORG-STUDENT-F-NAME", "ORG-STUDENT-F-CLASS-ID", "ORG-STUDENT-F-MEMBER-STATE"], ["ORG-ACT-CREATE-TEACHER", "ORG-ACT-UPDATE-TEACHER", "ORG-ACT-CREATE-STUDENT", "ORG-ACT-UPDATE-STUDENT", "ORG-ACT-DEACTIVATE-MEMBER"]),
     page("ORG-PAGE-IMPORT-TEMPLATE", "Import Object and Template Selection", ["ORG-OBJ-IMPORT-BATCH"], ["ORG-IMPORT-F-OBJECT-TYPE", "ORG-IMPORT-F-TEMPLATE-VERSION"], ["ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE", "ORG-ACT-UPLOAD-IMPORT"]),
     page("ORG-PAGE-IMPORT-MAPPING", "Import Mapping and Row Validation", ["ORG-OBJ-IMPORT-BATCH", "ORG-OBJ-IMPORT-ROW"], ["ORG-IMPORT-F-MAPPING", "ORG-IMPORT-F-STATUS", "ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-VALIDATION-RESULT", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS"], ["ORG-ACT-MAP-IMPORT-FIELDS", "ORG-ACT-VALIDATE-IMPORT", "ORG-ACT-CONFIRM-IMPORT"]),
     page("ORG-PAGE-IMPORT-RESULT", "Object-level Import Result and Retry", ["ORG-OBJ-IMPORT-BATCH", "ORG-OBJ-IMPORT-ROW"], ["ORG-IMPORT-F-STATUS", "ORG-IMPORT-ROW-F-RESULT-TYPE", "ORG-IMPORT-ROW-F-ERRORS", "ORG-IMPORT-ROW-F-CONFLICTS", "ORG-IMPORT-ROW-F-OBJECT-ID"], ["ORG-ACT-RETRY-FAILED-ROWS"]),
@@ -719,7 +726,7 @@ const iamObjects = [
     field("IAM-SCOPE-F-STATUS", "Scope Grant Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ]),
   object("IAM-OBJ-PERMISSION-DECISION", "Permission Decision", responsibility("PERMISSION_EVALUATION", "SYSTEM", "SYSTEM", "SYSTEM", "ROLE-SCHOOL-ADMIN"), "LIFE-004", "S4", ["ALLOW", "DENY", "STALE"], [
-    field("IAM-DECISION-F-ID", "Permission Decision ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("IAM-DECISION-F-ID", "Permission Decision ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("IAM-DECISION-F-SUBJECT", "Decision Subject ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-DECISION-F-ACTION", "Evaluated Action", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-DECISION-F-SCOPE", "Evaluated Object Scope", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -940,7 +947,7 @@ const audModule = moduleFact({
 
 const currObjects = [
   object("CURR-OBJ-CURRICULUM", "Curriculum Version", responsibility("SUBJECT_CURRICULUM", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-003", "S2", ["DRAFT", "VALIDATING", "VALIDATED", "PUBLISHED", "DEPRECATED"], [
-    field("CURR-CURRICULUM-F-ID", "Curriculum Version ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("CURR-CURRICULUM-F-ID", "Curriculum Version ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("CURR-CURRICULUM-F-NAME", "Curriculum Version Name"),
     field("CURR-CURRICULUM-F-SUBJECT", "Curriculum Subject", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" } }),
     field("CURR-CURRICULUM-F-VERSION", "Curriculum Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -970,7 +977,7 @@ const currObjects = [
     field("CURR-KP-F-STATUS", "Knowledge Point Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ]),
   object("CURR-OBJ-MAPPING", "Knowledge Mapping", responsibility("SUBJECT_CURRICULUM", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "VALIDATED", "PUBLISHED", "DEPRECATED"], [
-    field("CURR-MAPPING-F-ID", "Knowledge Mapping ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("CURR-MAPPING-F-ID", "Knowledge Mapping ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("CURR-MAPPING-F-CHAPTER-ID", "Mapped Chapter ID"),
     field("CURR-MAPPING-F-KP-ID", "Mapped Knowledge Point ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-011" } }),
     field("CURR-MAPPING-F-RELATION", "Mapping Relation", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-043" } }),
@@ -988,8 +995,9 @@ const currSubjectPermissions = [
 const currActions = [
   action({ id: "CURR-ACT-CREATE-DRAFT", label: "Create a Curriculum Version Draft", operationKind: "CREATE", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-NAME", "CURR-CURRICULUM-F-SUBJECT"], outputFieldIds: ["CURR-CURRICULUM-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
   action({ id: "CURR-ACT-ADD-TEXTBOOK", label: "Add a Textbook Version to Curriculum", operationKind: "CREATE", targetObjectId: "CURR-OBJ-TEXTBOOK", inputFieldIds: ["CURR-TEXTBOOK-F-CURRICULUM-ID", "CURR-TEXTBOOK-F-NAME", "CURR-TEXTBOOK-F-EDITION"], outputFieldIds: ["CURR-TEXTBOOK-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
-  action({ id: "CURR-ACT-MANAGE-CHAPTERS", label: "Create or Reorder Textbook Chapters", operationKind: "CREATE", targetObjectId: "CURR-OBJ-CHAPTER", inputFieldIds: ["CURR-CHAPTER-F-TEXTBOOK-ID", "CURR-CHAPTER-F-TITLE", "CURR-CHAPTER-F-ORDER"], outputFieldIds: ["CURR-CHAPTER-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
-  action({ id: "CURR-ACT-MANAGE-KNOWLEDGE", label: "Create or Version Knowledge Points", operationKind: "CREATE", targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT", inputFieldIds: ["CURR-KP-F-NAME", "CURR-KP-F-DEFINITION", "CURR-KP-F-PARENT-ID"], outputFieldIds: ["CURR-KP-F-STATUS"], permissions: currSubjectPermissions, successState: "DRAFT" }),
+  action({ id: "CURR-ACT-CREATE-CHAPTER", label: "Create a Textbook Chapter", operationKind: "CREATE", targetObjectId: "CURR-OBJ-CHAPTER", inputFieldIds: ["CURR-CHAPTER-F-TEXTBOOK-ID", "CURR-CHAPTER-F-TITLE", "CURR-CHAPTER-F-ORDER"], outputFieldIds: ["CURR-CHAPTER-F-ID", "CURR-CHAPTER-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
+  action({ id: "CURR-ACT-REORDER-CHAPTER", label: "Reorder a Draft Textbook Chapter", targetObjectId: "CURR-OBJ-CHAPTER", inputFieldIds: ["CURR-CHAPTER-F-ID", "CURR-CHAPTER-F-ORDER"], outputFieldIds: ["CURR-CHAPTER-F-ORDER", "CURR-CHAPTER-F-STATUS"], permissions: currAdminPermissions, transition: { from: "DRAFT", to: "DRAFT" } }),
+  action({ id: "CURR-ACT-CREATE-KNOWLEDGE-VERSION", label: "Create a Knowledge Point Version", operationKind: "CREATE", targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT", inputFieldIds: ["CURR-KP-F-NAME", "CURR-KP-F-DEFINITION", "CURR-KP-F-PARENT-ID"], outputFieldIds: ["CURR-KP-F-ID", "CURR-KP-F-STATUS"], permissions: currSubjectPermissions, successState: "DRAFT" }),
   action({ id: "CURR-ACT-CREATE-MAPPING", label: "Map a Chapter to a Knowledge Point", operationKind: "CREATE", targetObjectId: "CURR-OBJ-MAPPING", inputFieldIds: ["CURR-MAPPING-F-CHAPTER-ID", "CURR-MAPPING-F-KP-ID", "CURR-MAPPING-F-RELATION"], outputFieldIds: ["CURR-MAPPING-F-VERSION", "CURR-MAPPING-F-STATUS"], permissions: currSubjectPermissions, successState: "DRAFT" }),
   action({ id: "CURR-ACT-VALIDATE-MAPPING", label: "Validate Knowledge Mapping Publication Readiness", targetObjectId: "CURR-OBJ-MAPPING", inputFieldIds: ["CURR-MAPPING-F-ID", "CURR-MAPPING-F-VERSION"], outputFieldIds: ["CURR-MAPPING-F-VERSION", "CURR-MAPPING-F-STATUS"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "DRAFT", to: "VALIDATED" }, successData: "mapping validation confirms chapter, knowledge point, relation, and source version resolve before publication" }),
   action({ id: "CURR-ACT-VALIDATE-VERSION", label: "Validate Curriculum Publication Readiness", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-ID"], outputFieldIds: ["CURR-CURRICULUM-F-VERSION", "CURR-CURRICULUM-F-VALIDATION", "CURR-CURRICULUM-F-STATUS"], permissions: currSubjectPermissions, risk: RISK.HIGH, transition: { from: "DRAFT", to: "VALIDATED" }, successData: "validation confirms textbook, chapter, knowledge point, and mapping references resolve in one version" }),
@@ -1019,8 +1027,8 @@ const currModule = moduleFact({
   actions: currActions,
   pages: [
     page("CURR-PAGE-VERSIONS", "Curriculum Version Management", ["CURR-OBJ-CURRICULUM"], ["CURR-CURRICULUM-F-NAME", "CURR-CURRICULUM-F-SUBJECT", "CURR-CURRICULUM-F-STATUS", "CURR-CURRICULUM-F-PUBLISHED-AT"], ["CURR-ACT-CREATE-DRAFT", "CURR-ACT-DEPRECATE-VERSION"]),
-    page("CURR-PAGE-TEXTBOOK-TREE", "Textbook and Chapter Version Tree", ["CURR-OBJ-TEXTBOOK", "CURR-OBJ-CHAPTER"], ["CURR-TEXTBOOK-F-NAME", "CURR-TEXTBOOK-F-EDITION", "CURR-CHAPTER-F-TITLE", "CURR-CHAPTER-F-ORDER"], ["CURR-ACT-ADD-TEXTBOOK", "CURR-ACT-MANAGE-CHAPTERS"]),
-    page("CURR-PAGE-KP-EDITOR", "Knowledge Point Version Editor", ["CURR-OBJ-KNOWLEDGE-POINT"], ["CURR-KP-F-NAME", "CURR-KP-F-DEFINITION", "CURR-KP-F-PARENT-ID", "CURR-KP-F-STATUS"], ["CURR-ACT-MANAGE-KNOWLEDGE"]),
+    page("CURR-PAGE-TEXTBOOK-TREE", "Textbook and Chapter Version Tree", ["CURR-OBJ-TEXTBOOK", "CURR-OBJ-CHAPTER"], ["CURR-TEXTBOOK-F-NAME", "CURR-TEXTBOOK-F-EDITION", "CURR-CHAPTER-F-ID", "CURR-CHAPTER-F-TITLE", "CURR-CHAPTER-F-ORDER"], ["CURR-ACT-ADD-TEXTBOOK", "CURR-ACT-CREATE-CHAPTER", "CURR-ACT-REORDER-CHAPTER"]),
+    page("CURR-PAGE-KP-EDITOR", "Knowledge Point Version Editor", ["CURR-OBJ-KNOWLEDGE-POINT"], ["CURR-KP-F-NAME", "CURR-KP-F-DEFINITION", "CURR-KP-F-PARENT-ID", "CURR-KP-F-STATUS"], ["CURR-ACT-CREATE-KNOWLEDGE-VERSION"]),
     page("CURR-PAGE-MAPPING", "Chapter Knowledge Mapping Review", ["CURR-OBJ-MAPPING"], ["CURR-MAPPING-F-CHAPTER-ID", "CURR-MAPPING-F-KP-ID", "CURR-MAPPING-F-RELATION", "CURR-MAPPING-F-STATUS"], ["CURR-ACT-CREATE-MAPPING"]),
     page("CURR-PAGE-PUBLISH", "Curriculum and Mapping Publication Preview", ["CURR-OBJ-CURRICULUM", "CURR-OBJ-MAPPING"], ["CURR-CURRICULUM-F-VALIDATION", "CURR-CURRICULUM-F-STATUS", "CURR-CURRICULUM-F-PUBLISHED-AT", "CURR-MAPPING-F-VERSION", "CURR-MAPPING-F-STATUS"], ["CURR-ACT-VALIDATE-MAPPING", "CURR-ACT-VALIDATE-VERSION", "CURR-ACT-PUBLISH-MAPPING", "CURR-ACT-PUBLISH-VERSION"]),
     page("CURR-PAGE-PATH", "Published Knowledge Path Viewer", ["CURR-OBJ-MAPPING"], ["CURR-MAPPING-F-CHAPTER-ID", "CURR-MAPPING-F-KP-ID", "CURR-MAPPING-F-RELATION", "CURR-MAPPING-F-VERSION"], ["CURR-ACT-VIEW-KNOWLEDGE-PATH"], WEB_APP),
@@ -1061,7 +1069,8 @@ const teaActions = [
   action({ id: "TEA-ACT-CREATE-COORDINATION", label: "Create a Homeroom Coordination Item", operationKind: "CREATE", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID", "TEA-COORD-F-SUBJECT-REFS", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may create coordination notes for the assigned class", "homeroom duty cannot write another subject's professional facts, scores, evidence, or plans"), successState: "OPEN", successData: "coordination item stores references and coordination notes only" }),
   action({ id: "TEA-ACT-UPDATE-COORDINATION", label: "Update a Homeroom Coordination Note", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may update coordination-owned notes for the assigned class", "homeroom duty cannot write or overwrite other subject professional facts" ), transition: { from: "OPEN", to: "IN_PROGRESS" } }),
   action({ id: "TEA-ACT-CLOSE-COORDINATION", label: "Close a Resolved Homeroom Coordination Item", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-SUBJECT-TEACHER", "homeroom duty closes only coordination-owned items for the assigned class", "subject teacher cannot close a homeroom coordination item but retains ownership of subject facts"), transition: { from: "IN_PROGRESS", to: "CLOSED" } }),
-  action({ id: "TEA-ACT-SAVE-PREFERENCE", label: "Save Teacher Workspace Preference", operationKind: "CREATE", targetObjectId: "TEA-OBJ-PREFERENCE", inputFieldIds: ["TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], permissions: permissions("ROLE-TEACHER", "ROLE-PLATFORM-OPS", "teacher changes only the teacher's own workspace preference", "platform operations cannot change a teacher's personal work preference"), successState: "ACTIVE" }),
+  action({ id: "TEA-ACT-CREATE-PREFERENCE", label: "Create Teacher Workspace Preference", operationKind: "CREATE", targetObjectId: "TEA-OBJ-PREFERENCE", inputFieldIds: ["TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], outputFieldIds: ["TEA-PREF-F-ID", "TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], permissions: permissions("ROLE-TEACHER", "ROLE-PLATFORM-OPS", "teacher creates only the teacher's own workspace preference", "platform operations cannot create a teacher's personal work preference"), successState: "ACTIVE" }),
+  action({ id: "TEA-ACT-UPDATE-PREFERENCE", label: "Update Teacher Workspace Preference", targetObjectId: "TEA-OBJ-PREFERENCE", inputFieldIds: ["TEA-PREF-F-ID", "TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], outputFieldIds: ["TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], permissions: permissions("ROLE-TEACHER", "ROLE-PLATFORM-OPS", "teacher updates only the teacher's own workspace preference", "platform operations cannot update a teacher's personal work preference"), transition: { from: "ACTIVE", to: "ACTIVE" } }),
 ];
 
 const teaModule = moduleFact({
@@ -1086,7 +1095,7 @@ const teaModule = moduleFact({
     page("TEA-PAGE-QUEUE", "Grading and Review Queue Summary", ["TEA-OBJ-TODO-VIEW"], ["TEA-TODO-F-SUBJECT-SCOPE", "TEA-TODO-F-SOURCE-REFS", "TEA-TODO-F-FILTER"], ["TEA-ACT-QUERY-SUBJECT-TODOS"], WEB_APP),
     page("TEA-PAGE-HOMEROOM", "Homeroom Whole-subject Overview", ["TEA-OBJ-COORDINATION"], ["TEA-COORD-F-CLASS-ID", "TEA-COORD-F-SUBJECT-REFS", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE", "TEA-COORD-F-STATUS"], ["TEA-ACT-QUERY-HOMEROOM-SUMMARY", "TEA-ACT-CREATE-COORDINATION"], WEB_APP),
     page("TEA-PAGE-COORDINATION", "Homeroom Coordination Detail", ["TEA-OBJ-COORDINATION"], ["TEA-COORD-F-SUBJECT-REFS", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE", "TEA-COORD-F-STATUS"], ["TEA-ACT-UPDATE-COORDINATION", "TEA-ACT-CLOSE-COORDINATION"], WEB_APP),
-    page("TEA-PAGE-PREFERENCE", "Teacher Work Preference", ["TEA-OBJ-PREFERENCE"], ["TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], ["TEA-ACT-SAVE-PREFERENCE"]),
+    page("TEA-PAGE-PREFERENCE", "Teacher Work Preference", ["TEA-OBJ-PREFERENCE"], ["TEA-PREF-F-ID", "TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], ["TEA-ACT-CREATE-PREFERENCE", "TEA-ACT-UPDATE-PREFERENCE"]),
   ],
 });
 
@@ -1119,8 +1128,11 @@ export const foundationFlows = deepFreeze([
     ],
     sourceDataRefs: [
       { objectId: "ACC-OBJ-SCHOOL", fieldId: "ACC-SCHOOL-F-ID", version: "ACC-SCHOOL-F-SCHOOL-VERSION" },
+      { objectId: "ACC-OBJ-IDENTITY", fieldId: "ACC-IDENTITY-F-ID", version: "ACC-IDENTITY-F-IDENTITY-VERSION" },
       { objectId: "ACC-OBJ-IDENTITY", fieldId: "ACC-IDENTITY-F-SCOPES", version: "ACC-IDENTITY-F-IDENTITY-VERSION" },
+      { objectId: "ORG-OBJ-TERM", fieldId: "ORG-TERM-F-ID", version: "ORG-TERM-F-TERM-VERSION" },
       { objectId: "ORG-OBJ-TERM", fieldId: "ORG-TERM-F-STATUS", version: "ORG-TERM-F-TERM-VERSION" },
+      { objectId: "IAM-OBJ-PERMISSION-DECISION", fieldId: "IAM-DECISION-F-ID", version: "IAM-DECISION-F-DECISION-VERSION" },
       { objectId: "IAM-OBJ-PERMISSION-DECISION", fieldId: "IAM-DECISION-F-SOURCE-VERSIONS", version: "IAM-DECISION-F-DECISION-VERSION" },
     ],
     targetDataRefs: [
@@ -1128,9 +1140,9 @@ export const foundationFlows = deepFreeze([
       { objectId: "IAM-OBJ-PERMISSION-DECISION", fieldId: "IAM-DECISION-F-RESULT", version: "IAM-DECISION-F-DECISION-VERSION" },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["ACC-SCHOOL-F-ID", "ACC-IDENTITY-F-SCOPES", "ORG-TERM-F-STATUS"],
+      identityFieldIds: ["ACC-SCHOOL-F-ID", "ACC-IDENTITY-F-ID", "ORG-TERM-F-ID", "IAM-DECISION-F-ID"],
       versionFieldIds: ["ACC-SCHOOL-F-SCHOOL-VERSION", "ACC-IDENTITY-F-IDENTITY-VERSION", "ORG-TERM-F-TERM-VERSION", "IAM-DECISION-F-DECISION-VERSION"],
-      fanoutFieldId: "IAM-DECISION-F-SOURCE-VERSIONS",
+      fanoutFieldId: "IAM-DECISION-F-ID",
     },
     failureGranularity: "STEP_WITH_NO_CONTEXT_ACTIVATION_BEFORE_ALL_CHECKS_PASS",
     retryPolicy: { strategy: "RETRY_READS_AND_IDEMPOTENT_CONTEXT_WRITE", maxAttempts: 3, retryableFailureResults: ["VERSION_CONFLICT"] },
@@ -1155,8 +1167,11 @@ export const foundationFlows = deepFreeze([
       { order: 10, actionId: "IAM-ACT-RECALCULATE-PERMISSIONS", condition: "audited import was finalized and accepted organization rows changed permission sources" },
     ],
     sourceDataRefs: [
+      { objectId: "ORG-OBJ-IMPORT-BATCH", fieldId: "ORG-IMPORT-F-ID", version: "ORG-IMPORT-F-BATCH-VERSION" },
       { objectId: "ORG-OBJ-IMPORT-BATCH", fieldId: "ORG-IMPORT-F-TEMPLATE-VERSION", version: "ORG-IMPORT-F-BATCH-VERSION" },
+      { objectId: "ORG-OBJ-IMPORT-ROW", fieldId: "ORG-IMPORT-ROW-F-ID", version: "ORG-IMPORT-ROW-F-ROW-VERSION" },
       { objectId: "ORG-OBJ-IMPORT-ROW", fieldId: "ORG-IMPORT-ROW-F-RESULT-TYPE", version: "ORG-IMPORT-ROW-F-ROW-VERSION" },
+      { objectId: "IAM-OBJ-PERMISSION-DECISION", fieldId: "IAM-DECISION-F-ID", version: "IAM-DECISION-F-DECISION-VERSION" },
       { objectId: "IAM-OBJ-PERMISSION-DECISION", fieldId: "IAM-DECISION-F-SOURCE-VERSIONS", version: "IAM-DECISION-F-DECISION-VERSION" },
     ],
     targetDataRefs: [
@@ -1165,9 +1180,9 @@ export const foundationFlows = deepFreeze([
       { objectId: "AUD-OBJ-EVENT", fieldId: "AUD-EVENT-F-ID", version: "AUD-EVENT-F-EVENT-VERSION" },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["ORG-IMPORT-F-TEMPLATE-VERSION"],
+      identityFieldIds: ["ORG-IMPORT-F-ID", "ORG-IMPORT-ROW-F-ID", "IAM-DECISION-F-ID"],
       versionFieldIds: ["ORG-IMPORT-F-BATCH-VERSION", "ORG-IMPORT-ROW-F-ROW-VERSION", "IAM-DECISION-F-DECISION-VERSION"],
-      fanoutFieldId: "ORG-IMPORT-ROW-F-RESULT-TYPE",
+      fanoutFieldId: "ORG-IMPORT-ROW-F-ID",
     },
     failureGranularity: "OBJECT_ROW_WITH_PARTIAL_SUCCESS_AND_FAILED_ROW_RETRY",
     retryPolicy: { strategy: "RETRY_FAILED_ROWS_OR_AUDIT_APPEND", maxAttempts: 5, retryableFailureResults: ["VERSION_CONFLICT", "AUDIT_FAILED"] },
@@ -1186,7 +1201,9 @@ export const foundationFlows = deepFreeze([
       { order: 4, actionId: "CURR-ACT-PUBLISH-VERSION" },
     ],
     sourceDataRefs: [
+      { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-ID", version: "CURR-CURRICULUM-F-VERSION" },
       { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-VALIDATION", version: "CURR-CURRICULUM-F-VERSION" },
+      { objectId: "CURR-OBJ-MAPPING", fieldId: "CURR-MAPPING-F-ID", version: "CURR-MAPPING-F-VERSION" },
       { objectId: "CURR-OBJ-MAPPING", fieldId: "CURR-MAPPING-F-VERSION", version: "CURR-MAPPING-F-VERSION" },
     ],
     targetDataRefs: [
@@ -1195,9 +1212,9 @@ export const foundationFlows = deepFreeze([
       { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-PUBLISHED-AT", version: "CURR-CURRICULUM-F-VERSION" },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["CURR-CURRICULUM-F-VALIDATION"],
+      identityFieldIds: ["CURR-CURRICULUM-F-ID", "CURR-MAPPING-F-ID"],
       versionFieldIds: ["CURR-CURRICULUM-F-VERSION", "CURR-MAPPING-F-VERSION"],
-      fanoutFieldId: "CURR-MAPPING-F-VERSION",
+      fanoutFieldId: "CURR-MAPPING-F-ID",
     },
     failureGranularity: "VERSION_PUBLICATION_WITH_NO_PARTIAL_PUBLISH",
     retryPolicy: { strategy: "REVALIDATE_STALE_DRAFT_THEN_RETRY", maxAttempts: 3, retryableFailureResults: ["VERSION_CONFLICT"] },
