@@ -518,6 +518,27 @@ export function validateModelReferences(model) {
   }
 
   for (const objectEntry of index.objects) {
+    const phase = index.moduleById.get(objectEntry.moduleId)?.value?.phase;
+    const objectFields = index.fields.filter((fieldEntry) => (
+      fieldEntry.objectId === objectEntry.value?.id
+    ));
+    if (phase === 1) {
+      const identityFields = objectFields.filter((fieldEntry) => (
+        fieldEntry.value?.idempotencyRole === "OBJECT_ID"
+      ));
+      const [identityField] = identityFields;
+      if (
+        identityFields.length !== 1
+        || identityField?.value?.dataType !== "ID"
+        || identityField?.value?.valueSource?.kind !== "SYSTEM"
+        || identityField?.value?.mutability !== "IMMUTABLE"
+        || identityField?.value?.visibility !== "AUTHORIZED_SCOPE"
+      ) {
+        errors.push(
+          `INVALID_OBJECT_CONTRACT ${formatValidationValue(objectEntry.value?.id)} requires exactly one standard system object identity`,
+        );
+      }
+    }
     for (const property of ["producerRef", "ownerRef", "confirmerRef", "stewardRef"]) {
       checkActorReference(
         errors,
@@ -791,7 +812,8 @@ export function validateModelReferences(model) {
         .filter(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")
         .map(({ id }) => id);
       if (
-        targetIdentityFieldIds.some((fieldId) => list(action.inputFieldIds).includes(fieldId))
+        targetIdentityFieldIds.length !== 1
+        || targetIdentityFieldIds.some((fieldId) => list(action.inputFieldIds).includes(fieldId))
         || targetIdentityFieldIds.some((fieldId) => !list(action.outputFieldIds).includes(fieldId))
       ) {
         errors.push(

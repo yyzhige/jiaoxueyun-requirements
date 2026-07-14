@@ -32,7 +32,26 @@ function field(id, label, overrides = {}) {
   };
 }
 
-function object(id, label, responsibility, states, fields, overrides = {}) {
+function object(
+  id,
+  label,
+  responsibility,
+  states,
+  fields,
+  identityFieldId,
+  overrides = {},
+) {
+  const identityFields = fields.filter(({ id: fieldId, idempotencyRole }) => (
+    fieldId === identityFieldId || idempotencyRole === "OBJECT_ID"
+  ));
+  if (
+    typeof identityFieldId !== "string"
+    || identityFieldId.trim() === ""
+    || identityFields.length !== 1
+    || identityFields[0].id !== identityFieldId
+  ) {
+    throw new Error(`${id} requires one explicitly declared identity field`);
+  }
   return {
     id,
     label,
@@ -40,7 +59,14 @@ function object(id, label, responsibility, states, fields, overrides = {}) {
     lifecyclePolicyId: "LIFE-003",
     sensitivityId: "S2",
     states,
-    fields,
+    fields: fields.map((fieldValue) => fieldValue.id === identityFieldId ? {
+      ...fieldValue,
+      dataType: "ID",
+      valueSource: { kind: "SYSTEM" },
+      mutability: "IMMUTABLE",
+      visibility: "AUTHORIZED_SCOPE",
+      idempotencyRole: "OBJECT_ID",
+    } : fieldValue),
     ...overrides,
   };
 }
@@ -554,6 +580,7 @@ const hwModule = moduleFact({
       subjectTeacherResponsibility,
       ["DRAFT", "VALIDATED", "SCHEDULED", "PUBLISHED", "CLOSED", "REVISION_DRAFT"],
       hwAssignmentFields,
+      "HW-ASSIGNMENT-F-ID",
     ),
     object(
       "HW-OBJ-ITEM",
@@ -561,6 +588,7 @@ const hwModule = moduleFact({
       subjectTeacherResponsibility,
       ["DRAFT", "VALIDATED", "PUBLISHED", "REVISION_DRAFT"],
       hwItemFields,
+      "HW-ITEM-F-ID",
     ),
     object(
       "HW-OBJ-RUBRIC",
@@ -568,6 +596,7 @@ const hwModule = moduleFact({
       subjectTeacherResponsibility,
       ["PUBLISHED", "DEPRECATED"],
       hwRubricFields,
+      "HW-RUBRIC-F-ID",
     ),
   ],
   relationships: [
@@ -901,6 +930,7 @@ const submissionModule = moduleFact({
       studentWorkResponsibility,
       ["DRAFT", "UPLOADING", "READY_TO_SUBMIT"],
       submissionDraftFields,
+      "SUB-DRAFT-F-ID",
       { sensitivityId: "S3" },
     ),
     object(
@@ -909,6 +939,7 @@ const submissionModule = moduleFact({
       studentWorkResponsibility,
       ["DRAFT", "SUBMITTED", "RESUBMITTED"],
       submissionAttemptFields,
+      "SUB-ATTEMPT-F-ID",
       { sensitivityId: "S3" },
     ),
   ],
@@ -1652,6 +1683,7 @@ const gradingModule = moduleFact({
       },
       ["ACTIVE", "RETIRED"],
       capabilityMatrixFields,
+      "GRD-CAP-F-RULE-ID",
     ),
     object(
       "GRD-OBJ-DECISION",
@@ -1666,6 +1698,7 @@ const gradingModule = moduleFact({
       },
       ["QUEUED", "PROCESSING", "ROUTED_REVIEW", "ROUTED_MANUAL", "CONFLICT", "REVISION_PENDING", "TEACHER_CONFIRMED"],
       gradingDecisionFields,
+      "GRD-DECISION-F-ID",
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -1767,6 +1800,7 @@ const publicationBatchFields = [
 ];
 
 const publicationPreviewFields = [
+  field("PUB-PREVIEW-F-ID", "Publication Preview ID"),
   field("PUB-PREVIEW-F-BATCH-REF", "Publication Batch Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-BATCH" },
@@ -1970,6 +2004,7 @@ const publicationActions = [
       "PUB-PREVIEW-F-DECISION-REF",
     ],
     outputFieldIds: [
+      "PUB-PREVIEW-F-ID",
       "PUB-PREVIEW-F-ELIGIBILITY",
       "PUB-PREVIEW-F-BLOCKING-CODES",
       "PUB-PREVIEW-F-ANSWER-VISIBLE-AT",
@@ -2275,6 +2310,7 @@ const publicationModule = moduleFact({
       },
       ["DRAFT", "READY", "PUBLISHING", "PARTIAL_FAILED", "PUBLISHED"],
       publicationBatchFields,
+      "PUB-BATCH-F-ID",
       { sensitivityId: "S3" },
     ),
     object(
@@ -2290,6 +2326,7 @@ const publicationModule = moduleFact({
       },
       ["GENERATED"],
       publicationPreviewFields,
+      "PUB-PREVIEW-F-ID",
       { lifecyclePolicyId: "LIFE-005", sensitivityId: "S3" },
     ),
     object(
@@ -2305,6 +2342,7 @@ const publicationModule = moduleFact({
       },
       ["READY", "PUBLISHED", "PUBLISH_FAILED", "INVALIDATED"],
       publishedResultFields,
+      "PUB-RESULT-F-ID",
       {
         sensitivityId: "S3",
         readMode: "STUDENT_TIMED_RELEASE",

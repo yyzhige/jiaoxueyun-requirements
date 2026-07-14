@@ -267,6 +267,15 @@ function validFixture() {
       baselineDecisionIds: ["BASE-TEST"],
       nfrIds: ["NFR-TEST"],
       objects: [validObject("DAT-HW-01", "ROLE-TEACHER", validField("HW-F001"), {
+        fields: [
+          validField("HW-F000", {
+            dataType: "ID",
+            valueSource: { kind: "SYSTEM" },
+            mutability: "IMMUTABLE",
+            idempotencyRole: "OBJECT_ID",
+          }),
+          validField("HW-F001"),
+        ],
         states: ["DRAFT"],
       })],
       relationships: [],
@@ -318,7 +327,8 @@ function validFixture() {
 
 function addLineageBindingFixture(model) {
   const submissionObject = moduleById(model, "SUB-001").objects[0];
-  const targetVersionField = moduleById(model, "HW-001").objects[0].fields[0];
+  const targetVersionField = moduleById(model, "HW-001").objects[0].fields
+    .find(({ id }) => id === "HW-F001");
   Object.assign(targetVersionField, {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -720,6 +730,45 @@ test("rejects incomplete object and field contracts", () => {
 
     assertHasCode(validateRequirementModel(model), "INVALID_FIELD_CONTRACT");
   }
+});
+
+test("requires exactly one standard system identity on every phase-one object", () => {
+  const mutations = [
+    (object) => {
+      object.fields = object.fields.filter(({ id }) => id !== "SUB-F000");
+    },
+    (object) => {
+      delete object.fields.find(({ id }) => id === "SUB-F000").idempotencyRole;
+    },
+    (object) => {
+      object.fields.push({
+        ...structuredClone(object.fields.find(({ id }) => id === "SUB-F000")),
+        id: "SUB-F004",
+      });
+    },
+    (object) => {
+      object.fields.find(({ id }) => id === "SUB-F000").dataType = "STRING";
+    },
+    (object) => {
+      object.fields.find(({ id }) => id === "SUB-F000").valueSource = {
+        kind: "USER_INPUT",
+      };
+    },
+    (object) => {
+      object.fields.find(({ id }) => id === "SUB-F000").mutability = "EDITABLE";
+    },
+  ];
+
+  const results = mutations.map((mutate) => {
+    const model = validFixture();
+    mutate(moduleById(model, "SUB-001").objects[0]);
+    return {
+      model: errorCodes(validateRequirementModel(model)).includes("INVALID_OBJECT_CONTRACT"),
+      structure: errorCodes(prepareRequirementModel(model).errors)
+        .includes("INVALID_OBJECT_CONTRACT"),
+    };
+  });
+  assert.deepEqual(results, mutations.map(() => ({ model: true, structure: true })));
 });
 
 test("accepts boolean or explicit conditional field required rules", () => {
@@ -1256,6 +1305,46 @@ test("requires CREATE actions to receive target identity only as a system output
     assertHasCode(validateRequirementModel(model), "INVALID_ACTION_OPERATION");
   }
 
+  const missingIdentityModel = structuredClone(validModel);
+  const missingIdentityObject = moduleById(missingIdentityModel, "SUB-001").objects[0];
+  const missingIdentityAction = moduleById(missingIdentityModel, "SUB-001").actions[0];
+  delete missingIdentityObject.fields
+    .find(({ id }) => id === "SUB-F000").idempotencyRole;
+  missingIdentityAction.outputFieldIds = missingIdentityAction.outputFieldIds
+    .filter((fieldId) => fieldId !== "SUB-F000");
+  assertHasCode(
+    validateRequirementModel(missingIdentityModel),
+    "INVALID_ACTION_OPERATION",
+  );
+});
+
+test("rejects ORG CREATE identity input output and marker-output bypasses", () => {
+  const mutations = [
+    (_gradeId, createGrade) => { createGrade.inputFieldIds.push("ORG-GRADE-F-ID"); },
+    (_gradeId, createGrade) => {
+      createGrade.outputFieldIds = createGrade.outputFieldIds
+        .filter((fieldId) => fieldId !== "ORG-GRADE-F-ID");
+    },
+    (gradeId, createGrade) => {
+      delete gradeId.idempotencyRole;
+      createGrade.outputFieldIds = createGrade.outputFieldIds
+        .filter((fieldId) => fieldId !== "ORG-GRADE-F-ID");
+    },
+  ];
+  const results = mutations.map((mutate) => {
+    const model = structuredClone(requirementModel);
+    const organization = moduleById(model, "ORG-001");
+    const gradeId = organization.objects.find(({ id }) => id === "ORG-OBJ-GRADE")
+      .fields.find(({ id }) => id === "ORG-GRADE-F-ID");
+    const createGrade = organization.actions
+      .find(({ id }) => id === "ORG-ACT-CREATE-GRADE");
+    mutate(gradeId, createGrade);
+    return errorCodes(validateRequirementModel(model)).includes("INVALID_ACTION_OPERATION");
+  });
+  assert.deepEqual(results, mutations.map(() => true));
+});
+
+test("covers target identity input and output for every CREATE action", () => {
   const violations = modules.flatMap((module) => module.actions
     .filter(({ operationKind }) => operationKind === "CREATE")
     .flatMap((createAction) => {
@@ -1263,11 +1352,13 @@ test("requires CREATE actions to receive target identity only as a system output
       const identityFieldIds = targetObject?.fields
         .filter(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")
         .map(({ id }) => id) ?? [];
-      return identityFieldIds
-        .filter((fieldId) => (
-          createAction.inputFieldIds.includes(fieldId)
-          || !createAction.outputFieldIds.includes(fieldId)
-        ))
+      if (identityFieldIds.length !== 1) {
+        return [`${module.id}:${createAction.id}:identity-count=${identityFieldIds.length}`];
+      }
+      return identityFieldIds.filter((fieldId) => (
+        createAction.inputFieldIds.includes(fieldId)
+        || !createAction.outputFieldIds.includes(fieldId)
+      ))
         .map((fieldId) => `${module.id}:${createAction.id}:${fieldId}`);
     }));
   assert.deepEqual(violations, []);
@@ -1842,6 +1933,26 @@ test("declares the direct read mode for every phase-one object", () => {
     delete mutableObject.readMode;
     assertHasCode(validateRequirementModel(model), "INVALID_OBJECT_CONTRACT");
   }
+});
+
+test("declares one standard system identity for all 46 phase-one objects", () => {
+  const phaseOneObjects = modules
+    .filter(({ phase }) => phase === PHASE.FIRST)
+    .flatMap(({ objects }) => objects);
+  assert.equal(phaseOneObjects.length, 46);
+
+  const violations = phaseOneObjects.flatMap((object) => {
+    const identities = object.fields
+      .filter(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID");
+    if (identities.length !== 1) return [`${object.id}:identity-count=${identities.length}`];
+    const [identity] = identities;
+    const standard = identity.dataType === "ID"
+      && identity.valueSource?.kind === "SYSTEM"
+      && identity.mutability === "IMMUTABLE"
+      && identity.visibility === "AUTHORIZED_SCOPE";
+    return standard ? [] : [`${object.id}:${identity.id}:non-standard`];
+  });
+  assert.deepEqual(violations, []);
 });
 
 test("defines the seven foundation modules plus the four teaching-loop modules and nine Flows", () => {
@@ -2938,6 +3049,7 @@ test("models publication preview from authoritative visibility and notification 
     targetObjectId: "GRD-OBJ-DECISION",
   });
   const previewOutputFieldIds = [
+    "PUB-PREVIEW-F-ID",
     "PUB-PREVIEW-F-ELIGIBILITY",
     "PUB-PREVIEW-F-BLOCKING-CODES",
     "PUB-PREVIEW-F-ANSWER-VISIBLE-AT",
@@ -5126,7 +5238,18 @@ test("rejects a page field owned by a different object in the same module", () =
     "DAT-SUB-02",
     "ROLE-STUDENT",
     validField("SUB-F003"),
-    { states: ["DRAFT"] },
+    {
+      fields: [
+        validField("SUB-F004", {
+          dataType: "ID",
+          valueSource: { kind: "SYSTEM" },
+          mutability: "IMMUTABLE",
+          idempotencyRole: "OBJECT_ID",
+        }),
+        validField("SUB-F003"),
+      ],
+      states: ["DRAFT"],
+    },
   ));
   submissionModule.pages.push(validPage(
     "SUB-W01",
@@ -5147,7 +5270,18 @@ test("accepts page fields owned by one of its declared objects", () => {
     "DAT-SUB-02",
     "ROLE-STUDENT",
     validField("SUB-F003"),
-    { states: ["DRAFT"] },
+    {
+      fields: [
+        validField("SUB-F004", {
+          dataType: "ID",
+          valueSource: { kind: "SYSTEM" },
+          mutability: "IMMUTABLE",
+          idempotencyRole: "OBJECT_ID",
+        }),
+        validField("SUB-F003"),
+      ],
+      states: ["DRAFT"],
+    },
   ));
   submissionModule.pages.push(validPage(
     "SUB-W01",

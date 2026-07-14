@@ -475,6 +475,21 @@ function validateObject(errors, object, path, strict) {
     if (fields.length === 0) {
       errors.push(`INVALID_OBJECT_CONTRACT ${path}.fields must be non-empty`);
     }
+    const identityFields = fields.filter((field) => (
+      isRecord(field) && field.idempotencyRole === "OBJECT_ID"
+    ));
+    const [identityField] = identityFields;
+    if (
+      identityFields.length !== 1
+      || identityField?.dataType !== "ID"
+      || identityField?.valueSource?.kind !== "SYSTEM"
+      || identityField?.mutability !== "IMMUTABLE"
+      || identityField?.visibility !== "AUTHORIZED_SCOPE"
+    ) {
+      errors.push(
+        `INVALID_OBJECT_CONTRACT ${path} requires exactly one standard system object identity`,
+      );
+    }
     const seenStates = new Set();
     states.forEach((state, index) => {
       if (!isValidId(state) || seenStates.has(state)) {
