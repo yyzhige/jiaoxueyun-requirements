@@ -50,6 +50,10 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function records(value) {
+  return list(value).filter(isRecord);
+}
+
 function isPresent(value) {
   return value !== undefined
     && value !== null
@@ -109,14 +113,44 @@ function stateIds(object) {
 }
 
 function objectIdentityFieldId(object) {
-  return list(object?.fields).find(({ idempotencyRole }) => (
+  return records(object?.fields).find(({ idempotencyRole }) => (
     idempotencyRole === "OBJECT_ID"
   ))?.id;
 }
 
 function fieldIsRequiredForState(field, state) {
-  if (typeof field?.required !== "string" || !isValidId(state)) return false;
-  return (field.required.match(/[A-Z][A-Z0-9_-]*/g) ?? []).includes(state);
+  if (!isValidId(state)) return false;
+  if (field?.required === true) return true;
+  if (typeof field?.required !== "string") return false;
+  const stateClause = field.required.match(/\b(?:reaches|becomes|before|for)\b(.*)$/i)?.[1];
+  return (stateClause?.match(/[A-Z][A-Z0-9_-]*/g) ?? []).includes(state);
+}
+
+function concreteActionState(index, action) {
+  if (isValidId(action?.transition?.to)) return action.transition.to;
+  const successStates = new Set(index.scenarios
+    .filter(({ value }) => (
+      value?.actionId === action?.id
+      && value?.kind === "SUCCESS"
+      && value?.then?.expectedState?.mode === "STATE"
+      && isValidId(value.then.expectedState.value)
+    ))
+    .map(({ value }) => value.then.expectedState.value));
+  return successStates.size === 1 ? [...successStates][0] : undefined;
+}
+
+function inheritedRequiredFieldIds(action, targetObject) {
+  if (action?.operationKind !== "UPDATE") return new Set();
+  const fromStates = Array.isArray(action?.transition?.from)
+    ? action.transition.from
+    : [action?.transition?.from].filter(isValidId);
+  if (fromStates.length === 0) return new Set();
+  return new Set(records(targetObject?.fields)
+    .filter((field) => (
+      isValidId(field?.id)
+      && fromStates.every((state) => fieldIsRequiredForState(field, state))
+    ))
+    .map(({ id }) => id));
 }
 
 function policyRequiresGuard(policy, operationKind) {
@@ -164,7 +198,7 @@ function actionErrors(index) {
 
     const targetObject = index.objectById.get(action?.targetObjectId)?.value;
     if (targetObject && action?.operationKind === "CREATE") {
-      const allowPermissions = list(action?.permissions).filter(({ effect }) => (
+      const allowPermissions = records(action?.permissions).filter(({ effect }) => (
         effect === "ALLOW"
       ));
       const producerRef = targetObject.producerRef;
@@ -564,7 +598,7 @@ function flowErrors(index) {
           `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)}${pathContext} step=${formatValidationValue(step?.order)} provided field ${formatValidationValue(fieldId)} must be an input owned by the step target`,
         );
       }
-      const providerEntries = Object.entries(provider ?? {});
+      const providerEntries = isRecord(provider) ? Object.entries(provider) : [];
       const matchesAllowSubject = list(action?.permissions).some((permission) => (
         permission?.effect === "ALLOW"
         && providerEntries.length === 1
@@ -582,7 +616,7 @@ function flowErrors(index) {
       }
     };
     for (const step of steps) {
-      const providedInputs = list(step?.providedInputs);
+      const providedInputs = records(step?.providedInputs);
       providedInputsByStepOrder.set(
         step?.order,
         new Set(providedInputs.map(({ fieldId }) => fieldId)),
@@ -719,7 +753,7 @@ function flowErrors(index) {
     ));
     for (const executionPath of executionPaths) {
       const pathProvidedInputsByStepOrder = new Map();
-      for (const providedInput of list(executionPath?.providedInputs)) {
+      for (const providedInput of records(executionPath?.providedInputs)) {
         const step = stepByOrder.get(providedInput?.stepOrder);
         if (step) validateProvidedInput(step, providedInput, executionPath?.id);
         const fieldIds = pathProvidedInputsByStepOrder.get(providedInput?.stepOrder)
@@ -728,12 +762,10 @@ function flowErrors(index) {
         pathProvidedInputsByStepOrder.set(providedInput?.stepOrder, fieldIds);
       }
       const availableFieldIds = new Set(sourceFieldIdsForResolution);
-      let finalAction;
       for (const stepOrder of list(executionPath?.stepOrders)) {
         const step = stepByOrder.get(stepOrder);
         const action = index.actionById.get(step?.actionId)?.value;
         if (!action) continue;
-        finalAction = action;
         const providedFieldIds = new Set([
           ...(providedInputsByStepOrder.get(stepOrder) ?? []),
           ...(pathProvidedInputsByStepOrder.get(stepOrder) ?? []),
@@ -746,29 +778,28 @@ function flowErrors(index) {
             `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} step=${formatValidationValue(stepOrder)} action=${formatValidationValue(action.id)} missing ${missingInputFieldIds.map(formatValidationValue).join(",")}`,
           );
         }
+        const concreteState = concreteActionState(index, action);
+        const targetObject = index.objectById.get(action?.targetObjectId)?.value;
+        const stateCoverageFieldIds = new Set([
+          ...availableFieldIds,
+          ...inheritedRequiredFieldIds(action, targetObject),
+          ...list(action.inputFieldIds),
+          ...providedFieldIds,
+          ...list(action.outputFieldIds),
+        ]);
+        const missingStateFieldIds = records(targetObject?.fields)
+          .filter((field) => fieldIsRequiredForState(field, concreteState))
+          .map(({ id }) => id)
+          .filter((fieldId) => !stateCoverageFieldIds.has(fieldId));
+        if (missingStateFieldIds.length > 0) {
+          errors.push(
+            `INVALID_FLOW_TERMINAL_STATE ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} step=${formatValidationValue(stepOrder)} action=${formatValidationValue(action.id)} state=${formatValidationValue(concreteState)} missing ${missingStateFieldIds.map(formatValidationValue).join(",")}`,
+          );
+        }
         for (const fieldId of list(action.inputFieldIds)) {
           if (providedFieldIds.has(fieldId)) availableFieldIds.add(fieldId);
         }
         for (const fieldId of list(action.outputFieldIds)) availableFieldIds.add(fieldId);
-      }
-      const successStates = new Set(index.scenarios
-        .filter(({ value }) => (
-          value?.actionId === finalAction?.id
-          && value?.kind === "SUCCESS"
-          && value?.then?.expectedState?.mode === "STATE"
-        ))
-        .map(({ value }) => value.then.expectedState.value));
-      const terminalState = finalAction?.transition?.to
-        ?? (successStates.size === 1 ? [...successStates][0] : undefined);
-      const terminalObject = index.objectById.get(finalAction?.targetObjectId)?.value;
-      const missingTerminalFieldIds = list(terminalObject?.fields)
-        .filter((field) => fieldIsRequiredForState(field, terminalState))
-        .map(({ id }) => id)
-        .filter((fieldId) => !availableFieldIds.has(fieldId));
-      if (missingTerminalFieldIds.length > 0) {
-        errors.push(
-          `INVALID_FLOW_TERMINAL_STATE ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} state=${formatValidationValue(terminalState)} missing ${missingTerminalFieldIds.map(formatValidationValue).join(",")}`,
-        );
       }
     }
 
@@ -795,7 +826,7 @@ function flowErrors(index) {
       }
     }
 
-    const sourceRefs = list(flow?.sourceDataRefs);
+    const sourceRefs = records(flow?.sourceDataRefs);
     const sourceFieldIds = new Set(sourceRefs.map(({ fieldId }) => fieldId));
     const fixedSourceRefs = sourceRefs.filter(({ cardinality }) => cardinality === "ONE");
     const fixedSourceFieldIds = new Set(fixedSourceRefs.map(({ fieldId }) => fieldId));
@@ -824,7 +855,7 @@ function flowErrors(index) {
     const producer = producerCandidates.length === 1 ? producerCandidates[0] : undefined;
     const producerObject = index.objectById.get(producer?.action?.targetObjectId)?.value;
     const producerOutputFieldIds = new Set(list(producer?.action?.outputFieldIds));
-    const producerObjectFieldIds = new Set(list(producerObject?.fields).map(({ id }) => id));
+    const producerObjectFieldIds = new Set(records(producerObject?.fields).map(({ id }) => id));
     const producerIdentityFieldId = objectIdentityFieldId(producerObject);
     const fanoutField = index.fieldById.get(keyParts?.fanoutFieldId)?.value;
     const hasExactSourceLineage = list(producerObject?.lineageBindings).some((binding) => {

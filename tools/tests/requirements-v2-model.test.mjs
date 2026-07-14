@@ -2407,6 +2407,59 @@ test("requires each Flow path terminal state to satisfy its conditional fields",
   );
 });
 
+test("requires every Flow step concrete state to satisfy its required fields", () => {
+  const mutations = [
+    ["intermediate UPDATE", (model) => {
+      const action = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-CONFIRM-JUDGMENT");
+      action.outputFieldIds = action.outputFieldIds.filter((fieldId) => (
+        fieldId !== "CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF"
+      ));
+    }],
+    ["intermediate CREATE", (model) => {
+      const evidence = moduleById(model, "INS-001");
+      evidence.objects.find(({ id }) => id === "INS-OBJ-EVIDENCE").fields
+        .find(({ id }) => id === "INS-EVIDENCE-F-SOURCE-CORRECTION-REF").required = (
+          "required when evidence reaches CANDIDATE"
+        );
+      const action = evidence.actions.find(({ id }) => id === "INS-ACT-CREATE-CANDIDATE");
+      action.outputFieldIds = action.outputFieldIds.filter((fieldId) => (
+        fieldId !== "INS-EVIDENCE-F-SOURCE-CORRECTION-REF"
+      ));
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_FLOW_TERMINAL_STATE")) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("inherits required fields only when every UPDATE from state requires them", () => {
+  const inheritedModel = validFixture();
+  const submission = moduleById(inheritedModel, "SUB-001");
+  submission.objects[0].fields.push(validField("SUB-F003", {
+    required: "required when the object reaches DRAFT or SUBMITTED",
+  }));
+  submission.actions[0].transition.from = ["DRAFT", "SUBMITTED"];
+  assertNoCode(validateRequirementModel(inheritedModel), "INVALID_FLOW_TERMINAL_STATE");
+
+  const partialInheritance = structuredClone(inheritedModel);
+  moduleById(partialInheritance, "SUB-001").objects[0].fields
+    .find(({ id }) => id === "SUB-F003").required = (
+      "required when the object reaches SUBMITTED"
+    );
+  assertHasCode(
+    validateRequirementModel(partialInheritance),
+    "INVALID_FLOW_TERMINAL_STATE",
+  );
+});
+
 test("keeps terminal completeness path-local and closes DF-007 batch confirmation", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   const batchConfirm = grading.actions.find(({ id }) => id === "GRD-ACT-BATCH-CONFIRM");
@@ -8261,6 +8314,47 @@ test("returns validation errors for a null permission entry", () => {
   const errors = validateRequirementModel(model);
 
   assertHasCode(errors, "MISSING_ACTION_PERMISSION");
+});
+
+test("aggregates malformed Flow child entries without throwing", () => {
+  const cases = [
+    ["step provided input", "INVALID_FLOW_CONTRACT", () => {
+      const model = validFixture();
+      model.flows[0].steps[0].providedInputs[0] = null;
+      return model;
+    }],
+    ["source data reference", "INVALID_FLOW_CONTRACT", () => {
+      const model = validFixture();
+      model.flows[0].sourceDataRefs[0] = null;
+      return model;
+    }],
+    ["producer object field", "INVALID_ENTITY_SHAPE", () => {
+      const model = structuredClone(requirementModel);
+      const producerObject = moduleById(model, "PUB-001").objects
+        .find(({ id }) => id === "PUB-OBJ-DEPENDENCY-SNAPSHOT");
+      producerObject.fields[0] = null;
+      return model;
+    }],
+  ];
+
+  const failures = [];
+  for (const [name, shapeCode, makeModel] of cases) {
+    const model = makeModel();
+    model.metrics[0].ownerRef = "ROLE-MISSING";
+    let errors = [];
+    try {
+      errors = validateRequirementModel(model);
+    } catch (error) {
+      failures.push(`${name}: ${error.message}`);
+      continue;
+    }
+    const codes = errorCodes(errors);
+    if (!codes.includes(shapeCode)) failures.push(`${name}: missing ${shapeCode}`);
+    if (!codes.includes("ORPHAN_OWNER_ROLE")) {
+      failures.push(`${name}: validation did not continue`);
+    }
+  }
+  assert.deepEqual(failures, []);
 });
 
 test("rejects an actor-less ALLOW permission", () => {
