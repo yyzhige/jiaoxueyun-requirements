@@ -539,6 +539,14 @@ export function validateModelReferences(model) {
         );
       }
     }
+    const objectFieldIds = new Set(objectFields.map(({ value }) => value?.id));
+    for (const group of list(objectEntry.value?.exclusiveSourceGroups)) {
+      if (list(group?.fieldIds).some((fieldId) => !objectFieldIds.has(fieldId))) {
+        errors.push(
+          `INVALID_OBJECT_CONTRACT ${formatValidationValue(objectEntry.value?.id)} exclusive source groups must reference only owned fields`,
+        );
+      }
+    }
     for (const property of ["producerRef", "ownerRef", "confirmerRef", "stewardRef"]) {
       checkActorReference(
         errors,
@@ -819,6 +827,34 @@ export function validateModelReferences(model) {
         errors.push(
           `INVALID_ACTION_OPERATION ${formatValidationValue(action?.id)} must receive target identity only as a system output`,
         );
+      }
+      const coveredFieldIds = new Set([
+        ...list(action?.inputFieldIds),
+        ...list(action?.outputFieldIds),
+      ]);
+      const missingRequiredFieldIds = list(targetObjectEntry.value?.fields)
+        .filter((field) => field?.required === true && isValidId(field?.id))
+        .map((field) => field.id)
+        .filter((fieldId) => !coveredFieldIds.has(fieldId));
+      if (missingRequiredFieldIds.length > 0) {
+        errors.push(
+          `INVALID_ACTION_CONTRACT ${formatValidationValue(action?.id)} missing unconditional required fields ${missingRequiredFieldIds.join(",")}`,
+        );
+      }
+      const exclusiveSourceGroups = list(targetObjectEntry.value?.exclusiveSourceGroups)
+        .filter((group) => Array.isArray(group?.fieldIds) && group.fieldIds.length > 0);
+      if (exclusiveSourceGroups.length > 0) {
+        const touchedGroups = exclusiveSourceGroups.filter((group) => (
+          group.fieldIds.some((fieldId) => coveredFieldIds.has(fieldId))
+        ));
+        const completeGroups = exclusiveSourceGroups.filter((group) => (
+          group.fieldIds.every((fieldId) => coveredFieldIds.has(fieldId))
+        ));
+        if (touchedGroups.length !== 1 || completeGroups.length !== 1) {
+          errors.push(
+            `INVALID_ACTION_CONTRACT ${formatValidationValue(action?.id)} must cover exactly one complete exclusive source group`,
+          );
+        }
       }
     }
     if (

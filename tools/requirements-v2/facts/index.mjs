@@ -6,7 +6,7 @@ import {
 import {
   baselineDecisions,
   duties,
-  events,
+  events as catalogEvents,
   extensions,
   lifecyclePolicies,
   metrics,
@@ -18,6 +18,7 @@ import {
 import { foundationFlows, foundationModules } from "./foundation.mjs";
 import {
   teachingLoopFlows,
+  teachingLoopEvents,
   teachingLoopModules,
   teachingLoopOptionSets,
 } from "./teaching-loop.mjs";
@@ -27,10 +28,14 @@ export const optionSets = deepFreeze([
   ...teachingLoopOptionSets,
 ]);
 
+export const events = deepFreeze([
+  ...catalogEvents,
+  ...teachingLoopEvents,
+]);
+
 export {
   baselineDecisions,
   duties,
-  events,
   extensions,
   lifecyclePolicies,
   metrics,

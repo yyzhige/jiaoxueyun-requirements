@@ -499,6 +499,62 @@ function validateObject(errors, object, path, strict) {
       }
       if (isValidId(state)) seenStates.add(state);
     });
+    if (Object.hasOwn(object, "exclusiveSourceGroups")) {
+      const groups = contractArray(
+        errors,
+        object,
+        "exclusiveSourceGroups",
+        path,
+        "INVALID_OBJECT_CONTRACT",
+        { nonEmpty: true },
+      );
+      if (groups.length < 2) {
+        errors.push(
+          `INVALID_OBJECT_CONTRACT ${path}.exclusiveSourceGroups must declare at least two alternatives`,
+        );
+      }
+      const expectedKeys = new Set(["id", "fieldIds"]);
+      const seenGroupIds = new Set();
+      const seenFieldIds = new Set();
+      groups.forEach((group, index) => {
+        const groupPath = `${path}.exclusiveSourceGroups[${index}]`;
+        if (!isRecord(group)) {
+          errors.push(`INVALID_OBJECT_CONTRACT ${groupPath} must be an object`);
+          return;
+        }
+        if (
+          Object.keys(group).length !== expectedKeys.size
+          || Object.keys(group).some((key) => !expectedKeys.has(key))
+        ) {
+          errors.push(
+            `INVALID_OBJECT_CONTRACT ${groupPath} must use the closed id and fieldIds shape`,
+          );
+        }
+        contractString(errors, group, "id", groupPath, "INVALID_OBJECT_CONTRACT");
+        const fieldIds = contractStringArray(
+          errors,
+          group,
+          "fieldIds",
+          groupPath,
+          "INVALID_OBJECT_CONTRACT",
+          { nonEmpty: true },
+        );
+        if (isValidId(group.id) && seenGroupIds.has(group.id)) {
+          errors.push(
+            `INVALID_OBJECT_CONTRACT ${groupPath}.id must be unique within exclusiveSourceGroups`,
+          );
+        }
+        if (isValidId(group.id)) seenGroupIds.add(group.id);
+        for (const fieldId of fieldIds) {
+          if (seenFieldIds.has(fieldId)) {
+            errors.push(
+              `INVALID_OBJECT_CONTRACT ${groupPath}.fieldIds must not overlap another exclusive source group`,
+            );
+          }
+          seenFieldIds.add(fieldId);
+        }
+      });
+    }
     if (Object.hasOwn(object, "lineageBindings")) {
       const lineageBindings = requireArray(errors, object, "lineageBindings", path);
       validateObjectMembers(errors, lineageBindings, `${path}.lineageBindings`, "lineage binding");
@@ -1066,6 +1122,56 @@ function validateFlow(errors, flow, path) {
         `INVALID_FLOW_CONTRACT ${stepPath}.condition must be a non-empty string when present`,
       );
     }
+  });
+  const systemProvidedInputs = contractArray(
+    errors,
+    flow,
+    "systemProvidedInputs",
+    path,
+    "INVALID_FLOW_CONTRACT",
+  );
+  const expectedSystemInputKeys = new Set(["stepOrder", "provider", "fieldIds"]);
+  const validStepOrders = new Set(steps
+    .map((step) => step?.order)
+    .filter(Number.isInteger));
+  const seenSystemInputStepOrders = new Set();
+  systemProvidedInputs.forEach((binding, index) => {
+    const bindingPath = `${path}.systemProvidedInputs[${index}]`;
+    if (!isRecord(binding)) {
+      errors.push(`INVALID_FLOW_CONTRACT ${bindingPath} must be an object`);
+      return;
+    }
+    if (
+      Object.keys(binding).length !== expectedSystemInputKeys.size
+      || Object.keys(binding).some((key) => !expectedSystemInputKeys.has(key))
+    ) {
+      errors.push(
+        `INVALID_FLOW_CONTRACT ${bindingPath} must use the closed stepOrder, provider, and fieldIds shape`,
+      );
+    }
+    if (
+      !Number.isInteger(binding.stepOrder)
+      || !validStepOrders.has(binding.stepOrder)
+      || seenSystemInputStepOrders.has(binding.stepOrder)
+    ) {
+      errors.push(
+        `INVALID_FLOW_CONTRACT ${bindingPath}.stepOrder must reference one unique Flow step`,
+      );
+    }
+    if (Number.isInteger(binding.stepOrder)) {
+      seenSystemInputStepOrders.add(binding.stepOrder);
+    }
+    if (binding.provider !== "SYSTEM") {
+      errors.push(`INVALID_FLOW_CONTRACT ${bindingPath}.provider must be SYSTEM`);
+    }
+    contractStringArray(
+      errors,
+      binding,
+      "fieldIds",
+      bindingPath,
+      "INVALID_FLOW_CONTRACT",
+      { nonEmpty: true },
+    );
   });
   for (const property of ["sourceDataRefs", "targetDataRefs"]) {
     const dataRefs = contractArray(

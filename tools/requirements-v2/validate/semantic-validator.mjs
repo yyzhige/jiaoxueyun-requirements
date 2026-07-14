@@ -320,6 +320,47 @@ function flowErrors(index) {
       );
     }
 
+    const steps = [...list(flow?.steps)].sort((left, right) => (
+      (left?.order ?? 0) - (right?.order ?? 0)
+    ));
+    const systemInputsByStepOrder = new Map();
+    for (const binding of list(flow?.systemProvidedInputs)) {
+      const fieldIds = list(binding?.fieldIds);
+      systemInputsByStepOrder.set(binding?.stepOrder, new Set(fieldIds));
+      const action = index.actionById.get(
+        steps.find((step) => step?.order === binding?.stepOrder)?.actionId,
+      )?.value;
+      for (const fieldId of fieldIds) {
+        const fieldEntry = index.fieldById.get(fieldId);
+        if (
+          !action
+          || !list(action.inputFieldIds).includes(fieldId)
+          || fieldEntry?.objectId !== action.targetObjectId
+        ) {
+          errors.push(
+            `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} step=${formatValidationValue(binding?.stepOrder)} system field ${formatValidationValue(fieldId)} must be an input owned by the step target`,
+          );
+        }
+      }
+    }
+    const availableFieldIds = new Set(list(flow?.sourceDataRefs).flatMap((dataRef) => (
+      [dataRef?.fieldId, dataRef?.version].filter(isValidId)
+    )));
+    for (const step of steps) {
+      const action = index.actionById.get(step?.actionId)?.value;
+      if (!action) continue;
+      const systemFieldIds = systemInputsByStepOrder.get(step?.order) ?? new Set();
+      const missingInputFieldIds = list(action.inputFieldIds).filter((fieldId) => (
+        !availableFieldIds.has(fieldId) && !systemFieldIds.has(fieldId)
+      ));
+      if (missingInputFieldIds.length > 0) {
+        errors.push(
+          `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} step=${formatValidationValue(step?.order)} action=${formatValidationValue(action.id)} missing ${missingInputFieldIds.map(formatValidationValue).join(",")}`,
+        );
+      }
+      for (const fieldId of list(action.outputFieldIds)) availableFieldIds.add(fieldId);
+    }
+
     for (const targetRef of list(flow?.targetDataRefs)) {
       const produced = stepActions.some((action) => (
         action?.targetObjectId === targetRef?.objectId

@@ -373,8 +373,8 @@ const accActions = [
     label: "Select Current or Historical Term",
     operationKind: "CREATE",
     targetObjectId: "ACC-OBJ-CONTEXT",
-    inputFieldIds: ["ACC-CONTEXT-F-TERM-ID"],
-    outputFieldIds: ["ACC-CONTEXT-F-ID", "ACC-CONTEXT-F-CONTEXT-VERSION", "ACC-CONTEXT-F-STATUS"],
+    inputFieldIds: ["ACC-CONTEXT-F-SCHOOL-ID", "ACC-CONTEXT-F-IDENTITY-ID", "ACC-CONTEXT-F-TERM-ID"],
+    outputFieldIds: ["ACC-CONTEXT-F-ID", "ACC-CONTEXT-F-CREATED", "ACC-CONTEXT-F-EXPIRY", "ACC-CONTEXT-F-CONTEXT-VERSION", "ACC-CONTEXT-F-STATUS"],
     permissions: permissions(
       "CURRENT_ACTOR",
       "ROLE-PLATFORM-OPS",
@@ -402,7 +402,7 @@ const accActions = [
       "ACC-CONTEXT-F-IDENTITY-ID",
       "ACC-CONTEXT-F-TERM-ID",
     ],
-    outputFieldIds: ["ACC-CONTEXT-F-ID", "ACC-CONTEXT-F-CONTEXT-VERSION", "ACC-CONTEXT-F-STATUS"],
+    outputFieldIds: ["ACC-CONTEXT-F-ID", "ACC-CONTEXT-F-CREATED", "ACC-CONTEXT-F-EXPIRY", "ACC-CONTEXT-F-CONTEXT-VERSION", "ACC-CONTEXT-F-STATUS"],
     permissions: permissions(
       "CURRENT_ACTOR",
       "ROLE-PLATFORM-OPS",
@@ -575,7 +575,7 @@ const accModule = moduleFact({
   pages: [
     page("ACC-PAGE-SCHOOL-ENTRY", "Authorized School Selection", ["ACC-OBJ-SCHOOL"], ["ACC-SCHOOL-F-ID", "ACC-SCHOOL-F-NAME", "ACC-SCHOOL-F-REGION", "ACC-SCHOOL-F-SERVICE-STATE"], ["ACC-ACT-SEARCH-SCHOOL", "ACC-ACT-SELECT-SCHOOL"]),
     page("ACC-PAGE-LOGIN-ACTIVATION", "Selected School Login and First Activation", ["ACC-OBJ-MEMBERSHIP"], ["ACC-MEMBER-F-ACCOUNT-ID-TYPE", "ACC-MEMBER-F-ACCOUNT-ID", "ACC-MEMBER-F-SCHOOL-ID", "ACC-MEMBER-F-ACTIVATION", "ACC-MEMBER-F-STATE"], ["ACC-ACT-LOGIN", "ACC-ACT-FIRST-ACTIVATION"]),
-    page("ACC-PAGE-IDENTITY-TERM", "Effective Identity and Term Selection", ["ACC-OBJ-IDENTITY", "ACC-OBJ-CONTEXT"], ["ACC-IDENTITY-F-ROLE", "ACC-IDENTITY-F-DUTIES", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-SELECT-IDENTITY", "ACC-ACT-SELECT-TERM"]),
+    page("ACC-PAGE-IDENTITY-TERM", "Effective Identity and Term Selection", ["ACC-OBJ-IDENTITY", "ACC-OBJ-CONTEXT"], ["ACC-IDENTITY-F-ROLE", "ACC-IDENTITY-F-DUTIES", "ACC-CONTEXT-F-SCHOOL-ID", "ACC-CONTEXT-F-IDENTITY-ID", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-SELECT-IDENTITY", "ACC-ACT-SELECT-TERM"]),
     page("ACC-PAGE-CONTEXT-SWITCH", "Active Context Switcher", ["ACC-OBJ-CONTEXT"], ["ACC-CONTEXT-F-SCHOOL-ID", "ACC-CONTEXT-F-IDENTITY-ID", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-SWITCH-CONTEXT"]),
     page("ACC-PAGE-CONTEXT-RECOVERY", "Expired Context Recovery", ["ACC-OBJ-CONTEXT"], ["ACC-CONTEXT-F-SCHOOL-ID", "ACC-CONTEXT-F-IDENTITY-ID", "ACC-CONTEXT-F-TERM-ID", "ACC-CONTEXT-F-EXPIRY", "ACC-CONTEXT-F-STATUS"], ["ACC-ACT-SWITCH-CONTEXT"]),
   ],
@@ -943,7 +943,7 @@ const audSchoolPermissions = permissions("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS
 const audActions = [
   action({ id: "AUD-ACT-APPEND-EVENT", label: "Append an Immutable Audit Event", operationKind: "CREATE", targetObjectId: "AUD-OBJ-EVENT", inputFieldIds: ["AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION", "AUD-EVENT-F-SCOPE", "AUD-EVENT-F-RESULT"], outputFieldIds: ["AUD-EVENT-F-ID", "AUD-EVENT-F-TIME", "AUD-EVENT-F-EVENT-VERSION"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "system append is mandatory for audited actions", "no user may update or delete an accepted immutable audit event"), ...eventTrigger("EVT-AUDIT-APPEND-REQUESTED"), auditMode: ATOMIC_SELF_RECORD, risk: RISK.HIGH, successState: "ACCEPTED", successData: "immutable audit event is appended before the audited result is final" }),
   action({ id: "AUD-ACT-QUERY-AUDIT", label: "Query Authorized Audit Events", targetObjectId: "AUD-OBJ-EVENT", inputFieldIds: ["AUD-EVENT-F-SCOPE", "AUD-EVENT-F-ACTOR", "AUD-EVENT-F-ACTION"], outputFieldIds: ["AUD-EVENT-F-ID", "AUD-EVENT-F-TIME", "AUD-EVENT-F-RESULT"], writes: false, permissions: audSchoolPermissions, auditMode: AUDIT_REQUIRED }),
-  action({ id: "AUD-ACT-REQUEST-SENSITIVE", label: "Request Time-limited Sensitive Access", operationKind: "CREATE", targetObjectId: "AUD-OBJ-ACCESS-REQUEST", inputFieldIds: ["AUD-REQUEST-F-SCOPE", "AUD-REQUEST-F-PURPOSE", "AUD-REQUEST-F-EXPIRY"], outputFieldIds: ["AUD-REQUEST-F-ID", "AUD-REQUEST-F-RESULT"], clients: WEB_APP, permissions: permissions("ROLE-PLATFORM-OPS", "ROLE-PLATFORM-OPS", "platform operations may request but not self-approve explicitly limited school scope and time", "platform operations has no default student-detail access without a school-approved request"), risk: RISK.HIGH, successState: "REQUESTED", successData: "request remains non-executable until school authorization" }),
+  action({ id: "AUD-ACT-REQUEST-SENSITIVE", label: "Request Time-limited Sensitive Access", operationKind: "CREATE", targetObjectId: "AUD-OBJ-ACCESS-REQUEST", inputFieldIds: ["AUD-REQUEST-F-SCOPE", "AUD-REQUEST-F-PURPOSE", "AUD-REQUEST-F-EXPIRY"], outputFieldIds: ["AUD-REQUEST-F-ID", "AUD-REQUEST-F-REQUESTER", "AUD-REQUEST-F-RESULT"], clients: WEB_APP, permissions: permissions("ROLE-PLATFORM-OPS", "ROLE-PLATFORM-OPS", "platform operations may request but not self-approve explicitly limited school scope and time", "platform operations has no default student-detail access without a school-approved request"), risk: RISK.HIGH, successState: "REQUESTED", successData: "request remains non-executable until school authorization" }),
   action({ id: "AUD-ACT-APPROVE-SENSITIVE", label: "Approve Limited Sensitive Access", targetObjectId: "AUD-OBJ-ACCESS-REQUEST", inputFieldIds: ["AUD-REQUEST-F-ID", "AUD-REQUEST-F-APPROVER", "AUD-REQUEST-F-SCOPE", "AUD-REQUEST-F-EXPIRY", "AUD-REQUEST-F-DECISION-REASON"], outputFieldIds: ["AUD-REQUEST-F-RESULT"], permissions: audSchoolPermissions, risk: RISK.HIGH, transition: { from: "REQUESTED", to: "APPROVED" } }),
   action({ id: "AUD-ACT-DENY-SENSITIVE", label: "Deny Sensitive Access", targetObjectId: "AUD-OBJ-ACCESS-REQUEST", inputFieldIds: ["AUD-REQUEST-F-ID", "AUD-REQUEST-F-APPROVER", "AUD-REQUEST-F-DECISION-REASON"], outputFieldIds: ["AUD-REQUEST-F-RESULT"], permissions: audSchoolPermissions, risk: RISK.HIGH, transition: { from: "REQUESTED", to: "DENIED" } }),
   action({ id: "AUD-ACT-OPEN-SESSION", label: "Open an Approved Sensitive Access Session", operationKind: "CREATE", targetObjectId: "AUD-OBJ-ACCESS-SESSION", inputFieldIds: ["AUD-SESSION-F-REQUEST-ID", "AUD-SESSION-F-SCOPE", "AUD-SESSION-F-EXPIRY"], outputFieldIds: ["AUD-SESSION-F-ID", "AUD-SESSION-F-START", "AUD-SESSION-F-STATUS"], permissions: permissions("SYSTEM", "ROLE-PLATFORM-OPS", "system opens only the school-approved scope and time and requires immutable audit", "platform operations cannot widen the approved student-detail scope"), ...eventTrigger("EVT-SENSITIVE-ACCESS-APPROVED"), risk: RISK.HIGH, successState: "ACTIVE" }),
@@ -986,7 +986,7 @@ const currObjects = [
     field("CURR-CURRICULUM-F-SUBJECT", "Curriculum Subject", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" } }),
     field("CURR-CURRICULUM-F-VERSION", "Curriculum Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("CURR-CURRICULUM-F-STATUS", "Curriculum Version Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-    field("CURR-CURRICULUM-F-VALIDATION", "Version Validation Result", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
+    field("CURR-CURRICULUM-F-VALIDATION", "Version Validation Result", { dataType: "JSON", required: "required when the curriculum version reaches VALIDATED", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
     field("CURR-CURRICULUM-F-PUBLISHED-AT", "Published At", { dataType: "DATETIME", required: false, valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
   ], "CURR-CURRICULUM-F-ID"),
   object("CURR-OBJ-TEXTBOOK", "Textbook Version", responsibility("SUBJECT_CURRICULUM", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
@@ -1027,7 +1027,7 @@ const currSubjectPermissions = [
   { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations cannot publish a school subject version without school authorization" },
 ];
 const currActions = [
-  action({ id: "CURR-ACT-CREATE-DRAFT", label: "Create a Curriculum Version Draft", operationKind: "CREATE", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-NAME", "CURR-CURRICULUM-F-SUBJECT"], outputFieldIds: ["CURR-CURRICULUM-F-ID", "CURR-CURRICULUM-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
+  action({ id: "CURR-ACT-CREATE-DRAFT", label: "Create a Curriculum Version Draft", operationKind: "CREATE", targetObjectId: "CURR-OBJ-CURRICULUM", inputFieldIds: ["CURR-CURRICULUM-F-NAME", "CURR-CURRICULUM-F-SUBJECT"], outputFieldIds: ["CURR-CURRICULUM-F-ID", "CURR-CURRICULUM-F-VERSION", "CURR-CURRICULUM-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
   action({ id: "CURR-ACT-ADD-TEXTBOOK", label: "Add a Textbook Version to Curriculum", operationKind: "CREATE", targetObjectId: "CURR-OBJ-TEXTBOOK", inputFieldIds: ["CURR-TEXTBOOK-F-CURRICULUM-ID", "CURR-TEXTBOOK-F-NAME", "CURR-TEXTBOOK-F-EDITION"], outputFieldIds: ["CURR-TEXTBOOK-F-ID", "CURR-TEXTBOOK-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
   action({ id: "CURR-ACT-CREATE-CHAPTER", label: "Create a Textbook Chapter", operationKind: "CREATE", targetObjectId: "CURR-OBJ-CHAPTER", inputFieldIds: ["CURR-CHAPTER-F-TEXTBOOK-ID", "CURR-CHAPTER-F-TITLE", "CURR-CHAPTER-F-ORDER"], outputFieldIds: ["CURR-CHAPTER-F-ID", "CURR-CHAPTER-F-STATUS"], permissions: currAdminPermissions, successState: "DRAFT" }),
   action({ id: "CURR-ACT-REORDER-CHAPTER", label: "Reorder a Draft Textbook Chapter", targetObjectId: "CURR-OBJ-CHAPTER", inputFieldIds: ["CURR-CHAPTER-F-ID", "CURR-CHAPTER-F-ORDER"], outputFieldIds: ["CURR-CHAPTER-F-ORDER", "CURR-CHAPTER-F-STATUS"], permissions: currAdminPermissions, transition: { from: "DRAFT", to: "DRAFT" } }),
@@ -1103,7 +1103,7 @@ const teaActions = [
   action({ id: "TEA-ACT-CREATE-COORDINATION", label: "Create a Homeroom Coordination Item", operationKind: "CREATE", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID", "TEA-COORD-F-SUBJECT-REFS", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may create coordination notes for the assigned class", "homeroom duty cannot write another subject's professional facts, scores, evidence, or plans"), successState: "OPEN", successData: "coordination item stores references and coordination notes only" }),
   action({ id: "TEA-ACT-UPDATE-COORDINATION", label: "Update a Homeroom Coordination Note", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may update coordination-owned notes for the assigned class", "homeroom duty cannot write or overwrite other subject professional facts" ), transition: { from: "OPEN", to: "IN_PROGRESS" } }),
   action({ id: "TEA-ACT-CLOSE-COORDINATION", label: "Close a Resolved Homeroom Coordination Item", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-SUBJECT-TEACHER", "homeroom duty closes only coordination-owned items for the assigned class", "subject teacher cannot close a homeroom coordination item but retains ownership of subject facts"), transition: { from: "IN_PROGRESS", to: "CLOSED" } }),
-  action({ id: "TEA-ACT-CREATE-PREFERENCE", label: "Create Teacher Workspace Preference", operationKind: "CREATE", targetObjectId: "TEA-OBJ-PREFERENCE", inputFieldIds: ["TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], outputFieldIds: ["TEA-PREF-F-ID", "TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], permissions: permissions("ROLE-TEACHER", "ROLE-PLATFORM-OPS", "teacher creates only the teacher's own workspace preference", "platform operations cannot create a teacher's personal work preference"), successState: "ACTIVE" }),
+  action({ id: "TEA-ACT-CREATE-PREFERENCE", label: "Create Teacher Workspace Preference", operationKind: "CREATE", targetObjectId: "TEA-OBJ-PREFERENCE", inputFieldIds: ["TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], outputFieldIds: ["TEA-PREF-F-ID", "TEA-PREF-F-TEACHER-ID", "TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], permissions: permissions("ROLE-TEACHER", "ROLE-PLATFORM-OPS", "teacher creates only the teacher's own workspace preference", "platform operations cannot create a teacher's personal work preference"), successState: "ACTIVE" }),
   action({ id: "TEA-ACT-UPDATE-PREFERENCE", label: "Update Teacher Workspace Preference", targetObjectId: "TEA-OBJ-PREFERENCE", inputFieldIds: ["TEA-PREF-F-ID", "TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], outputFieldIds: ["TEA-PREF-F-DEFAULT-VIEW", "TEA-PREF-F-FILTERS"], permissions: permissions("ROLE-TEACHER", "ROLE-PLATFORM-OPS", "teacher updates only the teacher's own workspace preference", "platform operations cannot update a teacher's personal work preference"), transition: { from: "ACTIVE", to: "ACTIVE" } }),
 ];
 
@@ -1160,6 +1160,63 @@ export const foundationFlows = deepFreeze([
       { order: 8, actionId: "IAM-ACT-EVALUATE-PERMISSION" },
       { order: 9, actionId: "ACC-ACT-SWITCH-CONTEXT" },
     ],
+    systemProvidedInputs: [
+      {
+        stepOrder: 1,
+        provider: "SYSTEM",
+        fieldIds: ["ACC-SCHOOL-F-REGION", "ACC-SCHOOL-F-NAME"],
+      },
+      {
+        stepOrder: 3,
+        provider: "SYSTEM",
+        fieldIds: [
+          "ACC-MEMBER-F-ACTIVATION",
+          "ACC-MEMBER-F-ACCOUNT-ID-TYPE",
+          "ACC-MEMBER-F-ACCOUNT-ID",
+        ],
+      },
+      {
+        stepOrder: 4,
+        provider: "SYSTEM",
+        fieldIds: [
+          "ACC-MEMBER-F-ACCOUNT-ID-TYPE",
+          "ACC-MEMBER-F-ACCOUNT-ID",
+          "ACC-MEMBER-F-SCHOOL-ID",
+        ],
+      },
+      {
+        stepOrder: 5,
+        provider: "SYSTEM",
+        fieldIds: ["ACC-IDENTITY-F-ROLE", "ACC-IDENTITY-F-DUTIES"],
+      },
+      {
+        stepOrder: 6,
+        provider: "SYSTEM",
+        fieldIds: [
+          "ACC-CONTEXT-F-SCHOOL-ID",
+          "ACC-CONTEXT-F-IDENTITY-ID",
+          "ACC-CONTEXT-F-TERM-ID",
+        ],
+      },
+      {
+        stepOrder: 8,
+        provider: "SYSTEM",
+        fieldIds: [
+          "IAM-DECISION-F-SUBJECT",
+          "IAM-DECISION-F-ACTION",
+          "IAM-DECISION-F-SCOPE",
+        ],
+      },
+      {
+        stepOrder: 9,
+        provider: "SYSTEM",
+        fieldIds: [
+          "ACC-CONTEXT-F-SCHOOL-ID",
+          "ACC-CONTEXT-F-IDENTITY-ID",
+          "ACC-CONTEXT-F-TERM-ID",
+        ],
+      },
+    ],
     sourceDataRefs: [
       { objectId: "ACC-OBJ-SCHOOL", fieldId: "ACC-SCHOOL-F-ID", version: "ACC-SCHOOL-F-SCHOOL-VERSION" },
       { objectId: "ACC-OBJ-IDENTITY", fieldId: "ACC-IDENTITY-F-ID", version: "ACC-IDENTITY-F-IDENTITY-VERSION" },
@@ -1200,6 +1257,52 @@ export const foundationFlows = deepFreeze([
       { order: 9, actionId: "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", condition: "partial result outcome audit succeeded and rejected rows remain for correction" },
       { order: 10, actionId: "IAM-ACT-RECALCULATE-PERMISSIONS", condition: "audited import was finalized and accepted organization rows changed permission sources" },
     ],
+    systemProvidedInputs: [
+      {
+        stepOrder: 1,
+        provider: "SYSTEM",
+        fieldIds: ["ORG-IMPORT-F-OBJECT-TYPE"],
+      },
+      {
+        stepOrder: 2,
+        provider: "SYSTEM",
+        fieldIds: ["ORG-IMPORT-F-MAPPING"],
+      },
+      {
+        stepOrder: 3,
+        provider: "SYSTEM",
+        fieldIds: ["ORG-IMPORT-ROW-F-BATCH-ID"],
+      },
+      {
+        stepOrder: 4,
+        provider: "SYSTEM",
+        fieldIds: [
+          "IAM-DECISION-F-SUBJECT",
+          "IAM-DECISION-F-ACTION",
+          "IAM-DECISION-F-SCOPE",
+        ],
+      },
+      {
+        stepOrder: 5,
+        provider: "SYSTEM",
+        fieldIds: [
+          "AUD-EVENT-F-ACTOR",
+          "AUD-EVENT-F-ACTION",
+          "AUD-EVENT-F-SCOPE",
+          "AUD-EVENT-F-RESULT",
+        ],
+      },
+      {
+        stepOrder: 7,
+        provider: "SYSTEM",
+        fieldIds: [
+          "AUD-EVENT-F-ACTOR",
+          "AUD-EVENT-F-ACTION",
+          "AUD-EVENT-F-SCOPE",
+          "AUD-EVENT-F-RESULT",
+        ],
+      },
+    ],
     sourceDataRefs: [
       { objectId: "ORG-OBJ-IMPORT-BATCH", fieldId: "ORG-IMPORT-F-ID", version: "ORG-IMPORT-F-BATCH-VERSION" },
       { objectId: "ORG-OBJ-IMPORT-BATCH", fieldId: "ORG-IMPORT-F-TEMPLATE-VERSION", version: "ORG-IMPORT-F-BATCH-VERSION" },
@@ -1234,6 +1337,7 @@ export const foundationFlows = deepFreeze([
       { order: 3, actionId: "CURR-ACT-PUBLISH-MAPPING" },
       { order: 4, actionId: "CURR-ACT-PUBLISH-VERSION" },
     ],
+    systemProvidedInputs: [],
     sourceDataRefs: [
       { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-ID", version: "CURR-CURRICULUM-F-VERSION" },
       { objectId: "CURR-OBJ-CURRICULUM", fieldId: "CURR-CURRICULUM-F-VALIDATION", version: "CURR-CURRICULUM-F-VERSION" },

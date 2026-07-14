@@ -268,6 +268,13 @@ const hwAssignmentFields = [
     dataType: "STRING_ARRAY",
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-006" },
   }),
+  field("HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS", "Published Student Fanout Set", {
+    dataType: "STRING_ARRAY",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    required: "required when the assignment reaches PUBLISHED",
+    idempotencyRole: "FANOUT_SET",
+  }),
   field("HW-ASSIGNMENT-F-OPEN-AT", "Open Time", { dataType: "DATETIME" }),
   field("HW-ASSIGNMENT-F-DUE-AT", "Due Time", { dataType: "DATETIME" }),
   field("HW-ASSIGNMENT-F-LATE-POLICY", "Late Policy", {
@@ -384,7 +391,7 @@ const hwActions = [
     label: "Create Assignment Item",
     operationKind: "CREATE",
     targetObjectId: "HW-OBJ-ITEM",
-    inputFieldIds: hwItemInputIds,
+    inputFieldIds: [...hwItemInputIds, "HW-ITEM-F-RUBRIC-REF"],
     outputFieldIds: ["HW-ITEM-F-ID", "HW-ITEM-F-ITEM-VERSION"],
     permissions: subjectTeacherPermissions,
     successState: "DRAFT",
@@ -456,7 +463,10 @@ const hwActions = [
     id: "HW-ACT-PUBLISH-NOW",
     label: "Publish Assignment Immediately",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
-    outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    outputFieldIds: [
+      "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
+      "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: subjectTeacherPermissions,
     transition: { from: "VALIDATED", to: "PUBLISHED" },
@@ -466,7 +476,10 @@ const hwActions = [
     label: "Schedule Assignment Publication",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
     inputFieldIds: ["HW-ASSIGNMENT-F-OPEN-AT"],
-    outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    outputFieldIds: [
+      "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
+      "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: subjectTeacherPermissions,
     transition: { from: "VALIDATED", to: "SCHEDULED" },
@@ -476,7 +489,10 @@ const hwActions = [
     label: "Publish Scheduled Assignment at Open Time",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
     inputFieldIds: ["HW-ASSIGNMENT-F-OPEN-AT"],
-    outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    outputFieldIds: [
+      "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
+      "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    ],
     risk: RISK.HIGH,
     executionMode: SYSTEM_EVENT,
     trigger: { kind: "EVENT", eventId: "EVT-HW-SCHEDULED-PUBLISH-DUE" },
@@ -1041,10 +1057,12 @@ const gradingDecisionFields = [
   field("GRD-DECISION-F-RECOGNIZED-ANSWER", "Recognized Answer", {
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
+    required: "required when automated grading processing produces recognition evidence",
   }),
   field("GRD-DECISION-F-RECOGNIZED-REGION", "Recognized Region", {
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
+    required: "required when automated grading processing produces recognition evidence",
   }),
   field("GRD-DECISION-F-SUBMISSION-REF", "Input Submission Reference", {
     dataType: "ID",
@@ -1109,27 +1127,34 @@ const gradingDecisionFields = [
   field("GRD-DECISION-F-SUGGESTED-SCORE", "Suggested Score", {
     dataType: "DECIMAL",
     valueSource: { kind: "SYSTEM" },
+    required: "required when automated grading processing produces a scoring suggestion",
   }),
   field("GRD-DECISION-F-SCORING-RATIONALE", "Scoring Rationale", {
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
+    required: "required when automated grading processing produces a scoring suggestion",
   }),
   field("GRD-DECISION-F-CONFIDENCE", "Confidence Status", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-005" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when automated grading processing produces a scoring suggestion",
   }),
   field("GRD-DECISION-F-LIMITATION", "Limitation Note", {
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
+    required: "required when automated grading processing produces a scoring suggestion",
   }),
   field("GRD-DECISION-F-OFFICIAL-SCORE", "Teacher Official Score", {
     dataType: "DECIMAL",
+    required: "required when the grading decision reaches TEACHER_CONFIRMED",
   }),
   field("GRD-DECISION-F-TEACHER-FEEDBACK", "Teacher Feedback", {
     dataType: "TEXT",
+    required: "required when the grading decision reaches TEACHER_CONFIRMED",
   }),
   field("GRD-DECISION-F-CORRECTION-REASON", "Correction Reason", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-006" },
+    required: "required when correcting recognition, overriding a score, or revising a confirmed decision",
   }),
   field("GRD-DECISION-F-DECISION-VERSION", "Decision Version", {
     dataType: "INTEGER",
@@ -1145,6 +1170,7 @@ const gradingDecisionFields = [
   field("GRD-DECISION-F-ROUTE", "Grading Route", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-011" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when the grading decision reaches ROUTED_REVIEW or ROUTED_MANUAL",
   }),
 ];
 
@@ -1953,11 +1979,13 @@ const publishedResultFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when a published result is corrected",
   }),
   field("PUB-RESULT-F-INVALIDATION-VERSION", "Dependent Invalidation Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when a published result correction invalidates dependent interpretations",
   }),
   field("PUB-RESULT-F-PUBLIC-CORRECTION-NOTE", "Public Correction Note", {
     dataType: "TEXT",
@@ -1971,6 +1999,7 @@ const publishedResultFields = [
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when a published result correction invalidates dependent interpretations",
   }),
 ];
 
@@ -2863,6 +2892,7 @@ const evidenceFields = [
   }),
   field("INS-EVIDENCE-F-MASTERY-INTERPRETATION", "Teacher-confirmed Mastery Interpretation", {
     dataType: "TEXT",
+    required: "required when evidence reaches TEACHER_CONFIRMED",
     releaseRequirement: {
       readPolicyId: "INS-RP-STUDENT-MASTERY",
       requiredState: "STUDENT_VISIBLE",
@@ -2872,11 +2902,13 @@ const evidenceFields = [
   field("INS-EVIDENCE-F-TEACHER-CONFIRMATION", "Teacher Confirmation", {
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when evidence reaches TEACHER_CONFIRMED",
   }),
   field("INS-EVIDENCE-F-STUDENT-VISIBLE-AT", "Student Visible At", {
     dataType: "DATETIME",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when evidence reaches STUDENT_VISIBLE",
   }),
   field("INS-EVIDENCE-F-INVALIDATION-REASON", "Evidence Invalidation Reason", {
     dataType: "TEXT",
@@ -2968,7 +3000,7 @@ const evidenceActions = [
       "INS-EVIDENCE-F-EVIDENCE-VERSION",
     ],
     executionMode: FLOW_INTERNAL,
-    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    trigger: { kind: "FLOW", flowIds: ["DF-009", "DF-010"] },
     permissions: evidenceFlowPermissions,
     transition: { from: "STUDENT_VISIBLE", to: "STALE" },
     failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
@@ -3177,7 +3209,10 @@ const planFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
-  field("PLN-PLAN-F-GOAL", "Improvement Goal", { dataType: "TEXT" }),
+  field("PLN-PLAN-F-GOAL", "Improvement Goal", {
+    dataType: "TEXT",
+    required: "required when a candidate becomes an ACTIVE plan",
+  }),
   field("PLN-PLAN-F-SUBJECT", "Improvement Subject", {
     dataType: "ID",
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" },
@@ -3200,18 +3235,35 @@ const planFields = [
   field("PLN-PLAN-F-PRIORITY", "Improvement Priority", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-012" },
   }),
-  field("PLN-PLAN-F-TASK-CONTENT", "Improvement Task Content", { dataType: "TEXT" }),
-  field("PLN-PLAN-F-WORKLOAD", "Planned Workload", { dataType: "DECIMAL" }),
-  field("PLN-PLAN-F-DUE-AT", "Plan Due Time", { dataType: "DATETIME" }),
-  field("PLN-PLAN-F-SUCCESS-CONDITION", "Plan Success Condition", { dataType: "TEXT" }),
+  field("PLN-PLAN-F-TASK-CONTENT", "Improvement Task Content", {
+    dataType: "TEXT",
+    required: "required when a candidate becomes an ACTIVE plan",
+  }),
+  field("PLN-PLAN-F-WORKLOAD", "Planned Workload", {
+    dataType: "DECIMAL",
+    required: "required when a candidate becomes an ACTIVE plan",
+  }),
+  field("PLN-PLAN-F-DUE-AT", "Plan Due Time", {
+    dataType: "DATETIME",
+    required: "required when a candidate becomes an ACTIVE plan",
+  }),
+  field("PLN-PLAN-F-SUCCESS-CONDITION", "Plan Success Condition", {
+    dataType: "TEXT",
+    required: "required when a candidate becomes an ACTIVE plan",
+  }),
   field("PLN-PLAN-F-EVIDENCE-REQUIREMENT", "Completion Evidence Requirement", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-034" },
+    required: "required when a candidate becomes an ACTIVE plan",
   }),
-  field("PLN-PLAN-F-REVALIDATION-METHOD", "Plan Revalidation Method", { dataType: "TEXT" }),
+  field("PLN-PLAN-F-REVALIDATION-METHOD", "Plan Revalidation Method", {
+    dataType: "TEXT",
+    required: "required when a candidate becomes an ACTIVE plan",
+  }),
   field("PLN-PLAN-F-TEACHER-CONFIRMER-REF", "Plan Teacher Confirmer Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-TEACHER" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when a candidate becomes an ACTIVE plan",
     referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF", "Student Difficulty Feedback Reference", {
@@ -3259,11 +3311,13 @@ const planFields = [
   field("PLN-PLAN-F-EVALUATION-STATE", "Plan Evaluation State", {
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when an ACTIVE plan enters evaluation",
   }),
   field("PLN-PLAN-F-EVALUATION-VERSION", "Plan Evaluation Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when an ACTIVE plan enters evaluation",
   }),
   field("PLN-PLAN-F-PLAN-VERSION", "Improvement Plan Version", {
     dataType: "INTEGER",
@@ -3472,7 +3526,7 @@ const planActions = [
       "PLN-PLAN-F-PLAN-VERSION",
     ],
     executionMode: FLOW_INTERNAL,
-    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    trigger: { kind: "FLOW", flowIds: ["DF-009", "DF-010"] },
     permissions: planFlowPermissions,
     transition: { from: "ACTIVE", to: "PENDING_RECONFIRM" },
     failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
@@ -3645,6 +3699,7 @@ const studentTodoFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
     mutability: "IMMUTABLE",
+    required: "required when the todo links to an improvement plan",
     referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "APP-TODO-F-SOURCE-PLAN-VERSION",
@@ -3655,6 +3710,7 @@ const studentTodoFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
+    required: "required when the todo links to an improvement plan",
   }),
   field("APP-TODO-F-SOURCE-ASSIGNMENT-REF", "Source Assignment Reference", {
     dataType: "ID",
@@ -3684,6 +3740,7 @@ const studentTodoFields = [
   }),
   field("APP-TODO-F-LOCAL-PROGRESS", "Student Local Progress", {
     dataType: "JSON",
+    required: "required when the student records local todo execution state",
     releaseRequirement: {
       readPolicyId: "APP-RP-STUDENT-TODO",
       requiredState: "READY",
@@ -3692,6 +3749,7 @@ const studentTodoFields = [
   }),
   field("APP-TODO-F-COMPLETION-EVIDENCE", "Student Completion Evidence", {
     dataType: "JSON",
+    required: "required when the student records local todo execution state",
     releaseRequirement: {
       readPolicyId: "APP-RP-STUDENT-TODO",
       requiredState: "READY",
@@ -3700,6 +3758,7 @@ const studentTodoFields = [
   }),
   field("APP-TODO-F-DIFFICULTY-FEEDBACK", "Student Difficulty Feedback", {
     dataType: "TEXT",
+    required: "required when the student records local todo execution state",
     releaseRequirement: {
       readPolicyId: "APP-RP-STUDENT-TODO",
       requiredState: "READY",
@@ -3729,20 +3788,24 @@ const todoFlowPermissions = [
   permission("DENY", "CURRENT_ACTOR", "a user cannot invoke internal todo aggregation directly"),
 ];
 
+const todoCommonOutputFieldIds = [
+  "APP-TODO-F-ID",
+  "APP-TODO-F-STUDENT-REF",
+  "APP-TODO-F-TASK-DEEP-LINK",
+  "APP-TODO-F-STUDENT-VISIBLE-AT",
+  "APP-TODO-F-AGGREGATION-VERSION",
+];
+
 const studentTodoActions = [
   action({
-    id: "APP-ACT-CREATE-TODO-LINK",
-    label: "Create a Source-pinned Student Todo Link",
+    id: "APP-ACT-CREATE-PLAN-TODO",
+    label: "Create a Plan-pinned Student Todo Link",
     operationKind: "CREATE",
     targetObjectId: "APP-OBJ-TODO",
     outputFieldIds: [
-      "APP-TODO-F-ID",
-      "APP-TODO-F-STUDENT-REF",
+      ...todoCommonOutputFieldIds,
       "APP-TODO-F-SOURCE-PLAN-REF",
       "APP-TODO-F-SOURCE-PLAN-VERSION",
-      "APP-TODO-F-TASK-DEEP-LINK",
-      "APP-TODO-F-STUDENT-VISIBLE-AT",
-      "APP-TODO-F-AGGREGATION-VERSION",
     ],
     executionMode: FLOW_INTERNAL,
     trigger: { kind: "FLOW", flowIds: ["DF-012"] },
@@ -3750,6 +3813,23 @@ const studentTodoActions = [
     successState: "READY",
     failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
     successData: "creates only navigation and local execution state while PLN and HW retain task ownership",
+  }),
+  action({
+    id: "APP-ACT-CREATE-HOMEWORK-TODO",
+    label: "Create a Homework-pinned Student Todo Link",
+    operationKind: "CREATE",
+    targetObjectId: "APP-OBJ-TODO",
+    outputFieldIds: [
+      ...todoCommonOutputFieldIds,
+      "APP-TODO-F-SOURCE-ASSIGNMENT-REF",
+      "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
+    ],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-004"] },
+    permissions: todoFlowPermissions,
+    successState: "READY",
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "creates only a source-pinned homework deep link and student-local execution state",
   }),
   action({
     id: "APP-ACT-REFRESH-TODOS",
@@ -3833,6 +3913,22 @@ const studentExecutionModule = moduleFact({
     {
       sensitivityId: "S3",
       readMode: "STUDENT_TIMED_RELEASE",
+      exclusiveSourceGroups: [
+        {
+          id: "PLAN",
+          fieldIds: [
+            "APP-TODO-F-SOURCE-PLAN-REF",
+            "APP-TODO-F-SOURCE-PLAN-VERSION",
+          ],
+        },
+        {
+          id: "HOMEWORK",
+          fieldIds: [
+            "APP-TODO-F-SOURCE-ASSIGNMENT-REF",
+            "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
+          ],
+        },
+      ],
       lineageBindings: [
         {
           refFieldId: "APP-TODO-F-SOURCE-PLAN-REF",
@@ -3915,14 +4011,24 @@ const correctionAttemptFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
-  field("CORR-ATTEMPT-F-CORRECTION-ANSWER", "Student Correction Answer", { dataType: "JSON" }),
+  field("CORR-ATTEMPT-F-DUE-AT", "Correction Due Time", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("CORR-ATTEMPT-F-CORRECTION-ANSWER", "Student Correction Answer", {
+    dataType: "JSON",
+    required: "required when the correction reaches SUBMITTED",
+  }),
   field("CORR-ATTEMPT-F-TEACHER-JUDGMENT", "Teacher Correction Judgment", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-028" },
+    required: "required when the correction reaches JUDGED or NEEDS_RETRY",
   }),
   field("CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF", "Correction Teacher Confirmer Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-TEACHER" },
     mutability: "SYSTEM_MANAGED",
+    required: "required when the correction reaches JUDGED or NEEDS_RETRY",
     referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT", "Repeated Correction Count", {
@@ -3932,7 +4038,9 @@ const correctionAttemptFields = [
   }),
   field("CORR-ATTEMPT-F-OVERDUE-HANDLING", "Correction Overdue Handling", {
     dataType: "TEXT",
-    required: "required when the correction is overdue",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when an overdue correction is submitted",
   }),
   field("CORR-ATTEMPT-F-CORRECTION-VERSION", "Correction Attempt Version", {
     dataType: "INTEGER",
@@ -4025,26 +4133,74 @@ const invalidationFlowPermissions = [
   permission("DENY", "CURRENT_ACTOR", "a user cannot bypass the correction judgment to create invalidation records directly"),
 ];
 
+const correctionFlowPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified correction Flow normalizes one accepted student submission branch"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot invoke internal correction submission normalization directly"),
+];
+
+const correctionSubmissionOutputFieldIds = [
+  "CORR-ATTEMPT-F-CORRECTION-ANSWER",
+  "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
+  "CORR-ATTEMPT-F-CORRECTION-VERSION",
+];
+
 const correctionActions = [
   action({
-    id: "CORR-ACT-SUBMIT",
-    label: "Submit a Correction Answer",
+    id: "CORR-ACT-OPEN-TASK",
+    label: "Open a Correction Task",
     operationKind: "CREATE",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: [
       "CORR-ATTEMPT-F-STUDENT-REF",
       "CORR-ATTEMPT-F-SOURCE-RESULT-REF",
       "CORR-ATTEMPT-F-SOURCE-RESULT-VERSION",
-      "CORR-ATTEMPT-F-CORRECTION-ANSWER",
     ],
     outputFieldIds: [
       "CORR-ATTEMPT-F-ID",
       "CORR-ATTEMPT-F-SOURCE-DATA-ID",
+      "CORR-ATTEMPT-F-DUE-AT",
       "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
       "CORR-ATTEMPT-F-CORRECTION-VERSION",
     ],
     permissions: correctionStudentPermissions,
-    successState: "SUBMITTED",
+    successState: "OPEN",
+  }),
+  action({
+    id: "CORR-ACT-MARK-OVERDUE",
+    label: "Mark an Open Correction Task Overdue",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    outputFieldIds: [
+      "CORR-ATTEMPT-F-OVERDUE-HANDLING",
+      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    ],
+    executionMode: SYSTEM_EVENT,
+    trigger: { kind: "EVENT", eventId: "EVT-CORRECTION-TASK-DUE" },
+    permissions: [
+      permission("ALLOW", "SYSTEM", "the system marks only an OPEN correction task overdue at its due time"),
+      permission("DENY", "CURRENT_ACTOR", "a user cannot force a correction task into the overdue state"),
+    ],
+    transition: { from: "OPEN", to: "OVERDUE" },
+  }),
+  action({
+    id: "CORR-ACT-SUBMIT-INITIAL",
+    label: "Submit an Open Correction Answer",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
+    outputFieldIds: correctionSubmissionOutputFieldIds,
+    permissions: correctionStudentPermissions,
+    transition: { from: "OPEN", to: "SUBMITTED" },
+  }),
+  action({
+    id: "CORR-ACT-SUBMIT-LATE",
+    label: "Submit an Overdue Correction Answer",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
+    outputFieldIds: [
+      ...correctionSubmissionOutputFieldIds,
+      "CORR-ATTEMPT-F-OVERDUE-HANDLING",
+    ],
+    permissions: correctionStudentPermissions,
+    transition: { from: "OVERDUE", to: "SUBMITTED" },
   }),
   action({
     id: "CORR-ACT-CONFIRM-JUDGMENT",
@@ -4058,34 +4214,47 @@ const correctionActions = [
     ],
     risk: RISK.HIGH,
     permissions: correctionTeacherPermissions,
-    transition: { from: "SUBMITTED", to: "TEACHER_CONFIRMED" },
+    transition: { from: "SUBMITTED", to: "JUDGED" },
     failureResults: ["PERMISSION_DENIED", "STALE_RESULT_VERSION", "VERSION_CONFLICT"],
     successData: "the corresponding subject teacher confirms the official correction judgment; AI suggestions remain non-authoritative",
+  }),
+  action({
+    id: "CORR-ACT-REQUEST-RETRY",
+    label: "Request Another Correction Attempt",
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    inputFieldIds: ["CORR-ATTEMPT-F-TEACHER-JUDGMENT"],
+    outputFieldIds: [
+      "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+      "CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF",
+      "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: correctionTeacherPermissions,
+    transition: { from: "SUBMITTED", to: "NEEDS_RETRY" },
+    failureResults: ["PERMISSION_DENIED", "STALE_RESULT_VERSION", "VERSION_CONFLICT"],
+    successData: "the corresponding subject teacher records the retry judgment without accepting the correction as final",
   }),
   action({
     id: "CORR-ACT-RESUBMIT",
     label: "Resubmit a Repeated Correction",
     targetObjectId: "CORR-OBJ-ATTEMPT",
     inputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-ANSWER"],
-    outputFieldIds: [
-      "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
-      "CORR-ATTEMPT-F-CORRECTION-VERSION",
-    ],
+    outputFieldIds: correctionSubmissionOutputFieldIds,
     permissions: correctionStudentPermissions,
-    transition: { from: "TEACHER_CONFIRMED", to: "SUBMITTED" },
+    transition: { from: "NEEDS_RETRY", to: "SUBMITTED" },
   }),
   action({
-    id: "CORR-ACT-HANDLE-OVERDUE",
-    label: "Record Correction Overdue Handling",
+    id: "CORR-ACT-NORMALIZE-SUBMISSION",
+    label: "Normalize an Accepted Correction Submission",
     targetObjectId: "CORR-OBJ-ATTEMPT",
-    inputFieldIds: ["CORR-ATTEMPT-F-OVERDUE-HANDLING"],
-    outputFieldIds: [
-      "CORR-ATTEMPT-F-OVERDUE-HANDLING",
-      "CORR-ATTEMPT-F-CORRECTION-VERSION",
-    ],
-    risk: RISK.HIGH,
-    permissions: correctionTeacherPermissions,
+    inputFieldIds: correctionSubmissionOutputFieldIds,
+    outputFieldIds: ["CORR-ATTEMPT-F-CORRECTION-VERSION"],
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    permissions: correctionFlowPermissions,
     transition: { from: "SUBMITTED", to: "SUBMITTED" },
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    successData: "normalizes exactly one initial, late, or repeated student submission into the correction Flow contract",
   }),
   action({
     id: "CORR-ACT-RECORD-INVALIDATION",
@@ -4094,7 +4263,7 @@ const correctionActions = [
     targetObjectId: "CORR-OBJ-INVALIDATION",
     outputFieldIds: invalidationFields.map(({ id }) => id),
     executionMode: FLOW_INTERNAL,
-    trigger: { kind: "FLOW", flowIds: ["DF-010"] },
+    trigger: { kind: "FLOW", flowIds: ["DF-009", "DF-010"] },
     permissions: invalidationFlowPermissions,
     successState: "RECORDED",
     failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
@@ -4124,7 +4293,7 @@ const correctionModule = moduleFact({
         confirmerRef: "DUTY-SUBJECT-TEACHER",
         stewardRef: "DUTY-SUBJECT-TEACHER",
       },
-      ["SUBMITTED", "TEACHER_CONFIRMED"],
+      ["OPEN", "OVERDUE", "SUBMITTED", "JUDGED", "NEEDS_RETRY"],
       correctionAttemptFields,
       "CORR-ATTEMPT-F-ID",
       {
@@ -4188,10 +4357,12 @@ const correctionModule = moduleFact({
     ["CORR-OBJ-ATTEMPT"],
     correctionAttemptFields.map(({ id }) => id),
     [
-      "CORR-ACT-SUBMIT",
+      "CORR-ACT-OPEN-TASK",
+      "CORR-ACT-SUBMIT-INITIAL",
+      "CORR-ACT-SUBMIT-LATE",
       "CORR-ACT-CONFIRM-JUDGMENT",
+      "CORR-ACT-REQUEST-RETRY",
       "CORR-ACT-RESUBMIT",
-      "CORR-ACT-HANDLE-OVERDUE",
     ],
   )],
 });
@@ -4274,7 +4445,10 @@ const studentProfileViewFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
-  field("STU-PROFILE-F-SAVED-VIEW-DEFINITION", "Saved Student Profile View Definition", { dataType: "JSON" }),
+  field("STU-PROFILE-F-SAVED-VIEW-DEFINITION", "Saved Student Profile View Definition", {
+    dataType: "JSON",
+    required: "required when a teacher saves a custom profile view",
+  }),
   field("STU-PROFILE-F-PROFILE-VERSION", "Student Profile View Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -4566,6 +4740,13 @@ export const teachingLoopOptionSets = deepFreeze([
   ]),
 ]);
 
+export const teachingLoopEvents = deepFreeze([{
+  id: "EVT-CORRECTION-TASK-DUE",
+  label: "Correction Task Due",
+  definition: "the open correction task reaches its due time without a submitted answer",
+  triggeredActionIds: ["CORR-ACT-MARK-OVERDUE"],
+}]);
+
 export const teachingLoopModules = deepFreeze([
   hwModule,
   submissionModule,
@@ -4583,7 +4764,7 @@ export const teachingLoopFlows = deepFreeze([
     id: "DF-004",
     label: "Assignment Validation and Publication",
     phase: PHASE.FIRST,
-    moduleIds: ["HW-001"],
+    moduleIds: ["HW-001", "APP-001"],
     steps: [
       { order: 1, actionId: "HW-ACT-VALIDATE-ITEM", condition: "an item is an initial draft" },
       { order: 2, actionId: "HW-ACT-REVALIDATE-ITEM", condition: "an item is a revision draft" },
@@ -4593,7 +4774,9 @@ export const teachingLoopFlows = deepFreeze([
       { order: 6, actionId: "HW-ACT-PUBLISH-ITEM", condition: "every included item version is validated" },
       { order: 7, actionId: "HW-ACT-PUBLISH-NOW", condition: "the teacher selects immediate publication" },
       { order: 8, actionId: "HW-ACT-SCHEDULE-PUBLISH", condition: "the teacher selects scheduled publication instead of immediate publication" },
+      { order: 9, actionId: "APP-ACT-CREATE-HOMEWORK-TODO", condition: "the published assignment version becomes available to the assigned class scope" },
     ],
+    systemProvidedInputs: [],
     sourceDataRefs: [
       {
         objectId: "HW-OBJ-ASSIGNMENT",
@@ -4603,6 +4786,11 @@ export const teachingLoopFlows = deepFreeze([
       {
         objectId: "HW-OBJ-ASSIGNMENT",
         fieldId: "HW-ASSIGNMENT-F-DUE-AT",
+        version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-ASSIGNMENT",
+        fieldId: "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
         version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
       },
       {
@@ -4616,15 +4804,57 @@ export const teachingLoopFlows = deepFreeze([
         version: "HW-ITEM-F-ITEM-VERSION",
       },
     ],
-    targetDataRefs: [{
-      objectId: "HW-OBJ-ASSIGNMENT",
-      fieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
-      version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
-    }],
+    targetDataRefs: [
+      {
+        objectId: "HW-OBJ-ASSIGNMENT",
+        fieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+        version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-ASSIGNMENT",
+        fieldId: "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
+        version: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-ID",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-STUDENT-REF",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-SOURCE-ASSIGNMENT-REF",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-TASK-DEEP-LINK",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-STUDENT-VISIBLE-AT",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-AGGREGATION-VERSION",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+    ],
     idempotencyKeyParts: {
       identityFieldIds: ["HW-ASSIGNMENT-F-ID"],
       versionFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION", "HW-ITEM-F-ITEM-VERSION"],
-      fanoutFieldId: "HW-ITEM-F-ID",
+      fanoutFieldId: "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
     },
     failureGranularity: "ASSIGNMENT_OBJECT_VERSION_WITH_NO_PARTIAL_ITEM_PUBLICATION",
     retryPolicy: {
@@ -4652,6 +4882,31 @@ export const teachingLoopFlows = deepFreeze([
       { order: 3, actionId: "SUB-ACT-UPLOAD-CHUNK", condition: "the answer contains App media" },
       { order: 4, actionId: "SUB-ACT-RETRY-UPLOAD", condition: "one or more media chunks failed while successful chunks remain accepted" },
       { order: 5, actionId: "SUB-ACT-SUBMIT", condition: "the server can issue a final submission receipt" },
+    ],
+    systemProvidedInputs: [
+      {
+        stepOrder: 2,
+        provider: "SYSTEM",
+        fieldIds: [
+          "SUB-DRAFT-F-MEDIA-METADATA",
+          "SUB-DRAFT-F-PAGE-ITEM-MAPPING",
+        ],
+      },
+      {
+        stepOrder: 3,
+        provider: "SYSTEM",
+        fieldIds: ["SUB-DRAFT-F-PENDING-CHUNK"],
+      },
+      {
+        stepOrder: 4,
+        provider: "SYSTEM",
+        fieldIds: ["SUB-DRAFT-F-PENDING-CHUNK"],
+      },
+      {
+        stepOrder: 5,
+        provider: "SYSTEM",
+        fieldIds: ["SUB-ATTEMPT-F-DRAFT-VERSION"],
+      },
     ],
     sourceDataRefs: [
       {
@@ -4721,6 +4976,7 @@ export const teachingLoopFlows = deepFreeze([
       { order: 6, actionId: "GRD-ACT-ROUTE", condition: "supported processing succeeds and requires teacher review or confirmation" },
       { order: 7, actionId: "GRD-ACT-ROUTE-AI-UNAVAILABLE", condition: "AI processing is unavailable and the decision requires an explicit manual fallback" },
     ],
+    systemProvidedInputs: [],
     sourceDataRefs: [
       {
         objectId: "SUB-OBJ-ATTEMPT",
@@ -4848,6 +5104,32 @@ export const teachingLoopFlows = deepFreeze([
       { order: 5, actionId: "GRD-ACT-BATCH-CONFIRM", condition: "every selected item is objective, eligible, and teacher-reviewed" },
       { order: 6, actionId: "GRD-ACT-RESOLVE-VERSION-CONFLICT", condition: "submission, item, or Rubric versions changed before confirmation" },
     ],
+    systemProvidedInputs: [
+      {
+        stepOrder: 1,
+        provider: "SYSTEM",
+        fieldIds: [
+          "GRD-DECISION-F-RECOGNIZED-ANSWER",
+          "GRD-DECISION-F-RECOGNIZED-REGION",
+          "GRD-DECISION-F-CORRECTION-REASON",
+        ],
+      },
+      {
+        stepOrder: 2,
+        provider: "SYSTEM",
+        fieldIds: ["GRD-DECISION-F-TEACHER-FEEDBACK"],
+      },
+      {
+        stepOrder: 3,
+        provider: "SYSTEM",
+        fieldIds: ["GRD-DECISION-F-CORRECTION-REASON"],
+      },
+      {
+        stepOrder: 6,
+        provider: "SYSTEM",
+        fieldIds: ["GRD-DECISION-F-CORRECTION-REASON"],
+      },
+    ],
     sourceDataRefs: [{
       objectId: "GRD-OBJ-DECISION",
       fieldId: "GRD-DECISION-F-ID",
@@ -4906,6 +5188,30 @@ export const teachingLoopFlows = deepFreeze([
       { order: 9, actionId: "PUB-ACT-FINALIZE-BATCH", condition: "all student result attempts have an object-level outcome" },
       { order: 10, actionId: "PUB-ACT-RETRY-FAILED", condition: "only object-level failed student results are retried" },
       { order: 11, actionId: "PUB-ACT-RECONCILE-BATCH", condition: "all retried student results now have a terminal object-level outcome" },
+    ],
+    systemProvidedInputs: [
+      {
+        stepOrder: 1,
+        provider: "SYSTEM",
+        fieldIds: [
+          "GRD-DECISION-F-SUGGESTED-SCORE",
+          "GRD-DECISION-F-TEACHER-FEEDBACK",
+        ],
+      },
+      {
+        stepOrder: 2,
+        provider: "SYSTEM",
+        fieldIds: ["GRD-DECISION-F-CORRECTION-REASON"],
+      },
+      {
+        stepOrder: 4,
+        provider: "SYSTEM",
+        fieldIds: [
+          "PUB-PREVIEW-F-BATCH-REF",
+          "PUB-PREVIEW-F-STUDENT-REF",
+          "PUB-PREVIEW-F-DECISION-REF",
+        ],
+      },
     ],
     sourceDataRefs: [
       {
@@ -5040,13 +5346,17 @@ export const teachingLoopFlows = deepFreeze([
     id: "DF-009",
     label: "Published Result Correction",
     phase: PHASE.FIRST,
-    moduleIds: ["GRD-001", "PUB-001"],
+    moduleIds: ["GRD-001", "PUB-001", "INS-001", "PLN-001", "CORR-001"],
     steps: [
       { order: 1, actionId: "GRD-ACT-OPEN-CONFIRMED-REVISION", condition: "the corresponding subject teacher records the correction reason against the prior confirmed version" },
       { order: 2, actionId: "GRD-ACT-CONFIRM-REVISION", condition: "the corresponding subject teacher confirms the revised score and feedback into a new decision version" },
       { order: 3, actionId: "PUB-ACT-CORRECT-RESULT", condition: "the correction references the new confirmed decision version" },
-      { order: 4, actionId: "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION", condition: "dependent explanations are regenerated and teacher-reconfirmed" },
+      { order: 4, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "the corrected result records every dependent target kind, source version, target version, and history-preservation outcome" },
+      { order: 5, actionId: "INS-ACT-MARK-STALE", condition: "evidence or mastery interpretation depends on the corrected result or decision version" },
+      { order: 6, actionId: "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", condition: "an improvement candidate or plan evaluation depends on the invalidated evidence version" },
+      { order: 7, actionId: "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION", condition: "the publication-level explanation is regenerated and teacher-reconfirmed while future report and learning-path consumers remain versioned targets" },
     ],
+    systemProvidedInputs: [],
     sourceDataRefs: [
       {
         objectId: "GRD-OBJ-DECISION",
@@ -5059,14 +5369,89 @@ export const teachingLoopFlows = deepFreeze([
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
       {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-OFFICIAL-SCORE",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-TEACHER-FEEDBACK",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-CORRECTION-REASON",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
         objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-ID",
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
       {
         objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-STUDENT-REF",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-RESULT-VERSION",
         version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-CORRECTION-DECISION-REF",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-PUBLIC-CORRECTION-NOTE",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-ID",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-SOURCE-RESULT-REF",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-ID",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-REF",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-PLAN-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
       },
     ],
     targetDataRefs: [
@@ -5095,25 +5480,127 @@ export const teachingLoopFlows = deepFreeze([
         fieldId: "PUB-RESULT-F-INVALIDATION-VERSION",
         version: "PUB-RESULT-F-INVALIDATION-VERSION",
       },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS",
+        version: "PUB-RESULT-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-ID",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-TARGET-KINDS",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-TARGET-TRANSITIONS",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-TARGET-VERSIONS",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-HISTORY-PRESERVATION",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-INVALIDATION",
+        fieldId: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+        version: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-VALIDITY",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-INVALIDATION-REASON",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-INVALIDATION-REF",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-INVALIDATION-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-EVALUATION-STATE",
+        version: "PLN-PLAN-F-EVALUATION-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-EVALUATION-VERSION",
+        version: "PLN-PLAN-F-EVALUATION-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-PLAN-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["GRD-DECISION-F-ID", "PUB-RESULT-F-ID"],
-      versionFieldIds: ["GRD-DECISION-F-DECISION-VERSION", "PUB-RESULT-F-RESULT-VERSION"],
+      identityFieldIds: [
+        "GRD-DECISION-F-ID",
+        "PUB-RESULT-F-ID",
+        "INS-EVIDENCE-F-ID",
+        "PLN-PLAN-F-ID",
+      ],
+      versionFieldIds: [
+        "GRD-DECISION-F-DECISION-VERSION",
+        "PUB-RESULT-F-RESULT-VERSION",
+        "INS-EVIDENCE-F-EVIDENCE-VERSION",
+        "PLN-PLAN-F-PLAN-VERSION",
+      ],
       fanoutFieldId: "PUB-RESULT-F-ID",
     },
-    failureGranularity: "PUBLISHED_STUDENT_RESULT_OBJECT",
+    failureGranularity: "PUBLISHED_STUDENT_RESULT_AND_DEPENDENT_INTERPRETATION_OBJECT",
     retryPolicy: {
-      strategy: "REFRESH_DECISION_AND_RESULT_VERSIONS_THEN_RETRY",
+      strategy: "REFRESH_RESULT_DECISION_EVIDENCE_AND_PLAN_VERSIONS_THEN_RETRY_FAILED_OBJECTS",
       maxAttempts: 3,
-      retryableFailureResults: ["STALE_DECISION_VERSION", "VERSION_CONFLICT", "AUDIT_FAILED"],
+      retryableFailureResults: [
+        "STALE_DECISION_VERSION",
+        "SOURCE_VERSION_STALE",
+        "VERSION_CONFLICT",
+        "AUDIT_FAILED",
+      ],
     },
     compensation: {
-      strategy: "KEEP_PRIOR_PUBLIC_RESULT_UNTIL_CORRECTION_COMMITS",
-      description: "a failed correction leaves the prior result visible and does not expose a partial correction",
+      strategy: "KEEP_PRIOR_RESULT_AND_DEPENDENT_VERSIONS_UNTIL_OBJECT_OUTCOMES_COMMIT",
+      description: "a failed correction leaves prior result, evidence, mastery, plan evaluation, report, and learning-path history intact and retries only failed objects",
     },
     downstreamInvalidation: {
-      strategy: "INVALIDATE_AND_REQUIRE_RECONFIRMATION",
-      targets: ["score explanation", "knowledge evidence", "mastery projection", "improvement recommendation"],
+      strategy: "VERSION_AND_REQUIRE_RECONFIRMATION_FOR_EVERY_DEPENDENT_TARGET_KIND",
+      targets: [
+        "EVIDENCE",
+        "MASTERY_INTERPRETATION",
+        "IMPROVEMENT_CANDIDATE",
+        "PLAN_EVALUATION",
+        "REPORT_INTERPRETATION",
+        "LEARNING_PATH_EXPLANATION",
+      ],
     },
   },
   {
@@ -5123,7 +5610,7 @@ export const teachingLoopFlows = deepFreeze([
     moduleIds: ["PUB-001", "INS-001", "PLN-001", "CORR-001"],
     steps: [
       { order: 1, actionId: "PUB-ACT-VIEW-RESULT", condition: "the student's published result and source decision versions are visible" },
-      { order: 2, actionId: "CORR-ACT-SUBMIT", condition: "the student submits a correction answer against the visible result version" },
+      { order: 2, actionId: "CORR-ACT-NORMALIZE-SUBMISSION", condition: "exactly one initial, late, or repeated student submission has reached SUBMITTED" },
       { order: 3, actionId: "CORR-ACT-CONFIRM-JUDGMENT", condition: "the corresponding subject teacher confirms the formal correction judgment" },
       { order: 4, actionId: "CORR-ACT-RECORD-INVALIDATION", condition: "dependent versions receive object-level invalidation outcomes with history retained" },
       { order: 5, actionId: "INS-ACT-MARK-STALE", condition: "the prior evidence depends on the corrected result or decision version" },
@@ -5132,10 +5619,20 @@ export const teachingLoopFlows = deepFreeze([
       { order: 8, actionId: "INS-ACT-CONFIRM-MASTERY", condition: "the corresponding subject teacher confirms the candidate interpretation" },
       { order: 9, actionId: "INS-ACT-PUBLISH-INTERPRETATION", condition: "only the teacher-confirmed interpretation becomes student-visible" },
     ],
+    systemProvidedInputs: [{
+      stepOrder: 8,
+      provider: "SYSTEM",
+      fieldIds: ["INS-EVIDENCE-F-MASTERY-INTERPRETATION"],
+    }],
     sourceDataRefs: [
       {
         objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-ID",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-STUDENT-REF",
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
       {
@@ -5149,6 +5646,31 @@ export const teachingLoopFlows = deepFreeze([
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
       {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-ID",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-CORRECTION-ANSWER",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "CORR-OBJ-ATTEMPT",
+        fieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      },
+      {
         objectId: "INS-OBJ-EVIDENCE",
         fieldId: "INS-EVIDENCE-F-ID",
         version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -5156,6 +5678,11 @@ export const teachingLoopFlows = deepFreeze([
       {
         objectId: "INS-OBJ-EVIDENCE",
         fieldId: "INS-EVIDENCE-F-SOURCE-RESULT-REF",
+        version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+      },
+      {
+        objectId: "INS-OBJ-EVIDENCE",
+        fieldId: "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
         version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
       },
       {
@@ -5170,16 +5697,21 @@ export const teachingLoopFlows = deepFreeze([
       },
       {
         objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-REF",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
+        fieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
+        version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-PLAN",
         fieldId: "PLN-PLAN-F-PLAN-VERSION",
         version: "PLN-PLAN-F-PLAN-VERSION",
       },
     ],
     targetDataRefs: [
-      {
-        objectId: "CORR-OBJ-ATTEMPT",
-        fieldId: "CORR-ATTEMPT-F-ID",
-        version: "CORR-ATTEMPT-F-CORRECTION-VERSION",
-      },
       {
         objectId: "CORR-OBJ-ATTEMPT",
         fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
@@ -5272,9 +5804,15 @@ export const teachingLoopFlows = deepFreeze([
       },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["PUB-RESULT-F-ID", "INS-EVIDENCE-F-ID", "PLN-PLAN-F-ID"],
+      identityFieldIds: [
+        "PUB-RESULT-F-ID",
+        "CORR-ATTEMPT-F-ID",
+        "INS-EVIDENCE-F-ID",
+        "PLN-PLAN-F-ID",
+      ],
       versionFieldIds: [
         "PUB-RESULT-F-RESULT-VERSION",
+        "CORR-ATTEMPT-F-CORRECTION-VERSION",
         "INS-EVIDENCE-F-EVIDENCE-VERSION",
         "PLN-PLAN-F-PLAN-VERSION",
       ],
@@ -5313,8 +5851,21 @@ export const teachingLoopFlows = deepFreeze([
       { order: 3, actionId: "PLN-ACT-CONFIRM-PLAN", condition: "the corresponding subject teacher confirms the plan content" },
       { order: 4, actionId: "PLN-ACT-SYNC-SUBJECT-TEACHER", condition: "the confirmed plan creates a subject-teacher synchronization output" },
       { order: 5, actionId: "PLN-ACT-SYNC-HOMEROOM-COORDINATION", condition: "the confirmed plan creates a distinct read-only homeroom coordination output" },
-      { order: 6, actionId: "APP-ACT-CREATE-TODO-LINK", condition: "the student todo receives only a source-pinned plan deep link and local execution state" },
+      { order: 6, actionId: "APP-ACT-CREATE-PLAN-TODO", condition: "the student todo receives only a source-pinned plan deep link and local execution state" },
     ],
+    systemProvidedInputs: [{
+      stepOrder: 3,
+      provider: "SYSTEM",
+      fieldIds: [
+        "PLN-PLAN-F-GOAL",
+        "PLN-PLAN-F-TASK-CONTENT",
+        "PLN-PLAN-F-WORKLOAD",
+        "PLN-PLAN-F-DUE-AT",
+        "PLN-PLAN-F-SUCCESS-CONDITION",
+        "PLN-PLAN-F-EVIDENCE-REQUIREMENT",
+        "PLN-PLAN-F-REVALIDATION-METHOD",
+      ],
+    }],
     sourceDataRefs: [
       {
         objectId: "INS-OBJ-EVIDENCE",
@@ -5385,7 +5936,27 @@ export const teachingLoopFlows = deepFreeze([
       },
       {
         objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-STUDENT-REF",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-SOURCE-PLAN-REF",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-SOURCE-PLAN-VERSION",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
         fieldId: "APP-TODO-F-TASK-DEEP-LINK",
+        version: "APP-TODO-F-AGGREGATION-VERSION",
+      },
+      {
+        objectId: "APP-OBJ-TODO",
+        fieldId: "APP-TODO-F-STUDENT-VISIBLE-AT",
         version: "APP-TODO-F-AGGREGATION-VERSION",
       },
       {
@@ -5426,6 +5997,7 @@ export const teachingLoopFlows = deepFreeze([
       { order: 4, actionId: "APP-ACT-REFRESH-TODOS", condition: "student todo links refresh without copying source task content" },
       { order: 5, actionId: "STU-ACT-BUILD-PROFILE", condition: "the profile materializes only query, column, saved-view, and source-lineage definitions" },
     ],
+    systemProvidedInputs: [],
     sourceDataRefs: [
       {
         objectId: "SCO-OBJ-VIEW",
@@ -5456,6 +6028,11 @@ export const teachingLoopFlows = deepFreeze([
         objectId: "PLN-OBJ-PLAN",
         fieldId: "PLN-PLAN-F-PLAN-VERSION",
         version: "PLN-PLAN-F-PLAN-VERSION",
+      },
+      {
+        objectId: "PLN-OBJ-HOMEROOM-COORDINATION",
+        fieldId: "PLN-HOMEROOM-F-ID",
+        version: "PLN-HOMEROOM-F-OUTPUT-VERSION",
       },
       {
         objectId: "APP-OBJ-TODO",
@@ -5530,12 +6107,14 @@ export const teachingLoopFlows = deepFreeze([
         "SCO-VIEW-F-ID",
         "INS-EVIDENCE-F-ID",
         "PLN-PLAN-F-ID",
+        "PLN-HOMEROOM-F-ID",
         "APP-TODO-F-ID",
       ],
       versionFieldIds: [
         "SCO-VIEW-F-VIEW-VERSION",
         "INS-EVIDENCE-F-EVIDENCE-VERSION",
         "PLN-PLAN-F-PLAN-VERSION",
+        "PLN-HOMEROOM-F-OUTPUT-VERSION",
         "APP-TODO-F-AGGREGATION-VERSION",
       ],
       fanoutFieldId: "APP-TODO-F-STUDENT-REF",
