@@ -174,8 +174,17 @@ function moduleFact({ actions: actionFacts, ...module }) {
   const actionById = new Map(
     actionFacts.map(({ action: actionValue }) => [actionValue.id, actionValue]),
   );
+  const readTargetObjectIds = new Set(actionFacts
+    .map(({ action: actionValue }) => actionValue)
+    .filter(({ operationKind }) => operationKind === "READ")
+    .map(({ targetObjectId }) => targetObjectId));
   return defineModule({
     ...module,
+    objects: module.objects.map((objectValue) => ({
+      ...objectValue,
+      readMode: objectValue.readMode
+        ?? (readTargetObjectIds.has(objectValue.id) ? "AUTHORIZED" : "NO_DIRECT_READ"),
+    })),
     actions: actionFacts.map(({ action: actionValue }) => actionValue),
     scenarios: actionFacts.flatMap(({ scenarios }) => scenarios.map((scenario) => (
       actionById.get(scenario.actionId)?.executionMode === USER_TASK
@@ -299,6 +308,7 @@ const hwItemFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-RUBRIC" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("HW-ITEM-F-KNOWLEDGE-POINT-IDS", "Item Knowledge Points", {
     dataType: "STRING_ARRAY",
@@ -1009,6 +1019,7 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "SUB-OBJ-ATTEMPT" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
       targetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
@@ -1023,6 +1034,7 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-ITEM" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-ITEM-VERSION",
       targetVersionFieldId: "HW-ITEM-F-ITEM-VERSION",
@@ -1037,6 +1049,7 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-RUBRIC" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
       targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
@@ -1051,6 +1064,7 @@ const gradingDecisionFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-CAPABILITY-RULE" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
       targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
@@ -1757,16 +1771,19 @@ const publicationPreviewFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-BATCH" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("PUB-PREVIEW-F-STUDENT-REF", "Selected Student Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("PUB-PREVIEW-F-DECISION-REF", "Confirmed Decision Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("PUB-PREVIEW-F-ELIGIBILITY", "Preview Publication Eligibility", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-009" },
@@ -1805,11 +1822,13 @@ const publishedResultFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("PUB-RESULT-F-SOURCE-DECISION-REF", "Source Decision Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "PUB-RESULT-F-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -1825,6 +1844,7 @@ const publishedResultFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "SYSTEM_MANAGED",
     required: "required when correcting a published result",
+    referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -2145,9 +2165,14 @@ const publicationActions = [
     targetObjectId: "PUB-OBJ-RESULT",
     inputFieldIds: ["PUB-RESULT-F-STUDENT-REF"],
     outputFieldIds: [
+      "PUB-RESULT-F-STUDENT-REF",
       "PUB-RESULT-F-ANSWER",
       "PUB-RESULT-F-SCORE",
       "PUB-RESULT-F-FEEDBACK",
+      "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+      "PUB-RESULT-F-SCORE-VISIBLE-AT",
+      "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+      "PUB-RESULT-F-RESULT-VERSION",
     ],
     writes: false,
     permissions: [
@@ -2282,6 +2307,7 @@ const publicationModule = moduleFact({
       publishedResultFields,
       {
         sensitivityId: "S3",
+        readMode: "STUDENT_TIMED_RELEASE",
         lineageBindings: [
           {
             refFieldId: "PUB-RESULT-F-SOURCE-DECISION-REF",
@@ -2302,6 +2328,7 @@ const publicationModule = moduleFact({
           subject: { roleRef: "ROLE-STUDENT" },
           scope: { kind: "OWN_RECORD", subjectFieldId: "PUB-RESULT-F-STUDENT-REF" },
           requiredState: "PUBLISHED",
+          safeMetadataFieldIds: ["PUB-RESULT-F-RESULT-VERSION"],
           timeGates: [
             {
               visibleAtFieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",

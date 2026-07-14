@@ -8,6 +8,7 @@ import {
 } from "../requirements-v2/validate/index.mjs";
 import * as modelValidatorExports from "../requirements-v2/validate/model-validator.mjs";
 import * as requirementModelExports from "../requirements-v2/model.mjs";
+import { prepareRequirementModel } from "../requirements-v2/validate/structure-validator.mjs";
 import {
   CLIENT,
   PHASE,
@@ -59,6 +60,7 @@ function validObject(id, ownerRef, field, overrides = {}) {
     stewardRef: ownerRef,
     lifecyclePolicyId: "LIFE-TEST",
     sensitivityId: "S2",
+    readMode: "AUTHORIZED",
     states: ["DRAFT", "SUBMITTED"],
     fields: [field],
     ...overrides,
@@ -179,6 +181,7 @@ function validFixture() {
     roles: [
       { id: "ROLE-STUDENT", label: "student" },
       { id: "ROLE-TEACHER", label: "teacher" },
+      { id: "ROLE-PLATFORM-OPS", label: "platform operations" },
     ],
     duties: [],
     lifecyclePolicies: [{
@@ -325,6 +328,7 @@ function addLineageBindingFixture(model) {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
     mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
     versionBinding: {
       versionFieldId: "SUB-F002",
       targetVersionFieldId: "HW-F001",
@@ -340,7 +344,12 @@ function addLineageBindingFixture(model) {
 
 function addReadPolicyFixture(model) {
   const module = moduleById(model, "SUB-001");
+  module.objects[0].readMode = "STUDENT_TIMED_RELEASE";
   module.objects[0].fields.push(validField("SUB-F003", { dataType: "DATETIME" }));
+  module.objects[0].fields.push(validField("SUB-F004", {
+    label: "internal correction trace",
+    visibility: "INTERNAL",
+  }));
   module.objects[0].fields
     .find(({ id }) => id === "SUB-F001").releaseRequirement = {
       readPolicyId: "SUB-RP-OWNED-RESULT",
@@ -369,10 +378,10 @@ function addReadPolicyFixture(model) {
   const readAction = validAction(
     "SUB-ACT-READ",
     "DAT-SUB-01",
-    ["SUB-F001"],
+    ["SUB-F000"],
     scenarios.map(({ id }) => id),
     {
-      outputFieldIds: ["SUB-F001"],
+      outputFieldIds: ["SUB-F000", "SUB-F001", "SUB-F002", "SUB-F003"],
       operationKind: "READ",
       writes: false,
       risk: RISK.READ,
@@ -385,12 +394,14 @@ function addReadPolicyFixture(model) {
   module.actions.push(readAction);
   module.scenarios.push(...scenarios);
   module.pages[0].actionIds.push("SUB-ACT-READ");
+  module.pages[0].fieldIds = ["SUB-F000", "SUB-F001", "SUB-F002", "SUB-F003"];
   module.objects[0].readPolicies = [{
     id: "SUB-RP-OWNED-RESULT",
     actionId: "SUB-ACT-READ",
     subject: { roleRef: "ROLE-STUDENT" },
-    scope: { kind: "OWN_RECORD", subjectFieldId: "SUB-F001" },
+    scope: { kind: "OWN_RECORD", subjectFieldId: "SUB-F000" },
     requiredState: "SUBMITTED",
+    safeMetadataFieldIds: ["SUB-F002"],
     timeGates: [{
       visibleAtFieldId: "SUB-F003",
       protectedFieldIds: ["SUB-F001"],
@@ -821,6 +832,17 @@ test("validates generic object lineage bindings without Field ID allowlists", ()
   assert.deepEqual(validateRequirementModel(validModel), []);
 
   const mutations = [
+    (model) => {
+      delete moduleById(model, "SUB-001").objects[0].fields
+        .find(({ id }) => id === "SUB-F003").referenceIntegrity;
+    },
+    (model) => {
+      const object = moduleById(model, "SUB-001").objects[0];
+      const field = object.fields.find(({ id }) => id === "SUB-F003");
+      delete field.referenceIntegrity;
+      delete field.versionBinding;
+      delete object.lineageBindings;
+    },
     (model) => { delete moduleById(model, "SUB-001").objects[0].lineageBindings; },
     (model) => { moduleById(model, "SUB-001").objects[0].lineageBindings = []; },
     (model) => {
@@ -858,6 +880,58 @@ test("validates generic object lineage bindings without Field ID allowlists", ()
   }
 });
 
+test("enforces identity-only object references without lineage containers", () => {
+  const validModel = validFixture();
+  const object = moduleById(validModel, "SUB-001").objects[0];
+  const field = object.fields.find(({ id }) => id === "SUB-F001");
+  Object.assign(field, {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+  });
+  assert.deepEqual(validateRequirementModel(validModel), []);
+
+  const mutations = [
+    (identityField, identityObject) => { delete identityField.referenceIntegrity; },
+    (identityField) => { identityField.referenceIntegrity = "LEGACY"; },
+    (identityField) => {
+      identityField.versionBinding = {
+        versionFieldId: "SUB-F002",
+        targetVersionFieldId: "HW-F001",
+      };
+    },
+    (_identityField, identityObject) => {
+      identityObject.lineageBindings = [{
+        refFieldId: "SUB-F001",
+        versionFieldId: "SUB-F002",
+        targetObjectId: "DAT-HW-01",
+        targetVersionFieldId: "HW-F001",
+      }];
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(validModel);
+    const identityObject = moduleById(model, "SUB-001").objects[0];
+    const identityField = identityObject.fields.find(({ id }) => id === "SUB-F001");
+    mutate(identityField, identityObject);
+    assertHasCode(validateRequirementModel(model), "INVALID_LINEAGE_BINDING");
+  }
+});
+
+test("requires object-reference integrity during structural preparation in every phase", () => {
+  const model = validFixture();
+  const reportField = moduleById(model, "REPORT-001").objects[0].fields[0];
+  Object.assign(reportField, {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
+    mutability: "IMMUTABLE",
+  });
+
+  assertHasCode(prepareRequirementModel(model).errors, "INVALID_LINEAGE_BINDING");
+});
+
 test("covers every GRD and PUB versioned reference with one field-declared lineage binding", () => {
   const expectedRefs = new Map([
     ["GRD-OBJ-DECISION", [
@@ -876,7 +950,7 @@ test("covers every GRD and PUB versioned reference with one field-declared linea
     for (const object of moduleById(requirementModel, moduleId).objects) {
       if (!expectedRefs.has(object.id)) continue;
       const markedRefs = object.fields
-        .filter(({ versionBinding }) => versionBinding)
+        .filter(({ referenceIntegrity }) => referenceIntegrity === "VERSION_PINNED")
         .map(({ id }) => id)
         .sort();
       assert.deepEqual(markedRefs, expectedRefs.get(object.id).toSorted(), object.id);
@@ -886,12 +960,52 @@ test("covers every GRD and PUB versioned reference with one field-declared linea
   }
 });
 
+test("classifies every phase-one object reference with a closed integrity mode", () => {
+  const objectRefs = modules.flatMap((module) => module.objects.flatMap((object) => (
+    object.fields
+      .filter(({ valueSource }) => valueSource?.kind === "OBJECT_REF")
+      .map((field) => ({ module, object, field }))
+  )));
+  assert.equal(objectRefs.length, 11);
+  assert.equal(objectRefs.filter(({ field }) => (
+    field.referenceIntegrity === "VERSION_PINNED"
+  )).length, 6);
+  assert.equal(objectRefs.filter(({ field }) => (
+    field.referenceIntegrity === "IDENTITY_ONLY"
+  )).length, 5);
+
+  const missingPinnedBinding = structuredClone(requirementModel);
+  const gradingDecision = moduleById(missingPinnedBinding, "GRD-001").objects
+    .find(({ id }) => id === "GRD-OBJ-DECISION");
+  const submissionRef = gradingDecision.fields
+    .find(({ id }) => id === "GRD-DECISION-F-SUBMISSION-REF");
+  delete submissionRef.versionBinding;
+  gradingDecision.lineageBindings = gradingDecision.lineageBindings
+    .filter(({ refFieldId }) => refFieldId !== submissionRef.id);
+  assertHasCode(validateRequirementModel(missingPinnedBinding), "INVALID_LINEAGE_BINDING");
+
+  for (const { module, object, field } of objectRefs) {
+    const model = structuredClone(requirementModel);
+    const mutatedObject = moduleById(model, module.id).objects
+      .find(({ id }) => id === object.id);
+    delete mutatedObject.fields.find(({ id }) => id === field.id).referenceIntegrity;
+    assertHasCode(validateRequirementModel(model), "INVALID_LINEAGE_BINDING");
+  }
+});
+
 test("validates structured own-record read policies and time-gated outputs", () => {
   const validModel = validFixture();
   addReadPolicyFixture(validModel);
   assert.deepEqual(validateRequirementModel(validModel), []);
 
   const mutations = [
+    (model) => { delete moduleById(model, "SUB-001").objects[0].readMode; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readMode = "AUTHORIZED"; },
+    (model) => {
+      const object = moduleById(model, "SUB-001").objects[0];
+      delete object.fields.find(({ id }) => id === "SUB-F001").releaseRequirement;
+      delete object.readPolicies;
+    },
     (model) => { delete moduleById(model, "SUB-001").objects[0].readPolicies; },
     (model) => { moduleById(model, "SUB-001").objects[0].readPolicies = []; },
     (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].legacy = true; },
@@ -903,6 +1017,7 @@ test("validates structured own-record read policies and time-gated outputs", () 
     (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].scope.subjectFieldId = "HW-F001"; },
     (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].timeGates[0].visibleAtFieldId = "SUB-F002"; },
     (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].timeGates[0].protectedFieldIds = ["SUB-F002"]; },
+    (model) => { moduleById(model, "SUB-001").objects[0].readPolicies[0].timeGates[0].protectedFieldIds = ["SUB-F001", "SUB-F001"]; },
     (model) => {
       const policy = moduleById(model, "SUB-001").objects[0].readPolicies[0];
       policy.timeGates.push(structuredClone(policy.timeGates[0]));
@@ -921,6 +1036,46 @@ test("validates structured own-record read policies and time-gated outputs", () 
         .find(({ id }) => id === "SUB-F001").releaseRequirement;
     },
     (model) => { moduleById(model, "SUB-001").pages[0].fieldIds = []; },
+    (model) => { moduleById(model, "SUB-001").pages[0].fieldIds.push("SUB-F004"); },
+    (model) => { moduleById(model, "SUB-001").actions.find(({ id }) => id === "SUB-ACT-READ").outputFieldIds.pop(); },
+    (model) => { moduleById(model, "SUB-001").actions.find(({ id }) => id === "SUB-ACT-READ").outputFieldIds.push("SUB-F004"); },
+    (model) => {
+      const module = moduleById(model, "SUB-001");
+      module.actions = module.actions.filter(({ id }) => id !== "SUB-ACT-READ");
+    },
+    (model) => { moduleById(model, "SUB-001").pages = []; },
+    (model) => {
+      moduleById(model, "SUB-001").actions.find(({ id }) => id === "SUB-ACT-READ")
+        .permissions.push({
+          effect: "ALLOW",
+          roleRef: "ROLE-TEACHER",
+          condition: "the teacher reads the student result",
+        });
+    },
+    (model) => {
+      moduleById(model, "SUB-001").actions.find(({ id }) => id === "SUB-ACT-READ")
+        .permissions.push({
+          effect: "ALLOW",
+          roleRef: "ROLE-PLATFORM-OPS",
+          condition: "platform operations reads the student result",
+        });
+    },
+    (model) => {
+      moduleById(model, "SUB-001").actions.find(({ id }) => id === "SUB-ACT-READ")
+        .permissions.push({
+          effect: "ALLOW",
+          actorRef: "SYSTEM",
+          condition: "the system reads through the student action",
+        });
+    },
+    (model) => {
+      moduleById(model, "SUB-001").actions.find(({ id }) => id === "SUB-ACT-READ")
+        .permissions.push({
+          effect: "DENY",
+          roleRef: "ROLE-STUDENT",
+          condition: "the student is denied by a conflicting rule",
+        });
+    },
   ];
 
   for (const mutate of mutations) {
@@ -1024,15 +1179,20 @@ test("rejects CREATE actions whose generic command semantics also express update
     "Maintain the Record Catalog",
     "Save Record Preferences",
     "Create or Reorder Record Items",
+    "Upsert a Record",
+    "Merge Record Changes",
+    "合并写入记录",
+    "存在则更新记录",
   ];
 
   for (const label of mixedCommandNames) {
     const model = validFixture();
     const action = moduleById(model, "SUB-001").actions[0];
     action.label = label;
-    action.id = "SUB-ACT-MANAGE-RECORD";
+    action.id = "SUB-ACT-CREATE-RECORD";
     action.operationKind = "CREATE";
     delete action.transition;
+    action.outputFieldIds = ["SUB-F000", "SUB-F001", "SUB-F002"];
     for (const scenario of moduleById(model, "SUB-001").scenarios) {
       scenario.actionId = action.id;
     }
@@ -1045,7 +1205,7 @@ test("rejects CREATE actions whose generic command semantics also express update
 });
 
 test("uses task-specific CREATE and UPDATE actions for every mixed command surface", () => {
-  const mixedCreatePattern = /(?:\bupdate\b|\bmaintain\b|\bsave\b|\breorder\b|(?:^|-)manage(?:-|$))/i;
+  const mixedCreatePattern = /(?:\bupdate\b|\bmaintain\b|\bsave\b|\breorder\b|\bupsert\b|\bmerge\b|(?:^|-)manage(?:-|$)|合并写入|存在则更新)/i;
   const mixedCreates = modules.flatMap((module) => (
     module.actions
       .filter(({ operationKind, id, label }) => (
@@ -1054,6 +1214,8 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
       .map(({ id }) => `${module.id}:${id}`)
   ));
   assert.deepEqual(mixedCreates, []);
+  assert.equal(modules.flatMap(({ actions }) => actions)
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 34);
 
   const requiredPairs = [
     ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
@@ -1071,6 +1233,44 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
     assert.equal(actionById.get(createActionId)?.operationKind, "CREATE", createActionId);
     assert.equal(actionById.get(updateActionId)?.operationKind, "UPDATE", updateActionId);
   }
+});
+
+test("requires CREATE actions to receive target identity only as a system output", () => {
+  const validModel = validFixture();
+  const action = moduleById(validModel, "SUB-001").actions[0];
+  action.operationKind = "CREATE";
+  delete action.transition;
+  action.outputFieldIds = ["SUB-F000", "SUB-F001", "SUB-F002"];
+  assertNoCode(validateRequirementModel(validModel), "INVALID_ACTION_OPERATION");
+
+  const mutations = [
+    (createAction) => { createAction.inputFieldIds.push("SUB-F000"); },
+    (createAction) => {
+      createAction.outputFieldIds = createAction.outputFieldIds
+        .filter((fieldId) => fieldId !== "SUB-F000");
+    },
+  ];
+  for (const mutate of mutations) {
+    const model = structuredClone(validModel);
+    mutate(moduleById(model, "SUB-001").actions[0]);
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_OPERATION");
+  }
+
+  const violations = modules.flatMap((module) => module.actions
+    .filter(({ operationKind }) => operationKind === "CREATE")
+    .flatMap((createAction) => {
+      const targetObject = module.objects.find(({ id }) => id === createAction.targetObjectId);
+      const identityFieldIds = targetObject?.fields
+        .filter(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")
+        .map(({ id }) => id) ?? [];
+      return identityFieldIds
+        .filter((fieldId) => (
+          createAction.inputFieldIds.includes(fieldId)
+          || !createAction.outputFieldIds.includes(fieldId)
+        ))
+        .map((fieldId) => `${module.id}:${createAction.id}:${fieldId}`);
+    }));
+  assert.deepEqual(violations, []);
 });
 
 test("requires fail-closed audit behavior for high-risk actions", () => {
@@ -1373,6 +1573,7 @@ test("accepts a CREATE action with an explicit success state and no transition",
   const model = validFixture();
   const action = moduleById(model, "SUB-001").actions[0];
   action.operationKind = "CREATE";
+  action.outputFieldIds.push("SUB-F000");
   delete action.transition;
 
   assert.deepEqual(validateRequirementModel(model), []);
@@ -1612,6 +1813,35 @@ test("assembles the shared facts into the phase-one executable model", () => {
     extensions,
   });
   assert.deepEqual(validateRequirementModel(requirementModel), []);
+});
+
+test("declares the direct read mode for every phase-one object", () => {
+  const phaseOneObjects = modules
+    .filter(({ phase }) => phase === PHASE.FIRST)
+    .flatMap(({ objects }) => objects);
+  const readModeCounts = Object.groupBy(phaseOneObjects, ({ readMode }) => readMode);
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(readModeCounts).map(([mode, objects]) => (
+      [mode, objects.length]
+    ))),
+    {
+      AUTHORIZED: 15,
+      NO_DIRECT_READ: 30,
+      STUDENT_TIMED_RELEASE: 1,
+    },
+  );
+  assert.equal(
+    phaseOneObjects.find(({ id }) => id === "PUB-OBJ-RESULT")?.readMode,
+    "STUDENT_TIMED_RELEASE",
+  );
+
+  for (const object of phaseOneObjects) {
+    const model = structuredClone(requirementModel);
+    const mutableObject = model.modules.flatMap(({ objects }) => objects)
+      .find(({ id }) => id === object.id);
+    delete mutableObject.readMode;
+    assertHasCode(validateRequirementModel(model), "INVALID_OBJECT_CONTRACT");
+  }
 });
 
 test("defines the seven foundation modules plus the four teaching-loop modules and nine Flows", () => {
@@ -2378,6 +2608,7 @@ test("records result decision lineage and enforces structured student visibility
     subject: { roleRef: "ROLE-STUDENT" },
     scope: { kind: "OWN_RECORD", subjectFieldId: "PUB-RESULT-F-STUDENT-REF" },
     requiredState: "PUBLISHED",
+    safeMetadataFieldIds: ["PUB-RESULT-F-RESULT-VERSION"],
     timeGates: [
       {
         visibleAtFieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
@@ -2399,9 +2630,14 @@ test("records result decision lineage and enforces structured student visibility
   assert.equal(viewResult.operationKind, "READ");
   assert.deepEqual(viewResult.inputFieldIds, ["PUB-RESULT-F-STUDENT-REF"]);
   assert.deepEqual(viewResult.outputFieldIds, [
+    "PUB-RESULT-F-STUDENT-REF",
     "PUB-RESULT-F-ANSWER",
     "PUB-RESULT-F-SCORE",
     "PUB-RESULT-F-FEEDBACK",
+    "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    "PUB-RESULT-F-SCORE-VISIBLE-AT",
+    "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+    "PUB-RESULT-F-RESULT-VERSION",
   ]);
   assert.deepEqual(viewResult.failureResults, [
     "PERMISSION_DENIED",
@@ -2466,6 +2702,12 @@ test("drives student answer score and feedback release from protected field cont
 
 test("rejects fail-open student result release policy mutations", () => {
   const mutations = [
+    (result) => { delete result.readMode; },
+    (result) => { result.readMode = "AUTHORIZED"; },
+    (result) => {
+      for (const field of result.fields) delete field.releaseRequirement;
+      delete result.readPolicies;
+    },
     (result) => { delete result.readPolicies; },
     (result) => { result.readPolicies[0].requiredState = "READY"; },
     (result) => {
@@ -2485,6 +2727,58 @@ test("rejects fail-open student result release policy mutations", () => {
     (_result, publication) => {
       const page = publication.pages.find(({ id }) => id === "PUB-PAGE-STUDENT-RESULT");
       page.fieldIds = page.fieldIds.filter((fieldId) => fieldId !== "PUB-RESULT-F-SCORE");
+    },
+    (_result, publication) => {
+      publication.pages.find(({ id }) => id === "PUB-PAGE-STUDENT-RESULT")
+        .fieldIds.push("PUB-RESULT-F-PUBLIC-CORRECTION-NOTE");
+    },
+    (_result, publication) => {
+      publication.actions.find(({ id }) => id === "PUB-ACT-VIEW-RESULT")
+        .outputFieldIds.pop();
+    },
+    (_result, publication) => {
+      publication.actions.find(({ id }) => id === "PUB-ACT-VIEW-RESULT")
+        .outputFieldIds.push("PUB-RESULT-F-CORRECTION-VERSION");
+    },
+    (_result, publication) => {
+      publication.actions = publication.actions
+        .filter(({ id }) => id !== "PUB-ACT-VIEW-RESULT");
+    },
+    (_result, publication) => {
+      publication.pages = publication.pages
+        .filter(({ id }) => id !== "PUB-PAGE-STUDENT-RESULT");
+    },
+    (_result, publication) => {
+      publication.actions.find(({ id }) => id === "PUB-ACT-VIEW-RESULT")
+        .permissions.push({
+          effect: "ALLOW",
+          dutyRef: "DUTY-SUBJECT-TEACHER",
+          condition: "the teacher reads through the student result action",
+        });
+    },
+    (_result, publication) => {
+      publication.actions.find(({ id }) => id === "PUB-ACT-VIEW-RESULT")
+        .permissions.push({
+          effect: "ALLOW",
+          roleRef: "ROLE-PLATFORM-OPS",
+          condition: "platform operations reads through the student result action",
+        });
+    },
+    (_result, publication) => {
+      publication.actions.find(({ id }) => id === "PUB-ACT-VIEW-RESULT")
+        .permissions.push({
+          effect: "ALLOW",
+          actorRef: "SYSTEM",
+          condition: "the system reads through the student result action",
+        });
+    },
+    (_result, publication) => {
+      publication.actions.find(({ id }) => id === "PUB-ACT-VIEW-RESULT")
+        .permissions.push({
+          effect: "DENY",
+          roleRef: "ROLE-STUDENT",
+          condition: "the student is denied by a conflicting rule",
+        });
     },
   ];
 
@@ -4695,8 +4989,12 @@ test("accepts every supported field value-source kind", () => {
 
   for (const valueSource of valueSources) {
     const model = validFixture();
-    moduleById(model, "SUB-001").objects[0].fields
-      .find(({ id }) => id === "SUB-F001").valueSource = valueSource;
+    const field = moduleById(model, "SUB-001").objects[0].fields
+      .find(({ id }) => id === "SUB-F001");
+    field.valueSource = valueSource;
+    if (valueSource.kind === "OBJECT_REF") {
+      field.referenceIntegrity = "IDENTITY_ONLY";
+    }
 
     assert.deepEqual(validateRequirementModel(model), []);
   }
@@ -4732,6 +5030,7 @@ test("rejects an object-reference value source targeting an unknown object", () 
     kind: "OBJECT_REF",
     targetObjectId: "DAT-MISSING",
   };
+  moduleById(model, "SUB-001").objects[0].fields[0].referenceIntegrity = "IDENTITY_ONLY";
 
   assertHasCode(
     validateRequirementModel(model),

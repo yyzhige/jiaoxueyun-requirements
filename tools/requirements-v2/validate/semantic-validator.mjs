@@ -16,7 +16,7 @@ const FORBIDDEN_PAGE_NAMES = new Set([
   "历史/审计页",
 ]);
 
-const MIXED_CREATE_SEMANTICS = /(?:\bupdate\b|\bmaintain\b|\bsave\b|\breorder\b|(?:^|-)manage(?:-|$))/i;
+const MIXED_CREATE_SEMANTICS = /(?:\bupdate\b|\bmaintain\b|\bsave\b|\breorder\b|\bupsert\b|\bmerge\b|(?:^|-)manage(?:-|$)|合并写入|存在则更新)/i;
 
 const METRIC_EVENT_COUNTS = new Map([
   ["duration", 2],

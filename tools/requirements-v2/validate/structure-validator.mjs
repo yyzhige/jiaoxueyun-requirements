@@ -9,6 +9,8 @@ const CLIENTS = new Set(["WEB", "APP"]);
 const RISKS = new Set(["READ", "LOW", "HIGH"]);
 const OPERATION_KINDS = new Set(["READ", "CREATE", "UPDATE"]);
 const IDEMPOTENCY_ROLES = new Set(["OBJECT_ID", "OBJECT_REF", "FANOUT_SET"]);
+const REFERENCE_INTEGRITIES = new Set(["IDENTITY_ONLY", "VERSION_PINNED"]);
+const READ_MODES = new Set(["AUTHORIZED", "NO_DIRECT_READ", "STUDENT_TIMED_RELEASE"]);
 const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
 const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
 const OBJECT_SEMANTIC_TYPES = new Set(["AUDIT_EVENT_SINK"]);
@@ -324,8 +326,57 @@ function validateEntities(errors, values, path, label, validate) {
   });
 }
 
+function validateReferenceIntegrity(errors, field, path) {
+  if (field.valueSource?.kind === "OBJECT_REF") {
+    if (!REFERENCE_INTEGRITIES.has(field.referenceIntegrity)) {
+      errors.push(
+        `INVALID_LINEAGE_BINDING ${path}.referenceIntegrity must be IDENTITY_ONLY or VERSION_PINNED`,
+      );
+    }
+    if (
+      field.referenceIntegrity === "VERSION_PINNED"
+      && !Object.hasOwn(field, "versionBinding")
+    ) {
+      errors.push(`INVALID_LINEAGE_BINDING ${path}.versionBinding is required for VERSION_PINNED`);
+    }
+    if (
+      field.referenceIntegrity === "IDENTITY_ONLY"
+      && Object.hasOwn(field, "versionBinding")
+    ) {
+      errors.push(`INVALID_LINEAGE_BINDING ${path}.versionBinding is forbidden for IDENTITY_ONLY`);
+    }
+  } else if (
+    Object.hasOwn(field, "referenceIntegrity")
+    || Object.hasOwn(field, "versionBinding")
+  ) {
+    errors.push(`INVALID_LINEAGE_BINDING ${path} reference integrity requires OBJECT_REF`);
+  }
+  if (Object.hasOwn(field, "versionBinding")) {
+    const versionBinding = field.versionBinding;
+    const expectedKeys = new Set(["versionFieldId", "targetVersionFieldId"]);
+    if (
+      !isRecord(versionBinding)
+      || Object.keys(versionBinding).length !== expectedKeys.size
+      || Object.keys(versionBinding).some((key) => !expectedKeys.has(key))
+    ) {
+      errors.push(`INVALID_LINEAGE_BINDING ${path}.versionBinding must use the closed version-binding shape`);
+    } else {
+      for (const property of expectedKeys) {
+        contractString(
+          errors,
+          versionBinding,
+          property,
+          `${path}.versionBinding`,
+          "INVALID_LINEAGE_BINDING",
+        );
+      }
+    }
+  }
+}
+
 function validateField(errors, field, path, strict) {
   requireRecord(errors, field, "valueSource", path);
+  validateReferenceIntegrity(errors, field, path);
   if (!strict) return;
   for (const property of [
     "label",
@@ -367,27 +418,6 @@ function validateField(errors, field, path, strict) {
   ) {
     errors.push(`INVALID_FIELD_CONTRACT ${path}.idempotencyRole is unsupported`);
   }
-  if (Object.hasOwn(field, "versionBinding")) {
-    const versionBinding = field.versionBinding;
-    const expectedKeys = new Set(["versionFieldId", "targetVersionFieldId"]);
-    if (
-      !isRecord(versionBinding)
-      || Object.keys(versionBinding).length !== expectedKeys.size
-      || Object.keys(versionBinding).some((key) => !expectedKeys.has(key))
-    ) {
-      errors.push(`INVALID_LINEAGE_BINDING ${path}.versionBinding must use the closed version-binding shape`);
-    } else {
-      for (const property of expectedKeys) {
-        contractString(
-          errors,
-          versionBinding,
-          property,
-          `${path}.versionBinding`,
-          "INVALID_LINEAGE_BINDING",
-        );
-      }
-    }
-  }
   if (Object.hasOwn(field, "releaseRequirement")) {
     const releaseRequirement = field.releaseRequirement;
     const expectedKeys = new Set(["readPolicyId", "requiredState", "visibleAtFieldId"]);
@@ -427,6 +457,11 @@ function validateObject(errors, object, path, strict) {
       "sensitivityId",
     ]) {
       contractString(errors, object, property, path, "INVALID_OBJECT_CONTRACT");
+    }
+    if (!READ_MODES.has(object.readMode)) {
+      errors.push(
+        `INVALID_OBJECT_CONTRACT ${path}.readMode must be AUTHORIZED, NO_DIRECT_READ, or STUDENT_TIMED_RELEASE`,
+      );
     }
     if (
       Object.hasOwn(object, "semanticType")
@@ -472,10 +507,16 @@ function validateObject(errors, object, path, strict) {
         }
       });
     }
-    if (Object.hasOwn(object, "readPolicies")) {
+    if (
+      object.readMode === "STUDENT_TIMED_RELEASE"
+      || Object.hasOwn(object, "readPolicies")
+    ) {
       const readPolicies = requireArray(errors, object, "readPolicies", path);
       validateObjectMembers(errors, readPolicies, `${path}.readPolicies`, "read policy");
-      const expectedPolicyKeys = new Set([
+      if (object.readMode === "STUDENT_TIMED_RELEASE" && readPolicies.length === 0) {
+        errors.push(`INVALID_READ_POLICY ${path}.readPolicies must be non-empty`);
+      }
+      const requiredPolicyKeys = new Set([
         "id",
         "actionId",
         "subject",
@@ -483,18 +524,31 @@ function validateObject(errors, object, path, strict) {
         "requiredState",
         "timeGates",
       ]);
+      const allowedPolicyKeys = new Set([
+        ...requiredPolicyKeys,
+        "safeMetadataFieldIds",
+      ]);
       readPolicies.forEach((policy, index) => {
         if (!isRecord(policy)) return;
         const policyPath = `${path}.readPolicies[${index}]`;
         if (
-          Object.keys(policy).length !== expectedPolicyKeys.size
-          || Object.keys(policy).some((key) => !expectedPolicyKeys.has(key))
+          [...requiredPolicyKeys].some((key) => !Object.hasOwn(policy, key))
+          || Object.keys(policy).some((key) => !allowedPolicyKeys.has(key))
         ) {
           errors.push(`INVALID_READ_POLICY ${policyPath} must use the closed read-policy shape`);
         }
         contractString(errors, policy, "id", policyPath, "INVALID_READ_POLICY");
         contractString(errors, policy, "actionId", policyPath, "INVALID_READ_POLICY");
         contractString(errors, policy, "requiredState", policyPath, "INVALID_READ_POLICY");
+        if (Object.hasOwn(policy, "safeMetadataFieldIds")) {
+          contractStringArray(
+            errors,
+            policy,
+            "safeMetadataFieldIds",
+            policyPath,
+            "INVALID_READ_POLICY",
+          );
+        }
 
         if (!isRecord(policy.subject)) {
           errors.push(`INVALID_READ_POLICY ${policyPath}.subject must be an object`);

@@ -438,6 +438,28 @@ export function validateModelReferences(model) {
         `MISSING_VALUE_SOURCE_REFERENCE ${formatValidationValue(fieldEntry.value?.id)} RUNTIME_QUERY requires queryId`,
       );
     }
+    const referenceIntegrity = fieldEntry.value?.referenceIntegrity;
+    if (valueSource?.kind === "OBJECT_REF") {
+      const validReferenceIntegrity = (
+        referenceIntegrity === "IDENTITY_ONLY"
+        && !Object.hasOwn(fieldEntry.value, "versionBinding")
+      ) || (
+        referenceIntegrity === "VERSION_PINNED"
+        && Object.hasOwn(fieldEntry.value, "versionBinding")
+      );
+      if (!validReferenceIntegrity) {
+        errors.push(
+          `INVALID_LINEAGE_BINDING ${formatValidationValue(fieldEntry.value?.id)} requires a valid reference integrity contract`,
+        );
+      }
+    } else if (
+      Object.hasOwn(fieldEntry.value ?? {}, "referenceIntegrity")
+      || Object.hasOwn(fieldEntry.value ?? {}, "versionBinding")
+    ) {
+      errors.push(
+        `INVALID_LINEAGE_BINDING ${formatValidationValue(fieldEntry.value?.id)} reference integrity requires OBJECT_REF`,
+      );
+    }
     const idempotencyRole = fieldEntry.value?.idempotencyRole;
     if (idempotencyRole) {
       const stableScalar = fieldEntry.value?.dataType === "ID"
@@ -517,7 +539,7 @@ export function validateModelReferences(model) {
     const requiredLineageBindings = index.fields
       .filter((fieldEntry) => (
         fieldEntry.objectId === objectEntry.value?.id
-        && fieldEntry.value?.versionBinding
+        && fieldEntry.value?.referenceIntegrity === "VERSION_PINNED"
       ))
       .map((fieldEntry) => ({
         refFieldId: fieldEntry.value.id,
@@ -553,6 +575,7 @@ export function validateModelReferences(model) {
         refField?.objectId === objectEntry.value?.id
         && versionField?.objectId === objectEntry.value?.id
         && refField?.value?.valueSource?.kind === "OBJECT_REF"
+        && refField?.value?.referenceIntegrity === "VERSION_PINNED"
         && refField.value.valueSource.targetObjectId === binding?.targetObjectId
         && refField.value.versionBinding?.versionFieldId === binding?.versionFieldId
         && refField.value.versionBinding?.targetVersionFieldId === binding?.targetVersionFieldId
@@ -570,6 +593,15 @@ export function validateModelReferences(model) {
       && fieldEntry.value?.releaseRequirement
     ));
     const readPolicies = list(objectEntry.value?.readPolicies);
+    const studentTimedRelease = objectEntry.value?.readMode === "STUDENT_TIMED_RELEASE";
+    if (
+      (studentTimedRelease && (releaseFields.length === 0 || readPolicies.length === 0))
+      || (!studentTimedRelease && (releaseFields.length > 0 || readPolicies.length > 0))
+    ) {
+      errors.push(
+        `INVALID_READ_POLICY ${formatValidationValue(objectEntry.value?.id)} has an inconsistent ${formatValidationValue(objectEntry.value?.readMode)} read mode`,
+      );
+    }
     const readPolicyById = new Map();
     let duplicateReadPolicyId = false;
     for (const policy of readPolicies) {
@@ -610,18 +642,40 @@ export function validateModelReferences(model) {
       const subjectEntries = Object.entries(policy?.subject ?? {})
         .filter(([property]) => ["actorRef", "roleRef", "dutyRef"].includes(property));
       const [subjectProperty, subjectReference] = subjectEntries[0] ?? [];
-      const matchingPermission = list(action?.permissions).some((permission) => (
+      const actionPermissions = list(action?.permissions);
+      const allowPermissions = actionPermissions.filter(({ effect }) => effect === "ALLOW");
+      const matchingPermission = allowPermissions.length === 1 && allowPermissions.every((permission) => (
         permission?.effect === "ALLOW"
+        && permission?.[subjectProperty] === subjectReference
+      ));
+      const conflictingDeny = actionPermissions.some((permission) => (
+        permission?.effect === "DENY"
         && permission?.[subjectProperty] === subjectReference
       ));
       const subjectField = index.fieldById.get(policy?.scope?.subjectFieldId);
       const protectedFieldIds = list(policy?.timeGates)
         .flatMap((timeGate) => list(timeGate?.protectedFieldIds));
       const protectedFieldIdSet = new Set(protectedFieldIds);
+      const safeMetadataFieldIds = list(policy?.safeMetadataFieldIds);
+      const safeMetadataFieldIdSet = new Set(safeMetadataFieldIds);
+      const timeGateFieldIds = list(policy?.timeGates)
+        .map((timeGate) => timeGate?.visibleAtFieldId);
+      const timeGateFieldIdSet = new Set(timeGateFieldIds);
       const requiredPolicyFieldIds = releaseFields
         .filter((fieldEntry) => fieldEntry.value.releaseRequirement?.readPolicyId === policy?.id)
         .map((fieldEntry) => fieldEntry.value.id);
       const requiredPolicyFieldIdSet = new Set(requiredPolicyFieldIds);
+      const lineageFieldIds = new Set(actualLineageBindings.flatMap((binding) => (
+        [binding?.refFieldId, binding?.versionFieldId]
+      )));
+      const safeMetadataFieldsValid = safeMetadataFieldIds.every((fieldId) => {
+        const fieldEntry = index.fieldById.get(fieldId);
+        return fieldEntry?.objectId === objectEntry.value?.id
+          && fieldEntry.value?.visibility !== "INTERNAL"
+          && fieldEntry.value?.valueSource?.kind !== "USER_INPUT"
+          && !fieldEntry.value?.releaseRequirement
+          && !lineageFieldIds.has(fieldId);
+      });
       const localTimeGateFields = list(policy?.timeGates).every((timeGate) => (
         index.fieldById.get(timeGate?.visibleAtFieldId)?.objectId === objectEntry.value?.id
         && index.fieldById.get(timeGate?.visibleAtFieldId)?.value?.dataType === "DATETIME"
@@ -641,29 +695,42 @@ export function validateModelReferences(model) {
         pageEntry.moduleId === actionEntry?.moduleId
         && list(pageEntry.value?.actionIds).includes(action?.id)
       ));
+      const allowedStudentFieldIds = [
+        policy?.scope?.subjectFieldId,
+        ...protectedFieldIds,
+        ...safeMetadataFieldIds,
+        ...timeGateFieldIds,
+      ];
+      const allowedStudentFieldIdSet = new Set(allowedStudentFieldIds);
       const pageOutputsClosed = actionPages.length > 0
         && actionPages.every((pageEntry) => (
-          list(action?.outputFieldIds).every((fieldId) => (
-            list(pageEntry.value?.fieldIds).includes(fieldId)
-          ))
+          sameStringSet(pageEntry.value?.fieldIds, allowedStudentFieldIds)
         ));
       const valid = (
-        action?.targetObjectId === objectEntry.value?.id
+        studentTimedRelease
+        && action?.targetObjectId === objectEntry.value?.id
         && action?.operationKind === "READ"
+        && action?.executionMode === "USER_TASK"
         && subjectEntries.length === 1
         && subjectProperty === "roleRef"
         && subjectReference === "ROLE-STUDENT"
         && actorReferenceIsValid(index, subjectReference, subjectProperty)
         && matchingPermission
+        && !conflictingDeny
         && list(objectEntry.value?.states).includes(policy?.requiredState)
         && policy?.scope?.kind === "OWN_RECORD"
         && subjectField?.objectId === objectEntry.value?.id
+        && sameStringSet(action?.inputFieldIds, [policy?.scope?.subjectFieldId])
         && localTimeGateFields
         && releaseGatesMatch
         && protectedFieldIdSet.size === protectedFieldIds.length
+        && safeMetadataFieldIdSet.size === safeMetadataFieldIds.length
+        && timeGateFieldIdSet.size === timeGateFieldIds.length
         && requiredPolicyFieldIdSet.size === requiredPolicyFieldIds.length
+        && allowedStudentFieldIdSet.size === allowedStudentFieldIds.length
+        && safeMetadataFieldsValid
         && sameStringSet(protectedFieldIds, requiredPolicyFieldIds)
-        && sameStringSet(action?.outputFieldIds, requiredPolicyFieldIds)
+        && sameStringSet(action?.outputFieldIds, allowedStudentFieldIds)
         && pageOutputsClosed
       );
       if (!valid) {
@@ -718,6 +785,19 @@ export function validateModelReferences(model) {
       errors.push(
         `INVALID_MODULE_OWNERSHIP ${formatValidationValue(action?.id)} -> object ${formatValidationValue(action?.targetObjectId)} belongs to ${formatValidationValue(targetObjectEntry.moduleId)}`,
       );
+    }
+    if (action?.operationKind === "CREATE" && targetObjectEntry) {
+      const targetIdentityFieldIds = list(targetObjectEntry.value?.fields)
+        .filter(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")
+        .map(({ id }) => id);
+      if (
+        targetIdentityFieldIds.some((fieldId) => list(action.inputFieldIds).includes(fieldId))
+        || targetIdentityFieldIds.some((fieldId) => !list(action.outputFieldIds).includes(fieldId))
+      ) {
+        errors.push(
+          `INVALID_ACTION_OPERATION ${formatValidationValue(action?.id)} must receive target identity only as a system output`,
+        );
+      }
     }
     if (
       action?.auditMode === "ATOMIC_SELF_RECORD"
