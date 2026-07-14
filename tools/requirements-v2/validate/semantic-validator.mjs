@@ -119,6 +119,12 @@ function fieldIsRequiredForState(field, state) {
   return (field.required.match(/[A-Z][A-Z0-9_-]*/g) ?? []).includes(state);
 }
 
+function policyRequiresGuard(policy, operationKind) {
+  return policy === "ALWAYS_REQUIRED"
+    || (policy === "CREATE_REQUIRED" && operationKind === "CREATE")
+    || (policy === "UPDATE_REQUIRED" && operationKind === "UPDATE");
+}
+
 function ownerErrors(index) {
   const errors = [];
   for (const objectEntry of index.objects) {
@@ -207,6 +213,7 @@ function actionErrors(index) {
         && binding?.versionFieldId === guard?.versionFieldId
         && binding?.targetObjectId === guard?.targetObjectId
       ));
+      const guardPolicy = refField?.value?.stateGuardPolicy;
       const guardValid = refField?.objectId === action?.targetObjectId
         && versionField?.objectId === action?.targetObjectId
         && refField?.value?.valueSource?.kind === "OBJECT_REF"
@@ -217,10 +224,41 @@ function actionErrors(index) {
           === lineageBinding?.targetVersionFieldId
         && coveredFieldIds.has(guard?.refFieldId)
         && coveredFieldIds.has(guard?.versionFieldId)
+        && policyRequiresGuard(guardPolicy, action?.operationKind)
         && stateIds(guardTarget).has(guard?.requiredState);
       if (!guardValid) {
         errors.push(
           `INVALID_ACTION_STATE_GUARD ${formatValidationValue(action?.id)} requires a covered version-pinned lineage to ${formatValidationValue(guard?.targetObjectId)}.${formatValidationValue(guard?.requiredState)}`,
+        );
+      }
+    }
+
+    const coveredFieldIds = new Set([
+      ...list(action?.inputFieldIds),
+      ...list(action?.outputFieldIds),
+    ]);
+    for (const refField of list(targetObject?.fields).filter((field) => (
+      field?.valueSource?.kind === "OBJECT_REF"
+      && field?.referenceIntegrity === "VERSION_PINNED"
+    ))) {
+      const versionFieldId = refField.versionBinding?.versionFieldId;
+      const coversRef = coveredFieldIds.has(refField.id);
+      const coversVersion = coveredFieldIds.has(versionFieldId);
+      const guardRequired = policyRequiresGuard(
+        refField.stateGuardPolicy,
+        action?.operationKind,
+      ) && (coversRef || coversVersion);
+      const matchingGuards = list(action?.relatedStateGuards).filter((guard) => (
+        guard?.refFieldId === refField.id
+        && guard?.versionFieldId === versionFieldId
+        && guard?.targetObjectId === refField.valueSource.targetObjectId
+      ));
+      if (
+        (guardRequired && (!coversRef || !coversVersion || matchingGuards.length !== 1))
+        || (!guardRequired && matchingGuards.length > 0)
+      ) {
+        errors.push(
+          `INVALID_ACTION_STATE_GUARD ${formatValidationValue(action?.id)} must derive exactly one guard from ${formatValidationValue(refField.id)} policy=${formatValidationValue(refField.stateGuardPolicy)}`,
         );
       }
     }
@@ -493,48 +531,104 @@ function flowErrors(index) {
         validateProvidedInput(step, providedInput);
       }
     }
-    const executionPaths = list(flow?.executionPaths).length > 0
-      ? list(flow.executionPaths)
+    const declaredExecutionPaths = list(flow?.executionPaths);
+    const executionPaths = declaredExecutionPaths.length > 0
+      ? declaredExecutionPaths
       : [{
         id: "DEFAULT",
         stepOrders: steps.map((step) => step?.order),
         providedInputs: [],
       }];
-    const pathValuesByFieldId = new Map();
-    for (const executionPath of executionPaths) {
-      const when = executionPath?.when;
-      if (!when) continue;
-      const field = index.fieldById.get(when?.fieldId)?.value;
-      const optionSet = field?.valueSource?.kind === "OPTION_SET"
-        ? index.optionSetById.get(field.valueSource.optionSetId)?.value
-        : undefined;
-      const validCodes = new Set(list(optionSet?.values).map(({ code }) => code));
-      const usedCodes = pathValuesByFieldId.get(when?.fieldId) ?? new Set();
-      const values = list(when?.values);
-      if (
-        optionSet?.mode !== "STATIC"
-        || values.length === 0
-        || values.some((value) => !validCodes.has(value) || usedCodes.has(value))
-      ) {
-        errors.push(
-          `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} requires unique registered Option Set values for ${formatValidationValue(when?.fieldId)}`,
+    if (declaredExecutionPaths.length > 0) {
+      const optionRoutePartitions = new Map();
+      for (const executionPath of executionPaths) {
+        const route = executionPath?.route;
+        const consumerStep = stepByOrder.get(route?.consumerStepOrder);
+        const consumerAction = index.actionById.get(consumerStep?.actionId)?.value;
+        const pathStepOrders = list(executionPath?.stepOrders);
+        if (route?.kind === "ACTION_CHOICE") {
+          if (
+            !consumerStep
+            || !consumerAction
+            || !pathStepOrders.includes(route.consumerStepOrder)
+          ) {
+            errors.push(
+              `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} ACTION_CHOICE must bind one action step in the path`,
+            );
+          }
+          continue;
+        }
+        if (route?.kind !== "OPTION_VALUE") {
+          errors.push(
+            `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} requires an explicit route`,
+          );
+          continue;
+        }
+
+        const fieldEntry = index.fieldById.get(route?.fieldId);
+        const field = fieldEntry?.value;
+        const optionSet = field?.valueSource?.kind === "OPTION_SET"
+          ? index.optionSetById.get(field.valueSource.optionSetId)?.value
+          : undefined;
+        const optionValues = list(optionSet?.values);
+        const registeredCodes = new Set(
+          optionValues.filter(isRecord).map(({ code }) => code).filter(isValidId),
         );
+        const consumers = pathStepOrders.map((stepOrder) => ({
+          step: stepByOrder.get(stepOrder),
+          action: index.actionById.get(stepByOrder.get(stepOrder)?.actionId)?.value,
+        })).filter(({ action }) => (
+          list(action?.inputFieldIds).includes(route.fieldId)
+        ));
+        const acceptedBindings = list(consumerAction?.acceptedInputValues).filter((binding) => (
+          binding?.fieldId === route.fieldId
+          && binding?.optionSetId === field?.valueSource?.optionSetId
+        ));
+        const acceptedBinding = acceptedBindings.length === 1
+          ? acceptedBindings[0]
+          : undefined;
+        const values = list(route?.values);
+        const routeValid = optionSet?.mode === "STATIC"
+          && registeredCodes.size === optionValues.length
+          && values.length > 0
+          && new Set(values).size === values.length
+          && values.every((value) => registeredCodes.has(value))
+          && pathStepOrders.includes(route.consumerStepOrder)
+          && fieldEntry?.objectId === consumerAction?.targetObjectId
+          && list(consumerAction?.inputFieldIds).includes(route.fieldId)
+          && acceptedBinding
+          && values.every((value) => list(acceptedBinding.codes).includes(value))
+          && consumers.length === 1
+          && consumers[0].step?.order === route.consumerStepOrder;
+        if (!routeValid) {
+          errors.push(
+            `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} OPTION_VALUE must bind one accepted action consumer for registered values`,
+          );
+        }
+
+        if (!acceptedBinding) continue;
+        const partitionKey = [
+          consumerAction?.targetObjectId,
+          route.fieldId,
+          acceptedBinding.partitionId,
+        ].join("\u0000");
+        const partition = optionRoutePartitions.get(partitionKey) ?? {
+          registeredCodes,
+          routedCodes: new Set(),
+          valid: true,
+        };
+        for (const value of values) {
+          if (partition.routedCodes.has(value)) partition.valid = false;
+          partition.routedCodes.add(value);
+        }
+        optionRoutePartitions.set(partitionKey, partition);
       }
-      for (const value of values) usedCodes.add(value);
-      pathValuesByFieldId.set(when?.fieldId, usedCodes);
-    }
-    for (const [fieldId, usedCodes] of pathValuesByFieldId) {
-      const field = index.fieldById.get(fieldId)?.value;
-      const optionSet = field?.valueSource?.kind === "OPTION_SET"
-        ? index.optionSetById.get(field.valueSource.optionSetId)?.value
-        : undefined;
-      const registeredCodes = new Set(
-        list(optionSet?.values).filter(isRecord).map(({ code }) => code).filter(isValidId),
-      );
-      if (optionSet?.mode !== "STATIC" || !setEquals(usedCodes, registeredCodes)) {
-        errors.push(
-          `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} branches for ${formatValidationValue(fieldId)} must exhaust its STATIC Option Set`,
-        );
+      for (const partition of optionRoutePartitions.values()) {
+        if (!partition.valid || !setEquals(partition.routedCodes, partition.registeredCodes)) {
+          errors.push(
+            `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} OPTION_VALUE routes must be disjoint and exhaust each accepted partition`,
+          );
+        }
       }
     }
     const sourceFieldIdsForResolution = list(flow?.sourceDataRefs).flatMap((dataRef) => (

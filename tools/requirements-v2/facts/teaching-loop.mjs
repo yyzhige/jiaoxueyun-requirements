@@ -1101,6 +1101,7 @@ const gradingDecisionFields = [
     mutability: "IMMUTABLE",
     idempotencyRole: "OBJECT_REF",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
       targetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
@@ -1116,6 +1117,7 @@ const gradingDecisionFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-ITEM" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-ITEM-VERSION",
       targetVersionFieldId: "HW-ITEM-F-ITEM-VERSION",
@@ -1131,6 +1133,7 @@ const gradingDecisionFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-RUBRIC" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
       targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
@@ -1146,6 +1149,7 @@ const gradingDecisionFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-CAPABILITY-RULE" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
       targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
@@ -1931,6 +1935,7 @@ const publishedResultFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PUB-RESULT-F-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -1947,6 +1952,7 @@ const publishedResultFields = [
     mutability: "SYSTEM_MANAGED",
     required: "required when correcting a published result",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -2053,6 +2059,7 @@ const dependencySnapshotFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -2660,6 +2667,7 @@ const scoreViewFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "SCO-VIEW-F-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -2680,6 +2688,7 @@ const scoreViewFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "SCO-VIEW-F-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -2700,6 +2709,7 @@ const scoreViewFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "SCO-VIEW-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -2728,6 +2738,7 @@ const scoreFollowUpFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "SCO-OBJ-VIEW" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "SCO-FOLLOW-UP-F-VIEW-VERSION",
       targetVersionFieldId: "SCO-VIEW-F-VIEW-VERSION",
@@ -2934,6 +2945,7 @@ const evidenceFields = [
     mutability: "IMMUTABLE",
     required: "required for evidence derived from a published result",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -2951,6 +2963,7 @@ const evidenceFields = [
     mutability: "IMMUTABLE",
     required: "required for correction-stage evidence",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION",
       targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
@@ -2975,6 +2988,7 @@ const evidenceFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION",
       targetVersionFieldId: "CURR-KP-F-ID",
@@ -3042,6 +3056,7 @@ const evidenceFields = [
     mutability: "IMMUTABLE",
     required: "required when a new evidence version supersedes prior evidence",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -3323,6 +3338,7 @@ const planFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -3380,6 +3396,7 @@ const planFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "CURR-OBJ-KNOWLEDGE-POINT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-KNOWLEDGE-POINT-VERSION",
       targetVersionFieldId: "CURR-KP-F-ID",
@@ -3430,6 +3447,7 @@ const planFields = [
     mutability: "SYSTEM_MANAGED",
     required: "required when a student difficulty report changes the plan",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION",
       targetVersionFieldId: "APP-TODO-F-AGGREGATION-VERSION",
@@ -3455,6 +3473,7 @@ const planFields = [
     mutability: "SYSTEM_MANAGED",
     required: "required when the plan evaluation enters pending reconfirmation",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-INVALIDATION-VERSION",
       targetVersionFieldId: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
@@ -3492,6 +3511,7 @@ const subjectSyncFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PLN-SUBJECT-SYNC-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -3531,6 +3551,7 @@ const homeroomCoordinationFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "PLN-HOMEROOM-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -3869,6 +3890,7 @@ const studentTodoFields = [
     mutability: "IMMUTABLE",
     required: "required when the todo links to an improvement plan",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "APP-TODO-F-SOURCE-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -3886,6 +3908,7 @@ const studentTodoFields = [
     mutability: "IMMUTABLE",
     required: "required when the todo links to homework",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
       targetVersionFieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
@@ -4170,6 +4193,7 @@ const correctionTaskFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "CORR-TASK-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -4213,6 +4237,7 @@ const correctionAttemptFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-TASK" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
     versionBinding: {
       versionFieldId: "CORR-ATTEMPT-F-TASK-VERSION",
       targetVersionFieldId: "CORR-TASK-F-TASK-VERSION",
@@ -4229,6 +4254,7 @@ const correctionAttemptFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-ATTEMPT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
     versionBinding: {
       versionFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
       targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
@@ -4288,6 +4314,7 @@ const invalidationFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "CORR-INVALIDATION-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -4303,6 +4330,7 @@ const invalidationFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "CORR-INVALIDATION-F-SOURCE-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -4777,6 +4805,7 @@ const studentProfileViewFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "STU-PROFILE-F-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -4797,6 +4826,7 @@ const studentProfileViewFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "STU-PROFILE-F-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -4817,6 +4847,7 @@ const studentProfileViewFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "STU-PROFILE-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -4855,6 +4886,7 @@ const studentAttentionFields = [
     valueSource: { kind: "OBJECT_REF", targetObjectId: "STU-OBJ-PROFILE" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "STU-ATTENTION-F-PROFILE-VERSION",
       targetVersionFieldId: "STU-PROFILE-F-PROFILE-VERSION",
@@ -5531,11 +5563,13 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         id: "ACCEPT_SUGGESTION",
         stepOrders: [2],
         providedInputs: [],
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 2 },
       },
       {
         id: "CORRECT_RECOGNITION_AND_ACCEPT",
         stepOrders: [1, 2],
         providedInputs: [],
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 2 },
       },
       {
         id: "OVERRIDE_SCORE",
@@ -5546,6 +5580,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
           "GRD-DECISION-F-OFFICIAL-SCORE",
           "GRD-DECISION-F-TEACHER-FEEDBACK",
         ),
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 },
       },
       {
         id: "CORRECT_RECOGNITION_AND_OVERRIDE",
@@ -5556,6 +5591,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
           "GRD-DECISION-F-OFFICIAL-SCORE",
           "GRD-DECISION-F-TEACHER-FEEDBACK",
         ),
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 },
       },
       {
         id: "MANUAL_GRADE",
@@ -5566,16 +5602,19 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
           "GRD-DECISION-F-OFFICIAL-SCORE",
           "GRD-DECISION-F-TEACHER-FEEDBACK",
         ),
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 4 },
       },
       {
         id: "BATCH_CONFIRM",
         stepOrders: [5],
         providedInputs: [],
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 5 },
       },
       {
         id: "RESOLVE_VERSION_CONFLICT",
         stepOrders: [6],
         providedInputs: [],
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 6 },
       },
     ],
     sourceDataRefs: [{
@@ -6179,18 +6218,22 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
         id: "PASSED",
         stepOrders: [1, 2, 3, 5, 7, 8, 9, 10, 11, 12],
         providedInputs: [],
-        when: {
+        route: {
+          kind: "OPTION_VALUE",
           fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
           values: ["PASSED"],
+          consumerStepOrder: 3,
         },
       },
       {
         id: "CLOSED",
         stepOrders: [1, 2, 3, 5, 7, 8, 9, 10, 11, 12],
         providedInputs: [],
-        when: {
+        route: {
+          kind: "OPTION_VALUE",
           fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
           values: ["CLOSED"],
+          consumerStepOrder: 3,
         },
       },
       {
@@ -6201,9 +6244,11 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
           "DUTY-SUBJECT-TEACHER",
           "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         ),
-        when: {
+        route: {
+          kind: "OPTION_VALUE",
           fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
           values: ["NOT-PASSED"],
+          consumerStepOrder: 4,
         },
       },
       {
@@ -6214,9 +6259,11 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
           "DUTY-SUBJECT-TEACHER",
           "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         ),
-        when: {
+        route: {
+          kind: "OPTION_VALUE",
           fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
           values: ["NEEDS-MORE"],
+          consumerStepOrder: 4,
         },
       },
     ],

@@ -371,6 +371,7 @@ function addLineageBindingFixture(model) {
     valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "NONE",
     versionBinding: {
       versionFieldId: "SUB-F002",
       targetVersionFieldId: "HW-F001",
@@ -1360,6 +1361,8 @@ test("requires closed accepted Option Set values on action inputs", () => {
 test("requires closed version-pinned related state guards on actions", () => {
   const validModel = validFixture();
   addLineageBindingFixture(validModel);
+  validModel.modules[0].objects[0].fields.find(({ id }) => id === "SUB-F003")
+    .stateGuardPolicy = "UPDATE_REQUIRED";
   const action = moduleById(validModel, "SUB-001").actions[0];
   action.outputFieldIds.push("SUB-F003");
   action.relatedStateGuards = [{
@@ -1392,6 +1395,33 @@ test("requires closed version-pinned related state guards on actions", () => {
     mutate(model);
     assertHasCode(validateRequirementModel(model), "INVALID_ACTION_STATE_GUARD");
   }
+});
+
+test("requires an explicit closed state guard policy on every version-pinned reference", () => {
+  const validModel = validFixture();
+  addLineageBindingFixture(validModel);
+  assertNoCode(validateRequirementModel(validModel), "INVALID_FIELD_CONTRACT");
+
+  const missingPolicy = structuredClone(validModel);
+  delete missingPolicy.modules[0].objects[0].fields
+    .find(({ id }) => id === "SUB-F003").stateGuardPolicy;
+  assertHasCode(validateRequirementModel(missingPolicy), "INVALID_FIELD_CONTRACT");
+
+  const invalidPolicy = structuredClone(validModel);
+  invalidPolicy.modules[0].objects[0].fields
+    .find(({ id }) => id === "SUB-F003").stateGuardPolicy = "OPTIONAL";
+  assertHasCode(validateRequirementModel(invalidPolicy), "INVALID_FIELD_CONTRACT");
+
+  const identityOnlyPolicy = validFixture();
+  const identityOnlyRef = validField("SUB-F003", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "IDENTITY_ONLY",
+    stateGuardPolicy: "NONE",
+  });
+  identityOnlyPolicy.modules[0].objects[0].fields.push(identityOnlyRef);
+  assertHasCode(validateRequirementModel(identityOnlyPolicy), "INVALID_FIELD_CONTRACT");
 });
 
 test("matches user CREATE subjects to object producers while allowing system Flow creation", () => {
@@ -1982,6 +2012,7 @@ test("requires closed structured Flow execution paths", () => {
       fieldId: "SUB-F001",
       provider: { roleRef: "ROLE-STUDENT" },
     }],
+    route: { kind: "ACTION_CHOICE", consumerStepOrder: 1 },
   }];
   assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_CONTRACT");
 
@@ -2004,23 +2035,38 @@ test("requires closed structured Flow execution paths", () => {
   assertHasCode(validateRequirementModel(malformedStep), "INVALID_FLOW_CONTRACT");
 });
 
-test("requires closed Option Set conditions on value-routed execution paths", () => {
+test("requires a mandatory closed route on every execution path", () => {
   const validModel = validFixture();
+  validModel.modules[0].actions[0].acceptedInputValues = [{
+    fieldId: "SUB-F001",
+    optionSetId: "OPT-BOOL",
+    partitionId: "SUBMISSION_DECISION",
+    codes: ["YES"],
+  }];
   validModel.flows[0].executionPaths = [{
     id: "YES_PATH",
     stepOrders: [1],
     providedInputs: [],
-    when: { fieldId: "SUB-F001", values: ["YES"] },
+    route: {
+      kind: "OPTION_VALUE",
+      fieldId: "SUB-F001",
+      values: ["YES"],
+      consumerStepOrder: 1,
+    },
   }];
   assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_CONTRACT");
   assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_BRANCH");
 
   const malformed = structuredClone(validModel);
-  malformed.flows[0].executionPaths[0].when.extra = true;
+  malformed.flows[0].executionPaths[0].route.extra = true;
   assertHasCode(validateRequirementModel(malformed), "INVALID_FLOW_CONTRACT");
 
+  const missingRoute = structuredClone(validModel);
+  delete missingRoute.flows[0].executionPaths[0].route;
+  assertHasCode(validateRequirementModel(missingRoute), "INVALID_FLOW_CONTRACT");
+
   const unknownValue = structuredClone(validModel);
-  unknownValue.flows[0].executionPaths[0].when.values = ["UNKNOWN"];
+  unknownValue.flows[0].executionPaths[0].route.values = ["UNKNOWN"];
   assertHasCode(validateRequirementModel(unknownValue), "INVALID_FLOW_BRANCH");
 
   const overlapping = structuredClone(validModel);
@@ -2028,9 +2074,36 @@ test("requires closed Option Set conditions on value-routed execution paths", ()
     id: "ALSO_YES",
     stepOrders: [1],
     providedInputs: [],
-    when: { fieldId: "SUB-F001", values: ["YES"] },
+    route: {
+      kind: "OPTION_VALUE",
+      fieldId: "SUB-F001",
+      values: ["YES"],
+      consumerStepOrder: 1,
+    },
   });
   assertHasCode(validateRequirementModel(overlapping), "INVALID_FLOW_BRANCH");
+});
+
+test("binds every DF-007 path to one explicit action choice", () => {
+  const flow = flows.find(({ id }) => id === "DF-007");
+  assert.deepEqual(flow.executionPaths.map(({ id, route }) => ({ id, route })), [
+    { id: "ACCEPT_SUGGESTION", route: { kind: "ACTION_CHOICE", consumerStepOrder: 2 } },
+    {
+      id: "CORRECT_RECOGNITION_AND_ACCEPT",
+      route: { kind: "ACTION_CHOICE", consumerStepOrder: 2 },
+    },
+    { id: "OVERRIDE_SCORE", route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 } },
+    {
+      id: "CORRECT_RECOGNITION_AND_OVERRIDE",
+      route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 },
+    },
+    { id: "MANUAL_GRADE", route: { kind: "ACTION_CHOICE", consumerStepOrder: 4 } },
+    { id: "BATCH_CONFIRM", route: { kind: "ACTION_CHOICE", consumerStepOrder: 5 } },
+    {
+      id: "RESOLVE_VERSION_CONFLICT",
+      route: { kind: "ACTION_CHOICE", consumerStepOrder: 6 },
+    },
+  ]);
 });
 
 test("partitions the complete DF-010 judgment domain across actions and paths", () => {
@@ -2047,33 +2120,41 @@ test("partitions the complete DF-010 judgment domain across actions and paths", 
   ]);
 
   const flow = flows.find(({ id }) => id === "DF-010");
-  assert.deepEqual(flow.executionPaths.map(({ id, when }) => ({ id, when })), [
+  assert.deepEqual(flow.executionPaths.map(({ id, route }) => ({ id, route })), [
     {
       id: "PASSED",
-      when: {
+      route: {
+        kind: "OPTION_VALUE",
         fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         values: ["PASSED"],
+        consumerStepOrder: 3,
       },
     },
     {
       id: "CLOSED",
-      when: {
+      route: {
+        kind: "OPTION_VALUE",
         fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         values: ["CLOSED"],
+        consumerStepOrder: 3,
       },
     },
     {
       id: "NOT_PASSED",
-      when: {
+      route: {
+        kind: "OPTION_VALUE",
         fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         values: ["NOT-PASSED"],
+        consumerStepOrder: 4,
       },
     },
     {
       id: "NEEDS_MORE",
-      when: {
+      route: {
+        kind: "OPTION_VALUE",
         fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
         values: ["NEEDS-MORE"],
+        consumerStepOrder: 4,
       },
     },
   ]);
@@ -2097,25 +2178,48 @@ test("fails closed when DF-010 judgment action or branch domains are mutated", (
     codes: ["NOT-PASSED", "NEEDS-MORE"],
   }];
   const flow = closedModel.flows.find(({ id }) => id === "DF-010");
-  const passed = flow.executionPaths.find(({ id }) => id === "PASSED");
-  const retryRequired = flow.executionPaths.find(({ id }) => id === "RETRY_REQUIRED")
-    ?? flow.executionPaths.find(({ id }) => id === "NOT_PASSED");
-  flow.executionPaths = [
-    { ...passed, id: "PASSED", when: { ...passed.when, values: ["PASSED"] } },
-    { ...passed, id: "CLOSED", when: { ...passed.when, values: ["CLOSED"] } },
-    {
-      ...retryRequired,
-      id: "NOT_PASSED",
-      when: { ...retryRequired.when, values: ["NOT-PASSED"] },
-    },
-    {
-      ...retryRequired,
-      id: "NEEDS_MORE",
-      when: { ...retryRequired.when, values: ["NEEDS-MORE"] },
-    },
-  ];
+  for (const path of flow.executionPaths) {
+    if (path.when) {
+      const consumerStepOrder = ["PASSED", "CLOSED"].includes(path.id) ? 3 : 4;
+      path.route = {
+        kind: "OPTION_VALUE",
+        fieldId: path.when.fieldId,
+        values: path.when.values,
+        consumerStepOrder,
+      };
+      delete path.when;
+    }
+  }
 
   const mutations = [
+    ["deleted every route", "INVALID_FLOW_CONTRACT", (model) => {
+      for (const path of model.flows.find(({ id }) => id === "DF-010").executionPaths) {
+        delete path.route;
+      }
+    }],
+    ["deleted every accepted input partition", "INVALID_FLOW_BRANCH", (model) => {
+      for (const action of moduleById(model, "CORR-001").actions) {
+        delete action.acceptedInputValues;
+      }
+    }],
+    ["passed path routed to retry action", "INVALID_FLOW_BRANCH", (model) => {
+      const passedPath = model.flows.find(({ id }) => id === "DF-010").executionPaths
+        .find(({ id }) => id === "PASSED");
+      passedPath.stepOrders = passedPath.stepOrders
+        .map((stepOrder) => stepOrder === 3 ? 4 : stepOrder)
+        .toSorted((left, right) => left - right);
+      passedPath.route.consumerStepOrder = 4;
+    }],
+    ["consumer step outside path", "INVALID_FLOW_BRANCH", (model) => {
+      model.flows.find(({ id }) => id === "DF-010").executionPaths
+        .find(({ id }) => id === "PASSED").route.consumerStepOrder = 4;
+    }],
+    ["multiple route consumers", "INVALID_FLOW_BRANCH", (model) => {
+      const passedPath = model.flows.find(({ id }) => id === "DF-010").executionPaths
+        .find(({ id }) => id === "PASSED");
+      passedPath.stepOrders = [...passedPath.stepOrders, 4]
+        .toSorted((left, right) => left - right);
+    }],
     ["deleted NEEDS_MORE path", "INVALID_FLOW_BRANCH", (model) => {
       model.flows.find(({ id }) => id === "DF-010").executionPaths = model.flows
         .find(({ id }) => id === "DF-010").executionPaths
@@ -2125,6 +2229,10 @@ test("fails closed when DF-010 judgment action or branch domains are mutated", (
       model.flows.find(({ id }) => id === "DF-010").executionPaths = model.flows
         .find(({ id }) => id === "DF-010").executionPaths
         .filter(({ id }) => id !== "CLOSED");
+    }],
+    ["overlapping route value", "INVALID_FLOW_BRANCH", (model) => {
+      model.flows.find(({ id }) => id === "DF-010").executionPaths
+        .find(({ id }) => id === "CLOSED").route.values = ["PASSED"];
     }],
     ["wrong confirm action code", "INVALID_ACTION_INPUT_VALUES", (model) => {
       moduleById(model, "CORR-001").actions.find(({ id }) => (
@@ -2307,21 +2415,29 @@ test("routes DF-010 final judgments to evidence and retry judgments to terminati
   const closedPath = flow.executionPaths.find(({ id }) => id === "CLOSED");
   const notPassedPath = flow.executionPaths.find(({ id }) => id === "NOT_PASSED");
   const needsMorePath = flow.executionPaths.find(({ id }) => id === "NEEDS_MORE");
-  assert.deepEqual(passedPath.when, {
+  assert.deepEqual(passedPath.route, {
+    kind: "OPTION_VALUE",
     fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
     values: ["PASSED"],
+    consumerStepOrder: 3,
   });
-  assert.deepEqual(closedPath.when, {
+  assert.deepEqual(closedPath.route, {
+    kind: "OPTION_VALUE",
     fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
     values: ["CLOSED"],
+    consumerStepOrder: 3,
   });
-  assert.deepEqual(notPassedPath.when, {
+  assert.deepEqual(notPassedPath.route, {
+    kind: "OPTION_VALUE",
     fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
     values: ["NOT-PASSED"],
+    consumerStepOrder: 4,
   });
-  assert.deepEqual(needsMorePath.when, {
+  assert.deepEqual(needsMorePath.route, {
+    kind: "OPTION_VALUE",
     fieldId: "CORR-ATTEMPT-F-TEACHER-JUDGMENT",
     values: ["NEEDS-MORE"],
+    consumerStepOrder: 4,
   });
   const finalActionIds = [
     "PUB-ACT-VIEW-RESULT",
@@ -5176,6 +5292,100 @@ test("closes correction Task states and version-pinned Attempt lineage", () => {
       "CORR-ACT-MARK-TASK-AWAITING-RETRY",
     ], pathId);
   }
+});
+
+test("declares field-derived guard policies for every version-pinned reference", () => {
+  const pinnedRefs = modules.flatMap((module) => module.objects.flatMap((object) => (
+    object.fields.filter(({ referenceIntegrity }) => referenceIntegrity === "VERSION_PINNED")
+      .map((field) => ({ module, object, field }))
+  )));
+  const allowedPolicies = new Set([
+    "NONE",
+    "CREATE_REQUIRED",
+    "UPDATE_REQUIRED",
+    "ALWAYS_REQUIRED",
+  ]);
+  assert.equal(pinnedRefs.length, 32);
+  assert.equal(pinnedRefs.every(({ field }) => allowedPolicies.has(field.stateGuardPolicy)), true);
+
+  const correction = moduleById(requirementModel, "CORR-001");
+  const attempt = correction.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
+  assert.equal(attempt.fields.find(({ id }) => (
+    id === "CORR-ATTEMPT-F-TASK-REF"
+  )).stateGuardPolicy, "CREATE_REQUIRED");
+  assert.equal(attempt.fields.find(({ id }) => (
+    id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
+  )).stateGuardPolicy, "CREATE_REQUIRED");
+  assert.equal(pinnedRefs.filter(({ field }) => field.stateGuardPolicy === "NONE").length, 30);
+});
+
+test("fails closed when derived correction guards are removed or downgraded", () => {
+  const closedModel = structuredClone(requirementModel);
+  for (const module of closedModel.modules) {
+    for (const object of module.objects) {
+      for (const field of object.fields) {
+        if (field.referenceIntegrity === "VERSION_PINNED") field.stateGuardPolicy = "NONE";
+      }
+    }
+  }
+  const closedAttempt = moduleById(closedModel, "CORR-001").objects
+    .find(({ id }) => id === "CORR-OBJ-ATTEMPT");
+  for (const fieldId of [
+    "CORR-ATTEMPT-F-TASK-REF",
+    "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF",
+  ]) {
+    closedAttempt.fields.find(({ id }) => id === fieldId).stateGuardPolicy = "CREATE_REQUIRED";
+  }
+
+  const mutations = [
+    ["deleted all submission guards", "INVALID_ACTION_STATE_GUARD", (model) => {
+      const correction = moduleById(model, "CORR-001");
+      for (const actionId of [
+        "CORR-ACT-SUBMIT-INITIAL",
+        "CORR-ACT-SUBMIT-LATE",
+        "CORR-ACT-RESUBMIT",
+      ]) {
+        delete correction.actions.find(({ id }) => id === actionId).relatedStateGuards;
+      }
+    }],
+    ["deleted task guard policy", "INVALID_FIELD_CONTRACT", (model) => {
+      delete moduleById(model, "CORR-001").objects
+        .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+        .find(({ id }) => id === "CORR-ATTEMPT-F-TASK-REF").stateGuardPolicy;
+    }],
+    ["downgraded task guard policy", "INVALID_ACTION_STATE_GUARD", (model) => {
+      moduleById(model, "CORR-001").objects
+        .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+        .find(({ id }) => id === "CORR-ATTEMPT-F-TASK-REF").stateGuardPolicy = "NONE";
+    }],
+    ["omitted prior attempt ref", "INVALID_ACTION_STATE_GUARD", (model) => {
+      const resubmit = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-RESUBMIT");
+      resubmit.outputFieldIds = resubmit.outputFieldIds
+        .filter((fieldId) => fieldId !== "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF");
+    }],
+    ["omitted prior attempt version", "INVALID_ACTION_STATE_GUARD", (model) => {
+      const resubmit = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-RESUBMIT");
+      resubmit.outputFieldIds = resubmit.outputFieldIds
+        .filter((fieldId) => fieldId !== "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION");
+    }],
+    ["invalid guarded target state", "INVALID_ACTION_STATE_GUARD", (model) => {
+      moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-SUBMIT-INITIAL")
+        .relatedStateGuards[0].requiredState = "MISSING";
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, errorCode, mutate] of mutations) {
+    const model = structuredClone(closedModel);
+    mutate(model);
+    if (!errorCodes(validateRequirementModel(model)).includes(errorCode)) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
 });
 
 test("keeps correction task creation teacher or system owned and reachable from DF-008", () => {

@@ -15,6 +15,12 @@ const IDEMPOTENCY_ROLES = new Set([
   "FANOUT_SET",
 ]);
 const REFERENCE_INTEGRITIES = new Set(["IDENTITY_ONLY", "VERSION_PINNED"]);
+const STATE_GUARD_POLICIES = new Set([
+  "NONE",
+  "CREATE_REQUIRED",
+  "UPDATE_REQUIRED",
+  "ALWAYS_REQUIRED",
+]);
 const READ_MODES = new Set(["AUTHORIZED", "NO_DIRECT_READ", "STUDENT_TIMED_RELEASE"]);
 const EXECUTION_MODES = new Set(["USER_TASK", "SYSTEM_EVENT", "FLOW_INTERNAL"]);
 const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
@@ -351,9 +357,21 @@ function validateReferenceIntegrity(errors, field, path) {
     ) {
       errors.push(`INVALID_LINEAGE_BINDING ${path}.versionBinding is forbidden for IDENTITY_ONLY`);
     }
+    if (field.referenceIntegrity === "VERSION_PINNED") {
+      if (!STATE_GUARD_POLICIES.has(field.stateGuardPolicy)) {
+        errors.push(
+          `INVALID_FIELD_CONTRACT ${path}.stateGuardPolicy must explicitly be NONE, CREATE_REQUIRED, UPDATE_REQUIRED, or ALWAYS_REQUIRED`,
+        );
+      }
+    } else if (Object.hasOwn(field, "stateGuardPolicy")) {
+      errors.push(
+        `INVALID_FIELD_CONTRACT ${path}.stateGuardPolicy is allowed only for VERSION_PINNED references`,
+      );
+    }
   } else if (
     Object.hasOwn(field, "referenceIntegrity")
     || Object.hasOwn(field, "versionBinding")
+    || Object.hasOwn(field, "stateGuardPolicy")
   ) {
     errors.push(`INVALID_LINEAGE_BINDING ${path} reference integrity requires OBJECT_REF`);
   }
@@ -1329,13 +1347,13 @@ function validateFlow(errors, flow, path) {
         errors.push(`INVALID_FLOW_CONTRACT ${executionPathPath} must be an object`);
         return;
       }
-      const expectedPathKeys = new Set(["id", "stepOrders", "providedInputs", "when"]);
+      const expectedPathKeys = new Set(["id", "stepOrders", "providedInputs", "route"]);
       if (
-        ![3, 4].includes(Object.keys(executionPath).length)
+        Object.keys(executionPath).length !== expectedPathKeys.size
         || Object.keys(executionPath).some((key) => !expectedPathKeys.has(key))
       ) {
         errors.push(
-          `INVALID_FLOW_CONTRACT ${executionPathPath} must use the closed id, stepOrders, providedInputs, and optional when shape`,
+          `INVALID_FLOW_CONTRACT ${executionPathPath} must use the closed id, stepOrders, providedInputs, and route shape`,
         );
       }
       contractString(
@@ -1349,35 +1367,64 @@ function validateFlow(errors, flow, path) {
         errors.push(`INVALID_FLOW_CONTRACT ${executionPathPath}.id must be unique`);
       }
       seenPathIds.add(executionPath.id);
-      if (Object.hasOwn(executionPath, "when")) {
-        const when = executionPath.when;
-        const whenPath = `${executionPathPath}.when`;
-        const expectedWhenKeys = new Set(["fieldId", "values"]);
+      const route = executionPath.route;
+      const routePath = `${executionPathPath}.route`;
+      if (!isRecord(route)) {
+        errors.push(`INVALID_FLOW_CONTRACT ${routePath} must be an object`);
+      } else if (route.kind === "OPTION_VALUE") {
+        const expectedRouteKeys = new Set([
+          "kind",
+          "fieldId",
+          "values",
+          "consumerStepOrder",
+        ]);
         if (
-          !isRecord(when)
-          || Object.keys(when).length !== expectedWhenKeys.size
-          || Object.keys(when).some((key) => !expectedWhenKeys.has(key))
+          Object.keys(route).length !== expectedRouteKeys.size
+          || Object.keys(route).some((key) => !expectedRouteKeys.has(key))
         ) {
           errors.push(
-            `INVALID_FLOW_CONTRACT ${whenPath} must use the closed fieldId and values shape`,
-          );
-        } else {
-          contractString(errors, when, "fieldId", whenPath, "INVALID_FLOW_CONTRACT");
-          const values = contractStringArray(
-            errors,
-            when,
-            "values",
-            whenPath,
-            "INVALID_FLOW_CONTRACT",
-            { nonEmpty: true },
-          );
-          validateUniqueStrings(
-            errors,
-            values,
-            `${whenPath}.values`,
-            "INVALID_FLOW_CONTRACT",
+            `INVALID_FLOW_CONTRACT ${routePath} must use the closed OPTION_VALUE route shape`,
           );
         }
+        contractString(errors, route, "fieldId", routePath, "INVALID_FLOW_CONTRACT");
+        const values = contractStringArray(
+          errors,
+          route,
+          "values",
+          routePath,
+          "INVALID_FLOW_CONTRACT",
+          { nonEmpty: true },
+        );
+        validateUniqueStrings(
+          errors,
+          values,
+          `${routePath}.values`,
+          "INVALID_FLOW_CONTRACT",
+        );
+        if (!Number.isInteger(route.consumerStepOrder)) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${routePath}.consumerStepOrder must be an integer`,
+          );
+        }
+      } else if (route.kind === "ACTION_CHOICE") {
+        const expectedRouteKeys = new Set(["kind", "consumerStepOrder"]);
+        if (
+          Object.keys(route).length !== expectedRouteKeys.size
+          || Object.keys(route).some((key) => !expectedRouteKeys.has(key))
+        ) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${routePath} must use the closed ACTION_CHOICE route shape`,
+          );
+        }
+        if (!Number.isInteger(route.consumerStepOrder)) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${routePath}.consumerStepOrder must be an integer`,
+          );
+        }
+      } else {
+        errors.push(
+          `INVALID_FLOW_CONTRACT ${routePath}.kind must be OPTION_VALUE or ACTION_CHOICE`,
+        );
       }
       const stepOrders = contractArray(
         errors,
