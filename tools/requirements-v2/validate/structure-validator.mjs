@@ -4,6 +4,7 @@ const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 
 const MAX_TRAVERSAL_DEPTH = 64;
 const OPTION_SET_MODES = new Set(["STATIC", "RUNTIME_QUERY"]);
+const RUNTIME_QUERY_VALUE_FIELDS = new Set(["objectId", "actionId"]);
 const CLIENTS = new Set(["WEB", "APP"]);
 const RISKS = new Set(["READ", "LOW", "HIGH"]);
 const SCENARIO_KINDS = new Set(["SUCCESS", "FAILURE", "BOUNDARY"]);
@@ -845,9 +846,9 @@ function validateOptionSet(errors, optionSet, path) {
   const source = requireRecord(errors, optionSet, "source", path);
   if (!source) return;
   requireString(errors, source, "queryId", `${path}.source`);
-  if (source.valueField !== "objectId") {
+  if (!RUNTIME_QUERY_VALUE_FIELDS.has(source.valueField)) {
     errors.push(
-      `INVALID_ENTITY_SHAPE ${path}.source.valueField must be objectId`,
+      `INVALID_ENTITY_SHAPE ${path}.source.valueField must be objectId or actionId`,
     );
   }
   if (source.labelField !== "displayName") {

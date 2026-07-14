@@ -816,6 +816,23 @@ test("rejects write actions whose success scenario claims no state effect", () =
   assertHasCode(validateRequirementModel(model), "MISSING_ACTION_STATE_EFFECT");
 });
 
+test("rejects success scenario states that contradict the action transition", () => {
+  const model = validFixture();
+  moduleById(model, "SUB-001").scenarios[0].then.expectedState = {
+    mode: "STATE",
+    value: "DRAFT",
+  };
+
+  assertHasCode(validateRequirementModel(model), "SCENARIO_TRANSITION_MISMATCH");
+});
+
+test("accepts an explicit success state on a write action without a transition", () => {
+  const model = validFixture();
+  delete moduleById(model, "SUB-001").actions[0].transition;
+
+  assert.deepEqual(validateRequirementModel(model), []);
+});
+
 test("rejects empty optional Flow step conditions", () => {
   const model = validFixture();
   model.flows[0].steps[0].condition = "";
@@ -1087,6 +1104,70 @@ test("declares complete grant authority inputs for every IAM grant action", () =
     assert.equal(inputFieldIds.every((fieldId) => (
       exposingPages.some(({ fieldIds }) => fieldIds.includes(fieldId))
     )), true, actionId);
+  }
+});
+
+test("binds IAM action sets to the global authorizable action registry", () => {
+  const identity = moduleById(requirementModel, "IAM-001");
+  const actionSetFieldIds = [
+    "IAM-ROLE-F-ACTIONS",
+    "IAM-DUTY-F-ACTIONS",
+    "IAM-SCOPE-F-ACTIONS",
+    "IAM-TEMP-F-ACTIONS",
+  ];
+  const fields = identity.objects.flatMap((object) => object.fields);
+  for (const fieldId of actionSetFieldIds) {
+    assert.deepEqual(
+      fields.find(({ id }) => id === fieldId).valueSource,
+      { kind: "OPTION_SET", optionSetId: "OPT-COM-016" },
+      fieldId,
+    );
+  }
+  const authorizableActions = optionSets.find(({ id }) => id === "OPT-COM-016");
+  assert.equal(authorizableActions.mode, "RUNTIME_QUERY");
+  assert.deepEqual(authorizableActions.values, []);
+  assert.deepEqual(authorizableActions.source, {
+    queryId: "QUERY-AUTHORIZABLE-ACTIONS",
+    valueField: "actionId",
+    labelField: "displayName",
+    labelSnapshot: true,
+    filterContext: [
+      "schoolId",
+      "termId",
+      "grantorRoleId",
+      "grantorDutyIds",
+      "targetDutyId",
+      "scopeObjectIds",
+    ],
+  });
+});
+
+test("rejects IAM action sets that bypass the global action registry", () => {
+  const mutations = [
+    (model) => {
+      moduleById(model, "IAM-001").objects
+        .flatMap((object) => object.fields)
+        .find(({ id }) => id === "IAM-DUTY-F-ACTIONS")
+        .valueSource = { kind: "USER_INPUT" };
+    },
+    (model) => {
+      model.optionSets.find(({ id }) => id === "OPT-COM-016").source.queryId = "QUERY-FREE-TEXT";
+    },
+    (model) => {
+      model.optionSets.find(({ id }) => id === "OPT-COM-016").source.valueField = "objectId";
+    },
+    (model) => {
+      model.optionSets.find(({ id }) => id === "OPT-COM-016").values = [{
+        code: "ARBITRARY-ACTION",
+        label: "Arbitrary action",
+      }];
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_AUTHORIZABLE_ACTION_SOURCE");
   }
 });
 
@@ -1707,6 +1788,7 @@ test("registers every required Option Set concept with stable code-label values"
     "exam",
     "timeRange",
     "scopeObject",
+    "authorizableAction",
     "yesNo",
     "assignmentType",
     "submissionMethod",
@@ -1842,6 +1924,20 @@ test("registers every required Option Set concept with stable code-label values"
       labelField: "displayName",
       labelSnapshot: true,
       filterContext: ["schoolId", "termId", "roleId", "dutyIds", "actionId"],
+    },
+    authorizableAction: {
+      queryId: "QUERY-AUTHORIZABLE-ACTIONS",
+      valueField: "actionId",
+      labelField: "displayName",
+      labelSnapshot: true,
+      filterContext: [
+        "schoolId",
+        "termId",
+        "grantorRoleId",
+        "grantorDutyIds",
+        "targetDutyId",
+        "scopeObjectIds",
+      ],
     },
   };
   const staticCodes = {
@@ -2015,6 +2111,17 @@ test("rejects duplicate codes and labels in STATIC Option Sets", () => {
     model.optionSets = [validStaticOptionSet({ values })];
 
     assertHasCode(validateRequirementModel(model), "DUPLICATE_OPTION_SET_VALUE");
+  }
+});
+
+test("accepts supported RUNTIME_QUERY Option Set value fields", () => {
+  for (const valueField of ["objectId", "actionId"]) {
+    const model = validFixture();
+    const optionSet = validRuntimeOptionSet();
+    optionSet.source.valueField = valueField;
+    model.optionSets.push(optionSet);
+
+    assert.deepEqual(validateRequirementModel(model), []);
   }
 });
 

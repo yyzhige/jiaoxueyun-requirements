@@ -16,6 +16,20 @@ const VALUE_SOURCE_KINDS = new Set([
   "DERIVED",
   "CONSTANT",
 ]);
+const AUTHORIZABLE_ACTION_FIELD_IDS = new Set([
+  "IAM-ROLE-F-ACTIONS",
+  "IAM-DUTY-F-ACTIONS",
+  "IAM-SCOPE-F-ACTIONS",
+  "IAM-TEMP-F-ACTIONS",
+]);
+const AUTHORIZABLE_ACTION_FILTER_CONTEXT = [
+  "schoolId",
+  "termId",
+  "grantorRoleId",
+  "grantorDutyIds",
+  "targetDutyId",
+  "scopeObjectIds",
+];
 
 function list(value) {
   return Array.isArray(value) ? value : [];
@@ -355,6 +369,35 @@ export function validateModelReferences(model) {
       errors.push(
         `MISSING_VALUE_SOURCE_REFERENCE ${formatValidationValue(fieldEntry.value?.id)} RUNTIME_QUERY requires queryId`,
       );
+    }
+    if (AUTHORIZABLE_ACTION_FIELD_IDS.has(fieldEntry.value?.id)) {
+      const optionSet = valueSource?.kind === "OPTION_SET"
+        ? index.optionSetById.get(valueSource.optionSetId)?.value
+        : undefined;
+      const source = optionSet?.source;
+      const filterContext = list(source?.filterContext);
+      const validFilterContext = (
+        filterContext.length === AUTHORIZABLE_ACTION_FILTER_CONTEXT.length
+        && AUTHORIZABLE_ACTION_FILTER_CONTEXT.every((value, position) => (
+          filterContext[position] === value
+        ))
+      );
+      if (
+        valueSource?.kind !== "OPTION_SET"
+        || valueSource.optionSetId !== "OPT-COM-016"
+        || optionSet?.mode !== "RUNTIME_QUERY"
+        || !Array.isArray(optionSet?.values)
+        || optionSet.values.length !== 0
+        || source?.queryId !== "QUERY-AUTHORIZABLE-ACTIONS"
+        || source?.valueField !== "actionId"
+        || source?.labelField !== "displayName"
+        || source?.labelSnapshot !== true
+        || !validFilterContext
+      ) {
+        errors.push(
+          `INVALID_AUTHORIZABLE_ACTION_SOURCE ${formatValidationValue(fieldEntry.value?.id)} requires the global authorizable Action ID query`,
+        );
+      }
     }
   }
 

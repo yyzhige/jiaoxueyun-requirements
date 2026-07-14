@@ -131,6 +131,17 @@ function actionErrors(index) {
       ({ value }) => value?.kind === "SUCCESS",
     );
     if (
+      action?.transition
+      && successScenarios.some(({ value }) => (
+        value?.then?.expectedState?.mode !== "STATE"
+        || value.then.expectedState.value !== action.transition.to
+      ))
+    ) {
+      errors.push(
+        `SCENARIO_TRANSITION_MISMATCH ${formatValidationValue(action?.id)} requires SUCCESS state ${formatValidationValue(action.transition.to)}`,
+      );
+    }
+    if (
       action?.writes === true
       && successScenarios.some(({ value }) => value?.then?.expectedState?.mode !== "STATE")
     ) {

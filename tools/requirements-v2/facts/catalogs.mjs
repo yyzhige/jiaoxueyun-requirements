@@ -10,7 +10,7 @@ function optionSet(id, key, label, entries) {
   };
 }
 
-function runtimeOptionSet(id, key, label, queryId, filterContext) {
+function runtimeOptionSet(id, key, label, queryId, filterContext, sourceOverrides = {}) {
   return {
     id,
     key,
@@ -19,7 +19,7 @@ function runtimeOptionSet(id, key, label, queryId, filterContext) {
     values: [],
     source: {
       queryId,
-      valueField: "objectId",
+      valueField: sourceOverrides.valueField ?? "objectId",
       labelField: "displayName",
       labelSnapshot: true,
       filterContext,
@@ -499,6 +499,21 @@ export const optionSets = [
     "权限范围对象",
     "QUERY-AUTHORIZABLE-SCOPE-OBJECTS",
     ["schoolId", "termId", "roleId", "dutyIds", "actionId"],
+  ),
+  runtimeOptionSet(
+    "OPT-COM-016",
+    "authorizableAction",
+    "可授权动作",
+    "QUERY-AUTHORIZABLE-ACTIONS",
+    [
+      "schoolId",
+      "termId",
+      "grantorRoleId",
+      "grantorDutyIds",
+      "targetDutyId",
+      "scopeObjectIds",
+    ],
+    { valueField: "actionId" },
   ),
   optionSet("OPT-ENUM-001", "yesNo", "是否", [
     ["YES", "是"],
