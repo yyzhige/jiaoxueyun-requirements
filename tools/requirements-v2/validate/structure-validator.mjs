@@ -963,6 +963,11 @@ function validateOptionSet(errors, optionSet, path) {
       }
       requireString(errors, value, "code", valuePath);
       requireString(errors, value, "label", valuePath);
+      if (optionSet.key === "questionType" && typeof value.isSubjective !== "boolean") {
+        errors.push(
+          `INVALID_ENTITY_SHAPE ${valuePath}.isSubjective must be a boolean`,
+        );
+      }
       if (
         (isValidId(value.code) && codes.has(value.code))
         || (isValidId(value.label) && labels.has(value.label))

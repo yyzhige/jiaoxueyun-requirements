@@ -6,7 +6,11 @@ function optionSet(id, key, label, entries) {
     key,
     label,
     mode: "STATIC",
-    values: entries.map(([code, valueLabel]) => ({ code, label: valueLabel })),
+    values: entries.map(([code, valueLabel, metadata]) => ({
+      code,
+      label: valueLabel,
+      ...(metadata ?? {}),
+    })),
   };
 }
 
@@ -583,15 +587,15 @@ export const optionSets = [
     ["MIXED-MEDIA", "混合提交"],
   ]),
   optionSet("OPT-ENUM-003", "questionType", "题型", [
-    ["SINGLE-CHOICE", "单选"],
-    ["MULTIPLE-CHOICE", "多选"],
-    ["TRUE-FALSE", "判断"],
-    ["FILL-BLANK", "填空"],
-    ["CALCULATION", "计算"],
-    ["SHORT-ANSWER", "简答"],
-    ["ESSAY", "作文"],
-    ["ATTACHMENT-ANSWER", "附件作答"],
-    ["LEARNING-TASK", "学习任务"],
+    ["SINGLE-CHOICE", "单选", { isSubjective: false }],
+    ["MULTIPLE-CHOICE", "多选", { isSubjective: false }],
+    ["TRUE-FALSE", "判断", { isSubjective: false }],
+    ["FILL-BLANK", "填空", { isSubjective: false }],
+    ["CALCULATION", "计算", { isSubjective: true }],
+    ["SHORT-ANSWER", "简答", { isSubjective: true }],
+    ["ESSAY", "作文", { isSubjective: true }],
+    ["ATTACHMENT-ANSWER", "附件作答", { isSubjective: true }],
+    ["LEARNING-TASK", "学习任务", { isSubjective: true }],
   ]),
   optionSet("OPT-ENUM-032", "latePolicy", "迟交策略", [
     ["NOT-ALLOWED", "不允许迟交"],

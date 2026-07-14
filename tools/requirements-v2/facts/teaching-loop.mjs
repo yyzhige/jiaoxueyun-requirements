@@ -384,6 +384,20 @@ const hwActions = [
     ],
     failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "NOT_OPEN_YET"],
   }),
+  action({
+    id: "HW-ACT-RESOLVE-GRADING-SNAPSHOT",
+    label: "Resolve Published Item Grading Snapshot",
+    targetObjectId: "HW-OBJ-ITEM",
+    outputFieldIds: ["HW-ITEM-F-ITEM-VERSION", "HW-ITEM-F-RUBRIC-VERSION"],
+    writes: false,
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-006"] },
+    permissions: [
+      permission("ALLOW", "SYSTEM", "DF-006 resolves the immutable published item and Rubric versions"),
+      permission("DENY", "CURRENT_ACTOR", "users cannot invoke the internal grading snapshot handoff"),
+    ],
+    successData: "returns the immutable item and Rubric versions referenced by the submitted assignment",
+  }),
 ];
 
 const hwModule = moduleFact({
@@ -675,6 +689,20 @@ const submissionActions = [
     permissions: studentSubmissionPermissions,
     successData: "returns the server-issued receipt for the student's accepted submission version",
   }),
+  action({
+    id: "SUB-ACT-HANDOFF-ACCEPTED",
+    label: "Handoff Accepted Submission Version",
+    targetObjectId: "SUB-OBJ-ATTEMPT",
+    outputFieldIds: ["SUB-ATTEMPT-F-SUBMISSION-VERSION", "SUB-ATTEMPT-F-RECEIPT-ID"],
+    writes: false,
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-006"] },
+    permissions: [
+      permission("ALLOW", "SYSTEM", "DF-006 reads an accepted submission carrying a server receipt"),
+      permission("DENY", "CURRENT_ACTOR", "users cannot invoke the internal accepted-submission handoff"),
+    ],
+    successData: "returns only the immutable accepted submission version and server receipt",
+  }),
 ];
 
 const submissionModule = moduleFact({
@@ -726,7 +754,9 @@ const submissionModule = moduleFact({
       "App Student Submission Workspace",
       ["SUB-OBJ-DRAFT", "SUB-OBJ-ATTEMPT"],
       [...submissionDraftFields, ...submissionAttemptFields].map(({ id }) => id),
-      submissionActions.map(({ action: actionValue }) => actionValue.id),
+      submissionActions
+        .filter(({ action: actionValue }) => actionValue.executionMode === USER_TASK)
+        .map(({ action: actionValue }) => actionValue.id),
       [CLIENT.APP],
     ),
     page(
@@ -839,8 +869,14 @@ const gradingDecisionFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
+  field("GRD-DECISION-F-PRIOR-DECISION-VERSION", "Prior Confirmed Decision Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    required: "required when revising a confirmed decision",
+  }),
   field("GRD-DECISION-F-ROUTE", "Grading Route", {
-    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-008" },
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-011" },
     mutability: "SYSTEM_MANAGED",
   }),
 ];
@@ -857,7 +893,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "NO",
     batchConfirmEligibility: "ELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: false,
   },
   {
     id: "GRD-CAP-CHINESE-ESSAY-TEXT",
@@ -870,7 +905,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-MATH-CHOICE-ONLINE",
@@ -883,7 +917,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "NO",
     batchConfirmEligibility: "ELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: false,
   },
   {
     id: "GRD-CAP-MATH-CALCULATION-IMAGE",
@@ -896,7 +929,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-TRANSCRIPTION-THEN-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-ENGLISH-CHOICE-ONLINE",
@@ -909,7 +941,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "NO",
     batchConfirmEligibility: "ELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: false,
   },
   {
     id: "GRD-CAP-ENGLISH-SHORT-TEXT",
@@ -922,7 +953,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-MORALITY-SHORT-TEXT",
@@ -935,7 +965,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-HISTORY-SHORT-TEXT",
@@ -948,7 +977,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-GEOGRAPHY-ATTACHMENT-IMAGE",
@@ -961,7 +989,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-BIOLOGY-TRUE-FALSE-ONLINE",
@@ -974,7 +1001,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "NO",
     batchConfirmEligibility: "ELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: false,
   },
   {
     id: "GRD-CAP-PHYSICS-CALCULATION-IMAGE",
@@ -987,7 +1013,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-TRANSCRIPTION-THEN-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-CHEMISTRY-CALCULATION-IMAGE",
@@ -1000,7 +1025,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-TRANSCRIPTION-THEN-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-PE-LEARNING-TASK-MEDIA",
@@ -1013,7 +1037,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-ARTS-ATTACHMENT-FILE",
@@ -1026,7 +1049,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
   {
     id: "GRD-CAP-IT-LEARNING-TASK-FILE",
@@ -1039,7 +1061,6 @@ const gradingCapabilityMatrix = [
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
     unavailableFallback: "MANUAL-GRADING",
-    isSubjective: true,
   },
 ];
 
@@ -1090,13 +1111,6 @@ const gradingCapabilityApplicability = {
       "MIXED-MEDIA",
     ],
   },
-  subjectiveQuestionTypes: [
-    "CALCULATION",
-    "SHORT-ANSWER",
-    "ESSAY",
-    "ATTACHMENT-ANSWER",
-    "LEARNING-TASK",
-  ],
   unsupportedRule: {
     id: "GRD-CAP-UNSUPPORTED-COMBINATION",
     priority: 0,
@@ -1143,16 +1157,29 @@ const gradingTeacherPermissions = [
 ];
 
 const gradingFlowTrigger = { kind: "FLOW", flowIds: ["DF-006"] };
+const gradingVersionConflictOutcome = {
+  VERSION_CONFLICT: {
+    expectedState: "CONFLICT",
+    expectedData: "records the conflicting source versions and blocks confirmation until the decision is requeued",
+  },
+};
 const gradingActions = [
   action({
     id: "GRD-ACT-ENQUEUE",
     label: "Enqueue Submission for Grading",
     targetObjectId: "GRD-OBJ-DECISION",
-    outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+    outputFieldIds: [
+      "GRD-DECISION-F-SUBMISSION-VERSION",
+      "GRD-DECISION-F-ITEM-VERSION",
+      "GRD-DECISION-F-RUBRIC-VERSION",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
     executionMode: FLOW_INTERNAL,
     trigger: gradingFlowTrigger,
     permissions: systemFlowPermissions,
     successState: "QUEUED",
+    failureOutcomes: gradingVersionConflictOutcome,
+    successData: "creates a queued decision with immutable submission, item, and Rubric source versions",
   }),
   action({
     id: "GRD-ACT-PROCESS",
@@ -1171,7 +1198,7 @@ const gradingActions = [
     trigger: gradingFlowTrigger,
     permissions: systemFlowPermissions,
     transition: { from: "QUEUED", to: "PROCESSING" },
-    failureResults: ["PERMISSION_DENIED", "AI_UNAVAILABLE", "UNSUPPORTED_COMBINATION", "VERSION_CONFLICT"],
+    failureResults: ["PERMISSION_DENIED", "AI_UNAVAILABLE", "VERSION_CONFLICT"],
     failureOutcomes: {
       AI_UNAVAILABLE: {
         kind: "BOUNDARY",
@@ -1179,12 +1206,7 @@ const gradingActions = [
         expectedPermission: "ALLOW",
         expectedData: "records AI unavailability and preserves the submission for manual grading",
       },
-      UNSUPPORTED_COMBINATION: {
-        kind: "BOUNDARY",
-        expectedState: "PROCESSING",
-        expectedPermission: "ALLOW",
-        expectedData: "records the unsupported combination and preserves the submission for manual grading",
-      },
+      ...gradingVersionConflictOutcome,
     },
   }),
   action({
@@ -1195,8 +1217,33 @@ const gradingActions = [
     executionMode: FLOW_INTERNAL,
     trigger: gradingFlowTrigger,
     permissions: systemFlowPermissions,
-    transition: { from: "PROCESSING", to: "ROUTED" },
-    successData: "routes supported evidence to a suggestion path and every unsupported or unavailable combination to manual grading",
+    transition: { from: "PROCESSING", to: "ROUTED_REVIEW" },
+    failureOutcomes: gradingVersionConflictOutcome,
+    successData: "sets AI-SUGGESTION-REVIEW or AUTO-SCORE-CONFIRMATION from the exact capability decision; both remain teacher-confirmed paths",
+  }),
+  action({
+    id: "GRD-ACT-ROUTE-UNSUPPORTED",
+    label: "Route Unsupported Combination to Manual Grading",
+    targetObjectId: "GRD-OBJ-DECISION",
+    outputFieldIds: ["GRD-DECISION-F-ROUTE", "GRD-DECISION-F-DECISION-VERSION"],
+    executionMode: FLOW_INTERNAL,
+    trigger: gradingFlowTrigger,
+    permissions: systemFlowPermissions,
+    transition: { from: "QUEUED", to: "ROUTED_MANUAL" },
+    failureOutcomes: gradingVersionConflictOutcome,
+    successData: "sets MANUAL-GRADING or MANUAL-TRANSCRIPTION-THEN-GRADING from the explicit unsupported decision",
+  }),
+  action({
+    id: "GRD-ACT-ROUTE-AI-UNAVAILABLE",
+    label: "Route AI-unavailable Decision to Manual Fallback",
+    targetObjectId: "GRD-OBJ-DECISION",
+    outputFieldIds: ["GRD-DECISION-F-ROUTE", "GRD-DECISION-F-DECISION-VERSION"],
+    executionMode: FLOW_INTERNAL,
+    trigger: gradingFlowTrigger,
+    permissions: systemFlowPermissions,
+    transition: { from: "PROCESSING", to: "ROUTED_MANUAL" },
+    failureOutcomes: gradingVersionConflictOutcome,
+    successData: "sets the explicit MANUAL fallback route after an AI-unavailable processing outcome",
   }),
   action({
     id: "GRD-ACT-CORRECT-RECOGNITION",
@@ -1209,7 +1256,8 @@ const gradingActions = [
     ],
     outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
     permissions: gradingTeacherPermissions,
-    successState: "ROUTED",
+    successState: "ROUTED_REVIEW",
+    failureOutcomes: gradingVersionConflictOutcome,
   }),
   action({
     id: "GRD-ACT-ACCEPT-SUGGESTION",
@@ -1219,8 +1267,9 @@ const gradingActions = [
     outputFieldIds: ["GRD-DECISION-F-OFFICIAL-SCORE", "GRD-DECISION-F-DECISION-VERSION"],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
-    transition: { from: "ROUTED", to: "TEACHER_CONFIRMED" },
+    transition: { from: "ROUTED_REVIEW", to: "TEACHER_CONFIRMED" },
     failureResults: ["PERMISSION_DENIED", "SUBJECTIVE_REVIEW_REQUIRED", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
+    failureOutcomes: gradingVersionConflictOutcome,
   }),
   action({
     id: "GRD-ACT-OVERRIDE-SCORE",
@@ -1234,8 +1283,9 @@ const gradingActions = [
     outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
-    transition: { from: "ROUTED", to: "TEACHER_CONFIRMED" },
+    transition: { from: "ROUTED_REVIEW", to: "TEACHER_CONFIRMED" },
     failureResults: ["PERMISSION_DENIED", "CORRECTION_REASON_REQUIRED", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
+    failureOutcomes: gradingVersionConflictOutcome,
   }),
   action({
     id: "GRD-ACT-MANUAL-GRADE",
@@ -1248,8 +1298,9 @@ const gradingActions = [
     outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
-    transition: { from: "ROUTED", to: "TEACHER_CONFIRMED" },
+    transition: { from: "ROUTED_MANUAL", to: "TEACHER_CONFIRMED" },
     failureResults: ["PERMISSION_DENIED", "MISSING_REQUIRED_EVIDENCE", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
+    failureOutcomes: gradingVersionConflictOutcome,
   }),
   action({
     id: "GRD-ACT-BATCH-CONFIRM",
@@ -1258,24 +1309,59 @@ const gradingActions = [
     outputFieldIds: ["GRD-DECISION-F-OFFICIAL-SCORE", "GRD-DECISION-F-DECISION-VERSION"],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
-    transition: { from: "ROUTED", to: "TEACHER_CONFIRMED" },
+    transition: { from: "ROUTED_REVIEW", to: "TEACHER_CONFIRMED" },
     failureResults: ["PERMISSION_DENIED", "SUBJECTIVE_ITEMS_INELIGIBLE", "LOW_CONFIDENCE_INELIGIBLE", "VERSION_CONFLICT"],
+    failureOutcomes: gradingVersionConflictOutcome,
   }),
   action({
-    id: "GRD-ACT-RESOLVE-VERSION-CONFLICT",
-    label: "Resolve Grading Version Conflict",
+    id: "GRD-ACT-OPEN-CONFIRMED-REVISION",
+    label: "Open Confirmed Decision Revision",
+    targetObjectId: "GRD-OBJ-DECISION",
+    inputFieldIds: ["GRD-DECISION-F-CORRECTION-REASON"],
+    outputFieldIds: [
+      "GRD-DECISION-F-PRIOR-DECISION-VERSION",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: gradingTeacherPermissions,
+    transition: { from: "TEACHER_CONFIRMED", to: "REVISION_PENDING" },
+    failureResults: ["PERMISSION_DENIED", "CORRECTION_REASON_REQUIRED", "VERSION_CONFLICT"],
+    failureOutcomes: gradingVersionConflictOutcome,
+    successData: "creates a revision-pending decision version that retains the immutable prior confirmed decision version and correction reason",
+  }),
+  action({
+    id: "GRD-ACT-CONFIRM-REVISION",
+    label: "Confirm Revised Decision",
     targetObjectId: "GRD-OBJ-DECISION",
     inputFieldIds: [
-      "GRD-DECISION-F-SUBMISSION-VERSION",
-      "GRD-DECISION-F-ITEM-VERSION",
-      "GRD-DECISION-F-RUBRIC-VERSION",
+      "GRD-DECISION-F-OFFICIAL-SCORE",
+      "GRD-DECISION-F-TEACHER-FEEDBACK",
       "GRD-DECISION-F-CORRECTION-REASON",
     ],
     outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
-    transition: { from: "CONFLICT", to: "TEACHER_CONFIRMED" },
-    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STILL_STALE", "UNCONFIRMED_SUBJECTIVE_SCORE", "VERSION_CONFLICT"],
+    transition: { from: "REVISION_PENDING", to: "TEACHER_CONFIRMED" },
+    failureResults: ["PERMISSION_DENIED", "CORRECTION_REASON_REQUIRED", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
+    failureOutcomes: gradingVersionConflictOutcome,
+    successData: "creates a new decision version after corresponding subject-teacher confirmation and retains the prior confirmed version in history",
+  }),
+  action({
+    id: "GRD-ACT-RESOLVE-VERSION-CONFLICT",
+    label: "Resolve Grading Version Conflict",
+    targetObjectId: "GRD-OBJ-DECISION",
+    inputFieldIds: ["GRD-DECISION-F-CORRECTION-REASON"],
+    outputFieldIds: [
+      "GRD-DECISION-F-SUBMISSION-VERSION",
+      "GRD-DECISION-F-ITEM-VERSION",
+      "GRD-DECISION-F-RUBRIC-VERSION",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
+    risk: RISK.HIGH,
+    permissions: gradingTeacherPermissions,
+    transition: { from: "CONFLICT", to: "QUEUED" },
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STILL_STALE"],
+    successData: "refreshes immutable source lineage into a new queued decision version without confirming a score",
   }),
 ];
 
@@ -1317,7 +1403,7 @@ const gradingModule = moduleFact({
         confirmerRef: "DUTY-SUBJECT-TEACHER",
         stewardRef: "ROLE-ACADEMIC",
       },
-      ["QUEUED", "PROCESSING", "ROUTED", "CONFLICT", "TEACHER_CONFIRMED"],
+      ["QUEUED", "PROCESSING", "ROUTED_REVIEW", "ROUTED_MANUAL", "CONFLICT", "REVISION_PENDING", "TEACHER_CONFIRMED"],
       gradingDecisionFields,
       { sensitivityId: "S3" },
     ),
@@ -1338,7 +1424,9 @@ const gradingModule = moduleFact({
       "Subject Teacher Grading Workspace",
       ["GRD-OBJ-CAPABILITY-RULE", "GRD-OBJ-DECISION"],
       [...capabilityMatrixFields, ...gradingDecisionFields].map(({ id }) => id),
-      gradingActions.slice(3).map(({ action: actionValue }) => actionValue.id),
+      gradingActions
+        .filter(({ action: actionValue }) => actionValue.executionMode === USER_TASK)
+        .map(({ action: actionValue }) => actionValue.id),
     ),
   ],
 });
@@ -1371,6 +1459,12 @@ const publishedResultFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
+  field("PUB-RESULT-F-NEW-DECISION-VERSION", "New Confirmed Decision Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+    required: "required when correcting a published result",
+  }),
   field("PUB-RESULT-F-ELIGIBILITY", "Publication Eligibility", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-009" },
     mutability: "SYSTEM_MANAGED",
@@ -1388,6 +1482,11 @@ const publishedResultFields = [
     mutability: "SYSTEM_MANAGED",
   }),
   field("PUB-RESULT-F-CORRECTION-VERSION", "Correction Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-RESULT-F-INVALIDATION-VERSION", "Dependent Invalidation Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
@@ -1436,6 +1535,22 @@ const publicationActions = [
     successData: "returns student-level eligibility, blocking codes, visibility times, and notification preview without publication",
   }),
   action({
+    id: "PUB-ACT-PREPARE-BATCH",
+    label: "Prepare Result Publication Batch",
+    targetObjectId: "PUB-OBJ-BATCH",
+    inputFieldIds: ["PUB-BATCH-F-SELECTED-STUDENT-IDS"],
+    outputFieldIds: [
+      "PUB-BATCH-F-BATCH-VERSION",
+      "PUB-BATCH-F-OBJECT-RESULTS",
+      "PUB-BATCH-F-STATUS",
+    ],
+    risk: RISK.HIGH,
+    permissions: publicationTeacherPermissions,
+    transition: { from: "DRAFT", to: "READY" },
+    failureResults: ["PERMISSION_DENIED", "UNCONFIRMED_SUBJECTIVE_SCORE", "VISIBILITY_POLICY_BLOCKED", "VERSION_CONFLICT"],
+    successData: "records object-level eligibility and blocking codes for every selected student before publication starts",
+  }),
+  action({
     id: "PUB-ACT-PUBLISH-SELECTED",
     label: "Publish Results to Selected Students",
     targetObjectId: "PUB-OBJ-BATCH",
@@ -1447,27 +1562,59 @@ const publicationActions = [
     ],
     risk: RISK.HIGH,
     permissions: publicationTeacherPermissions,
-    transition: { from: "READY", to: "PUBLISHED" },
+    transition: { from: "READY", to: "PUBLISHING" },
     failureResults: [
       "PERMISSION_DENIED",
       "UNCONFIRMED_SUBJECTIVE_SCORE",
       "VISIBILITY_POLICY_BLOCKED",
-      "OBJECT_PUBLICATION_FAILED",
       "VERSION_CONFLICT",
     ],
-    failureOutcomes: {
-      OBJECT_PUBLICATION_FAILED: {
-        kind: "BOUNDARY",
-        expectedState: "PARTIAL_FAILED",
-        expectedPermission: "ALLOW",
-        expectedData: "publishes eligible students, records each failed student, and does not retry successful results",
-      },
-    },
     idempotencyKey: "PUB-ACT-PUBLISH-SELECTED:school:assignment:decision-versions:selected-student-set:request-id",
   }),
   action({
-    id: "PUB-ACT-RETRY-FAILED",
-    label: "Retry Failed Result Publication",
+    id: "PUB-ACT-MATERIALIZE-RESULT",
+    label: "Materialize Student Result Version",
+    targetObjectId: "PUB-OBJ-RESULT",
+    outputFieldIds: [
+      "PUB-RESULT-F-DECISION-VERSION",
+      "PUB-RESULT-F-ELIGIBILITY",
+      "PUB-RESULT-F-BLOCKING-CODES",
+      "PUB-RESULT-F-RESULT-VERSION",
+    ],
+    risk: RISK.HIGH,
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-008"] },
+    permissions: systemFlowPermissions,
+    transition: { from: "PENDING", to: "READY" },
+    failureResults: ["PERMISSION_DENIED", "UNCONFIRMED_SUBJECTIVE_SCORE", "VISIBILITY_POLICY_BLOCKED", "VERSION_CONFLICT"],
+    successData: "creates a ready per-student result from the immutable confirmed decision version",
+  }),
+  action({
+    id: "PUB-ACT-PUBLISH-RESULT",
+    label: "Publish Student Result Version",
+    targetObjectId: "PUB-OBJ-RESULT",
+    outputFieldIds: [
+      "PUB-RESULT-F-RESULT-VERSION",
+      "PUB-RESULT-F-NOTIFICATION-STATUS",
+    ],
+    risk: RISK.HIGH,
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-008"] },
+    permissions: systemFlowPermissions,
+    transition: { from: "READY", to: "PUBLISHED" },
+    failureResults: ["PERMISSION_DENIED", "OBJECT_PUBLICATION_FAILED", "VISIBILITY_POLICY_BLOCKED", "VERSION_CONFLICT"],
+    failureOutcomes: {
+      OBJECT_PUBLICATION_FAILED: {
+        kind: "BOUNDARY",
+        expectedState: "PUBLISH_FAILED",
+        expectedPermission: "ALLOW",
+        expectedData: "records the failed student result independently without changing successful student results",
+      },
+    },
+  }),
+  action({
+    id: "PUB-ACT-FINALIZE-BATCH",
+    label: "Finalize Result Publication Batch",
     targetObjectId: "PUB-OBJ-BATCH",
     outputFieldIds: [
       "PUB-BATCH-F-BATCH-VERSION",
@@ -1475,8 +1622,31 @@ const publicationActions = [
       "PUB-BATCH-F-STATUS",
     ],
     risk: RISK.HIGH,
+    executionMode: FLOW_INTERNAL,
+    trigger: { kind: "FLOW", flowIds: ["DF-008"] },
+    permissions: systemFlowPermissions,
+    transition: { from: "PUBLISHING", to: "PUBLISHED" },
+    failureResults: ["PERMISSION_DENIED", "OBJECT_PUBLICATION_FAILED", "VERSION_CONFLICT"],
+    failureOutcomes: {
+      OBJECT_PUBLICATION_FAILED: {
+        kind: "BOUNDARY",
+        expectedState: "PARTIAL_FAILED",
+        expectedPermission: "ALLOW",
+        expectedData: "finalizes successful results while retaining object-level failed results for retry",
+      },
+    },
+  }),
+  action({
+    id: "PUB-ACT-RETRY-FAILED",
+    label: "Retry Failed Result Publication",
+    targetObjectId: "PUB-OBJ-RESULT",
+    outputFieldIds: [
+      "PUB-RESULT-F-RESULT-VERSION",
+      "PUB-RESULT-F-NOTIFICATION-STATUS",
+    ],
+    risk: RISK.HIGH,
     permissions: publicationTeacherPermissions,
-    transition: { from: "PARTIAL_FAILED", to: "PUBLISHED" },
+    transition: { from: "PUBLISH_FAILED", to: "PUBLISHED" },
     failureResults: [
       "PERMISSION_DENIED",
       "UNCONFIRMED_SUBJECTIVE_SCORE",
@@ -1489,18 +1659,22 @@ const publicationActions = [
     id: "PUB-ACT-CORRECT-RESULT",
     label: "Correct Published Result",
     targetObjectId: "PUB-OBJ-RESULT",
-    inputFieldIds: ["PUB-RESULT-F-PUBLIC-CORRECTION-NOTE"],
+    inputFieldIds: [
+      "PUB-RESULT-F-NEW-DECISION-VERSION",
+      "PUB-RESULT-F-PUBLIC-CORRECTION-NOTE",
+    ],
     outputFieldIds: [
       "PUB-RESULT-F-RESULT-VERSION",
       "PUB-RESULT-F-CORRECTION-VERSION",
+      "PUB-RESULT-F-INVALIDATION-VERSION",
       "PUB-RESULT-F-NOTIFICATION-STATUS",
       "PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS",
     ],
     risk: RISK.HIGH,
     permissions: publicationTeacherPermissions,
-    transition: { from: "PUBLISHED", to: "CORRECTED" },
+    transition: { from: "PUBLISHED", to: "INVALIDATED" },
     failureResults: ["PERMISSION_DENIED", "CORRECTION_NOTE_REQUIRED", "STALE_DECISION_VERSION", "VERSION_CONFLICT"],
-    successData: "creates a correction version, exposes the public correction note, and records every invalidated downstream explanation",
+    successData: "references the new confirmed decision version, creates new result and correction versions, and records a dependent invalidation version without rewriting the old result",
   }),
   action({
     id: "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
@@ -1509,11 +1683,13 @@ const publicationActions = [
     inputFieldIds: ["PUB-RESULT-F-PUBLIC-CORRECTION-NOTE"],
     outputFieldIds: [
       "PUB-RESULT-F-RESULT-VERSION",
+      "PUB-RESULT-F-INVALIDATION-VERSION",
+      "PUB-RESULT-F-NOTIFICATION-STATUS",
       "PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS",
     ],
     risk: RISK.HIGH,
     permissions: publicationTeacherPermissions,
-    transition: { from: "INVALIDATED", to: "READY" },
+    transition: { from: "INVALIDATED", to: "PUBLISHED" },
     failureResults: ["PERMISSION_DENIED", "INVALIDATION_UNRESOLVED", "STALE_DECISION_VERSION", "VERSION_CONFLICT"],
   }),
 ];
@@ -1558,7 +1734,7 @@ const publicationModule = moduleFact({
         confirmerRef: "DUTY-SUBJECT-TEACHER",
         stewardRef: "ROLE-ACADEMIC",
       },
-      ["READY", "PUBLISHED", "PUBLISH_FAILED", "CORRECTED", "INVALIDATED"],
+      ["PENDING", "READY", "PUBLISHED", "PUBLISH_FAILED", "INVALIDATED"],
       publishedResultFields,
       { sensitivityId: "S3" },
     ),
@@ -1579,14 +1755,19 @@ const publicationModule = moduleFact({
       "Result Release Workspace",
       ["PUB-OBJ-BATCH", "PUB-OBJ-RESULT"],
       [...publicationBatchFields, ...publishedResultFields].map(({ id }) => id),
-      publicationActions.slice(0, 3).map(({ action: actionValue }) => actionValue.id),
+      [
+        "PUB-ACT-PREVIEW",
+        "PUB-ACT-PREPARE-BATCH",
+        "PUB-ACT-PUBLISH-SELECTED",
+        "PUB-ACT-RETRY-FAILED",
+      ],
     ),
     page(
       "PUB-PAGE-CORRECTION",
       "Published Result Correction Workspace",
       ["PUB-OBJ-RESULT"],
       publishedResultFields.map(({ id }) => id),
-      publicationActions.slice(3).map(({ action: actionValue }) => actionValue.id),
+      ["PUB-ACT-CORRECT-RESULT", "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION"],
     ),
   ],
 });
@@ -1653,6 +1834,12 @@ export const teachingLoopOptionSets = deepFreeze([
     ["SENT", "已发送"],
     ["FAILED", "发送失败"],
     ["NOT-REQUIRED", "无需发送"],
+  ]),
+  optionSet("OPT-TL-011", "gradingRoute", "批改路由", [
+    ["AI-SUGGESTION-REVIEW", "AI建议后教师复核"],
+    ["AUTO-SCORE-CONFIRMATION", "自动建议分后教师确认"],
+    ["MANUAL-GRADING", "人工批改"],
+    ["MANUAL-TRANSCRIPTION-THEN-GRADING", "人工录入后批改"],
   ]),
 ]);
 
@@ -1763,26 +1950,49 @@ export const teachingLoopFlows = deepFreeze([
     id: "DF-006",
     label: "Submission Grading Routing",
     phase: PHASE.FIRST,
-    moduleIds: ["SUB-001", "GRD-001"],
+    moduleIds: ["HW-001", "SUB-001", "GRD-001"],
     steps: [
-      { order: 1, actionId: "SUB-ACT-SUBMIT", condition: "an accepted submission version has a server receipt" },
-      { order: 2, actionId: "GRD-ACT-ENQUEUE" },
-      { order: 3, actionId: "GRD-ACT-PROCESS", condition: "the capability matrix permits recognition or scoring assistance" },
-      { order: 4, actionId: "GRD-ACT-ROUTE", condition: "AI unavailable or an unsupported combination routes to manual grading; otherwise route the suggestion for teacher review" },
+      { order: 1, actionId: "SUB-ACT-HANDOFF-ACCEPTED" },
+      { order: 2, actionId: "HW-ACT-RESOLVE-GRADING-SNAPSHOT" },
+      { order: 3, actionId: "GRD-ACT-ENQUEUE" },
+      { order: 4, actionId: "GRD-ACT-ROUTE-UNSUPPORTED", condition: "the exact combination is excluded from supported capability rules" },
+      { order: 5, actionId: "GRD-ACT-PROCESS", condition: "the exact combination has a supported recognition or scoring capability" },
+      { order: 6, actionId: "GRD-ACT-ROUTE", condition: "supported processing succeeds and requires teacher review or confirmation" },
+      { order: 7, actionId: "GRD-ACT-ROUTE-AI-UNAVAILABLE", condition: "AI processing is unavailable and the decision requires an explicit manual fallback" },
     ],
     sourceDataRefs: [
       {
         objectId: "SUB-OBJ-ATTEMPT",
-        fieldId: "SUB-ATTEMPT-F-RECEIPT-ID",
+        fieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
         version: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
       },
+      {
+        objectId: "HW-OBJ-ITEM",
+        fieldId: "HW-ITEM-F-ITEM-VERSION",
+        version: "HW-ITEM-F-ITEM-VERSION",
+      },
+      {
+        objectId: "HW-OBJ-ITEM",
+        fieldId: "HW-ITEM-F-RUBRIC-VERSION",
+        version: "HW-ITEM-F-ITEM-VERSION",
+      },
+    ],
+    targetDataRefs: [
       {
         objectId: "GRD-OBJ-DECISION",
         fieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
-    ],
-    targetDataRefs: [
+      {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-ITEM-VERSION",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
+      {
+        objectId: "GRD-OBJ-DECISION",
+        fieldId: "GRD-DECISION-F-RUBRIC-VERSION",
+        version: "GRD-DECISION-F-DECISION-VERSION",
+      },
       {
         objectId: "GRD-OBJ-DECISION",
         fieldId: "GRD-DECISION-F-ROUTE",
@@ -1866,8 +2076,12 @@ export const teachingLoopFlows = deepFreeze([
       { order: 2, actionId: "GRD-ACT-OVERRIDE-SCORE", condition: "the corresponding subject teacher confirms an overridden score" },
       { order: 3, actionId: "GRD-ACT-MANUAL-GRADE", condition: "the corresponding subject teacher confirms a subjective or manual score" },
       { order: 4, actionId: "PUB-ACT-PREVIEW" },
-      { order: 5, actionId: "PUB-ACT-PUBLISH-SELECTED", condition: "all selected results are eligible and every subjective score has teacher confirmation" },
-      { order: 6, actionId: "PUB-ACT-RETRY-FAILED", condition: "only object-level failed students are retried" },
+      { order: 5, actionId: "PUB-ACT-PREPARE-BATCH", condition: "object-level eligibility and blocking codes are complete" },
+      { order: 6, actionId: "PUB-ACT-PUBLISH-SELECTED", condition: "the prepared batch is ready and every subjective score has teacher confirmation" },
+      { order: 7, actionId: "PUB-ACT-MATERIALIZE-RESULT", condition: "create one ready result for each eligible selected student" },
+      { order: 8, actionId: "PUB-ACT-PUBLISH-RESULT", condition: "the result is ready and its configured visibility policy permits publication" },
+      { order: 9, actionId: "PUB-ACT-FINALIZE-BATCH", condition: "all student result attempts have an object-level outcome" },
+      { order: 10, actionId: "PUB-ACT-RETRY-FAILED", condition: "only object-level failed student results are retried" },
     ],
     sourceDataRefs: [
       {
@@ -1876,9 +2090,9 @@ export const teachingLoopFlows = deepFreeze([
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
       {
-        objectId: "PUB-OBJ-RESULT",
-        fieldId: "PUB-RESULT-F-ELIGIBILITY",
-        version: "PUB-RESULT-F-RESULT-VERSION",
+        objectId: "PUB-OBJ-BATCH",
+        fieldId: "PUB-BATCH-F-SELECTED-STUDENT-IDS",
+        version: "PUB-BATCH-F-BATCH-VERSION",
       },
     ],
     targetDataRefs: [
@@ -1915,15 +2129,15 @@ export const teachingLoopFlows = deepFreeze([
     phase: PHASE.FIRST,
     moduleIds: ["GRD-001", "PUB-001"],
     steps: [
-      { order: 1, actionId: "GRD-ACT-OVERRIDE-SCORE", condition: "the corresponding subject teacher records the corrected official score and reason" },
-      { order: 2, actionId: "GRD-ACT-RESOLVE-VERSION-CONFLICT", condition: "the published result references a stale submission, item, or Rubric version" },
-      { order: 3, actionId: "PUB-ACT-CORRECT-RESULT" },
-      { order: 4, actionId: "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION", condition: "a derived explanation was invalidated by the correction" },
+      { order: 1, actionId: "GRD-ACT-OPEN-CONFIRMED-REVISION", condition: "the corresponding subject teacher records the correction reason against the prior confirmed version" },
+      { order: 2, actionId: "GRD-ACT-CONFIRM-REVISION", condition: "the corresponding subject teacher confirms the revised score and feedback into a new decision version" },
+      { order: 3, actionId: "PUB-ACT-CORRECT-RESULT", condition: "the correction references the new confirmed decision version" },
+      { order: 4, actionId: "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION", condition: "dependent explanations are regenerated and teacher-reconfirmed" },
     ],
     sourceDataRefs: [
       {
         objectId: "GRD-OBJ-DECISION",
-        fieldId: "GRD-DECISION-F-OFFICIAL-SCORE",
+        fieldId: "GRD-DECISION-F-DECISION-VERSION",
         version: "GRD-DECISION-F-DECISION-VERSION",
       },
       {
@@ -1942,6 +2156,11 @@ export const teachingLoopFlows = deepFreeze([
         objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-CORRECTION-VERSION",
         version: "PUB-RESULT-F-CORRECTION-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-INVALIDATION-VERSION",
+        version: "PUB-RESULT-F-INVALIDATION-VERSION",
       },
     ],
     idempotencyKey: "DF-009:school:term:decision-version:result-version:correction-version:request-id",

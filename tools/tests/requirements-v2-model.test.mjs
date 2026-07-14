@@ -1193,6 +1193,7 @@ test("models assignment fields and task-specific lifecycle actions", () => {
     "HW-ACT-CLOSE",
     "HW-ACT-REVISE",
     "HW-ACT-OPEN-PUBLISHED",
+    "HW-ACT-RESOLVE-GRADING-SNAPSHOT",
   ]);
   assert.ok(assignment.relationships.some(({ fromObjectId, toObjectId, type }) => (
     fromObjectId === "HW-OBJ-ASSIGNMENT"
@@ -1227,6 +1228,7 @@ test("models submission payloads uploads receipts and App-first weak-network sem
     "SUB-ACT-SUBMIT",
     "SUB-ACT-RESUBMIT",
     "SUB-ACT-VIEW-RECEIPT",
+    "SUB-ACT-HANDOFF-ACCEPTED",
   ]);
   assert.equal(submission.clientStrategy.primaryClient, CLIENT.APP);
   assert.equal(submission.clientStrategy.webParityRequired, false);
@@ -1301,7 +1303,14 @@ test("publishes an authoritative all-subject grading capability matrix", () => {
       "PHYSICS",
     ],
   );
-  const subjectiveRows = grading.capabilityMatrix.filter(({ isSubjective }) => isSubjective);
+  const subjectiveQuestionTypes = new Set(
+    optionSets.find(({ key }) => key === "questionType").values
+      .filter(({ isSubjective }) => isSubjective)
+      .map(({ code }) => code),
+  );
+  const subjectiveRows = grading.capabilityMatrix.filter(({ questionType }) => (
+    subjectiveQuestionTypes.has(questionType)
+  ));
   assert.ok(subjectiveRows.length > 0);
   assert.equal(subjectiveRows.every((row) => (
     row.teacherReviewRequired === "YES"
@@ -1353,7 +1362,11 @@ test("covers every declared grading combination with exactly one explicit decisi
   });
 
   const dimensions = applicability.dimensions;
-  const subjectiveQuestionTypes = new Set(applicability.subjectiveQuestionTypes);
+  const subjectiveQuestionTypes = new Set(
+    optionSets.find(({ key }) => key === "questionType").values
+      .filter(({ isSubjective }) => isSubjective)
+      .map(({ code }) => code),
+  );
   let coveredCombinationCount = 0;
   for (const subjectFamily of dimensions.subjectFamilies) {
     for (const questionType of dimensions.questionTypes) {
@@ -1379,6 +1392,45 @@ test("covers every declared grading combination with exactly one explicit decisi
   assert.equal(coveredCombinationCount, 12 * 9 * 5);
 });
 
+test("derives grading dimensions and subjectivity only from central Option Sets", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const applicability = grading.capabilityApplicability;
+  const questionTypes = optionSets.find(({ key }) => key === "questionType");
+  assert.deepEqual(
+    Object.fromEntries(questionTypes.values.map(({ code, isSubjective }) => [code, isSubjective])),
+    {
+      "SINGLE-CHOICE": false,
+      "MULTIPLE-CHOICE": false,
+      "TRUE-FALSE": false,
+      "FILL-BLANK": false,
+      CALCULATION: true,
+      "SHORT-ANSWER": true,
+      ESSAY: true,
+      "ATTACHMENT-ANSWER": true,
+      "LEARNING-TASK": true,
+    },
+  );
+  assert.equal(Object.hasOwn(applicability, "subjectiveQuestionTypes"), false);
+  assert.equal(grading.capabilityMatrix.every((rule) => (
+    !Object.hasOwn(rule, "isSubjective")
+  )), true);
+
+  for (const [dimension, property] of [
+    ["subjectFamilies", "subjectFamily"],
+    ["questionTypes", "questionType"],
+    ["submissionMethods", "submissionMethod"],
+  ]) {
+    const optionSet = optionSets.find(({ id }) => (
+      id === applicability.optionSetBindings[property]
+    ));
+    assert.deepEqual(
+      new Set(applicability.dimensions[dimension]),
+      new Set(optionSet.values.map(({ code }) => code)),
+      dimension,
+    );
+  }
+});
+
 test("rejects grading capability overlap, gaps, implicit fallback, and review bypass", () => {
   const mutations = [
     (grading) => {
@@ -1396,11 +1448,34 @@ test("rejects grading capability overlap, gaps, implicit fallback, and review by
       delete grading.capabilityApplicability.unsupportedRule.decision.unavailableFallback;
     },
     (grading) => {
-      grading.capabilityMatrix.find(({ isSubjective }) => isSubjective)
+      grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
         .teacherReviewRequired = "NO";
     },
     (grading) => {
+      grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
+        .batchConfirmEligibility = "ELIGIBLE";
+    },
+    (grading) => {
       grading.capabilityMatrix[0].recognitionLevel = "UNKNOWN-LEVEL";
+    },
+    (grading) => {
+      grading.capabilityApplicability.dimensions.subjectFamilies = grading
+        .capabilityApplicability.dimensions.subjectFamilies
+        .filter((code) => code !== "ARTS");
+    },
+    (grading) => {
+      grading.capabilityMatrix.pop();
+    },
+    (grading) => {
+      grading.capabilityMatrix.find(({ questionType }) => questionType === "SINGLE-CHOICE")
+        .isSubjective = true;
+    },
+    (grading) => {
+      grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
+        .isSubjective = false;
+    },
+    (grading) => {
+      grading.capabilityApplicability.unsupportedRule.decision.batchConfirmEligibility = "ELIGIBLE";
     },
   ];
 
@@ -1414,17 +1489,33 @@ test("rejects grading capability overlap, gaps, implicit fallback, and review by
   }
 });
 
+test("rejects question type Option Sets without boolean subjectivity metadata", () => {
+  for (const mutate of [
+    (value) => { delete value.isSubjective; },
+    (value) => { value.isSubjective = "sometimes"; },
+  ]) {
+    const model = structuredClone(requirementModel);
+    const questionType = model.optionSets.find(({ key }) => key === "questionType");
+    mutate(questionType.values[0]);
+    assertHasCode(validateRequirementModel(model), "INVALID_ENTITY_SHAPE");
+  }
+});
+
 test("keeps formal grading under corresponding subject-teacher confirmation", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   assert.deepEqual(grading.actions.map(({ id }) => id), [
     "GRD-ACT-ENQUEUE",
     "GRD-ACT-PROCESS",
     "GRD-ACT-ROUTE",
+    "GRD-ACT-ROUTE-UNSUPPORTED",
+    "GRD-ACT-ROUTE-AI-UNAVAILABLE",
     "GRD-ACT-CORRECT-RECOGNITION",
     "GRD-ACT-ACCEPT-SUGGESTION",
     "GRD-ACT-OVERRIDE-SCORE",
     "GRD-ACT-MANUAL-GRADE",
     "GRD-ACT-BATCH-CONFIRM",
+    "GRD-ACT-OPEN-CONFIRMED-REVISION",
+    "GRD-ACT-CONFIRM-REVISION",
     "GRD-ACT-RESOLVE-VERSION-CONFLICT",
   ]);
   const decisionFieldIds = new Set(
@@ -1451,6 +1542,8 @@ test("keeps formal grading under corresponding subject-teacher confirmation", ()
     "GRD-ACT-OVERRIDE-SCORE",
     "GRD-ACT-MANUAL-GRADE",
     "GRD-ACT-BATCH-CONFIRM",
+    "GRD-ACT-OPEN-CONFIRMED-REVISION",
+    "GRD-ACT-CONFIRM-REVISION",
     "GRD-ACT-RESOLVE-VERSION-CONFLICT",
   ]);
   for (const action of grading.actions.filter(({ id }) => formalActionIds.has(id))) {
@@ -1462,6 +1555,121 @@ test("keeps formal grading under corresponding subject-teacher confirmation", ()
     assert.ok(action.permissions.some(({ effect, condition }) => (
       effect === "DENY" && /other subject|其他学科|unconfirmed subjective/i.test(condition)
     )), action.id);
+  }
+});
+
+test("makes supported, unsupported, and AI-unavailable grading routes state-reachable", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const actionById = new Map(grading.actions.map((action) => [action.id, action]));
+  const successState = (actionId) => grading.scenarios.find(({ actionId: id, kind }) => (
+    id === actionId && kind === "SUCCESS"
+  )).then.expectedState.value;
+  const successData = (actionId) => grading.scenarios.find(({ actionId: id, kind }) => (
+    id === actionId && kind === "SUCCESS"
+  )).then.expectedData;
+  const routeOptionSet = optionSets.find(({ key }) => key === "gradingRoute");
+  assert.ok(routeOptionSet, "gradingRoute Option Set must exist independently of fallback choices");
+  assert.deepEqual(routeOptionSet.values.map(({ code }) => code), [
+    "AI-SUGGESTION-REVIEW",
+    "AUTO-SCORE-CONFIRMATION",
+    "MANUAL-GRADING",
+    "MANUAL-TRANSCRIPTION-THEN-GRADING",
+  ]);
+
+  assert.equal(successState("GRD-ACT-ENQUEUE"), "QUEUED");
+  assert.deepEqual(actionById.get("GRD-ACT-PROCESS").transition, {
+    from: "QUEUED",
+    to: "PROCESSING",
+  });
+  assert.deepEqual(actionById.get("GRD-ACT-ROUTE").transition, {
+    from: "PROCESSING",
+    to: "ROUTED_REVIEW",
+  });
+  assert.deepEqual(actionById.get("GRD-ACT-ROUTE-UNSUPPORTED").transition, {
+    from: "QUEUED",
+    to: "ROUTED_MANUAL",
+  });
+  assert.deepEqual(actionById.get("GRD-ACT-ROUTE-AI-UNAVAILABLE").transition, {
+    from: "PROCESSING",
+    to: "ROUTED_MANUAL",
+  });
+  assert.match(successData("GRD-ACT-ROUTE"), /AI-SUGGESTION-REVIEW.*AUTO-SCORE-CONFIRMATION/i);
+  assert.match(successData("GRD-ACT-ROUTE-UNSUPPORTED"), /MANUAL-GRADING.*MANUAL-TRANSCRIPTION/i);
+  assert.match(successData("GRD-ACT-ROUTE-AI-UNAVAILABLE"), /MANUAL.*fallback/i);
+  assert.equal(actionById.get("GRD-ACT-MANUAL-GRADE").transition.from, "ROUTED_MANUAL");
+  assert.equal(actionById.get("GRD-ACT-ACCEPT-SUGGESTION").transition.from, "ROUTED_REVIEW");
+  assert.equal(actionById.get("GRD-ACT-BATCH-CONFIRM").transition.from, "ROUTED_REVIEW");
+
+  const routing = flows.find(({ id }) => id === "DF-006");
+  assert.deepEqual(routing.steps.map(({ actionId }) => actionId), [
+    "SUB-ACT-HANDOFF-ACCEPTED",
+    "HW-ACT-RESOLVE-GRADING-SNAPSHOT",
+    "GRD-ACT-ENQUEUE",
+    "GRD-ACT-ROUTE-UNSUPPORTED",
+    "GRD-ACT-PROCESS",
+    "GRD-ACT-ROUTE",
+    "GRD-ACT-ROUTE-AI-UNAVAILABLE",
+  ]);
+});
+
+test("writes grading lineage through system outputs and recovers conflicts through requeue", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const actionById = new Map(grading.actions.map((action) => [action.id, action]));
+  const lineageFieldIds = [
+    "GRD-DECISION-F-SUBMISSION-VERSION",
+    "GRD-DECISION-F-ITEM-VERSION",
+    "GRD-DECISION-F-RUBRIC-VERSION",
+  ];
+  const enqueue = actionById.get("GRD-ACT-ENQUEUE");
+  assert.equal(lineageFieldIds.every((fieldId) => enqueue.outputFieldIds.includes(fieldId)), true);
+  assert.equal(enqueue.inputFieldIds.some((fieldId) => lineageFieldIds.includes(fieldId)), false);
+
+  for (const action of grading.actions.filter(({ failureResults }) => (
+    failureResults.includes("VERSION_CONFLICT")
+  ))) {
+    const conflictScenario = grading.scenarios.find(({ actionId, resultCode }) => (
+      actionId === action.id && resultCode === "VERSION_CONFLICT"
+    ));
+    assert.deepEqual(conflictScenario.then.expectedState, {
+      mode: "STATE",
+      value: "CONFLICT",
+    }, action.id);
+  }
+
+  const resolve = actionById.get("GRD-ACT-RESOLVE-VERSION-CONFLICT");
+  assert.deepEqual(resolve.transition, { from: "CONFLICT", to: "QUEUED" });
+  assert.equal(lineageFieldIds.every((fieldId) => resolve.outputFieldIds.includes(fieldId)), true);
+  assert.equal(resolve.inputFieldIds.some((fieldId) => lineageFieldIds.includes(fieldId)), false);
+
+  const userActions = grading.actions.filter(({ executionMode }) => executionMode === "USER_TASK");
+  assert.equal(userActions.every(({ inputFieldIds }) => (
+    inputFieldIds.every((fieldId) => !lineageFieldIds.includes(fieldId))
+  )), true);
+
+  const routing = flows.find(({ id }) => id === "DF-006");
+  assert.deepEqual(new Set(routing.moduleIds), new Set(["HW-001", "SUB-001", "GRD-001"]));
+  assert.equal(routing.sourceDataRefs.some(({ objectId, fieldId, version }) => (
+    objectId === "SUB-OBJ-ATTEMPT"
+    && fieldId === "SUB-ATTEMPT-F-SUBMISSION-VERSION"
+    && version === "SUB-ATTEMPT-F-SUBMISSION-VERSION"
+  )), true);
+  assert.equal(routing.sourceDataRefs.some(({ objectId, fieldId, version }) => (
+    objectId === "HW-OBJ-ITEM"
+    && fieldId === "HW-ITEM-F-ITEM-VERSION"
+    && version === "HW-ITEM-F-ITEM-VERSION"
+  )), true);
+  assert.equal(routing.sourceDataRefs.some(({ objectId, fieldId, version }) => (
+    objectId === "HW-OBJ-ITEM"
+    && fieldId === "HW-ITEM-F-RUBRIC-VERSION"
+    && version === "HW-ITEM-F-ITEM-VERSION"
+  )), true);
+  const flowActionOutputIds = new Set(routing.steps.flatMap(({ actionId }) => (
+    actionById.get(actionId)?.outputFieldIds ?? []
+  )));
+  for (const { objectId, fieldId } of routing.targetDataRefs.filter(({ objectId }) => (
+    objectId === "GRD-OBJ-DECISION"
+  ))) {
+    assert.equal(flowActionOutputIds.has(fieldId), true, `${objectId}.${fieldId}`);
   }
 });
 
@@ -1483,7 +1691,11 @@ test("models publication eligibility visibility correction and invalidation", ()
   ].every((fieldId) => fieldIds.has(fieldId)), true);
   assert.deepEqual(publication.actions.map(({ id }) => id), [
     "PUB-ACT-PREVIEW",
+    "PUB-ACT-PREPARE-BATCH",
     "PUB-ACT-PUBLISH-SELECTED",
+    "PUB-ACT-MATERIALIZE-RESULT",
+    "PUB-ACT-PUBLISH-RESULT",
+    "PUB-ACT-FINALIZE-BATCH",
     "PUB-ACT-RETRY-FAILED",
     "PUB-ACT-CORRECT-RESULT",
     "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
@@ -1493,6 +1705,122 @@ test("models publication eligibility visibility correction and invalidation", ()
   assert.ok(publish.failureResults.includes("VISIBILITY_POLICY_BLOCKED"));
   const studentRead = publication.permissions.studentRead;
   assert.match(studentRead, /published.*visible time/i);
+});
+
+test("makes publication batch and student-result state chains reachable", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const actionById = new Map(publication.actions.map((action) => [action.id, action]));
+  const result = publication.objects.find(({ id }) => id === "PUB-OBJ-RESULT");
+  assert.ok(result.states.includes("PENDING"));
+  assert.deepEqual(actionById.get("PUB-ACT-PREPARE-BATCH").transition, {
+    from: "DRAFT",
+    to: "READY",
+  });
+  assert.deepEqual(actionById.get("PUB-ACT-PUBLISH-SELECTED").transition, {
+    from: "READY",
+    to: "PUBLISHING",
+  });
+  assert.deepEqual(actionById.get("PUB-ACT-MATERIALIZE-RESULT").transition, {
+    from: "PENDING",
+    to: "READY",
+  });
+  assert.deepEqual(actionById.get("PUB-ACT-PUBLISH-RESULT").transition, {
+    from: "READY",
+    to: "PUBLISHED",
+  });
+  assert.deepEqual(actionById.get("PUB-ACT-FINALIZE-BATCH").transition, {
+    from: "PUBLISHING",
+    to: "PUBLISHED",
+  });
+  assert.deepEqual(actionById.get("PUB-ACT-RETRY-FAILED").transition, {
+    from: "PUBLISH_FAILED",
+    to: "PUBLISHED",
+  });
+  assert.deepEqual(actionById.get("PUB-ACT-CORRECT-RESULT").transition, {
+    from: "PUBLISHED",
+    to: "INVALIDATED",
+  });
+  assert.deepEqual(actionById.get("PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION").transition, {
+    from: "INVALIDATED",
+    to: "PUBLISHED",
+  });
+  const publishFailure = publication.scenarios.find(({ actionId, resultCode }) => (
+    actionId === "PUB-ACT-PUBLISH-RESULT" && resultCode === "OBJECT_PUBLICATION_FAILED"
+  ));
+  assert.deepEqual(publishFailure.then.expectedState, {
+    mode: "STATE",
+    value: "PUBLISH_FAILED",
+  });
+
+  const release = flows.find(({ id }) => id === "DF-008");
+  assert.deepEqual(release.steps.map(({ actionId }) => actionId), [
+    "GRD-ACT-ACCEPT-SUGGESTION",
+    "GRD-ACT-OVERRIDE-SCORE",
+    "GRD-ACT-MANUAL-GRADE",
+    "PUB-ACT-PREVIEW",
+    "PUB-ACT-PREPARE-BATCH",
+    "PUB-ACT-PUBLISH-SELECTED",
+    "PUB-ACT-MATERIALIZE-RESULT",
+    "PUB-ACT-PUBLISH-RESULT",
+    "PUB-ACT-FINALIZE-BATCH",
+    "PUB-ACT-RETRY-FAILED",
+  ]);
+  assert.equal(release.targetDataRefs.some(({ objectId, fieldId }) => (
+    objectId === "PUB-OBJ-RESULT" && fieldId === "PUB-RESULT-F-RESULT-VERSION"
+  )), true);
+});
+
+test("revises confirmed decisions before correcting immutable published results", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const publication = moduleById(requirementModel, "PUB-001");
+  const gradingActionById = new Map(grading.actions.map((action) => [action.id, action]));
+  const publicationActionById = new Map(publication.actions.map((action) => [action.id, action]));
+  const openRevision = gradingActionById.get("GRD-ACT-OPEN-CONFIRMED-REVISION");
+  const confirmRevision = gradingActionById.get("GRD-ACT-CONFIRM-REVISION");
+  assert.ok(openRevision, "confirmed decision revision must be opened explicitly");
+  assert.ok(confirmRevision, "a revision must be confirmed into a new decision version");
+  assert.deepEqual(openRevision.transition, {
+    from: "TEACHER_CONFIRMED",
+    to: "REVISION_PENDING",
+  });
+  assert.ok(openRevision.inputFieldIds.includes("GRD-DECISION-F-CORRECTION-REASON"));
+  assert.ok(openRevision.outputFieldIds.includes("GRD-DECISION-F-PRIOR-DECISION-VERSION"));
+  assert.deepEqual(confirmRevision.transition, {
+    from: "REVISION_PENDING",
+    to: "TEACHER_CONFIRMED",
+  });
+  assert.ok(confirmRevision.outputFieldIds.includes("GRD-DECISION-F-DECISION-VERSION"));
+  assert.match(
+    grading.scenarios.find(({ actionId, kind }) => (
+      actionId === confirmRevision.id && kind === "SUCCESS"
+    )).then.expectedData,
+    /new decision version.*retain.*prior/i,
+  );
+
+  const correct = publicationActionById.get("PUB-ACT-CORRECT-RESULT");
+  assert.ok(correct.inputFieldIds.includes("PUB-RESULT-F-NEW-DECISION-VERSION"));
+  assert.equal(correct.outputFieldIds.includes("PUB-RESULT-F-DECISION-VERSION"), false);
+  assert.equal([
+    "PUB-RESULT-F-RESULT-VERSION",
+    "PUB-RESULT-F-CORRECTION-VERSION",
+    "PUB-RESULT-F-INVALIDATION-VERSION",
+    "PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS",
+  ].every((fieldId) => correct.outputFieldIds.includes(fieldId)), true);
+
+  const correction = flows.find(({ id }) => id === "DF-009");
+  assert.deepEqual(correction.steps.map(({ actionId }) => actionId), [
+    "GRD-ACT-OPEN-CONFIRMED-REVISION",
+    "GRD-ACT-CONFIRM-REVISION",
+    "PUB-ACT-CORRECT-RESULT",
+    "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
+  ]);
+  assert.equal(correction.steps.some(({ actionId }) => actionId === "GRD-ACT-OVERRIDE-SCORE"), false);
+  assert.equal(correction.sourceDataRefs.some(({ objectId, fieldId }) => (
+    objectId === "GRD-OBJ-DECISION" && fieldId === "GRD-DECISION-F-DECISION-VERSION"
+  )), true);
+  assert.equal(correction.targetDataRefs.some(({ objectId, fieldId }) => (
+    objectId === "PUB-OBJ-RESULT" && fieldId === "PUB-RESULT-F-INVALIDATION-VERSION"
+  )), true);
 });
 
 test("defines DF-004 through DF-009 as a versioned retryable teaching loop with manual fallback", () => {
@@ -1595,15 +1923,22 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["AUD-ACT-APPEND-EVENT", "SYSTEM_EVENT"],
     ["AUD-ACT-OPEN-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-SESSION", "SYSTEM_EVENT"],
+    ["HW-ACT-RESOLVE-GRADING-SNAPSHOT", "FLOW_INTERNAL"],
+    ["SUB-ACT-HANDOFF-ACCEPTED", "FLOW_INTERNAL"],
     ["GRD-ACT-ENQUEUE", "FLOW_INTERNAL"],
     ["GRD-ACT-PROCESS", "FLOW_INTERNAL"],
     ["GRD-ACT-ROUTE", "FLOW_INTERNAL"],
+    ["GRD-ACT-ROUTE-UNSUPPORTED", "FLOW_INTERNAL"],
+    ["GRD-ACT-ROUTE-AI-UNAVAILABLE", "FLOW_INTERNAL"],
+    ["PUB-ACT-MATERIALIZE-RESULT", "FLOW_INTERNAL"],
+    ["PUB-ACT-PUBLISH-RESULT", "FLOW_INTERNAL"],
+    ["PUB-ACT-FINALIZE-BATCH", "FLOW_INTERNAL"],
   ]);
   const actions = modules.flatMap((module) => module.actions);
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 14);
+  assert.equal(expectedModes.size, 21);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -2504,6 +2839,7 @@ test("registers every required Option Set concept with stable code-label values"
     "scoringLevel",
     "gradingEvidenceRequirement",
     "batchConfirmEligibility",
+    "gradingRoute",
     "gradingUnavailableFallback",
     "scoreState",
     "evidenceStage",
@@ -2715,6 +3051,12 @@ test("registers every required Option Set concept with stable code-label values"
       "TEACHER-JUDGMENT",
     ],
     batchConfirmEligibility: ["ELIGIBLE", "INELIGIBLE"],
+    gradingRoute: [
+      "AI-SUGGESTION-REVIEW",
+      "AUTO-SCORE-CONFIRMATION",
+      "MANUAL-GRADING",
+      "MANUAL-TRANSCRIPTION-THEN-GRADING",
+    ],
     gradingUnavailableFallback: ["MANUAL-GRADING", "MANUAL-TRANSCRIPTION-THEN-GRADING"],
     scoreState: ["UNPUBLISHED", "PUBLISHED", "MISSING", "EXEMPT", "INVALID", "CORRECTED"],
     evidenceStage: ["FIRST-ANSWER", "CORRECTION", "RETEST", "FORMATIVE"],

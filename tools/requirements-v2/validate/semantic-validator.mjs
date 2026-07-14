@@ -392,7 +392,6 @@ function gradingCapabilityErrors(index) {
     const subjectFamilies = list(dimensions?.subjectFamilies);
     const questionTypes = list(dimensions?.questionTypes);
     const submissionMethods = list(dimensions?.submissionMethods);
-    const subjectiveQuestionTypes = list(applicability?.subjectiveQuestionTypes);
     const unsupportedRule = applicability?.unsupportedRule;
     const unsupportedDecision = unsupportedRule?.decision;
     const exceptCombinationIds = list(unsupportedRule?.exceptCombinationIds);
@@ -410,9 +409,11 @@ function gradingCapabilityErrors(index) {
       "unavailableFallback",
     ];
     const allowedCodesByProperty = new Map();
+    const optionSetsByProperty = new Map();
     for (const property of optionProperties) {
       const optionSetId = optionSetBindings?.[property];
       const optionSet = index.optionSetById.get(optionSetId)?.value;
+      optionSetsByProperty.set(property, optionSet);
       const codes = new Set(list(optionSet?.values).map(({ code }) => code));
       if (optionSet?.mode !== "STATIC" || codes.size === 0) {
         allowedCodesByProperty.set(property, null);
@@ -426,6 +427,13 @@ function gradingCapabilityErrors(index) {
       const values = Array.isArray(value) ? value : [value];
       return values.length > 0 && values.every((entry) => allowedCodes.has(entry));
     };
+    const questionTypeOptionSet = optionSetsByProperty.get("questionType");
+    const questionTypeValues = list(questionTypeOptionSet?.values);
+    const subjectiveQuestionTypes = new Set(
+      questionTypeValues
+        .filter(({ isSubjective }) => isSubjective === true)
+        .map(({ code }) => code),
+    );
     let valid = Array.isArray(module?.capabilityMatrix)
       && matrix.length > 0
       && applicability !== null
@@ -455,11 +463,17 @@ function gradingCapabilityErrors(index) {
         valid = false;
       }
     }
-    if (
-      subjectiveQuestionTypes.length === 0
-      || subjectiveQuestionTypes.some((value) => !questionTypes.includes(value))
-      || new Set(subjectiveQuestionTypes).size !== subjectiveQuestionTypes.length
-    ) {
+    const dimensionOptionProperties = [
+      [subjectFamilies, "subjectFamily"],
+      [questionTypes, "questionType"],
+      [submissionMethods, "submissionMethod"],
+    ];
+    if (dimensionOptionProperties.some(([values, property]) => (
+      !setEquals(new Set(values), allowedCodesByProperty.get(property) ?? new Set())
+    ))) {
+      valid = false;
+    }
+    if (questionTypeValues.some(({ isSubjective }) => typeof isSubjective !== "boolean")) {
       valid = false;
     }
 
@@ -483,11 +497,14 @@ function gradingCapabilityErrors(index) {
         && isValidId(rule?.teacherReviewRequired)
         && isValidId(rule?.batchConfirmEligibility)
         && isValidId(rule?.unavailableFallback)
-        && typeof rule?.isSubjective === "boolean"
+        && !Object.hasOwn(rule ?? {}, "isSubjective")
         && optionProperties.every((property) => codeIsAllowed(property, rule?.[property]))
         && (
-          !subjectiveQuestionTypes.includes(questionType)
-          || rule.teacherReviewRequired === "YES"
+          !subjectiveQuestionTypes.has(questionType)
+          || (
+            rule.teacherReviewRequired === "YES"
+            && rule.batchConfirmEligibility === "INELIGIBLE"
+          )
         );
       if (!ruleIsComplete) valid = false;
       if (
@@ -519,7 +536,7 @@ function gradingCapabilityErrors(index) {
       || list(unsupportedDecision?.requiredEvidence).length === 0
       || !list(unsupportedDecision?.requiredEvidence).every(isValidId)
       || unsupportedDecision?.teacherReviewRequired !== "YES"
-      || !isValidId(unsupportedDecision?.batchConfirmEligibility)
+      || unsupportedDecision?.batchConfirmEligibility !== "INELIGIBLE"
       || !isValidId(unsupportedDecision?.unavailableFallback)
       || ![
         "recognitionLevel",
