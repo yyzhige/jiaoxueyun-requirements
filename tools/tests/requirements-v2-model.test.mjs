@@ -1711,7 +1711,7 @@ test("makes publication batch and student-result state chains reachable", () => 
   const publication = moduleById(requirementModel, "PUB-001");
   const actionById = new Map(publication.actions.map((action) => [action.id, action]));
   const result = publication.objects.find(({ id }) => id === "PUB-OBJ-RESULT");
-  assert.ok(result.states.includes("PENDING"));
+  assert.equal(result.states.includes("PENDING"), false);
   assert.deepEqual(actionById.get("PUB-ACT-PREPARE-BATCH").transition, {
     from: "DRAFT",
     to: "READY",
@@ -1720,10 +1720,24 @@ test("makes publication batch and student-result state chains reachable", () => 
     from: "READY",
     to: "PUBLISHING",
   });
-  assert.deepEqual(actionById.get("PUB-ACT-MATERIALIZE-RESULT").transition, {
-    from: "PENDING",
-    to: "READY",
+  const materialize = actionById.get("PUB-ACT-MATERIALIZE-RESULT");
+  assert.equal(Object.hasOwn(materialize, "transition"), false);
+  assert.deepEqual(publication.scenarios.find(({ actionId, kind }) => (
+    actionId === materialize.id && kind === "SUCCESS"
+  )).then.expectedState, {
+    mode: "STATE",
+    value: "READY",
   });
+  assert.equal([
+    "PUB-RESULT-F-STUDENT-REF",
+    "PUB-RESULT-F-DECISION-VERSION",
+    "PUB-RESULT-F-ELIGIBILITY",
+    "PUB-RESULT-F-BLOCKING-CODES",
+    "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+    "PUB-RESULT-F-NOTIFICATION-STATUS",
+    "PUB-RESULT-F-RESULT-VERSION",
+  ].every((fieldId) => materialize.outputFieldIds.includes(fieldId)), true);
   assert.deepEqual(actionById.get("PUB-ACT-PUBLISH-RESULT").transition, {
     from: "READY",
     to: "PUBLISHED",
@@ -1768,6 +1782,130 @@ test("makes publication batch and student-result state chains reachable", () => 
   assert.equal(release.targetDataRefs.some(({ objectId, fieldId }) => (
     objectId === "PUB-OBJ-RESULT" && fieldId === "PUB-RESULT-F-RESULT-VERSION"
   )), true);
+  assert.equal(release.targetDataRefs.some(({ objectId, fieldId }) => (
+    objectId === "PUB-OBJ-RESULT" && fieldId === "PUB-RESULT-F-STUDENT-REF"
+  )), true);
+});
+
+test("models publication preview from authoritative visibility and notification configuration", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const objectById = new Map(publication.objects.map((object) => [object.id, object]));
+  const actionById = new Map(publication.actions.map((action) => [action.id, action]));
+  const batch = objectById.get("PUB-OBJ-BATCH");
+  const preview = objectById.get("PUB-OBJ-PREVIEW");
+  const result = objectById.get("PUB-OBJ-RESULT");
+  assert.ok(preview, "publication previews must be explicit transient objects");
+  assert.equal(preview.lifecyclePolicyId, "LIFE-005");
+
+  const fieldById = (object) => new Map(object.fields.map((field) => [field.id, field]));
+  const batchFieldById = fieldById(batch);
+  const previewFieldById = fieldById(preview);
+  const resultFieldById = fieldById(result);
+  const batchConfigurationFieldIds = [
+    "PUB-BATCH-F-VISIBILITY-POLICY",
+    "PUB-BATCH-F-ANSWER-VISIBLE-AT",
+    "PUB-BATCH-F-FEEDBACK-VISIBLE-AT",
+    "PUB-BATCH-F-NOTIFICATION-POLICY",
+  ];
+  assert.equal(batchConfigurationFieldIds.every((fieldId) => batchFieldById.has(fieldId)), true);
+  const notificationPolicyOptionSet = optionSets.find(({ id }) => (
+    id === batchFieldById.get("PUB-BATCH-F-NOTIFICATION-POLICY").valueSource.optionSetId
+  ));
+  assert.equal(notificationPolicyOptionSet.key, "publicationNotificationPolicy");
+  assert.deepEqual(notificationPolicyOptionSet.values.map(({ code }) => code), [
+    "NONE",
+    "ON-PUBLISH",
+  ]);
+
+  assert.deepEqual(previewFieldById.get("PUB-PREVIEW-F-BATCH-REF").valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "PUB-OBJ-BATCH",
+  });
+  const studentRef = previewFieldById.get("PUB-PREVIEW-F-STUDENT-REF");
+  assert.ok(studentRef, "publication preview must identify one selected student");
+  assert.deepEqual(studentRef.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "ORG-OBJ-STUDENT",
+  });
+  assert.deepEqual(previewFieldById.get("PUB-PREVIEW-F-DECISION-REF").valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "GRD-OBJ-DECISION",
+  });
+  const previewOutputFieldIds = [
+    "PUB-PREVIEW-F-ELIGIBILITY",
+    "PUB-PREVIEW-F-BLOCKING-CODES",
+    "PUB-PREVIEW-F-ANSWER-VISIBLE-AT",
+    "PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT",
+    "PUB-PREVIEW-F-NOTIFICATION-PREVIEW",
+  ];
+  assert.equal(previewOutputFieldIds.every((fieldId) => previewFieldById.has(fieldId)), true);
+  const resultStudentRef = resultFieldById.get("PUB-RESULT-F-STUDENT-REF");
+  assert.ok(resultStudentRef, "materialized results must retain the selected student reference");
+  assert.deepEqual(resultStudentRef.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "ORG-OBJ-STUDENT",
+  });
+
+  const previewAction = actionById.get("PUB-ACT-PREVIEW");
+  assert.equal(previewAction.targetObjectId, preview.id);
+  assert.deepEqual(previewAction.inputFieldIds, [
+    "PUB-PREVIEW-F-BATCH-REF",
+    "PUB-PREVIEW-F-STUDENT-REF",
+    "PUB-PREVIEW-F-DECISION-REF",
+  ]);
+  assert.deepEqual(previewAction.outputFieldIds, previewOutputFieldIds);
+  assert.ok(previewAction.failureResults.includes("NOT_FOUND"));
+  assert.ok(previewAction.failureResults.includes("VISIBILITY_POLICY_BLOCKED"));
+  const blockedScenario = publication.scenarios.find(({ actionId, resultCode }) => (
+    actionId === previewAction.id && resultCode === "VISIBILITY_POLICY_BLOCKED"
+  ));
+  assert.equal(blockedScenario.kind, "BOUNDARY");
+  assert.match(blockedScenario.then.expectedData, /visibility.*block/i);
+
+  const releasePage = publication.pages.find(({ id }) => id === "PUB-PAGE-RELEASE");
+  assert.ok(releasePage.objectIds.includes(preview.id));
+  assert.equal(preview.fields.every(({ id }) => releasePage.fieldIds.includes(id)), true);
+  assert.ok(publication.relationships.some(({ fromObjectId, toObjectId, type }) => (
+    fromObjectId === preview.id
+    && toObjectId === batch.id
+    && type === "DERIVED_FROM"
+  )));
+
+  for (const fieldId of [
+    "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+  ]) {
+    assert.equal(resultFieldById.get(fieldId).valueSource.kind, "SYSTEM", fieldId);
+    assert.equal(resultFieldById.get(fieldId).mutability, "SYSTEM_MANAGED", fieldId);
+    assert.ok(actionById.get("PUB-ACT-MATERIALIZE-RESULT").outputFieldIds.includes(fieldId));
+  }
+  assert.deepEqual(resultFieldById.get("PUB-RESULT-F-NOTIFICATION-STATUS").valueSource, {
+    kind: "OPTION_SET",
+    optionSetId: "OPT-TL-010",
+  });
+  assert.equal(
+    resultFieldById.get("PUB-RESULT-F-NOTIFICATION-STATUS").mutability,
+    "SYSTEM_MANAGED",
+  );
+  assert.ok(actionById.get("PUB-ACT-MATERIALIZE-RESULT").outputFieldIds.includes(
+    "PUB-RESULT-F-NOTIFICATION-STATUS",
+  ));
+
+  const release = flows.find(({ id }) => id === "DF-008");
+  for (const fieldId of batchConfigurationFieldIds) {
+    assert.ok(release.sourceDataRefs.some(({ objectId, fieldId: sourceFieldId }) => (
+      objectId === batch.id && sourceFieldId === fieldId
+    )), fieldId);
+  }
+  for (const fieldId of [
+    "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+    "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+    "PUB-RESULT-F-NOTIFICATION-STATUS",
+  ]) {
+    assert.ok(release.targetDataRefs.some(({ objectId, fieldId: targetFieldId }) => (
+      objectId === result.id && targetFieldId === fieldId
+    )), fieldId);
+  }
 });
 
 test("revises confirmed decisions before correcting immutable published results", () => {
@@ -2861,6 +2999,7 @@ test("registers every required Option Set concept with stable code-label values"
     "notificationType",
     "notificationReadState",
     "publicationEligibility",
+    "publicationNotificationPolicy",
     "publicationNotificationStatus",
     "importObject",
     "importAction",
@@ -3091,6 +3230,7 @@ test("registers every required Option Set concept with stable code-label values"
     notificationType: ["ASSIGNMENT", "SUBMISSION", "GRADING", "PUBLISH", "CORRECTION", "IMPROVEMENT", "REPORT", "PERMISSION", "SYSTEM"],
     notificationReadState: ["UNREAD", "READ", "HANDLED", "ARCHIVED"],
     publicationEligibility: ["ELIGIBLE", "BLOCKED"],
+    publicationNotificationPolicy: ["NONE", "ON-PUBLISH"],
     publicationNotificationStatus: ["PENDING", "SENT", "FAILED", "NOT-REQUIRED"],
     importObject: ["TERM", "CLASS", "TEACHER", "STUDENT", "TEACHING-ASSIGNMENT", "HOMEROOM-ASSIGNMENT", "COURSE", "KNOWLEDGE-POINT"],
     importAction: ["CREATE", "UPDATE", "UNCHANGED", "REJECT", "DEACTIVATE"],

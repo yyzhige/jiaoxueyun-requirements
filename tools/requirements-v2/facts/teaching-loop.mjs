@@ -1436,6 +1436,18 @@ const publicationBatchFields = [
     dataType: "STRING_ARRAY",
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-010" },
   }),
+  field("PUB-BATCH-F-VISIBILITY-POLICY", "Result Visibility Policy", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-040" },
+  }),
+  field("PUB-BATCH-F-ANSWER-VISIBLE-AT", "Configured Answer Visible Time", {
+    dataType: "DATETIME",
+  }),
+  field("PUB-BATCH-F-FEEDBACK-VISIBLE-AT", "Configured Feedback Visible Time", {
+    dataType: "DATETIME",
+  }),
+  field("PUB-BATCH-F-NOTIFICATION-POLICY", "Result Notification Policy", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-012" },
+  }),
   field("PUB-BATCH-F-BATCH-VERSION", "Publication Batch Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -1453,7 +1465,54 @@ const publicationBatchFields = [
   }),
 ];
 
+const publicationPreviewFields = [
+  field("PUB-PREVIEW-F-BATCH-REF", "Publication Batch Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-BATCH" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PUB-PREVIEW-F-STUDENT-REF", "Selected Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PUB-PREVIEW-F-DECISION-REF", "Confirmed Decision Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
+    mutability: "IMMUTABLE",
+  }),
+  field("PUB-PREVIEW-F-ELIGIBILITY", "Preview Publication Eligibility", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-009" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-PREVIEW-F-BLOCKING-CODES", "Preview Publication Blocking Codes", {
+    dataType: "STRING_ARRAY",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-PREVIEW-F-ANSWER-VISIBLE-AT", "Resolved Answer Visible Time", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT", "Resolved Feedback Visible Time", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-PREVIEW-F-NOTIFICATION-PREVIEW", "Resolved Notification Preview", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+];
+
 const publishedResultFields = [
+  field("PUB-RESULT-F-STUDENT-REF", "Selected Student Reference", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-STUDENT" },
+    mutability: "IMMUTABLE",
+  }),
   field("PUB-RESULT-F-DECISION-VERSION", "Confirmed Decision Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -1474,8 +1533,16 @@ const publishedResultFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
-  field("PUB-RESULT-F-ANSWER-VISIBLE-AT", "Answer Visible Time", { dataType: "DATETIME" }),
-  field("PUB-RESULT-F-FEEDBACK-VISIBLE-AT", "Feedback Visible Time", { dataType: "DATETIME" }),
+  field("PUB-RESULT-F-ANSWER-VISIBLE-AT", "Answer Visible Time", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("PUB-RESULT-F-FEEDBACK-VISIBLE-AT", "Feedback Visible Time", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
   field("PUB-RESULT-F-RESULT-VERSION", "Result Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -1528,17 +1595,43 @@ const publicationActions = [
   action({
     id: "PUB-ACT-PREVIEW",
     label: "Preview Result Publication",
-    targetObjectId: "PUB-OBJ-BATCH",
-    outputFieldIds: publicationBatchFields.map(({ id }) => id),
+    targetObjectId: "PUB-OBJ-PREVIEW",
+    inputFieldIds: [
+      "PUB-PREVIEW-F-BATCH-REF",
+      "PUB-PREVIEW-F-STUDENT-REF",
+      "PUB-PREVIEW-F-DECISION-REF",
+    ],
+    outputFieldIds: [
+      "PUB-PREVIEW-F-ELIGIBILITY",
+      "PUB-PREVIEW-F-BLOCKING-CODES",
+      "PUB-PREVIEW-F-ANSWER-VISIBLE-AT",
+      "PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT",
+      "PUB-PREVIEW-F-NOTIFICATION-PREVIEW",
+    ],
     writes: false,
     permissions: publicationTeacherPermissions,
+    successState: "GENERATED",
+    failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "VISIBILITY_POLICY_BLOCKED"],
+    failureOutcomes: {
+      VISIBILITY_POLICY_BLOCKED: {
+        kind: "BOUNDARY",
+        expectedPermission: "ALLOW",
+        expectedData: "returns the resolved visibility conflict and blocking codes without creating a publishable result",
+      },
+    },
     successData: "returns student-level eligibility, blocking codes, visibility times, and notification preview without publication",
   }),
   action({
     id: "PUB-ACT-PREPARE-BATCH",
     label: "Prepare Result Publication Batch",
     targetObjectId: "PUB-OBJ-BATCH",
-    inputFieldIds: ["PUB-BATCH-F-SELECTED-STUDENT-IDS"],
+    inputFieldIds: [
+      "PUB-BATCH-F-SELECTED-STUDENT-IDS",
+      "PUB-BATCH-F-VISIBILITY-POLICY",
+      "PUB-BATCH-F-ANSWER-VISIBLE-AT",
+      "PUB-BATCH-F-FEEDBACK-VISIBLE-AT",
+      "PUB-BATCH-F-NOTIFICATION-POLICY",
+    ],
     outputFieldIds: [
       "PUB-BATCH-F-BATCH-VERSION",
       "PUB-BATCH-F-OBJECT-RESULTS",
@@ -1576,23 +1669,34 @@ const publicationActions = [
     label: "Materialize Student Result Version",
     targetObjectId: "PUB-OBJ-RESULT",
     outputFieldIds: [
+      "PUB-RESULT-F-STUDENT-REF",
       "PUB-RESULT-F-DECISION-VERSION",
       "PUB-RESULT-F-ELIGIBILITY",
       "PUB-RESULT-F-BLOCKING-CODES",
+      "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+      "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+      "PUB-RESULT-F-NOTIFICATION-STATUS",
       "PUB-RESULT-F-RESULT-VERSION",
     ],
     risk: RISK.HIGH,
     executionMode: FLOW_INTERNAL,
     trigger: { kind: "FLOW", flowIds: ["DF-008"] },
     permissions: systemFlowPermissions,
-    transition: { from: "PENDING", to: "READY" },
+    successState: "READY",
     failureResults: ["PERMISSION_DENIED", "UNCONFIRMED_SUBJECTIVE_SCORE", "VISIBILITY_POLICY_BLOCKED", "VERSION_CONFLICT"],
-    successData: "creates a ready per-student result from the immutable confirmed decision version",
+    successData: "creates the first ready per-student result from the immutable confirmed decision and resolved batch publication configuration",
   }),
   action({
     id: "PUB-ACT-PUBLISH-RESULT",
     label: "Publish Student Result Version",
     targetObjectId: "PUB-OBJ-RESULT",
+    inputFieldIds: [
+      "PUB-RESULT-F-ELIGIBILITY",
+      "PUB-RESULT-F-BLOCKING-CODES",
+      "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+      "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+      "PUB-RESULT-F-NOTIFICATION-STATUS",
+    ],
     outputFieldIds: [
       "PUB-RESULT-F-RESULT-VERSION",
       "PUB-RESULT-F-NOTIFICATION-STATUS",
@@ -1724,6 +1828,21 @@ const publicationModule = moduleFact({
       { sensitivityId: "S3" },
     ),
     object(
+      "PUB-OBJ-PREVIEW",
+      "Transient Student Publication Preview",
+      {
+        dataSubject: "STUDENT_RESULT_PUBLICATION_PREVIEW",
+        controlSubject: "SCHOOL",
+        producerRef: "SYSTEM",
+        ownerRef: "DUTY-SUBJECT-TEACHER",
+        confirmerRef: "DUTY-SUBJECT-TEACHER",
+        stewardRef: "ROLE-ACADEMIC",
+      },
+      ["GENERATED"],
+      publicationPreviewFields,
+      { lifecyclePolicyId: "LIFE-005", sensitivityId: "S3" },
+    ),
+    object(
       "PUB-OBJ-RESULT",
       "Published Student Result Version",
       {
@@ -1734,27 +1853,39 @@ const publicationModule = moduleFact({
         confirmerRef: "DUTY-SUBJECT-TEACHER",
         stewardRef: "ROLE-ACADEMIC",
       },
-      ["PENDING", "READY", "PUBLISHED", "PUBLISH_FAILED", "INVALIDATED"],
+      ["READY", "PUBLISHED", "PUBLISH_FAILED", "INVALIDATED"],
       publishedResultFields,
       { sensitivityId: "S3" },
     ),
   ],
-  relationships: [{
-    id: "PUB-REL-BATCH-RESULT",
-    fromObjectId: "PUB-OBJ-BATCH",
-    toObjectId: "PUB-OBJ-RESULT",
-    type: "CONTAINS",
-    cardinality: "ONE_TO_MANY",
-    ownershipScope: "SAME_SUBJECT",
-    onSourceInvalidation: "retain published student results and invalidate only failed or stale unpublished derivations",
-  }],
+  relationships: [
+    {
+      id: "PUB-REL-BATCH-RESULT",
+      fromObjectId: "PUB-OBJ-BATCH",
+      toObjectId: "PUB-OBJ-RESULT",
+      type: "CONTAINS",
+      cardinality: "ONE_TO_MANY",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "retain published student results and invalidate only failed or stale unpublished derivations",
+    },
+    {
+      id: "PUB-REL-PREVIEW-BATCH",
+      fromObjectId: "PUB-OBJ-PREVIEW",
+      toObjectId: "PUB-OBJ-BATCH",
+      type: "DERIVED_FROM",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "expire the transient preview when its referenced batch configuration or selected scope changes",
+    },
+  ],
   actions: publicationActions,
   pages: [
     page(
       "PUB-PAGE-RELEASE",
       "Result Release Workspace",
-      ["PUB-OBJ-BATCH", "PUB-OBJ-RESULT"],
-      [...publicationBatchFields, ...publishedResultFields].map(({ id }) => id),
+      ["PUB-OBJ-BATCH", "PUB-OBJ-PREVIEW", "PUB-OBJ-RESULT"],
+      [...publicationBatchFields, ...publicationPreviewFields, ...publishedResultFields]
+        .map(({ id }) => id),
       [
         "PUB-ACT-PREVIEW",
         "PUB-ACT-PREPARE-BATCH",
@@ -1840,6 +1971,10 @@ export const teachingLoopOptionSets = deepFreeze([
     ["AUTO-SCORE-CONFIRMATION", "自动建议分后教师确认"],
     ["MANUAL-GRADING", "人工批改"],
     ["MANUAL-TRANSCRIPTION-THEN-GRADING", "人工录入后批改"],
+  ]),
+  optionSet("OPT-TL-012", "publicationNotificationPolicy", "成绩发布通知策略", [
+    ["NONE", "不通知"],
+    ["ON-PUBLISH", "发布时通知"],
   ]),
 ]);
 
@@ -2094,6 +2229,26 @@ export const teachingLoopFlows = deepFreeze([
         fieldId: "PUB-BATCH-F-SELECTED-STUDENT-IDS",
         version: "PUB-BATCH-F-BATCH-VERSION",
       },
+      {
+        objectId: "PUB-OBJ-BATCH",
+        fieldId: "PUB-BATCH-F-VISIBILITY-POLICY",
+        version: "PUB-BATCH-F-BATCH-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-BATCH",
+        fieldId: "PUB-BATCH-F-ANSWER-VISIBLE-AT",
+        version: "PUB-BATCH-F-BATCH-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-BATCH",
+        fieldId: "PUB-BATCH-F-FEEDBACK-VISIBLE-AT",
+        version: "PUB-BATCH-F-BATCH-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-BATCH",
+        fieldId: "PUB-BATCH-F-NOTIFICATION-POLICY",
+        version: "PUB-BATCH-F-BATCH-VERSION",
+      },
     ],
     targetDataRefs: [
       {
@@ -2104,6 +2259,26 @@ export const teachingLoopFlows = deepFreeze([
       {
         objectId: "PUB-OBJ-RESULT",
         fieldId: "PUB-RESULT-F-RESULT-VERSION",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-STUDENT-REF",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-ANSWER-VISIBLE-AT",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-FEEDBACK-VISIBLE-AT",
+        version: "PUB-RESULT-F-RESULT-VERSION",
+      },
+      {
+        objectId: "PUB-OBJ-RESULT",
+        fieldId: "PUB-RESULT-F-NOTIFICATION-STATUS",
         version: "PUB-RESULT-F-RESULT-VERSION",
       },
     ],
