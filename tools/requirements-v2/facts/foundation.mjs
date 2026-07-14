@@ -1162,6 +1162,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-001",
     label: "School Context Establishment",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["ACC-001", "ORG-001", "IAM-001"],
     steps: [
       {
@@ -1264,6 +1265,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-002",
     label: "Organization Import and Permission Refresh",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["ORG-001", "IAM-001", "AUD-001"],
     steps: [
       {
@@ -1348,6 +1350,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-003",
     label: "Curriculum Version Publication",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["CURR-001"],
     steps: [
       { order: 1, actionId: "CURR-ACT-VALIDATE-MAPPING" },

@@ -427,6 +427,66 @@ function actionErrors(index) {
   return errors;
 }
 
+function actionApplicabilityErrors(index) {
+  const errors = [];
+  for (const fieldEntry of index.fields.filter(({ value }) => (
+    value?.referenceIntegrity === "VERSION_PINNED"
+  ))) {
+    const refField = fieldEntry.value;
+    const versionFieldId = refField?.versionBinding?.versionFieldId;
+    const requiredActionIds = list(refField?.actionApplicability?.requiredActionIds);
+    const requiredActionIdSet = new Set(requiredActionIds);
+    const requiredPolicyMatches = requiredActionIds.length > 0
+      ? refField?.stateGuardPolicy === "CREATE_REQUIRED"
+      : refField?.stateGuardPolicy === "NONE";
+    let valid = requiredPolicyMatches;
+
+    const matchingActionIds = new Set();
+    for (const actionEntry of index.actions) {
+      const action = actionEntry.value;
+      const matchingGuards = list(action?.relatedStateGuards).filter((guard) => (
+        guard?.refFieldId === refField?.id
+        && guard?.versionFieldId === versionFieldId
+        && guard?.targetObjectId === refField?.valueSource?.targetObjectId
+      ));
+      if (matchingGuards.length > 0) matchingActionIds.add(action?.id);
+    }
+
+    for (const actionId of requiredActionIds) {
+      const actionEntry = index.actionById.get(actionId);
+      const action = actionEntry?.value;
+      const coveredFieldIds = new Set([
+        ...list(action?.inputFieldIds),
+        ...list(action?.outputFieldIds),
+      ]);
+      const matchingGuards = list(action?.relatedStateGuards).filter((guard) => (
+        guard?.refFieldId === refField?.id
+        && guard?.versionFieldId === versionFieldId
+        && guard?.targetObjectId === refField?.valueSource?.targetObjectId
+      ));
+      if (
+        !actionEntry
+        || actionEntry.moduleId !== fieldEntry.moduleId
+        || action?.targetObjectId !== fieldEntry.objectId
+        || !policyRequiresGuard(refField?.stateGuardPolicy, action?.operationKind)
+        || !coveredFieldIds.has(refField?.id)
+        || !coveredFieldIds.has(versionFieldId)
+        || matchingGuards.length !== 1
+      ) {
+        valid = false;
+      }
+    }
+
+    if (!setEquals(requiredActionIdSet, matchingActionIds)) valid = false;
+    if (!valid) {
+      errors.push(
+        `INVALID_ACTION_STATE_GUARD ${formatValidationValue(refField?.id)} action applicability must exactly match same-module covered actions and derived guards for policy=${formatValidationValue(refField?.stateGuardPolicy)}`,
+      );
+    }
+  }
+  return errors;
+}
+
 function flowErrors(index) {
   const errors = [];
   for (const flowEntry of index.flows) {
@@ -532,9 +592,32 @@ function flowErrors(index) {
       }
     }
     const declaredExecutionPaths = list(flow?.executionPaths);
+    const requiredRouteKind = new Map([
+      ["ACTION_CHOICE_REQUIRED", "ACTION_CHOICE"],
+      ["OPTION_VALUE_REQUIRED", "OPTION_VALUE"],
+    ]).get(flow?.routingPolicy);
+    if (flow?.routingPolicy === "NONE" && Object.hasOwn(flow, "executionPaths")) {
+      errors.push(
+        `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} NONE routing policy forbids execution paths`,
+      );
+    }
+    if (requiredRouteKind && declaredExecutionPaths.length === 0) {
+      errors.push(
+        `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} ${formatValidationValue(flow?.routingPolicy)} requires execution paths`,
+      );
+    }
+    if (requiredRouteKind && declaredExecutionPaths.some((executionPath) => (
+      executionPath?.route?.kind !== requiredRouteKind
+    ))) {
+      errors.push(
+        `INVALID_FLOW_BRANCH ${formatValidationValue(flow?.id)} ${formatValidationValue(flow?.routingPolicy)} requires ${formatValidationValue(requiredRouteKind)} routes`,
+      );
+    }
     const executionPaths = declaredExecutionPaths.length > 0
       ? declaredExecutionPaths
-      : [{
+      : requiredRouteKind
+        ? []
+        : [{
         id: "DEFAULT",
         stepOrders: steps.map((step) => step?.order),
         providedInputs: [],
@@ -1202,6 +1285,7 @@ export function validateModelSemantics(model) {
   return [
     ...flowErrors(index),
     ...actionErrors(index),
+    ...actionApplicabilityErrors(index),
     ...ownerErrors(index),
     ...aiTaskErrors(index),
     ...phaseAndTemplateErrors(index),

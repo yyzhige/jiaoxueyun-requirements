@@ -27,6 +27,11 @@ const AUDIT_MODES = new Set(["REQUIRED", "NOT_REQUIRED", "ATOMIC_SELF_RECORD"]);
 const OBJECT_SEMANTIC_TYPES = new Set(["AUDIT_EVENT_SINK"]);
 const SYSTEM_ACTOR_CATEGORIES = new Set(["SYSTEM", "AI", "CURRENT_ACTOR"]);
 const SOURCE_DATA_CARDINALITIES = new Set(["ONE", "ZERO_MANY"]);
+const FLOW_ROUTING_POLICIES = new Set([
+  "NONE",
+  "ACTION_CHOICE_REQUIRED",
+  "OPTION_VALUE_REQUIRED",
+]);
 const PERMISSION_ALLOWED_KEYS = new Set([
   "effect",
   "condition",
@@ -363,9 +368,36 @@ function validateReferenceIntegrity(errors, field, path) {
           `INVALID_FIELD_CONTRACT ${path}.stateGuardPolicy must explicitly be NONE, CREATE_REQUIRED, UPDATE_REQUIRED, or ALWAYS_REQUIRED`,
         );
       }
+      const actionApplicability = field.actionApplicability;
+      const expectedApplicabilityKeys = new Set(["requiredActionIds"]);
+      if (
+        !isRecord(actionApplicability)
+        || Object.keys(actionApplicability).length !== expectedApplicabilityKeys.size
+        || Object.keys(actionApplicability).some((key) => !expectedApplicabilityKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_FIELD_CONTRACT ${path}.actionApplicability must use the closed requiredActionIds shape`,
+        );
+      } else {
+        contractStringArray(
+          errors,
+          actionApplicability,
+          "requiredActionIds",
+          `${path}.actionApplicability`,
+          "INVALID_FIELD_CONTRACT",
+        );
+      }
     } else if (Object.hasOwn(field, "stateGuardPolicy")) {
       errors.push(
         `INVALID_FIELD_CONTRACT ${path}.stateGuardPolicy is allowed only for VERSION_PINNED references`,
+      );
+    }
+    if (
+      field.referenceIntegrity !== "VERSION_PINNED"
+      && Object.hasOwn(field, "actionApplicability")
+    ) {
+      errors.push(
+        `INVALID_FIELD_CONTRACT ${path}.actionApplicability is allowed only for VERSION_PINNED references`,
       );
     }
   } else if (
@@ -374,6 +406,14 @@ function validateReferenceIntegrity(errors, field, path) {
     || Object.hasOwn(field, "stateGuardPolicy")
   ) {
     errors.push(`INVALID_LINEAGE_BINDING ${path} reference integrity requires OBJECT_REF`);
+  }
+  if (
+    field.valueSource?.kind !== "OBJECT_REF"
+    && Object.hasOwn(field, "actionApplicability")
+  ) {
+    errors.push(
+      `INVALID_FIELD_CONTRACT ${path}.actionApplicability is allowed only for VERSION_PINNED references`,
+    );
   }
   if (Object.hasOwn(field, "versionBinding")) {
     const versionBinding = field.versionBinding;
@@ -1219,6 +1259,11 @@ function validateFlow(errors, flow, path) {
   contractString(errors, flow, "label", path, "INVALID_FLOW_CONTRACT");
   if (![1, 2].includes(flow.phase)) {
     errors.push(`INVALID_FLOW_CONTRACT ${path}.phase must be 1 or 2`);
+  }
+  if (!FLOW_ROUTING_POLICIES.has(flow.routingPolicy)) {
+    errors.push(
+      `INVALID_FLOW_CONTRACT ${path}.routingPolicy must explicitly be NONE, ACTION_CHOICE_REQUIRED, or OPTION_VALUE_REQUIRED`,
+    );
   }
   contractStringArray(
     errors,

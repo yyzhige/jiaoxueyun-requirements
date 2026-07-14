@@ -311,6 +311,7 @@ function validFixture() {
       id: "DF-TEST",
       label: "Fixture submission flow",
       phase: PHASE.FIRST,
+      routingPolicy: "NONE",
       moduleIds: ["SUB-001"],
       steps: [{
         order: 1,
@@ -372,6 +373,7 @@ function addLineageBindingFixture(model) {
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "SUB-F002",
       targetVersionFieldId: "HW-F001",
@@ -1361,10 +1363,15 @@ test("requires closed accepted Option Set values on action inputs", () => {
 test("requires closed version-pinned related state guards on actions", () => {
   const validModel = validFixture();
   addLineageBindingFixture(validModel);
-  validModel.modules[0].objects[0].fields.find(({ id }) => id === "SUB-F003")
-    .stateGuardPolicy = "UPDATE_REQUIRED";
   const action = moduleById(validModel, "SUB-001").actions[0];
-  action.outputFieldIds.push("SUB-F003");
+  const refField = validModel.modules[0].objects[0].fields
+    .find(({ id }) => id === "SUB-F003");
+  refField.stateGuardPolicy = "CREATE_REQUIRED";
+  refField.actionApplicability.requiredActionIds = [action.id];
+  action.operationKind = "CREATE";
+  delete action.transition;
+  action.successState = "SUBMITTED";
+  action.outputFieldIds.push("SUB-F000", "SUB-F003");
   action.relatedStateGuards = [{
     refFieldId: "SUB-F003",
     versionFieldId: "SUB-F002",
@@ -2004,6 +2011,7 @@ test("rejects empty optional Flow step conditions", () => {
 
 test("requires closed structured Flow execution paths", () => {
   const validModel = validFixture();
+  validModel.flows[0].routingPolicy = "ACTION_CHOICE_REQUIRED";
   validModel.flows[0].executionPaths = [{
     id: "PRIMARY",
     stepOrders: [1],
@@ -2037,6 +2045,7 @@ test("requires closed structured Flow execution paths", () => {
 
 test("requires a mandatory closed route on every execution path", () => {
   const validModel = validFixture();
+  validModel.flows[0].routingPolicy = "OPTION_VALUE_REQUIRED";
   validModel.modules[0].actions[0].acceptedInputValues = [{
     fieldId: "SUB-F001",
     optionSetId: "OPT-BOOL",
@@ -2254,6 +2263,58 @@ test("fails closed when DF-010 judgment action or branch domains are mutated", (
   const missedMutations = [];
   for (const [name, errorCode, mutate] of mutations) {
     const model = structuredClone(closedModel);
+    mutate(model);
+    if (!errorCodes(validateRequirementModel(model)).includes(errorCode)) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("declares one closed routing policy for every Flow", () => {
+  const routingPolicyByFlowId = new Map(flows.map(({ id, routingPolicy }) => (
+    [id, routingPolicy]
+  )));
+  assert.deepEqual(routingPolicyByFlowId, new Map([
+    ["DF-001", "NONE"],
+    ["DF-002", "NONE"],
+    ["DF-003", "NONE"],
+    ["DF-004", "NONE"],
+    ["DF-005", "NONE"],
+    ["DF-006", "NONE"],
+    ["DF-007", "ACTION_CHOICE_REQUIRED"],
+    ["DF-008", "NONE"],
+    ["DF-009", "NONE"],
+    ["DF-010", "OPTION_VALUE_REQUIRED"],
+    ["DF-012", "NONE"],
+    ["DF-014", "NONE"],
+  ]));
+});
+
+test("fails closed when a Flow routing policy and its execution paths disagree", () => {
+  const mutations = [
+    ["deleted routing policy", "INVALID_FLOW_CONTRACT", (model) => {
+      delete model.flows.find(({ id }) => id === "DF-010").routingPolicy;
+    }],
+    ["deleted required execution paths", "INVALID_FLOW_BRANCH", (model) => {
+      delete model.flows.find(({ id }) => id === "DF-010").executionPaths;
+    }],
+    ["retained paths for NONE policy", "INVALID_FLOW_BRANCH", (model) => {
+      model.flows.find(({ id }) => id === "DF-010").routingPolicy = "NONE";
+    }],
+    ["mismatched route kind", "INVALID_FLOW_BRANCH", (model) => {
+      model.flows.find(({ id }) => id === "DF-010").routingPolicy = (
+        "ACTION_CHOICE_REQUIRED"
+      );
+    }],
+    ["malformed required path", "INVALID_FLOW_CONTRACT", (model) => {
+      model.flows.find(({ id }) => id === "DF-010").executionPaths[0] = null;
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, errorCode, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
     mutate(model);
     if (!errorCodes(validateRequirementModel(model)).includes(errorCode)) {
       missedMutations.push(name);
@@ -5317,6 +5378,135 @@ test("declares field-derived guard policies for every version-pinned reference",
     id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
   )).stateGuardPolicy, "CREATE_REQUIRED");
   assert.equal(pinnedRefs.filter(({ field }) => field.stateGuardPolicy === "NONE").length, 30);
+});
+
+test("declares exact action applicability for every version-pinned reference", () => {
+  const pinnedRefs = modules.flatMap((module) => module.objects.flatMap((object) => (
+    object.fields.filter(({ referenceIntegrity }) => referenceIntegrity === "VERSION_PINNED")
+      .map((field) => ({ module, object, field }))
+  )));
+  assert.equal(pinnedRefs.length, 32);
+  assert.equal(pinnedRefs.every(({ field }) => (
+    field.actionApplicability
+    && Object.keys(field.actionApplicability).length === 1
+    && Array.isArray(field.actionApplicability.requiredActionIds)
+  )), true);
+
+  const correction = moduleById(requirementModel, "CORR-001");
+  const attempt = correction.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
+  assert.deepEqual(attempt.fields.find(({ id }) => (
+    id === "CORR-ATTEMPT-F-TASK-REF"
+  )).actionApplicability.requiredActionIds, [
+    "CORR-ACT-SUBMIT-INITIAL",
+    "CORR-ACT-SUBMIT-LATE",
+    "CORR-ACT-RESUBMIT",
+  ]);
+  assert.deepEqual(attempt.fields.find(({ id }) => (
+    id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
+  )).actionApplicability.requiredActionIds, ["CORR-ACT-RESUBMIT"]);
+  assert.equal(pinnedRefs.filter(({ field }) => (
+    field.actionApplicability.requiredActionIds.length === 0
+  )).length, 30);
+});
+
+test("fails closed when version-pinned action applicability is malformed", () => {
+  const mutations = [
+    ["missing applicability declaration", (model) => {
+      delete moduleById(model, "CORR-001").objects
+        .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+        .find(({ id }) => id === "CORR-ATTEMPT-F-TASK-REF").actionApplicability;
+    }],
+    ["extra applicability key", (model) => {
+      moduleById(model, "CORR-001").objects
+        .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+        .find(({ id }) => id === "CORR-ATTEMPT-F-TASK-REF")
+        .actionApplicability.extra = true;
+    }],
+    ["duplicate required action", (model) => {
+      moduleById(model, "CORR-001").objects
+        .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+        .find(({ id }) => id === "CORR-ATTEMPT-F-TASK-REF")
+        .actionApplicability.requiredActionIds.push("CORR-ACT-SUBMIT-INITIAL");
+    }],
+    ["applicability on identity-only reference", (model) => {
+      moduleById(model, "CORR-001").objects
+        .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+        .find(({ id }) => id === "CORR-ATTEMPT-F-STUDENT-REF")
+        .actionApplicability = { requiredActionIds: [] };
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_FIELD_CONTRACT")) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("fails closed when version-pinned action applicability disagrees with actions", () => {
+  const taskRef = (model) => moduleById(model, "CORR-001").objects
+    .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+    .find(({ id }) => id === "CORR-ATTEMPT-F-TASK-REF");
+  const priorAttemptRef = (model) => moduleById(model, "CORR-001").objects
+    .find(({ id }) => id === "CORR-OBJ-ATTEMPT").fields
+    .find(({ id }) => id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF");
+  const mutations = [
+    ["downgraded policy and deleted guards", (model) => {
+      taskRef(model).stateGuardPolicy = "NONE";
+      for (const actionId of taskRef(model).actionApplicability.requiredActionIds) {
+        const action = moduleById(model, "CORR-001").actions
+          .find(({ id }) => id === actionId);
+        action.relatedStateGuards = action.relatedStateGuards.filter(({ refFieldId }) => (
+          refFieldId !== "CORR-ATTEMPT-F-TASK-REF"
+        ));
+        if (action.relatedStateGuards.length === 0) delete action.relatedStateGuards;
+      }
+    }],
+    ["deleted prior lineage coverage and guard", (model) => {
+      const action = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-RESUBMIT");
+      action.outputFieldIds = action.outputFieldIds.filter((fieldId) => ![
+        "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF",
+        "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
+      ].includes(fieldId));
+      action.relatedStateGuards = action.relatedStateGuards.filter(({ refFieldId }) => (
+        refFieldId !== "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
+      ));
+    }],
+    ["unknown action", (model) => {
+      taskRef(model).actionApplicability.requiredActionIds[0] = "CORR-ACT-MISSING";
+    }],
+    ["cross-object action", (model) => {
+      taskRef(model).actionApplicability.requiredActionIds[0] = "CORR-ACT-COMPLETE-TASK";
+    }],
+    ["operation mismatch", (model) => {
+      taskRef(model).actionApplicability.requiredActionIds[0] = (
+        "CORR-ACT-CONFIRM-JUDGMENT"
+      );
+    }],
+    ["missing required action", (model) => {
+      taskRef(model).actionApplicability.requiredActionIds = taskRef(model)
+        .actionApplicability.requiredActionIds
+        .filter((actionId) => actionId !== "CORR-ACT-SUBMIT-LATE");
+    }],
+    ["empty applicability with required policy", (model) => {
+      priorAttemptRef(model).actionApplicability.requiredActionIds = [];
+    }],
+  ];
+
+  const missedMutations = [];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_ACTION_STATE_GUARD")) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
 });
 
 test("fails closed when derived correction guards are removed or downgraded", () => {

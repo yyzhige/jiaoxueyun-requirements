@@ -1102,6 +1102,7 @@ const gradingDecisionFields = [
     idempotencyRole: "OBJECT_REF",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-SUBMISSION-VERSION",
       targetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
@@ -1118,6 +1119,7 @@ const gradingDecisionFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-ITEM-VERSION",
       targetVersionFieldId: "HW-ITEM-F-ITEM-VERSION",
@@ -1134,6 +1136,7 @@ const gradingDecisionFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
       targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
@@ -1150,6 +1153,7 @@ const gradingDecisionFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
       targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
@@ -1936,6 +1940,7 @@ const publishedResultFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PUB-RESULT-F-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -1953,6 +1958,7 @@ const publishedResultFields = [
     required: "required when correcting a published result",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PUB-RESULT-F-NEW-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -2060,6 +2066,7 @@ const dependencySnapshotFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -2668,6 +2675,7 @@ const scoreViewFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "SCO-VIEW-F-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -2689,6 +2697,7 @@ const scoreViewFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "SCO-VIEW-F-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -2710,6 +2719,7 @@ const scoreViewFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "SCO-VIEW-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -2739,6 +2749,7 @@ const scoreFollowUpFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "SCO-FOLLOW-UP-F-VIEW-VERSION",
       targetVersionFieldId: "SCO-VIEW-F-VIEW-VERSION",
@@ -2946,6 +2957,7 @@ const evidenceFields = [
     required: "required for evidence derived from a published result",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -2964,6 +2976,7 @@ const evidenceFields = [
     required: "required for correction-stage evidence",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION",
       targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
@@ -2989,6 +3002,7 @@ const evidenceFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION",
       targetVersionFieldId: "CURR-KP-F-ID",
@@ -3057,6 +3071,7 @@ const evidenceFields = [
     required: "required when a new evidence version supersedes prior evidence",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -3339,6 +3354,7 @@ const planFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -3397,6 +3413,7 @@ const planFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-KNOWLEDGE-POINT-VERSION",
       targetVersionFieldId: "CURR-KP-F-ID",
@@ -3448,6 +3465,7 @@ const planFields = [
     required: "required when a student difficulty report changes the plan",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION",
       targetVersionFieldId: "APP-TODO-F-AGGREGATION-VERSION",
@@ -3474,6 +3492,7 @@ const planFields = [
     required: "required when the plan evaluation enters pending reconfirmation",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PLN-PLAN-F-INVALIDATION-VERSION",
       targetVersionFieldId: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
@@ -3512,6 +3531,7 @@ const subjectSyncFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PLN-SUBJECT-SYNC-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -3552,6 +3572,7 @@ const homeroomCoordinationFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "PLN-HOMEROOM-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -3891,6 +3912,7 @@ const studentTodoFields = [
     required: "required when the todo links to an improvement plan",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "APP-TODO-F-SOURCE-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -3909,6 +3931,7 @@ const studentTodoFields = [
     required: "required when the todo links to homework",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
       targetVersionFieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
@@ -4194,6 +4217,7 @@ const correctionTaskFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "CORR-TASK-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -4238,6 +4262,13 @@ const correctionAttemptFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: {
+      requiredActionIds: [
+        "CORR-ACT-SUBMIT-INITIAL",
+        "CORR-ACT-SUBMIT-LATE",
+        "CORR-ACT-RESUBMIT",
+      ],
+    },
     versionBinding: {
       versionFieldId: "CORR-ATTEMPT-F-TASK-VERSION",
       targetVersionFieldId: "CORR-TASK-F-TASK-VERSION",
@@ -4255,6 +4286,7 @@ const correctionAttemptFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: { requiredActionIds: ["CORR-ACT-RESUBMIT"] },
     versionBinding: {
       versionFieldId: "CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION",
       targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
@@ -4315,6 +4347,7 @@ const invalidationFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "CORR-INVALIDATION-F-SOURCE-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -4331,6 +4364,7 @@ const invalidationFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "CORR-INVALIDATION-F-SOURCE-DECISION-VERSION",
       targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
@@ -4806,6 +4840,7 @@ const studentProfileViewFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "STU-PROFILE-F-RESULT-VERSION",
       targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
@@ -4827,6 +4862,7 @@ const studentProfileViewFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "STU-PROFILE-F-EVIDENCE-VERSION",
       targetVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
@@ -4848,6 +4884,7 @@ const studentProfileViewFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "STU-PROFILE-F-PLAN-VERSION",
       targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
@@ -4887,6 +4924,7 @@ const studentAttentionFields = [
     mutability: "IMMUTABLE",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
+    actionApplicability: { requiredActionIds: [] },
     versionBinding: {
       versionFieldId: "STU-ATTENTION-F-PROFILE-VERSION",
       targetVersionFieldId: "STU-PROFILE-F-PROFILE-VERSION",
@@ -5188,6 +5226,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-004",
     label: "Assignment Validation and Publication",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["HW-001", "APP-001"],
     steps: [
       { order: 1, actionId: "HW-ACT-VALIDATE-ITEM", condition: "an item is an initial draft" },
@@ -5298,6 +5337,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-005",
     label: "Published Assignment Student Submission",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["HW-001", "SUB-001"],
     steps: [
       { order: 1, actionId: "HW-ACT-OPEN-PUBLISHED" },
@@ -5387,6 +5427,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-006",
     label: "Submission Grading Routing",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["HW-001", "SUB-001", "GRD-001"],
     steps: [
       { order: 1, actionId: "SUB-ACT-HANDOFF-ACCEPTED" },
@@ -5515,6 +5556,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-007",
     label: "Subject Teacher Grading Confirmation",
     phase: PHASE.FIRST,
+    routingPolicy: "ACTION_CHOICE_REQUIRED",
     moduleIds: ["GRD-001"],
     steps: [
       {
@@ -5670,6 +5712,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-008",
     label: "Confirmed Result Publication",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["GRD-001", "PUB-001", "CORR-001"],
     steps: [
       {
@@ -5884,6 +5927,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-009",
     label: "Published Result Correction",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["GRD-001", "PUB-001", "INS-001", "PLN-001", "CORR-001"],
     steps: [
       { order: 1, actionId: "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT", condition: "resolve current dependencies against the exact prior published result ID and version before any correction or invalidation write" },
@@ -6181,6 +6225,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-010",
     label: "Correction Submission Judgment and New Evidence",
     phase: PHASE.FIRST,
+    routingPolicy: "OPTION_VALUE_REQUIRED",
     moduleIds: ["PUB-001", "INS-001", "PLN-001", "CORR-001"],
     steps: [
       { order: 1, actionId: "PUB-ACT-VIEW-RESULT", condition: "the student's published result and source decision versions are visible" },
@@ -6518,6 +6563,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-012",
     label: "Improvement Candidate to Subject Plan and Cross-subject Coordination",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["INS-001", "PLN-001", "APP-001"],
     steps: [
       { order: 1, actionId: "INS-ACT-READ-CONFIRMED-EVIDENCE", condition: "the evidence and mastery interpretation are teacher-confirmed and current" },
@@ -6665,6 +6711,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-014",
     label: "Student Management Profile Aggregation",
     phase: PHASE.FIRST,
+    routingPolicy: "NONE",
     moduleIds: ["SCO-001", "INS-001", "PLN-001", "APP-001", "STU-001"],
     steps: [
       { order: 1, actionId: "SCO-ACT-READ-GRADEBOOK", condition: "the score view resolves exact PUB, INS, and PLN source versions" },
