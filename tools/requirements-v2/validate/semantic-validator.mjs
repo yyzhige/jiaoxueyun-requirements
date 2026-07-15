@@ -7,10 +7,10 @@ import {
 } from "../facts/student-detail-access-exceptions.mjs";
 import {
   isProfessionalWriteAuthorizationBoundary,
-  isProfessionalWritePolicy,
   isRegisteredProfessionalWriteAction,
   isRegisteredProfessionalWriteObject,
   matchesRegisteredProfessionalWriteException,
+  matchesRegisteredProfessionalWriteExceptionPermissions,
   resolveProfessionalWriteException,
 } from "../facts/professional-write-authorization.mjs";
 
@@ -401,15 +401,16 @@ function academicAccessBoundaryErrors(index) {
       && action?.operationKind !== "READ"
       && (registeredTarget || targetDeclaresPolicy);
     if (registeredException || hasExceptionDeclaration) {
-      const allows = permissions.filter(({ effect }) => effect === "ALLOW");
       const validException = !registeredAction
         && isUserWrite
         && registeredTarget
-        && isProfessionalWritePolicy(targetObject?.professionalWritePolicy)
         && registeredException?.targetObjectId === action.targetObjectId
+        && registeredException?.operationKind === action.operationKind
+        && registeredException?.executionMode === action.executionMode
+        && registeredException?.writes === action.writes
+        && !hasBoundaryDeclaration
         && matchesRegisteredProfessionalWriteException(action)
-        && allows.length === 1
-        && allows[0].roleRef === registeredException?.declaration.allowRoleRef
+        && matchesRegisteredProfessionalWriteExceptionPermissions(action)
         && permissionDeniedScenarioValid;
       if (!validException) {
         errors.push(
@@ -422,7 +423,6 @@ function academicAccessBoundaryErrors(index) {
     const valid = isUserWrite
       && isProfessionalWriteAuthorizationBoundary(action.authorizationBoundary)
       && registeredTarget
-      && isProfessionalWritePolicy(targetObject?.professionalWritePolicy)
       && subjectTeacherAllows.length === 1
       && hasExactKeys(allowScope, ["kind", "subjectMatch", "courseMatch"])
       && allowScope.kind === "ASSIGNED_SUBJECT_COURSE"

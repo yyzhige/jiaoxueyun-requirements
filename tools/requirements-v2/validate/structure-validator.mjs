@@ -6,6 +6,7 @@ import {
   isProfessionalWriteAuthorizationBoundary,
   isProfessionalWritePolicy,
   matchesRegisteredProfessionalWriteException,
+  professionalWritePolicyMatchesRegistry,
 } from "../facts/professional-write-authorization.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
@@ -691,6 +692,11 @@ function validateObject(errors, object, path, strict) {
           `INVALID_OBJECT_CONTRACT ${path}.professionalWritePolicy must use the closed ${PROFESSIONAL_WRITE_BOUNDARY_KIND} shape`,
         );
       }
+    }
+    if (!professionalWritePolicyMatchesRegistry(object)) {
+      errors.push(
+        `INVALID_PROFESSIONAL_WRITE_POLICY ${object.id} professionalWritePolicy must exactly match professional write object registry membership`,
+      );
     }
     const reachability = object.stateReachability;
     if (!isRecord(reachability)) {

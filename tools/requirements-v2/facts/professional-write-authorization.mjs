@@ -61,36 +61,56 @@ const professionalWriteObjectIds = new Set([
   "EXM-OBJ-SUBJECT-SCORE",
 ]);
 
+const studentSubmissionPermissionSignature = {
+  allowRoleRef: "ROLE-STUDENT",
+  denyRoleRefs: ["ROLE-PLATFORM-OPS"],
+  denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
+  denyActorRefs: ["AI"],
+};
+
+const academicScoreAdministrationPermissionSignature = {
+  allowRoleRef: "ROLE-ACADEMIC",
+  denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
+  denyDutyRefs: [],
+  denyActorRefs: [],
+};
+
 const professionalWriteExceptionRegistry = new Map([
   ["CORR-ACT-SUBMIT-INITIAL", {
     targetObjectId: "CORR-OBJ-ATTEMPT",
+    operationKind: "CREATE",
     purpose: "STUDENT_SUBMISSION",
-    allowRoleRef: "ROLE-STUDENT",
+    permissionSignature: studentSubmissionPermissionSignature,
   }],
   ["CORR-ACT-SUBMIT-LATE", {
     targetObjectId: "CORR-OBJ-ATTEMPT",
+    operationKind: "CREATE",
     purpose: "STUDENT_SUBMISSION",
-    allowRoleRef: "ROLE-STUDENT",
+    permissionSignature: studentSubmissionPermissionSignature,
   }],
   ["CORR-ACT-RESUBMIT", {
     targetObjectId: "CORR-OBJ-ATTEMPT",
+    operationKind: "CREATE",
     purpose: "STUDENT_SUBMISSION",
-    allowRoleRef: "ROLE-STUDENT",
+    permissionSignature: studentSubmissionPermissionSignature,
   }],
   ["EXM-ACT-CREATE-SUBJECT-SCORE", {
     targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+    operationKind: "CREATE",
     purpose: "ACADEMIC_SCORE_ADMINISTRATION",
-    allowRoleRef: "ROLE-ACADEMIC",
+    permissionSignature: academicScoreAdministrationPermissionSignature,
   }],
   ["EXM-ACT-PUBLISH-SUBJECT-SCORE", {
     targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+    operationKind: "UPDATE",
     purpose: "ACADEMIC_SCORE_ADMINISTRATION",
-    allowRoleRef: "ROLE-ACADEMIC",
+    permissionSignature: academicScoreAdministrationPermissionSignature,
   }],
   ["EXM-ACT-REPUBLISH-CORRECTED-SCORE", {
     targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+    operationKind: "UPDATE",
     purpose: "ACADEMIC_SCORE_ADMINISTRATION",
-    allowRoleRef: "ROLE-ACADEMIC",
+    permissionSignature: academicScoreAdministrationPermissionSignature,
   }],
 ]);
 
@@ -118,6 +138,14 @@ export function isProfessionalWritePolicy(policy) {
     && policy.requiredAuthorizationBoundaryKind === PROFESSIONAL_WRITE_BOUNDARY_KIND;
 }
 
+export function professionalWritePolicyMatchesRegistry(object) {
+  const registeredPolicy = resolveProfessionalWritePolicy(object);
+  const hasPolicy = Object.hasOwn(object ?? {}, "professionalWritePolicy");
+  return registeredPolicy
+    ? hasPolicy && isProfessionalWritePolicy(object.professionalWritePolicy)
+    : !hasPolicy;
+}
+
 export function resolveProfessionalWriteAuthorizationBoundary(action) {
   if (!isRegisteredProfessionalWriteAction(action)) return null;
   return { kind: PROFESSIONAL_WRITE_BOUNDARY_KIND };
@@ -131,25 +159,74 @@ export function resolveProfessionalWritePolicy(object) {
 export function resolveProfessionalWriteException(action) {
   const registered = professionalWriteExceptionRegistry.get(action?.id);
   if (!registered) return null;
+  const permissionSignature = registered.permissionSignature;
   return {
     targetObjectId: registered.targetObjectId,
+    operationKind: registered.operationKind,
+    executionMode: "USER_TASK",
+    writes: true,
     declaration: {
       kind: NON_PROFESSIONAL_WRITE_EXCEPTION_KIND,
       purpose: registered.purpose,
-      allowRoleRef: registered.allowRoleRef,
+      permissionSignature: {
+        allowRoleRef: permissionSignature.allowRoleRef,
+        denyRoleRefs: [...permissionSignature.denyRoleRefs],
+        denyDutyRefs: [...permissionSignature.denyDutyRefs],
+        denyActorRefs: [...permissionSignature.denyActorRefs],
+      },
     },
   };
+}
+
+function sameStringArray(left, right) {
+  return Array.isArray(left)
+    && Array.isArray(right)
+    && left.length === right.length
+    && left.every((value, index) => value === right[index]);
 }
 
 export function matchesRegisteredProfessionalWriteException(action) {
   const registered = resolveProfessionalWriteException(action);
   const exception = action?.professionalWriteException;
+  const signature = exception?.permissionSignature;
+  const expectedSignature = registered?.declaration.permissionSignature;
   return registered !== null
     && isRecord(exception)
     && Object.keys(exception).length === 3
     && exception.kind === registered.declaration.kind
     && exception.purpose === registered.declaration.purpose
-    && exception.allowRoleRef === registered.declaration.allowRoleRef;
+    && isRecord(signature)
+    && Object.keys(signature).length === 4
+    && signature.allowRoleRef === expectedSignature.allowRoleRef
+    && sameStringArray(signature.denyRoleRefs, expectedSignature.denyRoleRefs)
+    && sameStringArray(signature.denyDutyRefs, expectedSignature.denyDutyRefs)
+    && sameStringArray(signature.denyActorRefs, expectedSignature.denyActorRefs);
+}
+
+function permissionSubjectKey(permission) {
+  if (!isRecord(permission) || !["ALLOW", "DENY"].includes(permission.effect)) return null;
+  const refKeys = ["roleRef", "dutyRef", "actorRef"]
+    .filter((key) => typeof permission[key] === "string" && permission[key] !== "");
+  if (refKeys.length !== 1) return null;
+  const refKey = refKeys[0];
+  return `${permission.effect}:${refKey}:${permission[refKey]}`;
+}
+
+export function matchesRegisteredProfessionalWriteExceptionPermissions(action) {
+  const registered = resolveProfessionalWriteException(action);
+  if (!registered || !Array.isArray(action?.permissions)) return false;
+  const signature = registered.declaration.permissionSignature;
+  const expected = [
+    `ALLOW:roleRef:${signature.allowRoleRef}`,
+    ...signature.denyRoleRefs.map((ref) => `DENY:roleRef:${ref}`),
+    ...signature.denyDutyRefs.map((ref) => `DENY:dutyRef:${ref}`),
+    ...signature.denyActorRefs.map((ref) => `DENY:actorRef:${ref}`),
+  ];
+  const actual = action.permissions.map(permissionSubjectKey);
+  return actual.every((key) => key !== null)
+    && actual.length === expected.length
+    && new Set(actual).size === actual.length
+    && expected.every((key) => actual.includes(key));
 }
 
 export function withProfessionalWriteAuthorization(action) {

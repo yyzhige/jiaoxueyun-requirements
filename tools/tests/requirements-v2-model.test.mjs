@@ -7599,40 +7599,205 @@ test("declares every protected-object non-professional write as a closed registr
         targetObjectId: "CORR-OBJ-ATTEMPT",
         kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
         purpose: "STUDENT_SUBMISSION",
-        allowRoleRef: "ROLE-STUDENT",
+        permissionSignature: {
+          allowRoleRef: "ROLE-STUDENT",
+          denyRoleRefs: ["ROLE-PLATFORM-OPS"],
+          denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
+          denyActorRefs: ["AI"],
+        },
       },
       "CORR-ACT-SUBMIT-LATE": {
         targetObjectId: "CORR-OBJ-ATTEMPT",
         kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
         purpose: "STUDENT_SUBMISSION",
-        allowRoleRef: "ROLE-STUDENT",
+        permissionSignature: {
+          allowRoleRef: "ROLE-STUDENT",
+          denyRoleRefs: ["ROLE-PLATFORM-OPS"],
+          denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
+          denyActorRefs: ["AI"],
+        },
       },
       "CORR-ACT-RESUBMIT": {
         targetObjectId: "CORR-OBJ-ATTEMPT",
         kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
         purpose: "STUDENT_SUBMISSION",
-        allowRoleRef: "ROLE-STUDENT",
+        permissionSignature: {
+          allowRoleRef: "ROLE-STUDENT",
+          denyRoleRefs: ["ROLE-PLATFORM-OPS"],
+          denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
+          denyActorRefs: ["AI"],
+        },
       },
       "EXM-ACT-CREATE-SUBJECT-SCORE": {
         targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
         kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
         purpose: "ACADEMIC_SCORE_ADMINISTRATION",
-        allowRoleRef: "ROLE-ACADEMIC",
+        permissionSignature: {
+          allowRoleRef: "ROLE-ACADEMIC",
+          denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
+          denyDutyRefs: [],
+          denyActorRefs: [],
+        },
       },
       "EXM-ACT-PUBLISH-SUBJECT-SCORE": {
         targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
         kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
         purpose: "ACADEMIC_SCORE_ADMINISTRATION",
-        allowRoleRef: "ROLE-ACADEMIC",
+        permissionSignature: {
+          allowRoleRef: "ROLE-ACADEMIC",
+          denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
+          denyDutyRefs: [],
+          denyActorRefs: [],
+        },
       },
       "EXM-ACT-REPUBLISH-CORRECTED-SCORE": {
         targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
         kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
         purpose: "ACADEMIC_SCORE_ADMINISTRATION",
-        allowRoleRef: "ROLE-ACADEMIC",
+        permissionSignature: {
+          allowRoleRef: "ROLE-ACADEMIC",
+          denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
+          denyDutyRefs: [],
+          denyActorRefs: [],
+        },
       },
     },
   );
+});
+
+test("rejects any missing extra or rebound exception permission subject", () => {
+  const families = [
+    {
+      moduleId: "CORR-001",
+      actionId: "CORR-ACT-SUBMIT-INITIAL",
+      requiredDenies: [
+        ["roleRef", "ROLE-PLATFORM-OPS"],
+        ["dutyRef", "DUTY-SUBJECT-TEACHER"],
+        ["actorRef", "AI"],
+      ],
+      reboundRoleRef: "ROLE-PLATFORM-OPS",
+    },
+    {
+      moduleId: "EXM-001",
+      actionId: "EXM-ACT-CREATE-SUBJECT-SCORE",
+      requiredDenies: [
+        ["roleRef", "ROLE-STUDENT"],
+        ["roleRef", "ROLE-PLATFORM-OPS"],
+      ],
+      reboundRoleRef: "ROLE-STUDENT",
+    },
+  ];
+  const mutations = families.flatMap((family) => [
+    ...family.requiredDenies.map(([refKey, ref]) => ({
+      name: `${family.actionId}:missing:${ref}`,
+      family,
+      mutate(action) {
+        action.permissions = action.permissions.filter((permission) => !(
+          permission.effect === "DENY" && permission[refKey] === ref
+        ));
+      },
+    })),
+    {
+      name: `${family.actionId}:extra:ROLE-SCHOOL-ADMIN`,
+      family,
+      mutate(action) {
+        action.permissions.push({
+          effect: "DENY",
+          roleRef: "ROLE-SCHOOL-ADMIN",
+          condition: "the extra role is outside the registered exception signature",
+        });
+      },
+    },
+    {
+      name: `${family.actionId}:rebound:${family.reboundRoleRef}`,
+      family,
+      mutate(action) {
+        const deny = action.permissions.find(({ effect, roleRef }) => (
+          effect === "DENY" && roleRef === family.reboundRoleRef
+        ));
+        deny.roleRef = "ROLE-SCHOOL-ADMIN";
+      },
+    },
+  ]);
+
+  for (const { name, family, mutate } of mutations) {
+    const model = structuredClone(requirementModel);
+    const action = moduleById(model, family.moduleId).actions
+      .find(({ id }) => id === family.actionId);
+    copyActionPermissions(action);
+    mutate(action);
+    const errors = validateRequirementModel(model);
+    assert.equal(errors.length, 1, name);
+    assert.match(errors[0], /^INVALID_ACADEMIC_ACCESS_BOUNDARY /, name);
+    assert.match(errors[0], new RegExp(family.actionId), name);
+  }
+});
+
+test("keeps professional and exception authorization modes mutually exclusive", () => {
+  const mutations = [
+    ["CORR-001", "CORR-ACT-SUBMIT-INITIAL", (model, action) => {
+      action.authorizationBoundary = { kind: "SUBJECT_COURSE_PROFESSIONAL_WRITE" };
+    }],
+    ["STU-001", "STU-ACT-SAVE-VIEW", (model, action) => {
+      const exception = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-SUBMIT-INITIAL")
+        .professionalWriteException;
+      action.professionalWriteException = structuredClone(exception);
+    }],
+  ];
+  for (const [moduleId, actionId, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    const action = moduleById(model, moduleId).actions.find(({ id }) => id === actionId);
+    mutate(model, action);
+    const boundaryErrors = validateRequirementModel(model)
+      .filter((error) => error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY"));
+    assert.equal(boundaryErrors.length, 1, actionId);
+    assert.match(boundaryErrors[0], new RegExp(actionId), actionId);
+  }
+});
+
+test("keeps professional write policy membership exact for every phase-one object", () => {
+  const legalPolicy = {
+    requiredAuthorizationBoundaryKind: "SUBJECT_COURSE_PROFESSIONAL_WRITE",
+  };
+  const mutations = [
+    ["extra", (model) => {
+      moduleById(model, "ACC-001").objects
+        .find(({ id }) => id === "ACC-OBJ-SCHOOL")
+        .professionalWritePolicy = structuredClone(legalPolicy);
+      return ["ACC-OBJ-SCHOOL"];
+    }],
+    ["missing", (model) => {
+      delete moduleById(model, "STU-001").objects
+        .find(({ id }) => id === "STU-OBJ-PROFILE")
+        .professionalWritePolicy;
+      return ["STU-OBJ-PROFILE"];
+    }],
+    ["rebound", (model) => {
+      delete moduleById(model, "STU-001").objects
+        .find(({ id }) => id === "STU-OBJ-PROFILE")
+        .professionalWritePolicy;
+      moduleById(model, "ACC-001").objects
+        .find(({ id }) => id === "ACC-OBJ-SCHOOL")
+        .professionalWritePolicy = structuredClone(legalPolicy);
+      return ["ACC-OBJ-SCHOOL", "STU-OBJ-PROFILE"];
+    }],
+  ];
+
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    const objectIds = mutate(model);
+    const errors = validateRequirementModel(model);
+    assert.equal(errors.length, objectIds.length, name);
+    assert.equal(errors.every((error) => (
+      error.startsWith("INVALID_PROFESSIONAL_WRITE_POLICY ")
+    )), true, name);
+    assert.deepEqual(
+      new Set(errors.map((error) => objectIds.find((objectId) => error.includes(objectId)))),
+      new Set(objectIds),
+      name,
+    );
+  }
 });
 
 test("rejects extra missing and rebound non-professional write exceptions", () => {
