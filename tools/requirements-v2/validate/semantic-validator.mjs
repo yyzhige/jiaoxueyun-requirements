@@ -77,20 +77,6 @@ const PROFESSIONAL_SUBJECT_MUTATION_ACTION_IDS = new Set([
   "EXM-ACT-CORRECT-SUBJECT-SCORE",
 ]);
 
-const STUDENT_DETAIL_OBJECT_IDS = new Set([
-  "SUB-OBJ-ATTEMPT",
-  "PUB-OBJ-RESULT",
-  "SCO-OBJ-VIEW",
-  "SCO-OBJ-FOLLOW-UP",
-  "INS-OBJ-EVIDENCE",
-  "PLN-OBJ-HOMEROOM-COORDINATION",
-  "APP-OBJ-TODO",
-  "STU-OBJ-PROFILE",
-  "STU-OBJ-ATTENTION",
-  "LPATH-OBJ-TIMELINE-ENTRY",
-  "EXM-OBJ-SUBJECT-SCORE",
-]);
-
 const TASK8_MODULE_MANIFEST = new Map([
   ["PREP-001", {
     objectIds: [
@@ -441,10 +427,11 @@ function academicAccessBoundaryErrors(index) {
 function studentDetailAccessBoundaryErrors(index) {
   const errors = [];
   for (const { value: action } of index.actions) {
+    const targetObject = index.objectById.get(action?.targetObjectId)?.value;
     if (
       action?.executionMode !== "USER_TASK"
       || action?.operationKind !== "READ"
-      || !STUDENT_DETAIL_OBJECT_IDS.has(action?.targetObjectId)
+      || targetObject?.studentDataClassification?.privilegedReadPolicy !== "DEFAULT_DENY"
     ) continue;
     const permissions = records(action?.permissions);
     const roleBoundariesValid = ["ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS"]
@@ -4421,6 +4408,7 @@ function platformAuditErrors(index) {
     targetVersionFieldId: "AUD-SESSION-F-VERSION",
   };
   const expectedGuard = {
+    exceptionKind: "AUD_SESSION_STUDENT_DETAIL",
     sessionRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
     pinnedSessionVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
     authorizedActorFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",

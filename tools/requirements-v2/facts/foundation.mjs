@@ -1,4 +1,5 @@
 import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import { withStudentDataClassification } from "./student-data-classification.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 const WEB_ONLY = [CLIENT.WEB];
@@ -78,6 +79,7 @@ function object(
   stateReachability,
   overrides = {},
 ) {
+  const { studentDataKind, ...objectOverrides } = overrides;
   const identityFields = fields.filter(({ id, idempotencyRole }) => (
     id === identityFieldId || idempotencyRole === "OBJECT_ID"
   ));
@@ -89,7 +91,7 @@ function object(
   ) {
     throw new Error(`${id} requires one explicitly declared identity field`);
   }
-  return {
+  return withStudentDataClassification({
     id,
     label,
     dataSubject,
@@ -110,8 +112,8 @@ function object(
       visibility: "AUTHORIZED_SCOPE",
       idempotencyRole: "OBJECT_ID",
     } : fieldValue),
-    ...overrides,
-  };
+    ...objectOverrides,
+  }, studentDataKind);
 }
 
 function actorReference(actorRef) {
@@ -1284,9 +1286,14 @@ const teaActions = [
   action({ id: "TEA-ACT-QUERY-SUBJECT-TODOS", label: "Query Assigned Subject Teacher Todos", targetObjectId: "TEA-OBJ-TODO-VIEW", inputFieldIds: ["TEA-TODO-F-TEACHER-ID", "TEA-TODO-F-SUBJECT-SCOPE", "TEA-TODO-F-FILTER"], outputFieldIds: ["TEA-TODO-F-SOURCE-REFS"], writes: false, clients: WEB_APP, permissions: [
     { effect: "ALLOW", dutyRef: "DUTY-SUBJECT-TEACHER", condition: "subject teacher reads referenced tasks only in assigned subject and class scope" },
     { effect: "ALLOW", dutyRef: "DUTY-SUBJECT-LEAD", condition: "subject lead reads referenced subject-wide queue facts without changing teacher-owned facts" },
+    { effect: "DENY", roleRef: "ROLE-SCHOOL-ADMIN", condition: "school administration has no default access to teacher todo student-detail aggregates" },
     { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations cannot read teacher or student work detail without school authorization" },
   ], auditMode: AUDIT_NOT_REQUIRED, successData: "todo view returns references to source tasks and never copies score, evidence, or plan facts" }),
-  action({ id: "TEA-ACT-QUERY-HOMEROOM-SUMMARY", label: "Query Homeroom Whole-subject Summary", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID"], outputFieldIds: ["TEA-COORD-F-SUBJECT-REFS"], writes: false, clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "ROLE-PLATFORM-OPS", "homeroom duty may read all-subject references for the assigned class", "platform operations has no default student-detail or all-subject class access"), auditMode: AUDIT_REQUIRED, successData: "homeroom view resolves all-subject references without copying professional facts" }),
+  action({ id: "TEA-ACT-QUERY-HOMEROOM-SUMMARY", label: "Query Homeroom Whole-subject Summary", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID"], outputFieldIds: ["TEA-COORD-F-SUBJECT-REFS"], writes: false, clients: WEB_APP, permissions: [
+    { effect: "ALLOW", dutyRef: "DUTY-HOMEROOM", condition: "homeroom duty may read all-subject references for the assigned class" },
+    { effect: "DENY", roleRef: "ROLE-SCHOOL-ADMIN", condition: "school administration has no default access to homeroom student-detail aggregates" },
+    { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations has no default student-detail or all-subject class access" },
+  ], auditMode: AUDIT_REQUIRED, successData: "homeroom view resolves all-subject references without copying professional facts" }),
   action({ id: "TEA-ACT-CREATE-COORDINATION", label: "Create a Homeroom Coordination Item", operationKind: "CREATE", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-CLASS-ID", "TEA-COORD-F-SUBJECT-REFS", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may create coordination notes for the assigned class", "homeroom duty cannot write another subject's professional facts, scores, evidence, or plans"), successState: "OPEN", successData: "coordination item stores references and coordination notes only" }),
   action({ id: "TEA-ACT-UPDATE-COORDINATION", label: "Update a Homeroom Coordination Note", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-TITLE", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-HOMEROOM", "homeroom duty may update coordination-owned notes for the assigned class", "homeroom duty cannot write or overwrite other subject professional facts" ), transition: { from: "OPEN", to: "IN_PROGRESS" } }),
   action({ id: "TEA-ACT-CLOSE-COORDINATION", label: "Close a Resolved Homeroom Coordination Item", targetObjectId: "TEA-OBJ-COORDINATION", inputFieldIds: ["TEA-COORD-F-ID", "TEA-COORD-F-NOTE"], outputFieldIds: ["TEA-COORD-F-STATUS"], clients: WEB_APP, permissions: permissions("DUTY-HOMEROOM", "DUTY-SUBJECT-TEACHER", "homeroom duty closes only coordination-owned items for the assigned class", "subject teacher cannot close a homeroom coordination item but retains ownership of subject facts"), risk: RISK.HIGH, transition: { from: "IN_PROGRESS", to: "CLOSED" } }),

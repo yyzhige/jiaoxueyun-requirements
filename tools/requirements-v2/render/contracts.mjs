@@ -74,7 +74,7 @@ export function renderAuthoritativeObjectCatalog(model) {
     "所有对象、字段、Owner、确认者、生命周期和敏感级别均直接来自已校验事实模型；跨模块消费只能使用对象 ID、字段 ID 和版本绑定。",
     "## 对象目录",
     markdownTable(
-      ["模块", "Object ID", "对象", "数据主体", "产生者", "Owner", "确认者", "Steward", "生命周期", "敏感级别", "读取模式", "状态"],
+      ["模块", "Object ID", "对象", "数据主体", "产生者", "Owner", "确认者", "Steward", "生命周期", "敏感级别", "学生数据分类", "特权读取策略", "读取模式", "状态"],
       allObjects(model).map(({ module, object }) => [
         module.id,
         object.id,
@@ -86,6 +86,8 @@ export function renderAuthoritativeObjectCatalog(model) {
         object.stewardRef,
         object.lifecyclePolicyId,
         object.sensitivityId,
+        object.studentDataClassification?.kind ?? "—",
+        object.studentDataClassification?.privilegedReadPolicy ?? "—",
         object.readMode,
         list(object.states).map((state) => typeof state === "string" ? state : state.id ?? state.code).join(" / "),
       ]),
@@ -169,12 +171,13 @@ export function renderPermissionsMatrix(model) {
     "# Action 级权限矩阵",
     "每一行均为可执行动作的显式 ALLOW 或 DENY 决策；客户端可见性不能替代服务端权限判断。",
     markdownTable(
-      ["模块", "Action ID", "目标对象", "效果", "主体", "条件", "记录范围", "端", "风险", "审计"],
+      ["模块", "Action ID", "目标对象", "访问例外", "效果", "主体", "条件", "记录范围", "端", "风险", "审计"],
       allActions(model).flatMap(({ module, action }) => (
         list(action.permissions).map((permission) => [
           module.id,
           action.id,
           action.targetObjectId,
+          action.accessGuard?.exceptionKind ?? "—",
           permission.effect,
           actorText(permission),
           permission.condition,

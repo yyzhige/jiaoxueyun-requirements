@@ -1,4 +1,5 @@
 import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import { withStudentDataClassification } from "./student-data-classification.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 const USER_TASK = "USER_TASK";
@@ -50,6 +51,7 @@ function object(
   stateReachability,
   overrides = {},
 ) {
+  const { studentDataKind, ...objectOverrides } = overrides;
   const identityFields = fields.filter(({ id: fieldId, idempotencyRole }) => (
     fieldId === identityFieldId || idempotencyRole === "OBJECT_ID"
   ));
@@ -61,7 +63,7 @@ function object(
   ) {
     throw new Error(`${id} requires one explicitly declared identity field`);
   }
-  return {
+  return withStudentDataClassification({
     id,
     label,
     ...responsibility,
@@ -77,8 +79,8 @@ function object(
       visibility: "AUTHORIZED_SCOPE",
       idempotencyRole: "OBJECT_ID",
     } : fieldValue),
-    ...overrides,
-  };
+    ...objectOverrides,
+  }, studentDataKind);
 }
 
 function actorReference(actorRef) {

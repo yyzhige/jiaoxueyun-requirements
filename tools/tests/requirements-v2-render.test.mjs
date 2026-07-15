@@ -12,6 +12,7 @@ import {
 } from "../requirements-v2/render/package.mjs";
 import {
   renderAiTaskRegistry,
+  renderAuthoritativeObjectCatalog,
   renderDataFlowCatalog,
   renderLifecycleAiUsage,
   renderMetricCatalog,
@@ -143,6 +144,28 @@ test("renders assigned subject-course permission scope as a machine-readable con
       /ASSIGNED_SUBJECT_COURSE:subject=REQUIRED;course=REQUIRED/,
     );
     assert.doesNotMatch(output, /ASSIGNED_SUBJECT_COURSE:undefined/);
+  }
+});
+
+test("renders student-data classification and the AUD access exception", () => {
+  const catalog = renderAuthoritativeObjectCatalog(requirementModel);
+  assert.match(
+    catalog,
+    /PLN-OBJ-PLAN[^\n]*DETAIL[^\n]*DEFAULT_DENY/,
+  );
+  assert.match(
+    catalog,
+    /ORG-OBJ-STUDENT[^\n]*NONE[^\n]*NOT_APPLICABLE/,
+  );
+
+  for (const output of [
+    renderPermissionsMatrix(requirementModel),
+    renderModulePrd(moduleById("PLAT-001"), requirementModel),
+  ]) {
+    assert.match(
+      output,
+      /PLAT-ACT-USE-SUPPORT-ACCESS[^\n]*AUD_SESSION_STUDENT_DETAIL/,
+    );
   }
 });
 

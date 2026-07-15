@@ -65,6 +65,10 @@ function validObject(id, ownerRef, field, overrides = {}) {
     stewardRef: ownerRef,
     lifecyclePolicyId: "LIFE-TEST",
     sensitivityId: "S2",
+    studentDataClassification: {
+      kind: "NONE",
+      privilegedReadPolicy: "NOT_APPLICABLE",
+    },
     readMode: "AUTHORIZED",
     stateReachability: { mode: "ACTION_GRAPH", initialStateIds: ["DRAFT"] },
     states: ["DRAFT", "SUBMITTED"],
@@ -7393,6 +7397,8 @@ test("binds score mastery and improvement-plan writes to assigned subject-course
 
 test("explicitly denies school-admin and platform-ops default student-detail reads", () => {
   const studentDetailReadActionIds = [
+    "TEA-ACT-QUERY-SUBJECT-TODOS",
+    "TEA-ACT-QUERY-HOMEROOM-SUMMARY",
     "SUB-ACT-VIEW-RECEIPT",
     "PUB-ACT-VIEW-RESULT",
     "SCO-ACT-READ-GRADEBOOK",
@@ -7409,6 +7415,22 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
   const actionById = new Map(modules.flatMap((module) => (
     module.actions.map((action) => [action.id, action])
   )));
+  const objectById = new Map(modules.flatMap((module) => (
+    module.objects.map((object) => [object.id, object])
+  )));
+  const protectedReadActionIds = modules.flatMap((module) => module.actions)
+    .filter((action) => (
+      action.executionMode === "USER_TASK"
+      && action.operationKind === "READ"
+      && objectById.get(action.targetObjectId)?.studentDataClassification
+        ?.privilegedReadPolicy === "DEFAULT_DENY"
+    ))
+    .map(({ id }) => id);
+  assert.equal(protectedReadActionIds.length, 14);
+  assert.deepEqual(
+    new Set(protectedReadActionIds),
+    new Set(studentDetailReadActionIds),
+  );
 
   for (const actionId of studentDetailReadActionIds) {
     const action = actionById.get(actionId);
@@ -7421,6 +7443,12 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
         effect === "ALLOW" && permissionRoleRef === roleRef
       )), false, `${actionId}:${roleRef}`);
     }
+    assert.ok(modules.flatMap((module) => module.scenarios).some((scenario) => (
+      scenario.actionId === actionId
+      && scenario.resultCode === "PERMISSION_DENIED"
+      && scenario.then?.expectedPermission === "DENY"
+      && scenario.then?.expectedState?.mode === "UNCHANGED"
+    )), `${actionId}:PERMISSION_DENIED`);
   }
 });
 
@@ -7513,6 +7541,188 @@ test("rejects fail-open school-admin and platform-ops student-detail reads", () 
     assertHasCode(
       validateRequirementModel(model),
       "INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY",
+      name,
+    );
+  }
+});
+
+test("rejects structurally complete privileged reads across every student-detail family", () => {
+  const cases = [
+    ["submission", "SUB-001", "SUB-OBJ-DRAFT", "ROLE-SCHOOL-ADMIN"],
+    ["grading", "GRD-001", "GRD-OBJ-DECISION", "ROLE-PLATFORM-OPS"],
+    ["publication", "PUB-001", "PUB-OBJ-DEPENDENCY-SNAPSHOT", "ROLE-SCHOOL-ADMIN"],
+    ["plan", "PLN-001", "PLN-OBJ-PLAN", "ROLE-PLATFORM-OPS"],
+    ["correction", "CORR-001", "CORR-OBJ-ATTEMPT", "ROLE-SCHOOL-ADMIN"],
+    ["AI preview", "AIX-001", "AIX-OBJ-TASK-PREVIEW", "ROLE-PLATFORM-OPS"],
+    ["report", "RPT-001", "RPT-OBJ-SNAPSHOT", "ROLE-SCHOOL-ADMIN"],
+    ["path", "LPATH-001", "LPATH-OBJ-INTERPRETATION", "ROLE-PLATFORM-OPS"],
+    ["notification", "NOTI-001", "NOTI-OBJ-NOTIFICATION", "ROLE-SCHOOL-ADMIN"],
+  ];
+
+  for (const [family, moduleId, objectId, allowRoleRef] of cases) {
+    const model = structuredClone(requirementModel);
+    const module = moduleById(model, moduleId);
+    const object = module.objects.find(({ id }) => id === objectId);
+    const identityFieldId = object.fields
+      .find(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")?.id;
+    assert.ok(identityFieldId, `${family}:${objectId}`);
+    const suffix = family.replace(/[^A-Za-z]+/g, "-").toUpperCase();
+    const actionId = `TEST-ACT-${suffix}-PRIVILEGED-READ`;
+    const pageId = `TEST-PAGE-${suffix}-PRIVILEGED-READ`;
+    const successScenarioId = `${actionId}-SCN-SUCCESS`;
+    const permissionScenarioId = `${actionId}-SCN-PERMISSION-DENIED`;
+    const notFoundScenarioId = `${actionId}-SCN-NOT-FOUND`;
+    const deniedRoleRef = allowRoleRef === "ROLE-SCHOOL-ADMIN"
+      ? "ROLE-PLATFORM-OPS"
+      : "ROLE-SCHOOL-ADMIN";
+
+    module.actions.push({
+      id: actionId,
+      label: `Read protected ${family} detail directly`,
+      targetObjectId: objectId,
+      inputFieldIds: [identityFieldId],
+      outputFieldIds: [identityFieldId],
+      operationKind: "READ",
+      writes: false,
+      risk: RISK.READ,
+      executionMode: "USER_TASK",
+      clients: [CLIENT.WEB],
+      permissions: [
+        {
+          effect: "ALLOW",
+          roleRef: allowRoleRef,
+          condition: `the privileged role reads ${family} detail by default`,
+        },
+        {
+          effect: "DENY",
+          roleRef: deniedRoleRef,
+          condition: `the other privileged role cannot read ${family} detail`,
+        },
+      ],
+      scenarioIds: [successScenarioId, permissionScenarioId, notFoundScenarioId],
+      auditMode: "NOT_REQUIRED",
+      failureResults: ["PERMISSION_DENIED", "NOT_FOUND"],
+      ...(moduleId === "NOTI-001" ? { channel: "IN_PRODUCT" } : {}),
+    });
+    module.pages.push({
+      id: pageId,
+      label: `Protected ${family} detail reader`,
+      clients: [CLIENT.WEB],
+      objectIds: [objectId],
+      fieldIds: [identityFieldId],
+      actionIds: [actionId],
+      regions: ["CONTEXT_HEADER", "TASK_WORK_AREA", "RESULT_AND_FAILURE_STATUS"],
+      viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN"],
+    });
+    module.scenarios.push(
+      {
+        id: successScenarioId,
+        kind: "SUCCESS",
+        actionId,
+        pageId,
+        given: `the privileged role has a default ${family} context`,
+        when: `the privileged role reads ${family} detail`,
+        then: {
+          expectedData: `the ${family} detail is returned`,
+          expectedState: { mode: "UNCHANGED" },
+          expectedPermission: "ALLOW",
+          expectedVisibility: "privileged default scope",
+        },
+      },
+      ...[
+        [permissionScenarioId, "PERMISSION_DENIED"],
+        [notFoundScenarioId, "NOT_FOUND"],
+      ].map(([id, resultCode]) => ({
+        id,
+        kind: "FAILURE",
+        resultCode,
+        actionId,
+        pageId,
+        given: `${resultCode} applies to the protected ${family} read`,
+        when: `the privileged role reads ${family} detail`,
+        then: {
+          expectedData: `${resultCode} returns no ${family} detail`,
+          expectedState: { mode: "UNCHANGED" },
+          expectedPermission: "DENY",
+          expectedVisibility: `no ${family} detail is visible`,
+        },
+      })),
+    );
+
+    const errors = validateRequirementModel(model);
+    assert.deepEqual(
+      errors.filter((error) => !error.startsWith("INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY")),
+      [],
+      family,
+    );
+    assertHasCode(errors, "INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY", family);
+  }
+});
+
+test("classifies every phase-one object with a closed student-data access fact", () => {
+  const phaseOneObjects = modules
+    .filter(({ phase }) => phase === PHASE.FIRST)
+    .flatMap((module) => module.objects);
+  assert.equal(phaseOneObjects.length, 87);
+  assert.deepEqual(
+    phaseOneObjects.reduce((counts, object) => ({
+      ...counts,
+      [object.studentDataClassification.kind]: counts[object.studentDataClassification.kind] + 1,
+    }), { NONE: 0, DETAIL: 0, AGGREGATE: 0 }),
+    { NONE: 58, DETAIL: 24, AGGREGATE: 5 },
+  );
+  assert.equal(phaseOneObjects.every((object) => {
+    const classification = object.studentDataClassification;
+    return classification
+      && Object.keys(classification).toSorted().join(",") === "kind,privilegedReadPolicy"
+      && ["NONE", "DETAIL", "AGGREGATE"].includes(classification.kind)
+      && (
+        (classification.kind === "NONE"
+          && classification.privilegedReadPolicy === "NOT_APPLICABLE")
+        || (["DETAIL", "AGGREGATE"].includes(classification.kind)
+          && classification.privilegedReadPolicy === "DEFAULT_DENY")
+      );
+  }), true);
+
+  const objectById = new Map(phaseOneObjects.map((object) => [object.id, object]));
+  assert.deepEqual(objectById.get("ORG-OBJ-STUDENT").studentDataClassification, {
+    kind: "NONE",
+    privilegedReadPolicy: "NOT_APPLICABLE",
+  });
+  assert.deepEqual(objectById.get("PLN-OBJ-PLAN").studentDataClassification, {
+    kind: "DETAIL",
+    privilegedReadPolicy: "DEFAULT_DENY",
+  });
+  assert.deepEqual(objectById.get("RPT-OBJ-SNAPSHOT").studentDataClassification, {
+    kind: "AGGREGATE",
+    privilegedReadPolicy: "DEFAULT_DENY",
+  });
+});
+
+test("rejects missing or contradictory phase-one student-data classifications", () => {
+  const mutations = [
+    ["missing", (object) => { delete object.studentDataClassification; }],
+    ["detail fail-open", (object) => {
+      object.studentDataClassification = {
+        kind: "DETAIL",
+        privilegedReadPolicy: "NOT_APPLICABLE",
+      };
+    }],
+    ["none default-deny", (object) => {
+      object.studentDataClassification = {
+        kind: "NONE",
+        privilegedReadPolicy: "DEFAULT_DENY",
+      };
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    const plan = moduleById(model, "PLN-001").objects
+      .find(({ id }) => id === "PLN-OBJ-PLAN");
+    mutate(plan);
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_STUDENT_DATA_CLASSIFICATION",
       name,
     );
   }
@@ -11289,6 +11499,7 @@ test("keeps support authorization fields and use guards authoritative in AUD", (
     "PLAT-ACT-EXPIRE-SUPPORT-ACCESS",
   ].includes(id)), false);
   assert.deepEqual(use.accessGuard, {
+    exceptionKind: "AUD_SESSION_STUDENT_DETAIL",
     sessionRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
     pinnedSessionVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
     authorizedActorFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",
@@ -11316,6 +11527,24 @@ test("keeps support authorization fields and use guards authoritative in AUD", (
     "SOURCE_VERSION_STALE",
     "AUDIT_FAILED",
   ]);
+});
+
+test("requires a closed AUD student-detail exception guard shape", () => {
+  const mutations = [
+    ["unsupported exception", (guard) => {
+      guard.exceptionKind = "UNSCOPED_STUDENT_DETAIL";
+    }],
+    ["extra guard key", (guard) => {
+      guard.unboundedAccess = true;
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    const use = moduleById(model, "PLAT-001").actions
+      .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+    mutate(use.accessGuard);
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT", name);
+  }
 });
 
 test("rejects support access self-approval scope expiry and audit bypass mutations", () => {
@@ -12682,9 +12911,11 @@ test("pins PLAT support cases and use to active versioned AUD sessions", () => {
 
 test("rejects duplicated PLAT authorization and fail-open AUD session use", () => {
   const accessGuardKeys = [
+    "exceptionKind",
     "sessionRefFieldId",
     "pinnedSessionVersionFieldId",
     "authorizedActorFieldId",
+    "requestedScopeFieldId",
     "scopeFieldId",
     "expiresAtFieldId",
     "stateFieldId",

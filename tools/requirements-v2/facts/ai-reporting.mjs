@@ -1,4 +1,8 @@
 import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import {
+  STUDENT_DATA_KIND,
+  withStudentDataClassification,
+} from "./student-data-classification.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 const USER_TASK = "USER_TASK";
@@ -47,7 +51,8 @@ function object(
   stateReachability,
   overrides = {},
 ) {
-  return {
+  const { studentDataKind, ...objectOverrides } = overrides;
+  return withStudentDataClassification({
     id,
     label,
     ...responsibility,
@@ -57,8 +62,8 @@ function object(
     stateReachability,
     states,
     fields,
-    ...overrides,
-  };
+    ...objectOverrides,
+  }, studentDataKind);
 }
 
 function actorReference(actorRef) {
@@ -389,7 +394,8 @@ const aixModule = moduleFact({
     "LIFE-005",
     ["PREVIEW_READY"],
     aixPreviewFields,
-    { mode: "ACTION_GRAPH", initialStateIds: [] })],
+    { mode: "ACTION_GRAPH", initialStateIds: [] },
+    { studentDataKind: STUDENT_DATA_KIND.DETAIL })],
   relationships: [],
   actions: [prepareAiPreview, createFeedbackDraftPreview, createPlanDraftPreview],
   pages: [page(
@@ -1109,6 +1115,7 @@ const reportModule = moduleFact({
       ["ACTIVE"],
       reportDefinitionFields,
       { mode: "ACTION_GRAPH", initialStateIds: [] },
+      { studentDataKind: STUDENT_DATA_KIND.NONE },
     ),
     object(
       "RPT-OBJ-SUBSCRIPTION",
@@ -1124,6 +1131,7 @@ const reportModule = moduleFact({
       reportSubscriptionFields,
       { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
+        studentDataKind: STUDENT_DATA_KIND.NONE,
         scopeBinding: {
           definitionScopeFieldId: "RPT-DEFINITION-F-DATA-SCOPE",
           subscriptionScopeFieldId: "RPT-SUBSCRIPTION-F-DATA-SCOPE",
@@ -1145,6 +1153,7 @@ const reportModule = moduleFact({
       reportRunFields,
       { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
+        studentDataKind: STUDENT_DATA_KIND.AGGREGATE,
         executionPolicy: {
           permissionCheck: "RECHECK_EACH_RUN",
           dataCutoff: "RESOLVE_AT_RUN_START",
@@ -1176,6 +1185,7 @@ const reportModule = moduleFact({
       reportSnapshotFields,
       { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
+        studentDataKind: STUDENT_DATA_KIND.AGGREGATE,
         lineageBindings: [{
           refFieldId: "RPT-SNAPSHOT-F-RUN-REF",
           versionFieldId: "RPT-SNAPSHOT-F-RUN-VERSION",
@@ -1192,6 +1202,7 @@ const reportModule = moduleFact({
       reportDeliveryFields,
       { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
+        studentDataKind: STUDENT_DATA_KIND.AGGREGATE,
         channelPolicy: {
           mode: "PHASE_ONE_CLOSED",
           fieldId: "RPT-DELIVERY-F-CHANNEL",
@@ -1660,6 +1671,7 @@ const learningPathModule = moduleFact({
       timelineFields,
       { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
+        studentDataKind: STUDENT_DATA_KIND.DETAIL,
         readMode: "AUTHORIZED",
         crossTerm: true,
         exclusiveSourceGroups: timelineSourceBindings.map((binding) => ({
@@ -1682,6 +1694,7 @@ const learningPathModule = moduleFact({
       interpretationFields,
       { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
+        studentDataKind: STUDENT_DATA_KIND.DETAIL,
         lineageBindings: [
           {
             refFieldId: "LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF",
@@ -1963,6 +1976,7 @@ const notificationModule = moduleFact({
     notificationFields,
     { mode: "ACTION_GRAPH", initialStateIds: [] },
     {
+      studentDataKind: STUDENT_DATA_KIND.DETAIL,
       channelPolicy: {
         mode: "PHASE_ONE_CLOSED",
         fieldId: "NOTI-NOTIFICATION-F-CHANNEL",

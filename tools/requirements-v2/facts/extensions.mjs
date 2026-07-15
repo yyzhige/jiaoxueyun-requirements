@@ -1,4 +1,5 @@
 import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import { withStudentDataClassification } from "./student-data-classification.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 
@@ -174,7 +175,8 @@ function domainObject({
   lifecyclePolicyId = "LIFE-003",
   overrides = {},
 }) {
-  return {
+  const { studentDataKind, ...objectOverrides } = overrides;
+  return withStudentDataClassification({
     id,
     label,
     ...responsibility,
@@ -184,8 +186,8 @@ function domainObject({
     stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
     states,
     fields: [identityField(identityFieldId, `${label} ID`), ...fields],
-    ...overrides,
-  };
+    ...objectOverrides,
+  }, studentDataKind);
 }
 
 function failureSemantic(resultCode, predicate, given, when, expectedData) {
@@ -2476,6 +2478,7 @@ const supportCaseFields = [
   }),
 ];
 const supportSessionAccessGuard = {
+  exceptionKind: "AUD_SESSION_STUDENT_DETAIL",
   sessionRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
   pinnedSessionVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
   authorizedActorFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",
