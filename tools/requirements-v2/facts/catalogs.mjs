@@ -473,6 +473,7 @@ export const metrics = [
     ],
     scope: "学生查看正式反馈后进入订正、再练或提升任务的转化",
     aggregation: "conversion",
+    correlationKey: "studentFeedbackViewId",
     target: ">=60%",
     exclusions: "排除反馈被撤回、任务在归因窗口内取消或学生已离校的记录",
     window: "反馈查看后7天归因，按试点周汇总",

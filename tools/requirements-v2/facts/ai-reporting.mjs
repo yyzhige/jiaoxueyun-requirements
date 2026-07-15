@@ -1477,6 +1477,11 @@ const pathReadPermissions = [
   ),
   permission(
     "DENY",
+    "ROLE-SCHOOL-ADMIN",
+    "school administration has no default access to learning path detail",
+  ),
+  permission(
+    "DENY",
     "ROLE-PLATFORM-OPS",
     "platform operations has no default access to learning path detail",
   ),

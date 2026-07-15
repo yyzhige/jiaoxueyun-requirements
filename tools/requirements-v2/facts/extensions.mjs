@@ -147,9 +147,14 @@ function actorReference(actorRef) {
   return { actorRef };
 }
 
-function permissions(allowRef, denyRefs, allowCondition) {
+function permissions(allowRef, denyRefs, allowCondition, allowScope) {
   return [
-    { effect: "ALLOW", ...actorReference(allowRef), condition: allowCondition },
+    {
+      effect: "ALLOW",
+      ...actorReference(allowRef),
+      condition: allowCondition,
+      ...(allowScope ? { scope: allowScope } : {}),
+    },
     ...denyRefs.map((denyRef) => ({
       effect: "DENY",
       ...actorReference(denyRef),
@@ -564,8 +569,13 @@ const schoolSupportAccess = {
 
 const teacherPermissions = permissions(
   "DUTY-SUBJECT-TEACHER",
-  ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
+  ["ROLE-STUDENT", "DUTY-HOMEROOM", "ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS"],
   "the corresponding subject teacher acts inside assigned course and class scope",
+  {
+    kind: "ASSIGNED_SUBJECT_COURSE",
+    subjectMatch: "REQUIRED",
+    courseMatch: "REQUIRED",
+  },
 );
 const leadPermissions = permissions(
   "DUTY-SUBJECT-LEAD",
@@ -1731,7 +1741,7 @@ const examActions = [
     ],
     permissions: permissions(
       "ROLE-STUDENT",
-      ["ROLE-PLATFORM-OPS"],
+      ["ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS"],
       "the student reads only the student's own score after the score reaches PUBLISHED and visibleAt opens",
     ),
     clients: WEB_APP,

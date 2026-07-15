@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 | --- | --- |
-| 状态 | v2.0 semantic reconstruction pending human promotion |
-| 状态码 | SEMANTIC_RECONSTRUCTION |
-| 评审日期 | 2026-07-15 |
+| 状态 | v2.0 product fact source; semantic review passed |
+| 状态码 | PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED |
+| 评审日期 | 2026-07-16 |
 | 事实源 | tools/requirements-v2/facts → fail-closed validators → renderers |
 | 模块 | 27 |
 | 数据流 | 14 |

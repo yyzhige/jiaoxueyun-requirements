@@ -49,6 +49,17 @@ export function actorText(permission) {
   return permission.actorRef ?? permission.roleRef ?? permission.dutyRef ?? "—";
 }
 
+export function permissionScopeText(scope) {
+  if (!scope || typeof scope !== "object") return "—";
+  if (["OWN_RECORD", "OTHER_RECORD"].includes(scope.kind)) {
+    return `${scope.kind}:${scope.subjectFieldId}`;
+  }
+  if (scope.kind === "ASSIGNED_SUBJECT_COURSE") {
+    return `${scope.kind}:subject=${scope.subjectMatch};course=${scope.courseMatch}`;
+  }
+  return JSON.stringify(scope);
+}
+
 export function requiredText(required) {
   if (required === true) return "是";
   if (required === false) return "否";

@@ -51,6 +51,46 @@ const PERIODIC_REPORT_ACTION_IDS = new Set([
   "RPT-ACT-CANCEL-SUBSCRIPTION",
 ]);
 
+const PROFESSIONAL_SUBJECT_MUTATION_ACTION_IDS = new Set([
+  "GRD-ACT-CORRECT-RECOGNITION",
+  "GRD-ACT-ACCEPT-SUGGESTION",
+  "GRD-ACT-OVERRIDE-SCORE",
+  "GRD-ACT-MANUAL-GRADE",
+  "GRD-ACT-BATCH-CONFIRM",
+  "GRD-ACT-OPEN-CONFIRMED-REVISION",
+  "GRD-ACT-CONFIRM-REVISION",
+  "GRD-ACT-RESOLVE-VERSION-CONFLICT",
+  "PUB-ACT-PREVIEW",
+  "PUB-ACT-PREPARE-BATCH",
+  "PUB-ACT-PUBLISH-SELECTED",
+  "PUB-ACT-RETRY-FAILED",
+  "PUB-ACT-CORRECT-RESULT",
+  "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
+  "INS-ACT-CONFIRM-MASTERY",
+  "INS-ACT-PUBLISH-INTERPRETATION",
+  "PLN-ACT-CONFIRM-PLAN",
+  "PLN-ACT-ADJUST-PLAN",
+  "PLN-ACT-CLOSE-PLAN",
+  "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+  "EXM-ACT-REJECT-SUBJECT-SCORE",
+  "EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE",
+  "EXM-ACT-CORRECT-SUBJECT-SCORE",
+]);
+
+const STUDENT_DETAIL_OBJECT_IDS = new Set([
+  "SUB-OBJ-ATTEMPT",
+  "PUB-OBJ-RESULT",
+  "SCO-OBJ-VIEW",
+  "SCO-OBJ-FOLLOW-UP",
+  "INS-OBJ-EVIDENCE",
+  "PLN-OBJ-HOMEROOM-COORDINATION",
+  "APP-OBJ-TODO",
+  "STU-OBJ-PROFILE",
+  "STU-OBJ-ATTENTION",
+  "LPATH-OBJ-TIMELINE-ENTRY",
+  "EXM-OBJ-SUBJECT-SCORE",
+]);
+
 const TASK8_MODULE_MANIFEST = new Map([
   ["PREP-001", {
     objectIds: [
@@ -356,6 +396,79 @@ function sameStringSet(left, right) {
 function hasExactKeys(value, expectedKeys) {
   return isRecord(value)
     && setEquals(new Set(Object.keys(value)), new Set(expectedKeys));
+}
+
+function academicAccessBoundaryErrors(index) {
+  const enabled = [...PROFESSIONAL_SUBJECT_MUTATION_ACTION_IDS]
+    .some((actionId) => index.actionById.has(actionId));
+  if (!enabled) return [];
+  const errors = [];
+  for (const actionId of PROFESSIONAL_SUBJECT_MUTATION_ACTION_IDS) {
+    const action = index.actionById.get(actionId)?.value;
+    const permissions = records(action?.permissions);
+    const subjectTeacherAllows = permissions.filter(({ effect, dutyRef }) => (
+      effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+    ));
+    const allowScope = subjectTeacherAllows[0]?.scope;
+    const valid = action?.writes === true
+      && action?.operationKind !== "READ"
+      && subjectTeacherAllows.length === 1
+      && hasExactKeys(allowScope, ["kind", "subjectMatch", "courseMatch"])
+      && allowScope.kind === "ASSIGNED_SUBJECT_COURSE"
+      && allowScope.subjectMatch === "REQUIRED"
+      && allowScope.courseMatch === "REQUIRED"
+      && permissions.some(({ effect, dutyRef }) => (
+        effect === "DENY" && dutyRef === "DUTY-HOMEROOM"
+      ))
+      && !permissions.some(({ effect, dutyRef }) => (
+        effect === "ALLOW" && dutyRef === "DUTY-HOMEROOM"
+      ))
+      && index.scenarios.some(({ value: scenario }) => (
+        scenario?.actionId === actionId
+        && scenario?.resultCode === "PERMISSION_DENIED"
+        && scenario?.then?.expectedPermission === "DENY"
+        && scenario?.then?.expectedState?.mode === "UNCHANGED"
+      ));
+    if (!valid) {
+      errors.push(
+        `INVALID_ACADEMIC_ACCESS_BOUNDARY ${actionId} requires assigned subject-course scope and homeroom default deny`,
+      );
+    }
+  }
+  return errors;
+}
+
+function studentDetailAccessBoundaryErrors(index) {
+  const errors = [];
+  for (const { value: action } of index.actions) {
+    if (
+      action?.executionMode !== "USER_TASK"
+      || action?.operationKind !== "READ"
+      || !STUDENT_DETAIL_OBJECT_IDS.has(action?.targetObjectId)
+    ) continue;
+    const permissions = records(action?.permissions);
+    const roleBoundariesValid = ["ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS"]
+      .every((roleRef) => (
+        permissions.some(({ effect, roleRef: permissionRoleRef }) => (
+          effect === "DENY" && permissionRoleRef === roleRef
+        ))
+        && !permissions.some(({ effect, roleRef: permissionRoleRef }) => (
+          effect === "ALLOW" && permissionRoleRef === roleRef
+        ))
+      ));
+    const deniedScenarioValid = index.scenarios.some(({ value: scenario }) => (
+      scenario?.actionId === action.id
+      && scenario?.resultCode === "PERMISSION_DENIED"
+      && scenario?.then?.expectedPermission === "DENY"
+      && scenario?.then?.expectedState?.mode === "UNCHANGED"
+    ));
+    if (!roleBoundariesValid || !deniedScenarioValid) {
+      errors.push(
+        `INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY ${action.id} must deny school-admin and platform-ops default student-detail reads`,
+      );
+    }
+  }
+  return errors;
 }
 
 function hasExactValues(value, expected) {
@@ -4810,6 +4923,15 @@ function metricErrors(index) {
     }
     if (
       metric?.aggregation === "conversion"
+      && list(metric?.eventIds).length === 2
+      && !isValidId(metric?.correlationKey)
+    ) {
+      errors.push(
+        `INVALID_METRIC_SERIES ${formatValidationValue(metric?.id)} requires a correlationKey for its conversion event pair`,
+      );
+    }
+    if (
+      metric?.aggregation === "conversion"
       && list(metric?.eventIds).length > 2
     ) {
       const metricEventIds = list(metric.eventIds).filter(isValidId);
@@ -5129,6 +5251,8 @@ export function validateModelSemantics(model) {
     ...flowErrors(index),
     ...flowProfileErrors(index),
     ...actionErrors(index),
+    ...academicAccessBoundaryErrors(index),
+    ...studentDetailAccessBoundaryErrors(index),
     ...lifecycleRiskErrors(index),
     ...actionApplicabilityErrors(index),
     ...conditionalRequiredErrors(index),

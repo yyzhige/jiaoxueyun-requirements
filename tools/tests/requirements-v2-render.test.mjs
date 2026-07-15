@@ -15,6 +15,7 @@ import {
   renderDataFlowCatalog,
   renderLifecycleAiUsage,
   renderMetricCatalog,
+  renderPermissionsMatrix,
   renderTraceability,
 } from "../requirements-v2/render/contracts.mjs";
 import {
@@ -31,18 +32,18 @@ function moduleById(id) {
 function renderableModel() {
   const model = structuredClone(requirementModel);
   model.reviewStatus = {
-    code: "SEMANTIC_RECONSTRUCTION",
-    label: "v2.0 semantic reconstruction pending human promotion",
-    reviewedAt: "2026-07-15",
+    code: "PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED",
+    label: "v2.0 product fact source; semantic review passed",
+    reviewedAt: "2026-07-16",
   };
   return model;
 }
 
-test("publishes semantic reconstruction review status as a source fact", () => {
+test("publishes the passed semantic review status as a source fact", () => {
   assert.deepEqual(requirementModel.reviewStatus, {
-    code: "SEMANTIC_RECONSTRUCTION",
-    label: "v2.0 semantic reconstruction pending human promotion",
-    reviewedAt: "2026-07-15",
+    code: "PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED",
+    label: "v2.0 product fact source; semantic review passed",
+    reviewedAt: "2026-07-16",
   });
 });
 
@@ -132,6 +133,19 @@ test("renders the authored lifecycle policy keys without empty legacy columns", 
   assert.match(output, /学校停用后按激活时配置的期限归档/);
 });
 
+test("renders assigned subject-course permission scope as a machine-readable contract", () => {
+  const permissions = renderPermissionsMatrix(requirementModel);
+  const grading = renderModulePrd(moduleById("GRD-001"), requirementModel);
+
+  for (const output of [permissions, grading]) {
+    assert.match(
+      output,
+      /ASSIGNED_SUBJECT_COURSE:subject=REQUIRED;course=REQUIRED/,
+    );
+    assert.doesNotMatch(output, /ASSIGNED_SUBJECT_COURSE:undefined/);
+  }
+});
+
 test("renders Flow failure granularity providers compensation and invalidation", () => {
   const output = renderDataFlowCatalog(requirementModel);
 
@@ -148,6 +162,7 @@ test("renders metric statistic target and event calculation facts", () => {
 
   assert.match(output, /MET-001/);
   assert.match(output, /median/);
+  assert.match(output, /studentFeedbackViewId/);
   assert.match(output, /相对试点基线降低>=30%/);
   assert.match(output, /EVT-TEACHER-OPERATION-STARTED/);
 });

@@ -1,6 +1,6 @@
 # 完整性与语义扫描报告
 
-reviewStatus: `SEMANTIC_RECONSTRUCTION`
+reviewStatus: `PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED`
 
 | 检查项 | 结果 | 证据 |
 | --- | --- | --- |

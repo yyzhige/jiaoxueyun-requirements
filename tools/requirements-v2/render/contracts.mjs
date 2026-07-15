@@ -5,6 +5,7 @@ import {
   markdownList,
   markdownTable,
   normalizeDocument,
+  permissionScopeText,
   requiredText,
   stateText,
   valueSourceText,
@@ -51,7 +52,9 @@ function transitionText(action) {
 
 function permissionText(permissions) {
   return list(permissions).map((permission) => (
-    `${permission.effect}:${actorText(permission)} (${permission.condition})`
+    `${permission.effect}:${actorText(permission)} (${permission.condition})${
+      permission.scope ? ` [${permissionScopeText(permission.scope)}]` : ""
+    }`
   )).join("<br>");
 }
 
@@ -175,9 +178,7 @@ export function renderPermissionsMatrix(model) {
           permission.effect,
           actorText(permission),
           permission.condition,
-          permission.scope
-            ? `${permission.scope.kind}:${permission.scope.subjectFieldId}`
-            : "—",
+          permissionScopeText(permission.scope),
           list(action.clients).join(" / ") || action.executionMode,
           action.risk,
           action.auditMode,
@@ -357,13 +358,14 @@ export function renderMetricCatalog(model) {
   return normalizeDocument([
     "# 成功指标与事件计算合同",
     markdownTable(
-      ["Metric ID", "Owner", "范围", "聚合", "统计量", "窗口", "事件", "排除", "目标", "序列"],
+      ["Metric ID", "Owner", "范围", "聚合", "统计量", "关联键", "窗口", "事件", "排除", "目标", "序列"],
       list(model.metrics).map((metric) => [
         metric.id,
         metric.ownerRef,
         metric.scope,
         metric.aggregation,
         metric.statistic ?? "—",
+        metric.correlationKey ?? "—",
         metric.window,
         list(metric.eventIds).join(" / "),
         metric.exclusions,

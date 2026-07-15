@@ -76,9 +76,9 @@ export const aiTasks = deepFreeze([
 ]);
 
 export const reviewStatus = deepFreeze({
-  code: "SEMANTIC_RECONSTRUCTION",
-  label: "v2.0 semantic reconstruction pending human promotion",
-  reviewedAt: "2026-07-15",
+  code: "PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED",
+  label: "v2.0 product fact source; semantic review passed",
+  reviewedAt: "2026-07-16",
 });
 
 const collectionFacts = {

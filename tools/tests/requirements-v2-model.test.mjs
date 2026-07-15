@@ -7333,6 +7333,191 @@ test("enforces subject-teacher mutation and homeroom read-only coordination boun
   )), false);
 });
 
+test("binds score mastery and improvement-plan writes to assigned subject-course scope", () => {
+  const professionalMutationActionIds = [
+    "GRD-ACT-CORRECT-RECOGNITION",
+    "GRD-ACT-ACCEPT-SUGGESTION",
+    "GRD-ACT-OVERRIDE-SCORE",
+    "GRD-ACT-MANUAL-GRADE",
+    "GRD-ACT-BATCH-CONFIRM",
+    "GRD-ACT-OPEN-CONFIRMED-REVISION",
+    "GRD-ACT-CONFIRM-REVISION",
+    "GRD-ACT-RESOLVE-VERSION-CONFLICT",
+    "PUB-ACT-PREVIEW",
+    "PUB-ACT-PREPARE-BATCH",
+    "PUB-ACT-PUBLISH-SELECTED",
+    "PUB-ACT-RETRY-FAILED",
+    "PUB-ACT-CORRECT-RESULT",
+    "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
+    "INS-ACT-CONFIRM-MASTERY",
+    "INS-ACT-PUBLISH-INTERPRETATION",
+    "PLN-ACT-CONFIRM-PLAN",
+    "PLN-ACT-ADJUST-PLAN",
+    "PLN-ACT-CLOSE-PLAN",
+    "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+    "EXM-ACT-REJECT-SUBJECT-SCORE",
+    "EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE",
+    "EXM-ACT-CORRECT-SUBJECT-SCORE",
+  ];
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+
+  for (const actionId of professionalMutationActionIds) {
+    const action = actionById.get(actionId);
+    assert.ok(action, actionId);
+    assert.notEqual(action.operationKind, "READ", actionId);
+    assert.deepEqual(
+      action.permissions.find(({ effect, dutyRef }) => (
+        effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+      ))?.scope,
+      {
+        kind: "ASSIGNED_SUBJECT_COURSE",
+        subjectMatch: "REQUIRED",
+        courseMatch: "REQUIRED",
+      },
+      actionId,
+    );
+    assert.ok(action.permissions.some(({ effect, dutyRef }) => (
+      effect === "DENY" && dutyRef === "DUTY-HOMEROOM"
+    )), actionId);
+    const deniedScenario = modules
+      .flatMap((module) => module.scenarios)
+      .find(({ actionId: scenarioActionId, resultCode }) => (
+        scenarioActionId === actionId && resultCode === "PERMISSION_DENIED"
+      ));
+    assert.deepEqual(deniedScenario?.then.expectedPermission, "DENY", actionId);
+    assert.deepEqual(deniedScenario?.then.expectedState, { mode: "UNCHANGED" }, actionId);
+  }
+});
+
+test("explicitly denies school-admin and platform-ops default student-detail reads", () => {
+  const studentDetailReadActionIds = [
+    "SUB-ACT-VIEW-RECEIPT",
+    "PUB-ACT-VIEW-RESULT",
+    "SCO-ACT-READ-GRADEBOOK",
+    "SCO-ACT-VIEW-FOLLOW-UP",
+    "INS-ACT-READ-CONFIRMED-EVIDENCE",
+    "INS-ACT-VIEW-MASTERY",
+    "PLN-ACT-VIEW-HOMEROOM-COORDINATION",
+    "APP-ACT-VIEW-TODOS",
+    "STU-ACT-OPEN-PROFILE",
+    "STU-ACT-VIEW-ATTENTION",
+    "LPATH-ACT-VIEW-PATH",
+    "EXM-ACT-VIEW-PUBLISHED-SCORE",
+  ];
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+
+  for (const actionId of studentDetailReadActionIds) {
+    const action = actionById.get(actionId);
+    assert.equal(action?.operationKind, "READ", actionId);
+    for (const roleRef of ["ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS"]) {
+      assert.ok(action.permissions.some(({ effect, roleRef: permissionRoleRef }) => (
+        effect === "DENY" && permissionRoleRef === roleRef
+      )), `${actionId}:${roleRef}`);
+      assert.equal(action.permissions.some(({ effect, roleRef: permissionRoleRef }) => (
+        effect === "ALLOW" && permissionRoleRef === roleRef
+      )), false, `${actionId}:${roleRef}`);
+    }
+  }
+});
+
+test("rejects fail-open professional subject-course mutation boundaries", () => {
+  const mutations = [
+    ["missing assigned scope", (model) => {
+      const action = moduleById(model, "GRD-001").actions
+        .find(({ id }) => id === "GRD-ACT-OVERRIDE-SCORE");
+      const allow = action.permissions.find(({ effect, dutyRef }) => (
+        effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+      ));
+      delete allow.scope;
+    }],
+    ["missing homeroom deny", (model) => {
+      const action = moduleById(model, "INS-001").actions
+        .find(({ id }) => id === "INS-ACT-CONFIRM-MASTERY");
+      action.permissions = action.permissions.filter(({ effect, dutyRef }) => (
+        effect !== "DENY" || dutyRef !== "DUTY-HOMEROOM"
+      ));
+    }],
+    ["missing publication subject-course scope", (model) => {
+      const action = moduleById(model, "PUB-001").actions
+        .find(({ id }) => id === "PUB-ACT-CORRECT-RESULT");
+      const allow = action.permissions.find(({ effect, dutyRef }) => (
+        effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+      ));
+      delete allow.scope;
+    }],
+    ["homeroom write allow", (model) => {
+      const action = moduleById(model, "PLN-001").actions
+        .find(({ id }) => id === "PLN-ACT-ADJUST-PLAN");
+      action.permissions.push({
+        effect: "ALLOW",
+        dutyRef: "DUTY-HOMEROOM",
+        condition: "homeroom duty writes a subject plan",
+      });
+    }],
+  ];
+
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_ACADEMIC_ACCESS_BOUNDARY",
+      name,
+    );
+  }
+});
+
+test("rejects fail-open school-admin and platform-ops student-detail reads", () => {
+  const mutations = [
+    ["missing school-admin deny", (model) => {
+      const action = moduleById(model, "SUB-001").actions
+        .find(({ id }) => id === "SUB-ACT-VIEW-RECEIPT");
+      action.permissions = action.permissions.filter(({ effect, roleRef }) => (
+        effect !== "DENY" || roleRef !== "ROLE-SCHOOL-ADMIN"
+      ));
+    }],
+    ["school-admin default allow", (model) => {
+      moduleById(model, "PUB-001").actions
+        .find(({ id }) => id === "PUB-ACT-VIEW-RESULT")
+        .permissions.push({
+          effect: "ALLOW",
+          roleRef: "ROLE-SCHOOL-ADMIN",
+          condition: "school administration browses student result detail by default",
+        });
+    }],
+    ["missing platform-ops deny", (model) => {
+      const action = moduleById(model, "LPATH-001").actions
+        .find(({ id }) => id === "LPATH-ACT-VIEW-PATH");
+      action.permissions = action.permissions.filter(({ effect, roleRef }) => (
+        effect !== "DENY" || roleRef !== "ROLE-PLATFORM-OPS"
+      ));
+    }],
+    ["platform-ops default allow", (model) => {
+      moduleById(model, "SCO-001").actions
+        .find(({ id }) => id === "SCO-ACT-READ-GRADEBOOK")
+        .permissions.push({
+          effect: "ALLOW",
+          roleRef: "ROLE-PLATFORM-OPS",
+          condition: "platform operations browses student grade detail by default",
+        });
+    }],
+  ];
+
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY",
+      name,
+    );
+  }
+});
+
 test("models evidence candidates teacher confirmation student visibility and immutable invalidation history", () => {
   const insight = moduleById(requirementModel, "INS-001");
   const evidence = insight.objects.find(({ id }) => id === "INS-OBJ-EVIDENCE");
@@ -9272,6 +9457,10 @@ test("defines measurable metric event contracts and all approved NFRs", () => {
     window: "以一次作业反馈闭环为统计单元，比较试点基线期与试点运行期的周中位数",
   });
   assert.equal(metrics.find(({ id }) => id === "MET-002").aggregation, "conversion");
+  assert.equal(
+    metrics.find(({ id }) => id === "MET-002").correlationKey,
+    "studentFeedbackViewId",
+  );
   assert.equal(metrics.find(({ id }) => id === "MET-003").aggregation, "count");
   assert.equal(metrics.find(({ id }) => id === "MET-004").aggregation, "count");
   const manualFallback = metrics.find(({ id }) => id === "MET-005");
@@ -11700,6 +11889,13 @@ test("rejects a conversion series without a correlation key", () => {
   assertHasCode(validateRequirementModel(model), "INVALID_METRIC_SERIES");
 });
 
+test("rejects a single conversion pair without a correlation key", () => {
+  const model = validFixture();
+  model.metrics[0].aggregation = "conversion";
+
+  assertHasCode(validateRequirementModel(model), "INVALID_METRIC_SERIES");
+});
+
 test("rejects a conversion series that omits one metric path", () => {
   const model = validMultiSeriesConversionModel();
   const metric = model.metrics[0];
@@ -11750,6 +11946,9 @@ test("accepts supported metric aggregations with sufficient events", () => {
     const model = validFixture();
     model.metrics[0].aggregation = aggregation;
     model.metrics[0].eventIds = eventIds;
+    if (aggregation === "conversion") {
+      model.metrics[0].correlationKey = "fixtureConversionId";
+    }
     model.events = eventIds.map((id) => ({
       id,
       label: id,

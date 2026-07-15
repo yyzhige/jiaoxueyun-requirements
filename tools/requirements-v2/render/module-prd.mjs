@@ -4,6 +4,7 @@ import {
   markdownList,
   markdownTable,
   normalizeDocument,
+  permissionScopeText,
   requiredText,
   stateText,
   valueSourceText,
@@ -182,7 +183,11 @@ export function renderModulePrd(module, model) {
         list(action.inputFieldIds).join("<br>"),
         list(action.outputFieldIds).join("<br>"),
         transitionText(action),
-        list(action.permissions).map((permission) => `${permission.effect}:${actorText(permission)} — ${permission.condition}`).join("<br>"),
+        list(action.permissions).map((permission) => (
+          `${permission.effect}:${actorText(permission)} — ${permission.condition}${
+            permission.scope ? ` [${permissionScopeText(permission.scope)}]` : ""
+          }`
+        )).join("<br>"),
         list(action.clients).join(" / ") || action.executionMode,
         action.risk,
         action.auditMode,

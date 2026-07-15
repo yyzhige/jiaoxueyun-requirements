@@ -1340,16 +1340,26 @@ function validateAction(errors, action, path, strict) {
     }
     if (Object.hasOwn(permission, "scope")) {
       const scope = permission.scope;
-      const scopeKeys = new Set(["kind", "subjectFieldId"]);
-      if (
-        !isRecord(scope)
-        || Object.keys(scope).length !== scopeKeys.size
-        || Object.keys(scope).some((key) => !scopeKeys.has(key))
-        || !["OWN_RECORD", "OTHER_RECORD"].includes(scope.kind)
-        || !isValidId(scope.subjectFieldId)
-      ) {
+      const recordScopeKeys = new Set(["kind", "subjectFieldId"]);
+      const assignedSubjectCourseKeys = new Set([
+        "kind",
+        "subjectMatch",
+        "courseMatch",
+      ]);
+      const validRecordScope = isRecord(scope)
+        && Object.keys(scope).length === recordScopeKeys.size
+        && Object.keys(scope).every((key) => recordScopeKeys.has(key))
+        && ["OWN_RECORD", "OTHER_RECORD"].includes(scope.kind)
+        && isValidId(scope.subjectFieldId);
+      const validAssignedSubjectCourseScope = isRecord(scope)
+        && Object.keys(scope).length === assignedSubjectCourseKeys.size
+        && Object.keys(scope).every((key) => assignedSubjectCourseKeys.has(key))
+        && scope.kind === "ASSIGNED_SUBJECT_COURSE"
+        && scope.subjectMatch === "REQUIRED"
+        && scope.courseMatch === "REQUIRED";
+      if (!validRecordScope && !validAssignedSubjectCourseScope) {
         errors.push(
-          `INVALID_ACTION_CONTRACT ${permissionPath}.scope must declare an OWN_RECORD or OTHER_RECORD subject field`,
+          `INVALID_ACTION_CONTRACT ${permissionPath}.scope must declare an OWN_RECORD, OTHER_RECORD, or ASSIGNED_SUBJECT_COURSE scope`,
         );
       }
     }
@@ -2945,6 +2955,9 @@ function validateModelShape(model) {
         "window",
       ]) {
         requireString(errors, metric, property, path);
+      }
+      if (Object.hasOwn(metric, "correlationKey")) {
+        requireString(errors, metric, "correlationKey", path);
       }
       const eventIds = requireArray(errors, metric, "eventIds", path);
       eventIds.forEach((eventId, index) => {

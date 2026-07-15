@@ -108,8 +108,13 @@ function declareSourceCardinalities(flowDefinitions) {
   }));
 }
 
-function permission(effect, actorRef, condition) {
-  return { effect, ...actorReference(actorRef), condition };
+function permission(effect, actorRef, condition, scope) {
+  return {
+    effect,
+    ...actorReference(actorRef),
+    condition,
+    ...(scope ? { scope } : {}),
+  };
 }
 
 function action({
@@ -776,6 +781,11 @@ const studentSubmissionPermissions = [
     "DENY",
     "ROLE-TEACHER",
     "a teacher attempts to create or submit student work on the student's behalf",
+  ),
+  permission(
+    "DENY",
+    "ROLE-SCHOOL-ADMIN",
+    "school administration has no default access to student answer content",
   ),
   permission(
     "DENY",
@@ -1567,11 +1577,18 @@ const systemFlowPermissions = [
   permission("DENY", "CURRENT_ACTOR", "a user attempts to invoke an internal grading step directly"),
 ];
 
+const assignedSubjectCourseScope = {
+  kind: "ASSIGNED_SUBJECT_COURSE",
+  subjectMatch: "REQUIRED",
+  courseMatch: "REQUIRED",
+};
+
 const gradingTeacherPermissions = [
   permission(
     "ALLOW",
     "DUTY-SUBJECT-TEACHER",
     "the corresponding subject teacher confirms the decision inside assigned course and student scope",
+    assignedSubjectCourseScope,
   ),
   permission(
     "DENY",
@@ -2222,6 +2239,7 @@ const publicationTeacherPermissions = [
     "ALLOW",
     "DUTY-SUBJECT-TEACHER",
     "the corresponding subject teacher publishes confirmed decisions inside assigned student scope",
+    assignedSubjectCourseScope,
   ),
   permission(
     "DENY",
@@ -2455,6 +2473,7 @@ const publicationActions = [
     writes: false,
     permissions: [
       permission("ALLOW", "ROLE-STUDENT", "the student reads only the student's own published result after each configured visibility time"),
+      permission("DENY", "ROLE-SCHOOL-ADMIN", "school administration has no default access to a student's answer, score, or feedback"),
       permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to a student's answer, score, or feedback"),
     ],
     failureResults: [
@@ -2740,6 +2759,7 @@ const subjectTeacherWritePermissions = [
     "ALLOW",
     "DUTY-SUBJECT-TEACHER",
     "the corresponding subject teacher writes only inside the assigned subject, class, and student scope",
+    assignedSubjectCourseScope,
   ),
   permission(
     "DENY",
@@ -3355,6 +3375,7 @@ const evidenceActions = [
     writes: false,
     permissions: [
       permission("ALLOW", "ROLE-STUDENT", "the student reads only the student's own teacher-confirmed interpretation after its release time"),
+      permission("DENY", "ROLE-SCHOOL-ADMIN", "school administration has no default access to student evidence or mastery interpretation"),
       permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to student evidence or mastery interpretation"),
     ],
     capability: "ANALYSIS",
@@ -4215,6 +4236,7 @@ const studentTodoActions = [
     writes: false,
     permissions: [
       permission("ALLOW", "ROLE-STUDENT", "the student reads only the student's own released todo aggregation"),
+      permission("DENY", "ROLE-SCHOOL-ADMIN", "school administration has no default access to student todo execution detail"),
       permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to student todo execution detail"),
     ],
     failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "NOT_YET_VISIBLE"],
