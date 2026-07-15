@@ -32,6 +32,15 @@ const FLOW_ROUTING_POLICIES = new Set([
   "ACTION_CHOICE_REQUIRED",
   "OPTION_VALUE_REQUIRED",
 ]);
+const AI_TASK_TYPES = new Set([
+  "QUERY",
+  "ANALYSIS",
+  "DRAFT",
+  "AD_HOC_REPORT",
+  "PERIODIC",
+  "REMINDER",
+  "CONTROLLED_ACTION",
+]);
 const PERMISSION_ALLOWED_KEYS = new Set([
   "effect",
   "condition",
@@ -1794,16 +1803,114 @@ function validateFlow(errors, flow, path) {
 }
 
 function validateAiTask(errors, task, path) {
+  const code = "INVALID_AI_TASK_CONTRACT";
   requireArray(errors, task, "previewFieldIds", path);
-  for (const property of [
-    "actorRefs",
-    "roleRefs",
-    "dutyRefs",
-    "actorIds",
-    "roleIds",
-    "dutyIds",
-  ]) {
-    optionalArray(errors, task, property, path);
+  if (!AI_TASK_TYPES.has(task.taskType)) {
+    errors.push(`${code} ${path}.taskType must be a registered AI task type`);
+  }
+  const roleRefs = contractStringArray(errors, task, "roleRefs", path, code);
+  const dutyRefs = contractStringArray(errors, task, "dutyRefs", path, code);
+  if (roleRefs.length + dutyRefs.length === 0) {
+    errors.push(`${code} ${path} requires at least one role or duty`);
+  }
+  contractStringArray(errors, task, "clients", path, code, { nonEmpty: true })
+    .forEach((client) => {
+      if (isValidId(client) && !CLIENTS.has(client)) {
+        errors.push(`${code} ${path}.clients contains unsupported ${client}`);
+      }
+    });
+  contractStringArray(
+    errors,
+    task,
+    "naturalLanguageExamples",
+    path,
+    code,
+    { nonEmpty: true },
+  );
+  contractString(errors, task, "actionId", path, code);
+  if (!RISKS.has(task.risk)) {
+    errors.push(`${code} ${path}.risk must be READ, LOW, or HIGH`);
+  }
+  if (typeof task.writes !== "boolean") {
+    errors.push(`${code} ${path}.writes must be boolean`);
+  }
+  contractStringArray(errors, task, "previewFieldIds", path, code);
+
+  const validateSchema = (schema, schemaPath) => {
+    if (!isRecord(schema)) {
+      errors.push(`${code} ${schemaPath} must be an object schema`);
+      return;
+    }
+    if (schema.type !== "object") {
+      errors.push(`${code} ${schemaPath}.type must be object`);
+    }
+    const required = contractStringArray(
+      errors,
+      schema,
+      "required",
+      schemaPath,
+      code,
+    );
+    if (!isRecord(schema.properties)) {
+      errors.push(`${code} ${schemaPath}.properties must be an object`);
+    } else {
+      for (const property of required) {
+        if (!Object.hasOwn(schema.properties, property)) {
+          errors.push(`${code} ${schemaPath}.required references missing ${property}`);
+        }
+      }
+    }
+    if (schema.additionalProperties !== false) {
+      errors.push(`${code} ${schemaPath}.additionalProperties must be false`);
+    }
+  };
+  validateSchema(task.parameterSchema, `${path}.parameterSchema`);
+  validateSchema(task.resultSchema, `${path}.resultSchema`);
+
+  const clarificationRules = contractArray(
+    errors,
+    task,
+    "clarificationRules",
+    path,
+    code,
+    { nonEmpty: true },
+  );
+  clarificationRules.forEach((rule, index) => {
+    const rulePath = `${path}.clarificationRules[${index}]`;
+    if (!isRecord(rule)) {
+      errors.push(`${code} ${rulePath} must be an object`);
+      return;
+    }
+    contractStringArray(errors, rule, "whenMissing", rulePath, code, { nonEmpty: true });
+    contractString(errors, rule, "prompt", rulePath, code);
+    if (rule.blocksExecution !== true) {
+      errors.push(`${code} ${rulePath}.blocksExecution must be true`);
+    }
+  });
+
+  const confirmer = task.confirmer;
+  if (!isRecord(confirmer) || !["DUTY", "NOT_REQUIRED"].includes(confirmer.mode)) {
+    errors.push(`${code} ${path}.confirmer must declare DUTY or NOT_REQUIRED mode`);
+  } else if (confirmer.mode === "DUTY" && !isValidId(confirmer.dutyRef)) {
+    errors.push(`${code} ${path}.confirmer.dutyRef must be a non-empty duty ID`);
+  }
+
+  const failureBehavior = task.failureBehavior;
+  if (
+    !isRecord(failureBehavior)
+    || failureBehavior.mode !== "FAIL_CLOSED"
+    || failureBehavior.preservesBusinessFacts !== true
+    || !isValidId(failureBehavior.manualFallback)
+  ) {
+    errors.push(`${code} ${path}.failureBehavior must fail closed and preserve business facts`);
+  }
+  const reversibility = task.reversibility;
+  if (
+    !isRecord(reversibility)
+    || !["NOT_APPLICABLE", "TARGET_ACTION_POLICY"].includes(reversibility.mode)
+    || !isValidId(reversibility.instructions)
+  ) {
+    errors.push(`${code} ${path}.reversibility must declare an explicit supported policy`);
   }
 }
 

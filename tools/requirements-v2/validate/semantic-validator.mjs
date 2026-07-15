@@ -42,6 +42,13 @@ const EXTENSION_EXECUTABLE_KEYS = [
   "actionId",
 ];
 
+const PERIODIC_REPORT_ACTION_IDS = new Set([
+  "RPT-ACT-CREATE-SUBSCRIPTION",
+  "RPT-ACT-UPDATE-SUBSCRIPTION",
+  "RPT-ACT-PAUSE-SUBSCRIPTION",
+  "RPT-ACT-CANCEL-SUBSCRIPTION",
+]);
+
 function list(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -988,15 +995,320 @@ function aiTaskErrors(index) {
   const errors = [];
   for (const taskEntry of index.aiTasks) {
     const task = taskEntry.value;
+    const targetActionEntry = index.actionById.get(task?.actionId);
+    const targetAction = targetActionEntry?.value;
+    const writesMatch = typeof task?.writes === "boolean"
+      && typeof targetAction?.writes === "boolean"
+      && task.writes === targetAction.writes;
+    const readContractValid = !["QUERY", "ANALYSIS"].includes(task?.taskType)
+      || (task?.writes === false && task?.risk === "READ");
+    const clientsMatch = targetAction?.executionMode === "USER_TASK"
+      && list(task?.clients).every((client) => list(targetAction?.clients).includes(client));
+    const riskMatches = task?.risk === targetAction?.risk;
+    if (
+      targetActionEntry
+      && (!writesMatch || !readContractValid || !clientsMatch || !riskMatches)
+    ) {
+      errors.push(
+        `INVALID_AI_TARGET_ACTION ${formatValidationValue(task?.id)} must match the target Action write, risk, and client contract`,
+      );
+    }
+
+    if (
+      task?.taskType === "PERIODIC"
+      && (
+        targetActionEntry?.moduleId !== "RPT-001"
+        || targetAction?.targetObjectId !== "RPT-OBJ-SUBSCRIPTION"
+        || !PERIODIC_REPORT_ACTION_IDS.has(task?.actionId)
+      )
+    ) {
+      errors.push(
+        `INVALID_AI_PERIODIC_TARGET ${formatValidationValue(task?.id)} may manage only report subscriptions`,
+      );
+    }
+
+    if (task?.taskType === "DRAFT") {
+      const draftPolicy = task?.draftPolicy;
+      const previewActionEntry = index.actionById.get(draftPolicy?.previewActionId);
+      const previewObjectEntry = index.objectById.get(draftPolicy?.previewObjectId);
+      const draftPolicyValid = draftPolicy?.previewActionId === "AIX-ACT-PREPARE-TASK-PREVIEW"
+        && draftPolicy?.previewObjectId === "AIX-OBJ-TASK-PREVIEW"
+        && draftPolicy.confirmationRequired === true
+        && draftPolicy.businessWriteBeforeConfirmation === false
+        && previewActionEntry?.moduleId === "AIX-001"
+        && previewActionEntry.value?.targetObjectId === draftPolicy.previewObjectId
+        && previewObjectEntry?.moduleId === "AIX-001"
+        && previewObjectEntry.value?.lifecyclePolicyId === "LIFE-005";
+      if (!draftPolicyValid) {
+        errors.push(
+          `INVALID_AI_DRAFT_POLICY ${formatValidationValue(task?.id)} must remain a temporary AIX preview until authorized confirmation`,
+        );
+      }
+    }
+
+    if (list(task?.roleRefs).includes("ROLE-STUDENT")) {
+      const policy = task?.studentAccessPolicy;
+      const policyValid = isRecord(policy)
+        && ["answer", "explanation", "score", "feedback"]
+          .every((property) => policy[property] === "OPEN_CONTENT_ONLY")
+        && policy.sourceVersionRequired === true;
+      if (!policyValid) {
+        errors.push(
+          `MISSING_AI_STUDENT_POLICY ${formatValidationValue(task?.id)} must enforce every content-open gate and source version`,
+        );
+      }
+    }
+
     if (!task?.writes) continue;
-    const registeredConfirmer = index.dutyIds.has(task?.confirmerDutyRef);
-    if (list(task?.previewFieldIds).length === 0 || !registeredConfirmer) {
+    const registeredConfirmer = index.dutyIds.has(task?.confirmerDutyRef)
+      && task?.confirmer?.mode === "DUTY"
+      && task.confirmer.dutyRef === task.confirmerDutyRef;
+    const previewFieldIds = new Set(list(task?.previewFieldIds));
+    const previewComplete = list(targetAction?.inputFieldIds)
+      .every((fieldId) => previewFieldIds.has(fieldId));
+    if (previewFieldIds.size === 0 || !previewComplete || !registeredConfirmer) {
       errors.push(
         `AI_WRITE_WITHOUT_CONFIRMATION ${formatValidationValue(task?.id)} requires preview fields and an authorized duty confirmer`,
       );
     }
   }
   return errors;
+}
+
+function reportErrors(index) {
+  const reportModule = index.moduleById.get("RPT-001")?.value;
+  if (!reportModule) return [];
+  const errors = [];
+  const objectById = new Map(records(reportModule.objects).map((object) => [object.id, object]));
+  const requiredObjectIds = [
+    "RPT-OBJ-DEFINITION",
+    "RPT-OBJ-SUBSCRIPTION",
+    "RPT-OBJ-RUN",
+    "RPT-OBJ-SNAPSHOT",
+    "RPT-OBJ-DELIVERY",
+  ];
+  const fieldRequirements = new Map([
+    ["RPT-OBJ-DEFINITION", [
+      "RPT-DEFINITION-F-NAME",
+      "RPT-DEFINITION-F-METRIC-IDS",
+      "RPT-DEFINITION-F-DATA-SCOPE",
+      "RPT-DEFINITION-F-TIME-RANGE",
+    ]],
+    ["RPT-OBJ-SUBSCRIPTION", [
+      "RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY",
+      "RPT-SUBSCRIPTION-F-EXECUTION-TIME",
+      "RPT-SUBSCRIPTION-F-TIMEZONE",
+      "RPT-SUBSCRIPTION-F-RECIPIENTS",
+    ]],
+    ["RPT-OBJ-RUN", [
+      "RPT-RUN-F-DATA-CUTOFF",
+      "RPT-RUN-F-PERMISSION-RESULT",
+      "RPT-RUN-F-SOURCE-VERSIONS",
+      "RPT-RUN-F-RESULT",
+    ]],
+    ["RPT-OBJ-DELIVERY", ["RPT-DELIVERY-F-STATE"]],
+  ]);
+  const objectContractValid = setEquals(
+    new Set(objectById.keys()),
+    new Set(requiredObjectIds),
+  ) && [...fieldRequirements].every(([objectId, fieldIds]) => {
+    const actualFieldIds = new Set(records(objectById.get(objectId)?.fields).map(({ id }) => id));
+    return fieldIds.every((fieldId) => actualFieldIds.has(fieldId));
+  });
+
+  const subscription = objectById.get("RPT-OBJ-SUBSCRIPTION");
+  const run = objectById.get("RPT-OBJ-RUN");
+  const lifecycleValid = setEquals(
+    stateIds(subscription),
+    new Set(["ACTIVE", "PAUSED", "CANCELLED"]),
+  ) && setEquals(
+    stateIds(run),
+    new Set(["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED_PERMISSION"]),
+  ) && hasExactKeys(reportModule.lifecycleBoundaries, [
+    "subscriptionObjectId",
+    "runObjectId",
+    "sharedStateMachine",
+  ])
+    && reportModule.lifecycleBoundaries.subscriptionObjectId === "RPT-OBJ-SUBSCRIPTION"
+    && reportModule.lifecycleBoundaries.runObjectId === "RPT-OBJ-RUN"
+    && reportModule.lifecycleBoundaries.sharedStateMachine === false;
+
+  const policy = run?.executionPolicy;
+  const runPolicyValid = hasExactKeys(policy, [
+    "permissionCheck",
+    "dataCutoff",
+    "permissionFailureState",
+    "sourceVersionCapture",
+  ])
+    && policy.permissionCheck === "RECHECK_EACH_RUN"
+    && policy.dataCutoff === "RESOLVE_AT_RUN_START"
+    && policy.permissionFailureState === "BLOCKED_PERMISSION"
+    && policy.sourceVersionCapture === "PIN_BEFORE_QUERY";
+
+  const snapshot = objectById.get("RPT-OBJ-SNAPSHOT");
+  const runRef = records(snapshot?.fields).find(({ id }) => id === "RPT-SNAPSHOT-F-RUN-REF");
+  const snapshotPinValid = runRef?.valueSource?.kind === "OBJECT_REF"
+    && runRef.valueSource.targetObjectId === "RPT-OBJ-RUN"
+    && runRef.referenceIntegrity === "VERSION_PINNED"
+    && runRef.versionBinding?.versionFieldId === "RPT-SNAPSHOT-F-RUN-VERSION"
+    && runRef.versionBinding?.targetVersionFieldId === "RPT-RUN-F-VERSION"
+    && records(snapshot?.fields).some(({ id }) => id === "RPT-SNAPSHOT-F-SOURCE-VERSIONS")
+    && list(snapshot?.lineageBindings).some((binding) => (
+      binding?.refFieldId === "RPT-SNAPSHOT-F-RUN-REF"
+      && binding?.versionFieldId === "RPT-SNAPSHOT-F-RUN-VERSION"
+      && binding?.targetObjectId === "RPT-OBJ-RUN"
+      && binding?.targetVersionFieldId === "RPT-RUN-F-VERSION"
+    ));
+
+  const horizonValid = hasExactKeys(reportModule.timeHorizons, ["adHoc", "periodic"])
+    && reportModule.timeHorizons.adHoc
+      === "SESSION_ANALYSIS_SAVED_ONLY_ON_CONFIRMATION"
+    && reportModule.timeHorizons.periodic
+      === "SUBSCRIPTION_WITH_INDEPENDENT_RUN_SNAPSHOT_AND_DELIVERY"
+    && index.moduleById.get("LPATH-001")?.value?.timeHorizon
+      === "CROSS_TERM_APPEND_ONLY_LONG_TERM";
+
+  if (
+    !objectContractValid
+    || !lifecycleValid
+    || !runPolicyValid
+    || !snapshotPinValid
+    || !horizonValid
+  ) {
+    errors.push(
+      "INVALID_REPORT_CONTRACT RPT-001 must separate report objects, lifecycles, run authorization, source pins, and time horizons",
+    );
+  }
+  return errors;
+}
+
+function learningPathErrors(index) {
+  const pathModule = index.moduleById.get("LPATH-001")?.value;
+  if (!pathModule) return [];
+  const errors = [];
+  const timeline = index.objectById.get("LPATH-OBJ-TIMELINE-ENTRY")?.value;
+  const interpretation = index.objectById.get("LPATH-OBJ-INTERPRETATION")?.value;
+  const expectedSourceBindings = [
+    ["PUBLISHED-RESULT", "PUB-OBJ-RESULT", "PUB-RESULT-F-RESULT-VERSION"],
+    ["EVIDENCE", "INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-EVIDENCE-VERSION"],
+    ["CORRECTION", "CORR-OBJ-ATTEMPT", "CORR-ATTEMPT-F-CORRECTION-VERSION"],
+    ["PLAN-EXECUTION", "APP-OBJ-TODO", "APP-TODO-F-AGGREGATION-VERSION"],
+    ["TEACHER-CONFIRMATION", "GRD-OBJ-DECISION", "GRD-DECISION-F-DECISION-VERSION"],
+  ];
+  const timelineFieldById = new Map(records(timeline?.fields).map((field) => [field.id, field]));
+  const timelineValid = timeline?.crossTerm === true
+    && expectedSourceBindings.every(([kind, objectId, targetVersionFieldId]) => {
+      const refFieldId = `LPATH-ENTRY-F-${kind}-REF`;
+      const versionFieldId = `LPATH-ENTRY-F-${kind}-VERSION`;
+      const refField = timelineFieldById.get(refFieldId);
+      return refField?.valueSource?.kind === "OBJECT_REF"
+        && refField.valueSource.targetObjectId === objectId
+        && refField.referenceIntegrity === "VERSION_PINNED"
+        && refField.versionBinding?.versionFieldId === versionFieldId
+        && refField.versionBinding?.targetVersionFieldId === targetVersionFieldId
+        && timelineFieldById.has(versionFieldId)
+        && list(timeline?.lineageBindings).some((binding) => (
+          binding?.refFieldId === refFieldId
+          && binding?.versionFieldId === versionFieldId
+          && binding?.targetObjectId === objectId
+          && binding?.targetVersionFieldId === targetVersionFieldId
+        ));
+    });
+
+  const interpretationFieldIds = new Set(
+    records(interpretation?.fields).map(({ id }) => id),
+  );
+  const requiredInterpretationFieldIds = [
+    "LPATH-INTERPRETATION-F-SUBJECT",
+    "LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF",
+    "LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-VERSION",
+    "LPATH-INTERPRETATION-F-EVIDENCE-REFS",
+    "LPATH-INTERPRETATION-F-EXPLANATION",
+    "LPATH-INTERPRETATION-F-CONFIDENCE",
+    "LPATH-INTERPRETATION-F-LIMITATIONS",
+    "LPATH-INTERPRETATION-F-TEACHER-CONFIRMER",
+    "LPATH-INTERPRETATION-F-VISIBLE-FROM",
+    "LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF",
+    "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
+    "LPATH-INTERPRETATION-F-STALE-REASON",
+    "LPATH-INTERPRETATION-F-VERSION",
+  ];
+  const interpretationValid = requiredInterpretationFieldIds.every((fieldId) => (
+    interpretationFieldIds.has(fieldId)
+  )) && setEquals(
+    stateIds(interpretation),
+    new Set(["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "SUPERSEDED", "STALE"]),
+  );
+
+  const history = pathModule.historyPolicy;
+  const historyValid = hasExactKeys(history, [
+    "timeline",
+    "sourceFacts",
+    "interpretationChange",
+    "priorVersions",
+  ])
+    && history.timeline === "APPEND_ONLY_SOURCE_REFERENCES"
+    && history.sourceFacts === "NEVER_COPY_OR_REWRITE"
+    && history.interpretationChange === "CREATE_NEW_VERSION"
+    && history.priorVersions === "RETAIN_WITH_SUPERSEDED_OR_STALE_REASON";
+
+  const userWrites = records(pathModule.actions).filter(({ executionMode, writes }) => (
+    executionMode === "USER_TASK" && writes === true
+  ));
+  const writesValid = userWrites.length > 0 && userWrites.every((action) => {
+    const allows = records(action.permissions).filter(({ effect }) => effect === "ALLOW");
+    return allows.length === 1
+      && allows[0].dutyRef === "DUTY-SUBJECT-TEACHER"
+      && records(action.permissions).some(({ effect, dutyRef }) => (
+        effect === "DENY" && dutyRef === "DUTY-HOMEROOM"
+      ));
+  });
+  const readAction = index.actionById.get("LPATH-ACT-VIEW-PATH")?.value;
+  const readAllows = records(readAction?.permissions)
+    .filter(({ effect }) => effect === "ALLOW")
+    .map(({ dutyRef }) => dutyRef);
+  const readValid = readAction?.writes === false
+    && setEquals(
+      new Set(readAllows),
+      new Set(["DUTY-SUBJECT-TEACHER", "DUTY-HOMEROOM"]),
+    );
+
+  if (!timelineValid || !interpretationValid || !historyValid || !writesValid || !readValid) {
+    errors.push(
+      "INVALID_LEARNING_PATH_CONTRACT LPATH-001 must retain cross-term source versions and subject-owned interpretation history",
+    );
+  }
+  return errors;
+}
+
+function notificationErrors(index) {
+  const notification = index.objectById.get("NOTI-OBJ-NOTIFICATION")?.value;
+  if (!notification) return [];
+  const requiredFieldIds = [
+    "NOTI-NOTIFICATION-F-SOURCE-EVENT",
+    "NOTI-NOTIFICATION-F-RECIPIENT",
+    "NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE",
+    "NOTI-NOTIFICATION-F-DEEP-LINK",
+    "NOTI-NOTIFICATION-F-DELIVERED-AT",
+    "NOTI-NOTIFICATION-F-READ-AT",
+    "NOTI-NOTIFICATION-F-HANDLED-AT",
+    "NOTI-NOTIFICATION-F-FAILURE-CODE",
+    "NOTI-NOTIFICATION-F-RETRY-COUNT",
+  ];
+  const fieldIds = new Set(records(notification.fields).map(({ id }) => id));
+  const policy = notification.deliveryFailurePolicy;
+  const valid = requiredFieldIds.every((fieldId) => fieldIds.has(fieldId))
+    && hasExactKeys(policy, [
+      "sourceBusinessFactRollback",
+      "retryScope",
+      "preserveAcceptedSourceVersion",
+    ])
+    && policy.sourceBusinessFactRollback === false
+    && policy.retryScope === "NOTIFICATION_DELIVERY_ONLY"
+    && policy.preserveAcceptedSourceVersion === true;
+  return valid ? [] : [
+    "INVALID_NOTIFICATION_CONTRACT NOTI-001 must retry delivery independently without rolling back source facts",
+  ];
 }
 
 function phaseAndTemplateErrors(index) {
@@ -1373,6 +1685,9 @@ export function validateModelSemantics(model) {
     ...conditionalRequiredErrors(index),
     ...ownerErrors(index),
     ...aiTaskErrors(index),
+    ...reportErrors(index),
+    ...learningPathErrors(index),
+    ...notificationErrors(index),
     ...phaseAndTemplateErrors(index),
     ...metricErrors(index),
     ...gradingCapabilityErrors(index),

@@ -17,6 +17,11 @@ import {
 } from "./catalogs.mjs";
 import { foundationFlows, foundationModules } from "./foundation.mjs";
 import {
+  aiReportingAiTasks,
+  aiReportingFlows,
+  aiReportingModules,
+} from "./ai-reporting.mjs";
+import {
   teachingLoopFlows,
   teachingLoopEvents,
   teachingLoopModules,
@@ -44,9 +49,17 @@ export {
   sensitivities,
 };
 
-export const modules = deepFreeze([...foundationModules, ...teachingLoopModules]);
-export const flows = deepFreeze([...foundationFlows, ...teachingLoopFlows]);
-export const aiTasks = deepFreeze([]);
+export const modules = deepFreeze([
+  ...foundationModules,
+  ...teachingLoopModules,
+  ...aiReportingModules,
+]);
+export const flows = deepFreeze([
+  ...foundationFlows,
+  ...teachingLoopFlows,
+  ...aiReportingFlows,
+]);
+export const aiTasks = deepFreeze(aiReportingAiTasks);
 
 const collectionFacts = {
   baselineDecisions,
