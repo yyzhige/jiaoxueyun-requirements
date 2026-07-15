@@ -33,6 +33,14 @@ function field(id, label, overrides = {}) {
   };
 }
 
+function requiredWhen(description, whenStates, whenActionIds) {
+  return {
+    description,
+    whenStates,
+    ...(whenActionIds ? { whenActionIds } : {}),
+  };
+}
+
 function responsibility(
   dataSubject,
   producerRef,
@@ -867,8 +875,8 @@ const dgvObjects = [
     field("DGV-EXPORT-F-ID", "Export Request ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("DGV-EXPORT-F-SCOPE", "Export Object Scope", { dataType: "JSON" }),
     field("DGV-EXPORT-F-PURPOSE", "Export Purpose"),
-    field("DGV-EXPORT-F-APPROVER", "Export Approver ID", { required: "required before APPROVED", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-    field("DGV-EXPORT-F-DECISION-REASON", "Export Decision Reason", { dataType: "TEXT", required: "required for APPROVED or DENIED" }),
+    field("DGV-EXPORT-F-APPROVER", "Export Approver ID", { required: requiredWhen("required before APPROVED", ["APPROVED"]), valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("DGV-EXPORT-F-DECISION-REASON", "Export Decision Reason", { dataType: "TEXT", required: requiredWhen("required for APPROVED or DENIED", ["APPROVED", "DENIED"]) }),
     field("DGV-EXPORT-F-EXPIRY", "Export File Expiry", { dataType: "DATETIME" }),
     field("DGV-EXPORT-F-RESULT", "Export Result", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
     field("DGV-EXPORT-F-AUDIT-REF", "Export Audit Reference", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -932,8 +940,8 @@ const audObjects = [
     field("AUD-REQUEST-F-SCOPE", "Requested Sensitive Scope", { dataType: "JSON" }),
     field("AUD-REQUEST-F-PURPOSE", "Sensitive Access Purpose"),
     field("AUD-REQUEST-F-EXPIRY", "Requested Access Expiry", { dataType: "DATETIME" }),
-    field("AUD-REQUEST-F-APPROVER", "School Approver ID", { required: "required before APPROVED", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-    field("AUD-REQUEST-F-DECISION-REASON", "Sensitive Access Decision Reason", { dataType: "TEXT", required: "required for APPROVED or DENIED" }),
+    field("AUD-REQUEST-F-APPROVER", "School Approver ID", { required: requiredWhen("required before APPROVED", ["APPROVED"]), valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
+    field("AUD-REQUEST-F-DECISION-REASON", "Sensitive Access Decision Reason", { dataType: "TEXT", required: requiredWhen("required for APPROVED or DENIED", ["APPROVED", "DENIED"]) }),
     field("AUD-REQUEST-F-RESULT", "Access Decision Result", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ], "AUD-REQUEST-F-ID"),
   object("AUD-OBJ-ACCESS-SESSION", "Sensitive Access Session", responsibility("APPROVED_SENSITIVE_ACCESS", "SYSTEM", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-004", "S4", ["PENDING", "ACTIVE", "EXPIRED", "REVOKED"], [
@@ -948,7 +956,7 @@ const audObjects = [
     field("AUD-REVIEW-F-ID", "Review Case ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-REVIEW-F-EVENT-IDS", "Related Audit Event IDs", { dataType: "STRING_ARRAY" }),
     field("AUD-REVIEW-F-REASON", "Review Reason"),
-    field("AUD-REVIEW-F-RESOLUTION", "Review Resolution", { required: "required before RESOLVED" }),
+    field("AUD-REVIEW-F-RESOLUTION", "Review Resolution", { required: requiredWhen("required before RESOLVED", ["RESOLVED"]) }),
     field("AUD-REVIEW-F-STATUS", "Review Case Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
   ], "AUD-REVIEW-F-ID"),
 ];
@@ -1000,7 +1008,7 @@ const currObjects = [
     field("CURR-CURRICULUM-F-SUBJECT", "Curriculum Subject", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" } }),
     field("CURR-CURRICULUM-F-VERSION", "Curriculum Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_VERSION" }),
     field("CURR-CURRICULUM-F-STATUS", "Curriculum Version Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-    field("CURR-CURRICULUM-F-VALIDATION", "Version Validation Result", { dataType: "JSON", required: "required when the curriculum version reaches VALIDATED", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
+    field("CURR-CURRICULUM-F-VALIDATION", "Version Validation Result", { dataType: "JSON", required: requiredWhen("required when the curriculum version reaches VALIDATED", ["VALIDATED"]), valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
     field("CURR-CURRICULUM-F-PUBLISHED-AT", "Published At", { dataType: "DATETIME", required: false, valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
   ], "CURR-CURRICULUM-F-ID"),
   object("CURR-OBJ-TEXTBOOK", "Textbook Version", responsibility("SUBJECT_CURRICULUM", "ROLE-ACADEMIC", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [

@@ -438,7 +438,7 @@ function validateReferenceIntegrity(errors, field, path) {
   }
 }
 
-function validateField(errors, field, path, strict) {
+function validateField(errors, field, path, strict, objectStateIds) {
   requireRecord(errors, field, "valueSource", path);
   validateReferenceIntegrity(errors, field, path);
   if (!strict) return;
@@ -453,10 +453,53 @@ function validateField(errors, field, path, strict) {
     contractString(errors, field, property, path, "INVALID_FIELD_CONTRACT");
   }
   const required = field.required;
-  if (!(typeof required === "boolean" || isValidId(required))) {
+  if (typeof required !== "boolean" && !isRecord(required)) {
     errors.push(
-      `INVALID_FIELD_CONTRACT ${path}.required must be boolean or a non-empty conditional rule`,
+      `INVALID_FIELD_CONTRACT ${path}.required must be boolean or a structured conditional rule`,
     );
+  } else if (isRecord(required)) {
+    const allowedKeys = new Set(["description", "whenStates", "whenActionIds"]);
+    const requiredKeys = new Set(["description", "whenStates"]);
+    if (
+      [...requiredKeys].some((key) => !Object.hasOwn(required, key))
+      || Object.keys(required).some((key) => !allowedKeys.has(key))
+    ) {
+      errors.push(
+        `INVALID_FIELD_CONTRACT ${path}.required must use the closed description, whenStates, and optional whenActionIds shape`,
+      );
+    }
+    contractString(
+      errors,
+      required,
+      "description",
+      `${path}.required`,
+      "INVALID_FIELD_CONTRACT",
+    );
+    const whenStates = contractStringArray(
+      errors,
+      required,
+      "whenStates",
+      `${path}.required`,
+      "INVALID_FIELD_CONTRACT",
+      { nonEmpty: true },
+    );
+    for (const state of whenStates) {
+      if (isValidId(state) && !objectStateIds.has(state)) {
+        errors.push(
+          `INVALID_FIELD_CONTRACT ${path}.required.whenStates contains unknown object state ${state}`,
+        );
+      }
+    }
+    if (Object.hasOwn(required, "whenActionIds")) {
+      contractStringArray(
+        errors,
+        required,
+        "whenActionIds",
+        `${path}.required`,
+        "INVALID_FIELD_CONTRACT",
+        { nonEmpty: true },
+      );
+    }
   }
   if (!isRecord(field.valueSource)) {
     errors.push(`INVALID_FIELD_CONTRACT ${path}.valueSource must be an object`);
@@ -749,8 +792,9 @@ function validateObject(errors, object, path, strict) {
       });
     }
   }
+  const objectStateIds = new Set(states.filter(isValidId));
   validateEntities(errors, fields, `${path}.fields`, "field", (field, fieldPath) => {
-    validateField(errors, field, fieldPath, strict);
+    validateField(errors, field, fieldPath, strict, objectStateIds);
   });
 }
 

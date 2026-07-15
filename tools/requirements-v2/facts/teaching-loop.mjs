@@ -32,6 +32,14 @@ function field(id, label, overrides = {}) {
   };
 }
 
+function requiredWhen(description, whenStates, whenActionIds) {
+  return {
+    description,
+    whenStates,
+    ...(whenActionIds ? { whenActionIds } : {}),
+  };
+}
+
 function object(
   id,
   label,
@@ -297,7 +305,7 @@ const hwAssignmentFields = [
     dataType: "STRING_ARRAY",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required when the assignment reaches PUBLISHED",
+    required: requiredWhen("required when the assignment reaches PUBLISHED", ["PUBLISHED"]),
     idempotencyRole: "FANOUT_SET",
   }),
   field("HW-ASSIGNMENT-F-OPEN-AT", "Open Time", { dataType: "DATETIME" }),
@@ -336,7 +344,7 @@ const hwAssignmentFields = [
   }),
   field("HW-ASSIGNMENT-F-REVISION-REASON", "Revision Reason", {
     dataType: "TEXT",
-    required: "required when revising a published assignment",
+    required: requiredWhen("required when revising a published assignment", ["REVISION_DRAFT"], ["HW-ACT-REVISE"]),
   }),
 ];
 
@@ -795,7 +803,11 @@ const submissionAttemptFields = [
   }),
   field("SUB-ATTEMPT-F-RESUBMISSION-OF", "Resubmission Relationship", {
     dataType: "ID",
-    required: "required for a resubmission and absent for the first accepted submission",
+    required: requiredWhen(
+      "required for a resubmission and absent for the first accepted submission",
+      ["RESUBMITTED"],
+      ["SUB-ACT-RESUBMIT"],
+    ),
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
@@ -1088,12 +1100,12 @@ const gradingDecisionFields = [
   field("GRD-DECISION-F-RECOGNIZED-ANSWER", "Recognized Answer", {
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
-    required: "required when automated grading processing produces recognition evidence",
+    required: requiredWhen("required when automated grading processing produces recognition evidence", ["PROCESSING"], ["GRD-ACT-PROCESS"]),
   }),
   field("GRD-DECISION-F-RECOGNIZED-REGION", "Recognized Region", {
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
-    required: "required when automated grading processing produces recognition evidence",
+    required: requiredWhen("required when automated grading processing produces recognition evidence", ["PROCESSING"], ["GRD-ACT-PROCESS"]),
   }),
   field("GRD-DECISION-F-SUBMISSION-REF", "Input Submission Reference", {
     dataType: "ID",
@@ -1167,34 +1179,34 @@ const gradingDecisionFields = [
   field("GRD-DECISION-F-SUGGESTED-SCORE", "Suggested Score", {
     dataType: "DECIMAL",
     valueSource: { kind: "SYSTEM" },
-    required: "required when automated grading processing produces a scoring suggestion",
+    required: requiredWhen("required when automated grading processing produces a scoring suggestion", ["PROCESSING"], ["GRD-ACT-PROCESS"]),
   }),
   field("GRD-DECISION-F-SCORING-RATIONALE", "Scoring Rationale", {
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
-    required: "required when automated grading processing produces a scoring suggestion",
+    required: requiredWhen("required when automated grading processing produces a scoring suggestion", ["PROCESSING"], ["GRD-ACT-PROCESS"]),
   }),
   field("GRD-DECISION-F-CONFIDENCE", "Confidence Status", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-005" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when automated grading processing produces a scoring suggestion",
+    required: requiredWhen("required when automated grading processing produces a scoring suggestion", ["PROCESSING"], ["GRD-ACT-PROCESS"]),
   }),
   field("GRD-DECISION-F-LIMITATION", "Limitation Note", {
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
-    required: "required when automated grading processing produces a scoring suggestion",
+    required: requiredWhen("required when automated grading processing produces a scoring suggestion", ["PROCESSING"], ["GRD-ACT-PROCESS"]),
   }),
   field("GRD-DECISION-F-OFFICIAL-SCORE", "Teacher Official Score", {
     dataType: "DECIMAL",
-    required: "required when the grading decision reaches TEACHER_CONFIRMED",
+    required: requiredWhen("required when the grading decision reaches TEACHER_CONFIRMED", ["TEACHER_CONFIRMED"]),
   }),
   field("GRD-DECISION-F-TEACHER-FEEDBACK", "Teacher Feedback", {
     dataType: "TEXT",
-    required: "required when the grading decision reaches TEACHER_CONFIRMED",
+    required: requiredWhen("required when the grading decision reaches TEACHER_CONFIRMED", ["TEACHER_CONFIRMED"]),
   }),
   field("GRD-DECISION-F-CORRECTION-REASON", "Correction Reason", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-006" },
-    required: "required when correcting recognition, overriding a score, or revising a confirmed decision",
+    required: requiredWhen("required when correcting recognition, overriding a score, or revising a confirmed decision", ["ROUTED_REVIEW", "TEACHER_CONFIRMED", "REVISION_PENDING", "QUEUED"], ["GRD-ACT-CORRECT-RECOGNITION", "GRD-ACT-OVERRIDE-SCORE", "GRD-ACT-OPEN-CONFIRMED-REVISION", "GRD-ACT-CONFIRM-REVISION", "GRD-ACT-RESOLVE-VERSION-CONFLICT"]),
   }),
   field("GRD-DECISION-F-DECISION-VERSION", "Decision Version", {
     dataType: "INTEGER",
@@ -1206,12 +1218,12 @@ const gradingDecisionFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required when revising a confirmed decision",
+    required: requiredWhen("required when revising a confirmed decision", ["REVISION_PENDING"], ["GRD-ACT-OPEN-CONFIRMED-REVISION"]),
   }),
   field("GRD-DECISION-F-ROUTE", "Grading Route", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-011" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when the grading decision reaches ROUTED_REVIEW or ROUTED_MANUAL",
+    required: requiredWhen("required when the grading decision reaches ROUTED_REVIEW or ROUTED_MANUAL", ["ROUTED_REVIEW", "ROUTED_MANUAL"]),
   }),
 ];
 
@@ -1955,7 +1967,7 @@ const publishedResultFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "GRD-OBJ-DECISION" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when correcting a published result",
+    required: requiredWhen("required when correcting a published result", ["INVALIDATED"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -1968,7 +1980,7 @@ const publishedResultFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when correcting a published result",
+    required: requiredWhen("required when correcting a published result", ["INVALIDATED"]),
   }),
   field("PUB-RESULT-F-ANSWER", "Published Answer", {
     dataType: "JSON",
@@ -2034,17 +2046,17 @@ const publishedResultFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when a published result is corrected",
+    required: requiredWhen("required when a published result is corrected", ["INVALIDATED"]),
   }),
   field("PUB-RESULT-F-INVALIDATION-VERSION", "Dependent Invalidation Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when a published result correction invalidates dependent interpretations",
+    required: requiredWhen("required when a published result correction invalidates dependent interpretations", ["INVALIDATED"]),
   }),
   field("PUB-RESULT-F-PUBLIC-CORRECTION-NOTE", "Public Correction Note", {
     dataType: "TEXT",
-    required: "required when a published result is corrected",
+    required: requiredWhen("required when a published result is corrected", ["INVALIDATED"]),
   }),
   field("PUB-RESULT-F-NOTIFICATION-STATUS", "Notification Status", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-010" },
@@ -2054,7 +2066,7 @@ const publishedResultFields = [
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when a published result correction invalidates dependent interpretations",
+    required: requiredWhen("required when a published result correction invalidates dependent interpretations", ["INVALIDATED"]),
   }),
 ];
 
@@ -2954,7 +2966,7 @@ const evidenceFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PUB-OBJ-RESULT" },
     mutability: "IMMUTABLE",
-    required: "required for evidence derived from a published result",
+    required: requiredWhen("required for evidence derived from a published result", ["CANDIDATE"], ["INS-ACT-CREATE-CANDIDATE"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -2967,13 +2979,13 @@ const evidenceFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required for evidence derived from a published result",
+    required: requiredWhen("required for evidence derived from a published result", ["CANDIDATE"], ["INS-ACT-CREATE-CANDIDATE"]),
   }),
   field("INS-EVIDENCE-F-SOURCE-CORRECTION-REF", "Source Correction Attempt Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-ATTEMPT" },
     mutability: "IMMUTABLE",
-    required: "required for correction-stage evidence",
+    required: requiredWhen("required for correction-stage evidence", ["CANDIDATE"], ["INS-ACT-CREATE-CANDIDATE"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -2986,7 +2998,7 @@ const evidenceFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required for correction-stage evidence",
+    required: requiredWhen("required for correction-stage evidence", ["CANDIDATE"], ["INS-ACT-CREATE-CANDIDATE"]),
   }),
   field("INS-EVIDENCE-F-EVIDENCE-SOURCE", "Evidence Source", {
     valueSource: { kind: "SYSTEM" },
@@ -3042,7 +3054,7 @@ const evidenceFields = [
   }),
   field("INS-EVIDENCE-F-MASTERY-INTERPRETATION", "Teacher-confirmed Mastery Interpretation", {
     dataType: "TEXT",
-    required: "required when evidence reaches TEACHER_CONFIRMED",
+    required: requiredWhen("required when evidence reaches TEACHER_CONFIRMED", ["TEACHER_CONFIRMED"]),
     releaseRequirement: {
       readPolicyId: "INS-RP-STUDENT-MASTERY",
       requiredState: "STUDENT_VISIBLE",
@@ -3050,25 +3062,25 @@ const evidenceFields = [
     },
   }),
   field("INS-EVIDENCE-F-TEACHER-CONFIRMATION", "Teacher Confirmation", {
-    required: "required when evidence reaches TEACHER_CONFIRMED",
+    required: requiredWhen("required when evidence reaches TEACHER_CONFIRMED", ["TEACHER_CONFIRMED"]),
   }),
   field("INS-EVIDENCE-F-STUDENT-VISIBLE-AT", "Student Visible At", {
     dataType: "DATETIME",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when evidence reaches STUDENT_VISIBLE",
+    required: requiredWhen("required when evidence reaches STUDENT_VISIBLE", ["STUDENT_VISIBLE"]),
   }),
   field("INS-EVIDENCE-F-INVALIDATION-REASON", "Evidence Invalidation Reason", {
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when evidence becomes stale",
+    required: requiredWhen("required when evidence becomes stale", ["STALE"]),
   }),
   field("INS-EVIDENCE-F-PRIOR-EVIDENCE-REF", "Prior Evidence Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "INS-OBJ-EVIDENCE" },
     mutability: "IMMUTABLE",
-    required: "required when a new evidence version supersedes prior evidence",
+    required: requiredWhen("required when a new evidence version supersedes prior evidence", ["CANDIDATE"], ["INS-ACT-CREATE-CANDIDATE"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -3081,7 +3093,7 @@ const evidenceFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required when a new evidence version supersedes prior evidence",
+    required: requiredWhen("required when a new evidence version supersedes prior evidence", ["CANDIDATE"], ["INS-ACT-CREATE-CANDIDATE"]),
   }),
   field("INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION", "Mastery Interpretation Version", {
     dataType: "INTEGER",
@@ -3117,6 +3129,8 @@ const evidenceActions = [
       "INS-EVIDENCE-F-ID",
       "INS-EVIDENCE-F-STUDENT-REF",
       "INS-EVIDENCE-F-SOURCE-DATA-ID",
+      "INS-EVIDENCE-F-SOURCE-RESULT-REF",
+      "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
       "INS-EVIDENCE-F-SOURCE-CORRECTION-REF",
       "INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION",
       "INS-EVIDENCE-F-EVIDENCE-SOURCE",
@@ -3401,7 +3415,7 @@ const planFields = [
   }),
   field("PLN-PLAN-F-GOAL", "Improvement Goal", {
     dataType: "TEXT",
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
   }),
   field("PLN-PLAN-F-SUBJECT", "Improvement Subject", {
     dataType: "ID",
@@ -3429,40 +3443,40 @@ const planFields = [
   }),
   field("PLN-PLAN-F-TASK-CONTENT", "Improvement Task Content", {
     dataType: "TEXT",
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
   }),
   field("PLN-PLAN-F-WORKLOAD", "Planned Workload", {
     dataType: "DECIMAL",
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
   }),
   field("PLN-PLAN-F-DUE-AT", "Plan Due Time", {
     dataType: "DATETIME",
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
   }),
   field("PLN-PLAN-F-SUCCESS-CONDITION", "Plan Success Condition", {
     dataType: "TEXT",
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
   }),
   field("PLN-PLAN-F-EVIDENCE-REQUIREMENT", "Completion Evidence Requirement", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-034" },
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
   }),
   field("PLN-PLAN-F-REVALIDATION-METHOD", "Plan Revalidation Method", {
     dataType: "TEXT",
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
   }),
   field("PLN-PLAN-F-TEACHER-CONFIRMER-REF", "Plan Teacher Confirmer Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-TEACHER" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when a candidate becomes an ACTIVE plan",
+    required: requiredWhen("required when a candidate becomes an ACTIVE plan", ["ACTIVE"]),
     referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF", "Student Difficulty Feedback Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "APP-OBJ-TODO" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when a student difficulty report changes the plan",
+    required: requiredWhen("required when a student difficulty report changes the plan", ["ACTIVE"], ["PLN-ACT-ADJUST-PLAN"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -3475,21 +3489,21 @@ const planFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when a student difficulty report changes the plan",
+    required: requiredWhen("required when a student difficulty report changes the plan", ["ACTIVE"], ["PLN-ACT-ADJUST-PLAN"]),
   }),
   field("PLN-PLAN-F-ADJUSTMENT-REASON", "Plan Adjustment Reason", {
     dataType: "TEXT",
-    required: "required when plan content or workload changes",
+    required: requiredWhen("required when plan content or workload changes", ["ACTIVE"], ["PLN-ACT-ADJUST-PLAN"]),
   }),
   field("PLN-PLAN-F-CLOSE-REASON", "Plan Close Reason", {
     dataType: "TEXT",
-    required: "required when the plan closes",
+    required: requiredWhen("required when the plan closes", ["CLOSED"], ["PLN-ACT-CLOSE-PLAN"]),
   }),
   field("PLN-PLAN-F-INVALIDATION-REF", "Plan Evaluation Invalidation Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "CORR-OBJ-INVALIDATION" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when the plan evaluation enters pending reconfirmation",
+    required: requiredWhen("required when the plan evaluation enters pending reconfirmation", ["PENDING_RECONFIRM"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -3502,18 +3516,18 @@ const planFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when the plan evaluation enters pending reconfirmation",
+    required: requiredWhen("required when the plan evaluation enters pending reconfirmation", ["PENDING_RECONFIRM"]),
   }),
   field("PLN-PLAN-F-EVALUATION-STATE", "Plan Evaluation State", {
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when an ACTIVE plan enters evaluation",
+    required: requiredWhen("required when an ACTIVE plan enters evaluation", ["PENDING_RECONFIRM"]),
   }),
   field("PLN-PLAN-F-EVALUATION-VERSION", "Plan Evaluation Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when an ACTIVE plan enters evaluation",
+    required: requiredWhen("required when an ACTIVE plan enters evaluation", ["PENDING_RECONFIRM"]),
   }),
   field("PLN-PLAN-F-PLAN-VERSION", "Improvement Plan Version", {
     dataType: "INTEGER",
@@ -3909,7 +3923,7 @@ const studentTodoFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PLN-OBJ-PLAN" },
     mutability: "IMMUTABLE",
-    required: "required when the todo links to an improvement plan",
+    required: requiredWhen("required when the todo links to an improvement plan", ["READY"], ["APP-ACT-CREATE-PLAN-TODO"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -3922,13 +3936,13 @@ const studentTodoFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required when the todo links to an improvement plan",
+    required: requiredWhen("required when the todo links to an improvement plan", ["READY"], ["APP-ACT-CREATE-PLAN-TODO"]),
   }),
   field("APP-TODO-F-SOURCE-ASSIGNMENT-REF", "Source Assignment Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "HW-OBJ-ASSIGNMENT" },
     mutability: "IMMUTABLE",
-    required: "required when the todo links to homework",
+    required: requiredWhen("required when the todo links to homework", ["READY"], ["APP-ACT-CREATE-HOMEWORK-TODO"]),
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "NONE",
     actionApplicability: { requiredActionIds: [] },
@@ -3941,7 +3955,7 @@ const studentTodoFields = [
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required when the todo links to homework",
+    required: requiredWhen("required when the todo links to homework", ["READY"], ["APP-ACT-CREATE-HOMEWORK-TODO"]),
   }),
   field("APP-TODO-F-TASK-DEEP-LINK", "Task Deep Link", {
     valueSource: { kind: "SYSTEM" },
@@ -3954,7 +3968,7 @@ const studentTodoFields = [
   }),
   field("APP-TODO-F-LOCAL-PROGRESS", "Student Local Progress", {
     dataType: "JSON",
-    required: "required when the student records local todo execution state",
+    required: requiredWhen("required when the student records local todo execution state", ["READY"], ["APP-ACT-UPDATE-LOCAL-PROGRESS"]),
     releaseRequirement: {
       readPolicyId: "APP-RP-STUDENT-TODO",
       requiredState: "READY",
@@ -3963,7 +3977,7 @@ const studentTodoFields = [
   }),
   field("APP-TODO-F-COMPLETION-EVIDENCE", "Student Completion Evidence", {
     dataType: "JSON",
-    required: "required when the student records local todo execution state",
+    required: requiredWhen("required when the student records local todo execution state", ["READY"], ["APP-ACT-UPDATE-LOCAL-PROGRESS"]),
     releaseRequirement: {
       readPolicyId: "APP-RP-STUDENT-TODO",
       requiredState: "READY",
@@ -3972,7 +3986,7 @@ const studentTodoFields = [
   }),
   field("APP-TODO-F-DIFFICULTY-FEEDBACK", "Student Difficulty Feedback", {
     dataType: "TEXT",
-    required: "required when the student records local todo execution state",
+    required: requiredWhen("required when the student records local todo execution state", ["READY"], ["APP-ACT-UPDATE-LOCAL-PROGRESS"]),
     releaseRequirement: {
       readPolicyId: "APP-RP-STUDENT-TODO",
       requiredState: "READY",
@@ -4237,7 +4251,7 @@ const correctionTaskFields = [
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when the correction task reaches OVERDUE",
+    required: requiredWhen("required when the correction task reaches OVERDUE", ["OVERDUE"]),
   }),
   field("CORR-TASK-F-TASK-VERSION", "Correction Task Version", {
     dataType: "INTEGER",
@@ -4292,27 +4306,35 @@ const correctionAttemptFields = [
       targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
     },
     idempotencyRole: "OBJECT_REF",
-    required: "required for a resubmission and absent for the first accepted submission",
+    required: requiredWhen(
+      "required for a resubmission and absent for the first accepted submission",
+      ["SUBMITTED"],
+      ["CORR-ACT-RESUBMIT"],
+    ),
   }),
   field("CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION", "Prior Correction Attempt Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
-    required: "required for a resubmission and absent for the first accepted submission",
+    required: requiredWhen(
+      "required for a resubmission and absent for the first accepted submission",
+      ["SUBMITTED"],
+      ["CORR-ACT-RESUBMIT"],
+    ),
   }),
   field("CORR-ATTEMPT-F-CORRECTION-ANSWER", "Student Correction Answer", {
     dataType: "JSON",
-    required: "required when the correction reaches SUBMITTED",
+    required: requiredWhen("required when the correction reaches SUBMITTED", ["SUBMITTED"]),
   }),
   field("CORR-ATTEMPT-F-TEACHER-JUDGMENT", "Teacher Correction Judgment", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-028" },
-    required: "required when the correction reaches JUDGED or NEEDS_RETRY",
+    required: requiredWhen("required when the correction reaches JUDGED or NEEDS_RETRY", ["JUDGED", "NEEDS_RETRY"]),
   }),
   field("CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF", "Correction Teacher Confirmer Reference", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ORG-OBJ-TEACHER" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when the correction reaches JUDGED or NEEDS_RETRY",
+    required: requiredWhen("required when the correction reaches JUDGED or NEEDS_RETRY", ["JUDGED", "NEEDS_RETRY"]),
     referenceIntegrity: "IDENTITY_ONLY",
   }),
   field("CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT", "Repeated Correction Count", {
@@ -4324,7 +4346,7 @@ const correctionAttemptFields = [
     dataType: "TEXT",
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
-    required: "required when an overdue correction is submitted",
+    required: requiredWhen("required when an overdue correction is submitted", ["SUBMITTED"], ["CORR-ACT-SUBMIT-LATE"]),
   }),
   field("CORR-ATTEMPT-F-CORRECTION-VERSION", "Correction Attempt Version", {
     dataType: "INTEGER",
@@ -4907,7 +4929,7 @@ const studentProfileViewFields = [
   }),
   field("STU-PROFILE-F-SAVED-VIEW-DEFINITION", "Saved Student Profile View Definition", {
     dataType: "JSON",
-    required: "required when a teacher saves a custom profile view",
+    required: requiredWhen("required when a teacher saves a custom profile view", ["READY"], ["STU-ACT-SAVE-VIEW"]),
   }),
   field("STU-PROFILE-F-PROFILE-VERSION", "Student Profile View Version", {
     dataType: "INTEGER",

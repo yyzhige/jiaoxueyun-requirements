@@ -118,12 +118,13 @@ function objectIdentityFieldId(object) {
   ))?.id;
 }
 
-function fieldIsRequiredForState(field, state) {
+function fieldIsRequiredForState(field, state, actionId) {
   if (!isValidId(state)) return false;
   if (field?.required === true) return true;
-  if (typeof field?.required !== "string") return false;
-  const stateClause = field.required.match(/\b(?:reaches|becomes|before|for)\b(.*)$/i)?.[1];
-  return (stateClause?.match(/[A-Z][A-Z0-9_-]*/g) ?? []).includes(state);
+  if (!isRecord(field?.required)) return false;
+  if (!list(field.required.whenStates).includes(state)) return false;
+  if (!Object.hasOwn(field.required, "whenActionIds")) return true;
+  return isValidId(actionId) && list(field.required.whenActionIds).includes(actionId);
 }
 
 function concreteActionState(index, action) {
@@ -151,6 +152,30 @@ function inheritedRequiredFieldIds(action, targetObject) {
       && fromStates.every((state) => fieldIsRequiredForState(field, state))
     ))
     .map(({ id }) => id));
+}
+
+function conditionalRequiredErrors(index) {
+  const errors = [];
+  for (const fieldEntry of index.fields) {
+    const required = fieldEntry.value?.required;
+    if (!isRecord(required) || !Object.hasOwn(required, "whenActionIds")) continue;
+    for (const actionId of list(required.whenActionIds)) {
+      const actionEntry = index.actionById.get(actionId);
+      const action = actionEntry?.value;
+      const concreteState = concreteActionState(index, action);
+      if (
+        !actionEntry
+        || actionEntry.moduleId !== fieldEntry.moduleId
+        || action?.targetObjectId !== fieldEntry.objectId
+        || !list(required.whenStates).includes(concreteState)
+      ) {
+        errors.push(
+          `INVALID_FIELD_CONTRACT ${formatValidationValue(fieldEntry.value?.id)} conditional action ${formatValidationValue(actionId)} must target the owning object in the same module and reach a declared required state`,
+        );
+      }
+    }
+  }
+  return errors;
 }
 
 function policyRequiresGuard(policy, operationKind) {
@@ -781,14 +806,13 @@ function flowErrors(index) {
         const concreteState = concreteActionState(index, action);
         const targetObject = index.objectById.get(action?.targetObjectId)?.value;
         const stateCoverageFieldIds = new Set([
-          ...availableFieldIds,
           ...inheritedRequiredFieldIds(action, targetObject),
           ...list(action.inputFieldIds),
           ...providedFieldIds,
           ...list(action.outputFieldIds),
         ]);
         const missingStateFieldIds = records(targetObject?.fields)
-          .filter((field) => fieldIsRequiredForState(field, concreteState))
+          .filter((field) => fieldIsRequiredForState(field, concreteState, action.id))
           .map(({ id }) => id)
           .filter((fieldId) => !stateCoverageFieldIds.has(fieldId));
         if (missingStateFieldIds.length > 0) {
@@ -1317,6 +1341,7 @@ export function validateModelSemantics(model) {
     ...flowErrors(index),
     ...actionErrors(index),
     ...actionApplicabilityErrors(index),
+    ...conditionalRequiredErrors(index),
     ...ownerErrors(index),
     ...aiTaskErrors(index),
     ...phaseAndTemplateErrors(index),

@@ -416,7 +416,11 @@ function addExclusiveSourceGroupsFixture(model) {
   const submissionObject = submission.objects[0];
   for (const fieldId of ["SUB-F003", "SUB-F004", "SUB-F005", "SUB-F006"]) {
     submissionObject.fields.push(validField(fieldId, {
-      required: "required for the selected source alternative",
+      required: {
+        description: "required for the selected source alternative",
+        whenStates: ["SUBMITTED"],
+        whenActionIds: ["SUB-ACT-01"],
+      },
     }));
   }
   submissionObject.exclusiveSourceGroups = [
@@ -882,13 +886,70 @@ test("requires exactly one standard system identity on every phase-one object", 
   assert.deepEqual(results, mutations.map(() => ({ model: true, structure: true })));
 });
 
-test("accepts boolean or explicit conditional field required rules", () => {
-  for (const required of [true, false, "required when activation mode is FIRST_LOGIN"]) {
+test("accepts boolean or structured conditional field required rules", () => {
+  for (const required of [
+    true,
+    false,
+    {
+      description: "required when the submission reaches SUBMITTED",
+      whenStates: ["SUBMITTED"],
+    },
+  ]) {
     const model = validFixture();
-    moduleById(model, "SUB-001").objects[0].fields[0].required = required;
+    moduleById(model, "SUB-001").objects[0].fields[1].required = required;
 
     assert.deepEqual(validateRequirementModel(model), []);
   }
+});
+
+test("rejects legacy and malformed conditional field required rules", () => {
+  const mutations = [
+    ["legacy string", "required when the object reaches SUBMITTED"],
+    ["empty states", { description: "conditional", whenStates: [] }],
+    ["duplicate states", {
+      description: "conditional",
+      whenStates: ["SUBMITTED", "SUBMITTED"],
+    }],
+    ["unknown state", { description: "conditional", whenStates: ["MISSING"] }],
+    ["extra key", {
+      description: "conditional",
+      whenStates: ["SUBMITTED"],
+      extra: true,
+    }],
+  ];
+  const missedMutations = [];
+  for (const [name, required] of mutations) {
+    const model = validFixture();
+    moduleById(model, "SUB-001").objects[0].fields[0].required = required;
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_FIELD_CONTRACT")) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("validates action-specific required rule bindings", () => {
+  const validModel = validFixture();
+  moduleById(validModel, "SUB-001").objects[0].fields[1].required = {
+    description: "required for the fixture action",
+    whenStates: ["SUBMITTED"],
+    whenActionIds: ["SUB-ACT-01"],
+  };
+  assert.deepEqual(validateRequirementModel(validModel), []);
+
+  const mutations = [
+    ["unknown action", "SUB-ACT-MISSING"],
+    ["cross-module action", "CORR-ACT-RESUBMIT"],
+  ];
+  const missedMutations = [];
+  for (const [name, actionId] of mutations) {
+    const model = structuredClone(validModel);
+    model.modules[0].objects[0].fields[1].required.whenActionIds = [actionId];
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_FIELD_CONTRACT")) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
 });
 
 test("rejects invalid field required, mutability, and visibility rules", () => {
@@ -1649,7 +1710,10 @@ test("does not treat state-conditional required fields as unconditional CREATE i
   const conditionalField = submission.objects[0].fields
     .find(({ id }) => id === "SUB-F001");
   const createAction = submission.actions[0];
-  conditionalField.required = "required when the object reaches SUBMITTED";
+  conditionalField.required = {
+    description: "required when the object reaches SUBMITTED",
+    whenStates: ["SUBMITTED"],
+  };
   createAction.operationKind = "CREATE";
   delete createAction.transition;
   createAction.inputFieldIds = [];
@@ -2380,7 +2444,10 @@ test("requires each Flow path terminal state to satisfy its conditional fields",
   const validModel = validFixture();
   const submission = moduleById(validModel, "SUB-001");
   submission.objects[0].fields.push(validField("SUB-F003", {
-    required: "required when the object reaches SUBMITTED",
+    required: {
+      description: "required when the object reaches SUBMITTED",
+      whenStates: ["SUBMITTED"],
+    },
   }));
   submission.actions[0].outputFieldIds.push("SUB-F003");
   assertNoCode(validateRequirementModel(validModel), "INVALID_FLOW_TERMINAL_STATE");
@@ -2397,8 +2464,10 @@ test("requires each Flow path terminal state to satisfy its conditional fields",
 
   const providerCompletesState = validFixture();
   const providedSubmission = moduleById(providerCompletesState, "SUB-001");
-  providedSubmission.objects[0].fields.find(({ id }) => id === "SUB-F001").required =
-    "required when the object reaches SUBMITTED";
+  providedSubmission.objects[0].fields.find(({ id }) => id === "SUB-F001").required = {
+    description: "required when the object reaches SUBMITTED",
+    whenStates: ["SUBMITTED"],
+  };
   providedSubmission.actions[0].outputFieldIds = providedSubmission.actions[0]
     .outputFieldIds.filter((fieldId) => fieldId !== "SUB-F001");
   assertNoCode(
@@ -2419,9 +2488,10 @@ test("requires every Flow step concrete state to satisfy its required fields", (
     ["intermediate CREATE", (model) => {
       const evidence = moduleById(model, "INS-001");
       evidence.objects.find(({ id }) => id === "INS-OBJ-EVIDENCE").fields
-        .find(({ id }) => id === "INS-EVIDENCE-F-SOURCE-CORRECTION-REF").required = (
-          "required when evidence reaches CANDIDATE"
-        );
+        .find(({ id }) => id === "INS-EVIDENCE-F-SOURCE-CORRECTION-REF").required = {
+          description: "required when evidence reaches CANDIDATE",
+          whenStates: ["CANDIDATE"],
+        };
       const action = evidence.actions.find(({ id }) => id === "INS-ACT-CREATE-CANDIDATE");
       action.outputFieldIds = action.outputFieldIds.filter((fieldId) => (
         fieldId !== "INS-EVIDENCE-F-SOURCE-CORRECTION-REF"
@@ -2440,20 +2510,84 @@ test("requires every Flow step concrete state to satisfy its required fields", (
   assert.deepEqual(missedMutations, []);
 });
 
+test("does not let CREATE borrow target required fields from Flow sources", () => {
+  const model = structuredClone(requirementModel);
+  const evidence = moduleById(model, "INS-001");
+  evidence.objects.find(({ id }) => id === "INS-OBJ-EVIDENCE").fields
+    .find(({ id }) => id === "INS-EVIDENCE-F-SOURCE-CORRECTION-REF").required = {
+      description: "required for a correction evidence candidate",
+      whenStates: ["CANDIDATE"],
+    };
+  const createCandidate = evidence.actions
+    .find(({ id }) => id === "INS-ACT-CREATE-CANDIDATE");
+  createCandidate.outputFieldIds = createCandidate.outputFieldIds.filter((fieldId) => (
+    fieldId !== "INS-EVIDENCE-F-SOURCE-CORRECTION-REF"
+  ));
+  model.flows.find(({ id }) => id === "DF-010").sourceDataRefs.push({
+    objectId: "INS-OBJ-EVIDENCE",
+    fieldId: "INS-EVIDENCE-F-SOURCE-CORRECTION-REF",
+    version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    cardinality: "ONE",
+  });
+  assertHasCode(validateRequirementModel(model), "INVALID_FLOW_TERMINAL_STATE");
+});
+
+test("allows CREATE to populate a target required field from its explicit input", () => {
+  const model = validFixture();
+  const submission = moduleById(model, "SUB-001");
+  submission.objects[0].fields.find(({ id }) => id === "SUB-F001").required = {
+    description: "required when the submission reaches SUBMITTED",
+    whenStates: ["SUBMITTED"],
+  };
+  const action = submission.actions[0];
+  action.operationKind = "CREATE";
+  delete action.transition;
+  action.successState = "SUBMITTED";
+  action.outputFieldIds.push("SUB-F000");
+  assert.deepEqual(validateRequirementModel(model), []);
+});
+
+test("requires plan evaluation fields when entering PENDING_RECONFIRM", () => {
+  const model = structuredClone(requirementModel);
+  const plan = moduleById(model, "PLN-001");
+  const planObject = plan.objects.find(({ id }) => id === "PLN-OBJ-PLAN");
+  for (const fieldId of [
+    "PLN-PLAN-F-EVALUATION-STATE",
+    "PLN-PLAN-F-EVALUATION-VERSION",
+  ]) {
+    planObject.fields.find(({ id }) => id === fieldId).required = {
+      description: "required when plan evaluation enters pending reconfirmation",
+      whenStates: ["PENDING_RECONFIRM"],
+    };
+  }
+  plan.actions.find(({ id }) => (
+    id === "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM"
+  )).outputFieldIds = [
+    "PLN-PLAN-F-INVALIDATION-REF",
+    "PLN-PLAN-F-INVALIDATION-VERSION",
+    "PLN-PLAN-F-PLAN-VERSION",
+  ];
+  assertHasCode(validateRequirementModel(model), "INVALID_FLOW_TERMINAL_STATE");
+});
+
 test("inherits required fields only when every UPDATE from state requires them", () => {
   const inheritedModel = validFixture();
   const submission = moduleById(inheritedModel, "SUB-001");
   submission.objects[0].fields.push(validField("SUB-F003", {
-    required: "required when the object reaches DRAFT or SUBMITTED",
+    required: {
+      description: "required when the object reaches DRAFT or SUBMITTED",
+      whenStates: ["DRAFT", "SUBMITTED"],
+    },
   }));
   submission.actions[0].transition.from = ["DRAFT", "SUBMITTED"];
   assertNoCode(validateRequirementModel(inheritedModel), "INVALID_FLOW_TERMINAL_STATE");
 
   const partialInheritance = structuredClone(inheritedModel);
   moduleById(partialInheritance, "SUB-001").objects[0].fields
-    .find(({ id }) => id === "SUB-F003").required = (
-      "required when the object reaches SUBMITTED"
-    );
+    .find(({ id }) => id === "SUB-F003").required = {
+      description: "required when the object reaches SUBMITTED",
+      whenStates: ["SUBMITTED"],
+    };
   assertHasCode(
     validateRequirementModel(partialInheritance),
     "INVALID_FLOW_TERMINAL_STATE",
