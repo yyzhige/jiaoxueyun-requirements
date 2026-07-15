@@ -59,6 +59,24 @@ const AI_TASK_TYPES = new Set([
   "REMINDER",
   "CONTROLLED_ACTION",
 ]);
+const AI_CAPABILITIES = new Set([
+  "QUERY",
+  "ANALYSIS",
+  "DRAFT",
+  "REPORT",
+  "PERIODIC",
+  "REMINDER",
+  "CONTROLLED",
+]);
+const DRAFT_CONTENT_KINDS = new Set([
+  "ASSIGNMENT",
+  "FEEDBACK",
+  "IMPROVEMENT_PLAN",
+]);
+const DRAFT_EFFECT_BOUNDARIES = new Set([
+  "BUSINESS_DRAFT_ONLY",
+  "TEMPORARY_PREVIEW_ONLY",
+]);
 const JSON_SCHEMA_TYPES = new Set([
   "string",
   "number",
@@ -561,6 +579,53 @@ function validateField(errors, field, path, strict, objectStateIds) {
   ) {
     errors.push(`INVALID_FIELD_CONTRACT ${path}.idempotencyRole is unsupported`);
   }
+  if (Object.hasOwn(field, "writeContract")) {
+    const code = "INVALID_FIELD_WRITE_CONTRACT";
+    const writeContract = field.writeContract;
+    if (
+      !isRecord(writeContract)
+      || Object.keys(writeContract).length !== 2
+      || !Object.hasOwn(writeContract, "initializers")
+      || !Object.hasOwn(writeContract, "mutators")
+    ) {
+      errors.push(`${code} ${path}.writeContract must use the closed initializer and mutator shape`);
+    } else {
+      const initializers = writeContract.initializers;
+      const mutators = writeContract.mutators;
+      if (
+        !isRecord(initializers)
+        || Object.keys(initializers).length !== 2
+        || !Object.hasOwn(initializers, "actionIds")
+        || !Object.hasOwn(initializers, "value")
+      ) {
+        errors.push(`${code} ${path}.writeContract.initializers must declare actionIds and value`);
+      } else {
+        const actionIds = contractStringArray(errors, initializers, "actionIds", `${path}.writeContract.initializers`, code, { nonEmpty: true });
+        validateUniqueStrings(errors, actionIds, `${path}.writeContract.initializers.actionIds`, code);
+        if (typeof initializers.value !== "number" || !Number.isFinite(initializers.value)) {
+          errors.push(`${code} ${path}.writeContract.initializers.value must be finite numeric data`);
+        }
+      }
+      if (
+        !isRecord(mutators)
+        || Object.keys(mutators).length !== 3
+        || !Object.hasOwn(mutators, "actionIds")
+        || !Object.hasOwn(mutators, "operation")
+        || !Object.hasOwn(mutators, "amount")
+      ) {
+        errors.push(`${code} ${path}.writeContract.mutators must declare actionIds, operation, and amount`);
+      } else {
+        const actionIds = contractStringArray(errors, mutators, "actionIds", `${path}.writeContract.mutators`, code, { nonEmpty: true });
+        validateUniqueStrings(errors, actionIds, `${path}.writeContract.mutators.actionIds`, code);
+        if (mutators.operation !== "INCREMENT") {
+          errors.push(`${code} ${path}.writeContract.mutators.operation must be INCREMENT`);
+        }
+        if (typeof mutators.amount !== "number" || !Number.isFinite(mutators.amount)) {
+          errors.push(`${code} ${path}.writeContract.mutators.amount must be finite numeric data`);
+        }
+      }
+    }
+  }
   if (Object.hasOwn(field, "releaseRequirement")) {
     const releaseRequirement = field.releaseRequirement;
     const expectedKeys = new Set(["readPolicyId", "requiredState", "visibleAtFieldId"]);
@@ -604,6 +669,77 @@ function validateObject(errors, object, path, strict) {
     if (!READ_MODES.has(object.readMode)) {
       errors.push(
         `INVALID_OBJECT_CONTRACT ${path}.readMode must be AUTHORIZED, NO_DIRECT_READ, or STUDENT_TIMED_RELEASE`,
+      );
+    }
+    const reachability = object.stateReachability;
+    if (!isRecord(reachability)) {
+      errors.push(
+        `INVALID_STATE_REACHABILITY_POLICY ${path}.stateReachability must be an object`,
+      );
+    } else if (reachability.mode === "NONE") {
+      if (Object.keys(reachability).length !== 1) {
+        errors.push(
+          `INVALID_STATE_REACHABILITY_POLICY ${path}.stateReachability NONE must use the closed mode shape`,
+        );
+      }
+    } else if (reachability.mode === "ACTION_GRAPH") {
+      const allowedKeys = new Set(["mode", "initialStateIds", "entrySources"]);
+      if (
+        !Object.hasOwn(reachability, "initialStateIds")
+        || Object.keys(reachability).some((key) => !allowedKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_STATE_REACHABILITY_POLICY ${path}.stateReachability ACTION_GRAPH must use the closed initialStateIds and optional entrySources shape`,
+        );
+      }
+      contractStringArray(
+        errors,
+        reachability,
+        "initialStateIds",
+        `${path}.stateReachability`,
+        "INVALID_STATE_REACHABILITY_POLICY",
+      );
+      if (Object.hasOwn(reachability, "entrySources")) {
+        const entrySources = contractArray(
+          errors,
+          reachability,
+          "entrySources",
+          `${path}.stateReachability`,
+          "INVALID_STATE_REACHABILITY_POLICY",
+          { nonEmpty: true },
+        );
+        const expectedKeys = new Set(["kind", "stateId", "producerRef"]);
+        entrySources.forEach((source, index) => {
+          const sourcePath = `${path}.stateReachability.entrySources[${index}]`;
+          if (
+            !isRecord(source)
+            || Object.keys(source).length !== expectedKeys.size
+            || Object.keys(source).some((key) => !expectedKeys.has(key))
+          ) {
+            errors.push(
+              `INVALID_STATE_REACHABILITY_POLICY ${sourcePath} must use the closed external source shape`,
+            );
+            return;
+          }
+          for (const property of expectedKeys) {
+            contractString(
+              errors,
+              source,
+              property,
+              sourcePath,
+              "INVALID_STATE_REACHABILITY_POLICY",
+            );
+          }
+          if (source.kind !== "EXTERNAL_SOURCE") {
+            errors.push(
+              `INVALID_STATE_REACHABILITY_POLICY ${sourcePath}.kind must be EXTERNAL_SOURCE`,
+            );
+          }
+        });
+      }
+    } else {
+      errors.push(
+        `INVALID_STATE_REACHABILITY_POLICY ${path}.stateReachability.mode must be NONE or ACTION_GRAPH`,
       );
     }
     if (
@@ -888,6 +1024,62 @@ function validateActionTrigger(errors, trigger, path, expectedKind) {
   errors.push(`INVALID_ACTION_CONTRACT ${path}.kind must be EVENT or FLOW`);
 }
 
+function validateDraftPurpose(errors, purpose, path, errorCode) {
+  const expectedKeys = new Set([
+    "contentKind",
+    "effectBoundary",
+    "targetLifecyclePolicyId",
+    "targetStateId",
+  ]);
+  if (
+    !isRecord(purpose)
+    || Object.keys(purpose).length !== expectedKeys.size
+    || Object.keys(purpose).some((key) => !expectedKeys.has(key))
+  ) {
+    errors.push(`${errorCode} ${path} must use the closed draft-purpose shape`);
+    return;
+  }
+  for (const property of expectedKeys) {
+    contractString(errors, purpose, property, path, errorCode);
+  }
+  if (!DRAFT_CONTENT_KINDS.has(purpose.contentKind)) {
+    errors.push(`${errorCode} ${path}.contentKind must be a registered draft content kind`);
+  }
+  if (!DRAFT_EFFECT_BOUNDARIES.has(purpose.effectBoundary)) {
+    errors.push(`${errorCode} ${path}.effectBoundary must be a registered draft effect boundary`);
+  }
+}
+
+function validateDraftPurposeProfile(errors, profile, path) {
+  const code = "INVALID_AI_DRAFT_PURPOSE";
+  const expectedKeys = new Set([
+    "taskId",
+    "actionId",
+    "contentKind",
+    "effectBoundary",
+    "targetObjectId",
+    "targetLifecyclePolicyId",
+    "targetStateId",
+  ]);
+  if (
+    !isRecord(profile)
+    || Object.keys(profile).length !== expectedKeys.size
+    || Object.keys(profile).some((key) => !expectedKeys.has(key))
+  ) {
+    errors.push(`${code} ${path} must use the closed draft-purpose profile shape`);
+    return;
+  }
+  for (const property of expectedKeys) {
+    contractString(errors, profile, property, path, code);
+  }
+  if (!DRAFT_CONTENT_KINDS.has(profile.contentKind)) {
+    errors.push(`${code} ${path}.contentKind must be a registered draft content kind`);
+  }
+  if (!DRAFT_EFFECT_BOUNDARIES.has(profile.effectBoundary)) {
+    errors.push(`${code} ${path}.effectBoundary must be a registered draft effect boundary`);
+  }
+}
+
 function validateAction(errors, action, path, strict) {
   requireArray(errors, action, "inputFieldIds", path);
   requireArray(errors, action, "outputFieldIds", path);
@@ -939,6 +1131,57 @@ function validateAction(errors, action, path, strict) {
     errors.push(
       `INVALID_ACTION_OPERATION ${path}.operationKind must be READ, CREATE, or UPDATE`,
     );
+  }
+  if (Object.hasOwn(action, "capability")) {
+    contractString(errors, action, "capability", path, "INVALID_ACTION_CONTRACT");
+    if (!AI_CAPABILITIES.has(action.capability)) {
+      errors.push(
+        `INVALID_ACTION_CONTRACT ${path}.capability must be a registered AI capability`,
+      );
+    }
+  }
+  if (Object.hasOwn(action, "draftPurpose")) {
+    validateDraftPurpose(
+      errors,
+      action.draftPurpose,
+      `${path}.draftPurpose`,
+      "INVALID_ACTION_CONTRACT",
+    );
+  }
+  if (Object.hasOwn(action, "fieldWrites")) {
+    const code = "INVALID_FIELD_WRITE_CONTRACT";
+    const fieldWrites = contractArray(errors, action, "fieldWrites", path, code, { nonEmpty: true });
+    const fieldIds = [];
+    fieldWrites.forEach((fieldWrite, index) => {
+      const fieldWritePath = `${path}.fieldWrites[${index}]`;
+      if (!isRecord(fieldWrite)) {
+        errors.push(`${code} ${fieldWritePath} must be an object`);
+        return;
+      }
+      const expectedKeys = fieldWrite.mode === "INITIALIZE"
+        ? new Set(["fieldId", "mode", "value"])
+        : fieldWrite.mode === "INCREMENT"
+          ? new Set(["fieldId", "mode", "amount"])
+          : null;
+      if (
+        !expectedKeys
+        || Object.keys(fieldWrite).length !== expectedKeys.size
+        || Object.keys(fieldWrite).some((key) => !expectedKeys.has(key))
+      ) {
+        errors.push(`${code} ${fieldWritePath} must use a closed INITIALIZE or INCREMENT shape`);
+        return;
+      }
+      contractString(errors, fieldWrite, "fieldId", fieldWritePath, code);
+      fieldIds.push(fieldWrite.fieldId);
+      const numericProperty = fieldWrite.mode === "INITIALIZE" ? "value" : "amount";
+      if (
+        typeof fieldWrite[numericProperty] !== "number"
+        || !Number.isFinite(fieldWrite[numericProperty])
+      ) {
+        errors.push(`${code} ${fieldWritePath}.${numericProperty} must be finite numeric data`);
+      }
+    });
+    validateUniqueStrings(errors, fieldIds, `${path}.fieldWrites`, code);
   }
   for (const property of ["inputFieldIds", "outputFieldIds"]) {
     contractStringArray(errors, action, property, path, "INVALID_ACTION_CONTRACT");
@@ -1327,6 +1570,23 @@ function validateModule(errors, module, path) {
   const actions = requireArray(errors, module, "actions", path);
   const pages = requireArray(errors, module, "pages", path);
   const scenarios = requireArray(errors, module, "scenarios", path);
+  if (Object.hasOwn(module, "draftPurposeProfiles")) {
+    const profiles = contractArray(
+      errors,
+      module,
+      "draftPurposeProfiles",
+      path,
+      "INVALID_AI_DRAFT_PURPOSE",
+      { nonEmpty: true },
+    );
+    profiles.forEach((profile, index) => {
+      validateDraftPurposeProfile(
+        errors,
+        profile,
+        `${path}.draftPurposeProfiles[${index}]`,
+      );
+    });
+  }
   validateEntities(errors, objects, `${path}.objects`, "object", (object, objectPath) => {
     validateObject(errors, object, objectPath, strict);
   });
@@ -2108,6 +2368,15 @@ function validateAiTask(errors, task, path) {
     { nonEmpty: true },
   );
   contractString(errors, task, "actionId", path, code);
+  contractString(errors, task, "capability", path, code);
+  if (!AI_CAPABILITIES.has(task.capability)) {
+    errors.push(`${code} ${path}.capability must be a registered AI capability`);
+  }
+  if (task.taskType === "DRAFT") {
+    validateDraftPurpose(errors, task.draftPurpose, `${path}.draftPurpose`, code);
+  } else if (Object.hasOwn(task, "draftPurpose")) {
+    errors.push(`${code} ${path}.draftPurpose is allowed only for DRAFT tasks`);
+  }
   if (!RISKS.has(task.risk)) {
     errors.push(`${code} ${path}.risk must be READ, LOW, or HIGH`);
   }
@@ -2177,6 +2446,7 @@ function validateAiTask(errors, task, path) {
     code,
     { nonEmpty: true },
   );
+  const blockingMissingParameters = [];
   clarificationRules.forEach((rule, index) => {
     const rulePath = `${path}.clarificationRules[${index}]`;
     if (!isRecord(rule)) {
@@ -2191,6 +2461,9 @@ function validateAiTask(errors, task, path) {
       code,
       { nonEmpty: true },
     );
+    if (rule.blocksExecution === true) {
+      blockingMissingParameters.push(...whenMissing);
+    }
     const parameterProperties = isRecord(task.parameterSchema?.properties)
       ? task.parameterSchema.properties
       : {};
@@ -2204,12 +2477,54 @@ function validateAiTask(errors, task, path) {
       errors.push(`${code} ${rulePath}.blocksExecution must be true`);
     }
   });
+  const requiredParameters = Array.isArray(task.parameterSchema?.required)
+    ? task.parameterSchema.required.filter(isValidId)
+    : [];
+  const blockingMissingSet = new Set(blockingMissingParameters);
+  if (
+    blockingMissingSet.size !== blockingMissingParameters.length
+    || blockingMissingSet.size !== requiredParameters.length
+    || requiredParameters.some((parameter) => !blockingMissingSet.has(parameter))
+  ) {
+    errors.push(
+      `${code} ${path}.clarificationRules blocking whenMissing union must exactly cover parameterSchema.required without duplicates`,
+    );
+  }
 
   const confirmer = task.confirmer;
-  if (!isRecord(confirmer) || !["DUTY", "NOT_REQUIRED"].includes(confirmer.mode)) {
-    errors.push(`${code} ${path}.confirmer must declare DUTY or NOT_REQUIRED mode`);
-  } else if (confirmer.mode === "DUTY" && !isValidId(confirmer.dutyRef)) {
-    errors.push(`${code} ${path}.confirmer.dutyRef must be a non-empty duty ID`);
+  if (!isRecord(confirmer) || !["DUTY", "ROLE", "NOT_REQUIRED"].includes(confirmer.mode)) {
+    errors.push(`${code} ${path}.confirmer must declare DUTY, ROLE, or NOT_REQUIRED mode`);
+  } else {
+    const expectedKeys = confirmer.mode === "DUTY"
+      ? ["mode", "dutyRef"]
+      : confirmer.mode === "ROLE"
+        ? ["mode", "roleRef"]
+        : ["mode"];
+    if (
+      Object.keys(confirmer).length !== expectedKeys.length
+      || expectedKeys.some((property) => !Object.hasOwn(confirmer, property))
+    ) {
+      errors.push(`${code} ${path}.confirmer must use the closed ${confirmer.mode} shape`);
+    }
+    if (confirmer.mode === "DUTY" && !isValidId(confirmer.dutyRef)) {
+      errors.push(`${code} ${path}.confirmer.dutyRef must be a non-empty duty ID`);
+    }
+    if (confirmer.mode === "ROLE" && !isValidId(confirmer.roleRef)) {
+      errors.push(`${code} ${path}.confirmer.roleRef must be a non-empty role ID`);
+    }
+  }
+  if (task.writes === true) {
+    contractString(errors, task, "confirmerRef", path, code);
+    const structuredRef = confirmer?.mode === "DUTY"
+      ? confirmer.dutyRef
+      : confirmer?.mode === "ROLE"
+        ? confirmer.roleRef
+        : undefined;
+    if (isValidId(task.confirmerRef) && task.confirmerRef !== structuredRef) {
+      errors.push(`${code} ${path}.confirmerRef must match the structured confirmer`);
+    }
+  } else if (Object.hasOwn(task, "confirmerRef")) {
+    errors.push(`${code} ${path}.confirmerRef is not allowed when confirmation is not required`);
   }
 
   const failureBehavior = task.failureBehavior;

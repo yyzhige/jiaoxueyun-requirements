@@ -270,14 +270,68 @@ export const events = [
   {
     id: "EVT-CONTEXT-EXPIRY-REACHED",
     label: "工作上下文到期或失效",
-    definition: "活动上下文到达显式期限或其来源版本失效时触发上下文过期动作。",
+    definition: "活动上下文到达显式期限时触发上下文过期动作。",
     triggeredActionIds: ["ACC-ACT-EXPIRE-CONTEXT"],
+  },
+  {
+    id: "EVT-CONTEXT-SOURCE-VERSION-INVALIDATED",
+    label: "工作上下文来源版本失效",
+    definition: "活动上下文绑定的学校、身份或学期版本变化时触发上下文失效动作。",
+    triggeredActionIds: ["ACC-ACT-INVALIDATE-CONTEXT"],
+  },
+  {
+    id: "EVT-SCHOOL-DIRECTORY-SNAPSHOT-AVAILABLE",
+    label: "学校目录快照可同步",
+    definition: "学校目录发布带来源版本的学校状态快照时触发本地投影同步。",
+    triggeredActionIds: ["ACC-ACT-SYNC-SCHOOL"],
+  },
+  {
+    id: "EVT-IDENTITY-DIRECTORY-SNAPSHOT-AVAILABLE",
+    label: "工作身份目录快照可同步",
+    definition: "学校身份目录发布带来源版本的身份分配快照时触发本地投影同步。",
+    triggeredActionIds: ["ACC-ACT-SYNC-IDENTITY"],
+  },
+  {
+    id: "EVT-ROLE-POLICY-SNAPSHOT-AVAILABLE",
+    label: "角色策略快照可同步",
+    definition: "学校权限源发布带来源版本的角色策略快照时触发本地投影同步。",
+    triggeredActionIds: ["IAM-ACT-SYNC-ROLE-POLICY"],
+  },
+  {
+    id: "EVT-DATA-GOVERNANCE-POLICY-SNAPSHOT-AVAILABLE",
+    label: "数据治理策略快照可同步",
+    definition: "学校治理源发布带来源版本的数据治理策略快照时触发本地投影同步。",
+    triggeredActionIds: ["DGV-ACT-SYNC-POLICY"],
+  },
+  {
+    id: "EVT-TEACHER-TODO-PROJECTION-AVAILABLE",
+    label: "教师待办投影可同步",
+    definition: "教师工作台聚合源发布带来源版本的待办视图时触发本地投影同步。",
+    triggeredActionIds: ["TEA-ACT-SYNC-TODO-VIEW"],
+  },
+  {
+    id: "EVT-RUBRIC-SNAPSHOT-AVAILABLE",
+    label: "评分量规快照可同步",
+    definition: "学科量规源发布带来源版本的量规快照时触发作业域投影同步。",
+    triggeredActionIds: ["HW-ACT-SYNC-RUBRIC"],
+  },
+  {
+    id: "EVT-GRADING-CAPABILITY-SNAPSHOT-AVAILABLE",
+    label: "批改能力规则快照可同步",
+    definition: "批改路由配置源发布带来源版本的能力规则快照时触发本地投影同步。",
+    triggeredActionIds: ["GRD-ACT-SYNC-CAPABILITY-RULE"],
   },
   {
     id: "EVT-TEMP-GRANT-EXPIRY-REACHED",
     label: "临时授权到期",
     definition: "临时授权到达强制失效时间时触发授权过期动作。",
     triggeredActionIds: ["IAM-ACT-EXPIRE-GRANT"],
+  },
+  {
+    id: "EVT-PERMISSION-SOURCE-VERSION-STALE",
+    label: "权限判定来源版本失效",
+    definition: "权限判定绑定的组织、职责或范围版本变化时，将既有判定标记为失效并要求重算。",
+    triggeredActionIds: ["IAM-ACT-MARK-PERMISSION-STALE"],
   },
   {
     id: "EVT-HW-SCHEDULED-PUBLISH-DUE",
@@ -292,6 +346,18 @@ export const events = [
     triggeredActionIds: ["DGV-ACT-GENERATE-EXPORT"],
   },
   {
+    id: "EVT-EXPORT-GENERATION-COMPLETED",
+    label: "导出生成完成",
+    definition: "已审批导出按不可变范围生成完成后，将临时文件标记为可用。",
+    triggeredActionIds: ["DGV-ACT-COMPLETE-EXPORT"],
+  },
+  {
+    id: "EVT-EXPORT-GENERATION-FAILED",
+    label: "导出生成失败",
+    definition: "已审批导出生成失败时记录失败结果，不扩大范围且不生成可用文件。",
+    triggeredActionIds: ["DGV-ACT-FAIL-EXPORT"],
+  },
+  {
     id: "EVT-EXPORT-EXPIRY-REACHED",
     label: "导出文件到期",
     definition: "导出文件达到批准的显式期限时触发过期和删除动作。",
@@ -304,10 +370,22 @@ export const events = [
     triggeredActionIds: ["AUD-ACT-APPEND-EVENT"],
   },
   {
+    id: "EVT-AUDIT-RETENTION-REACHED",
+    label: "审计事件达到归档期限",
+    definition: "不可变审计事件达到学校保留策略的归档阈值时触发归档，不删除其引用。",
+    triggeredActionIds: ["AUD-ACT-ARCHIVE-EVENT"],
+  },
+  {
     id: "EVT-SENSITIVE-ACCESS-APPROVED",
     label: "敏感访问批准已记录",
     definition: "学校批准的敏感访问范围和期限完成记录后触发受限会话开启。",
     triggeredActionIds: ["AUD-ACT-OPEN-SESSION"],
+  },
+  {
+    id: "EVT-SENSITIVE-REQUEST-EXPIRY-REACHED",
+    label: "敏感访问申请到期",
+    definition: "敏感访问申请达到声明期限且不再可执行时，将申请状态标记为到期。",
+    triggeredActionIds: ["AUD-ACT-EXPIRE-ACCESS-REQUEST"],
   },
   {
     id: "EVT-SENSITIVE-SESSION-EXPIRY-REACHED",
@@ -946,6 +1024,11 @@ export const optionSets = [
   ]),
   optionSet("OPT-ENUM-047", "notificationChannel", "通知渠道", [
     ["IN_PRODUCT", "站内"],
+  ]),
+  optionSet("OPT-ENUM-048", "reportDataScope", "报告数据范围", [
+    ["SUBJECT_ASSIGNED", "任教学科与班级范围"],
+    ["HOMEROOM_ASSIGNED_CLASS_AGGREGATE", "班主任本班全学科汇总"],
+    ["ACADEMIC_AUTHORIZED_AGGREGATE", "教务授权范围汇总"],
   ]),
 ];
 

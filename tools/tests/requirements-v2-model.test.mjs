@@ -64,7 +64,7 @@ function validObject(id, ownerRef, field, overrides = {}) {
     lifecyclePolicyId: "LIFE-TEST",
     sensitivityId: "S2",
     readMode: "AUTHORIZED",
-    stateReachability: { mode: "NONE" },
+    stateReachability: { mode: "ACTION_GRAPH", initialStateIds: ["DRAFT"] },
     states: ["DRAFT", "SUBMITTED"],
     fields: [field],
     ...overrides,
@@ -103,6 +103,7 @@ function validAction(id, targetObjectId, inputFieldIds, scenarioIds, overrides =
     operationKind: "UPDATE",
     writes: true,
     risk: RISK.LOW,
+    capability: "CONTROLLED",
     executionMode: "USER_TASK",
     clients: [CLIENT.WEB, CLIENT.APP],
     permissions: [
@@ -121,6 +122,7 @@ function validAiTask(id, overrides = {}) {
   return {
     id,
     taskType: "CONTROLLED_ACTION",
+    capability: "CONTROLLED",
     roleRefs: ["ROLE-STUDENT"],
     dutyRefs: [],
     clients: [CLIENT.WEB, CLIENT.APP],
@@ -142,7 +144,7 @@ function validAiTask(id, overrides = {}) {
     risk: RISK.LOW,
     writes: true,
     previewFieldIds: ["SUB-F001"],
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+    confirmerRef: "DUTY-SUBJECT-TEACHER",
     confirmer: {
       mode: "DUTY",
       dutyRef: "DUTY-SUBJECT-TEACHER",
@@ -355,6 +357,10 @@ function validFixture() {
           validField("HW-F001"),
         ],
         states: ["DRAFT"],
+        stateReachability: {
+          mode: "ACTION_GRAPH",
+          initialStateIds: ["DRAFT"],
+        },
       })],
       relationships: [],
       actions: [],
@@ -1658,7 +1664,7 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 66);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 79);
 
   const requiredPairs = [
     ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
@@ -1961,6 +1967,53 @@ test("rejects non-user triggers without reverse event or Flow consistency", () =
   assertHasCode(validateRequirementModel(flowModel), "INVALID_ACTION_TRIGGER");
 });
 
+test("rejects one event routing overlapping transitions to mutually exclusive states", () => {
+  const model = structuredClone(requirementModel);
+  const identity = moduleById(model, "IAM-001");
+  const expiry = identity.actions.find(({ id }) => id === "IAM-ACT-EXPIRE-GRANT");
+  const revoke = identity.actions.find(({ id }) => id === "IAM-ACT-REVOKE-GRANT");
+  const expiryEvent = model.events.find(({ id }) => id === "EVT-TEMP-GRANT-EXPIRY-REACHED");
+
+  revoke.targetObjectId = expiry.targetObjectId;
+  revoke.executionMode = "SYSTEM_EVENT";
+  delete revoke.clients;
+  revoke.permissions = structuredClone(expiry.permissions);
+  revoke.trigger = structuredClone(expiry.trigger);
+  identity.pages.forEach((page) => {
+    page.actionIds = page.actionIds.filter((actionId) => actionId !== revoke.id);
+  });
+  identity.scenarios
+    .filter(({ actionId }) => actionId === revoke.id)
+    .forEach((scenario) => {
+      delete scenario.pageId;
+      scenario.trigger = structuredClone(expiry.trigger);
+    });
+  expiryEvent.triggeredActionIds.push(revoke.id);
+
+  assertHasCode(validateRequirementModel(model), "INVALID_EVENT_ACTION_ROUTING");
+});
+
+test("rejects an implicit same-event CREATE then UPDATE chain", () => {
+  const model = structuredClone(requirementModel);
+  const audit = moduleById(model, "AUD-001");
+  const append = audit.actions.find(({ id }) => id === "AUD-ACT-APPEND-EVENT");
+  const archive = audit.actions.find(({ id }) => id === "AUD-ACT-ARCHIVE-EVENT");
+  const appendEvent = model.events.find(({ id }) => id === "EVT-AUDIT-APPEND-REQUESTED");
+  const archiveEvent = model.events.find(({ id }) => id === "EVT-AUDIT-RETENTION-REACHED");
+
+  archive.trigger = structuredClone(append.trigger);
+  audit.scenarios
+    .filter(({ actionId }) => actionId === archive.id)
+    .forEach((scenario) => {
+      scenario.trigger = structuredClone(append.trigger);
+    });
+  appendEvent.triggeredActionIds.push(archive.id);
+  archiveEvent.triggeredActionIds = archiveEvent.triggeredActionIds
+    .filter((actionId) => actionId !== archive.id);
+
+  assertHasCode(validateRequirementModel(model), "INVALID_EVENT_ACTION_ROUTING");
+});
+
 test("rejects non-user actions without a SYSTEM allow subject", () => {
   const model = nonUserActionFixture("SYSTEM_EVENT", {
     kind: "EVENT",
@@ -2176,6 +2229,9 @@ test("rejects success scenario states that contradict the action transition", ()
 
 test("accepts a CREATE action with an explicit success state and no transition", () => {
   const model = validFixture();
+  const targetObject = moduleById(model, "SUB-001").objects[0];
+  targetObject.states = ["SUBMITTED"];
+  targetObject.stateReachability.initialStateIds = [];
   const action = moduleById(model, "SUB-001").actions[0];
   action.operationKind = "CREATE";
   action.outputFieldIds.push("SUB-F000");
@@ -2621,6 +2677,8 @@ test("does not let CREATE borrow target required fields from Flow sources", () =
 test("allows CREATE to populate a target required field from its explicit input", () => {
   const model = validFixture();
   const submission = moduleById(model, "SUB-001");
+  submission.objects[0].states = ["SUBMITTED"];
+  submission.objects[0].stateReachability.initialStateIds = [];
   submission.objects[0].fields.find(({ id }) => id === "SUB-F001").required = {
     description: "required when the submission reaches SUBMITTED",
     whenStates: ["SUBMITTED"],
@@ -3460,10 +3518,20 @@ test("publishes the complete AI task registry", () => {
       "AI-TASK-FEEDBACK-DRAFT",
       "AI-TASK-IMPROVEMENT-PLAN-DRAFT",
       "AI-TASK-AD-HOC-REPORT",
+      "AI-TASK-HOMEROOM-AD-HOC-REPORT",
+      "AI-TASK-ACADEMIC-AD-HOC-REPORT",
       "AI-TASK-CREATE-REPORT-SUBSCRIPTION",
       "AI-TASK-UPDATE-REPORT-SUBSCRIPTION",
       "AI-TASK-PAUSE-REPORT-SUBSCRIPTION",
       "AI-TASK-CANCEL-REPORT-SUBSCRIPTION",
+      "AI-TASK-CREATE-HOMEROOM-REPORT-SUBSCRIPTION",
+      "AI-TASK-UPDATE-HOMEROOM-REPORT-SUBSCRIPTION",
+      "AI-TASK-PAUSE-HOMEROOM-REPORT-SUBSCRIPTION",
+      "AI-TASK-CANCEL-HOMEROOM-REPORT-SUBSCRIPTION",
+      "AI-TASK-CREATE-ACADEMIC-REPORT-SUBSCRIPTION",
+      "AI-TASK-UPDATE-ACADEMIC-REPORT-SUBSCRIPTION",
+      "AI-TASK-PAUSE-ACADEMIC-REPORT-SUBSCRIPTION",
+      "AI-TASK-CANCEL-ACADEMIC-REPORT-SUBSCRIPTION",
       "AI-TASK-CREATE-REMINDER",
       "AI-TASK-PUBLISH-ASSIGNMENT",
     ],
@@ -3479,6 +3547,7 @@ test("publishes the complete AI task registry", () => {
     assert.equal(task.clarificationRules.length > 0, true);
     assert.ok(actionById.has(task.actionId), `${task.id} target action must exist`);
     assert.equal(typeof task.risk, "string");
+    assert.equal(typeof task.capability, "string");
     assert.equal(typeof task.writes, "boolean");
     assert.equal(Array.isArray(task.previewFieldIds), true);
     assert.equal(task.resultSchema.type, "object");
@@ -3488,8 +3557,13 @@ test("publishes the complete AI task registry", () => {
     assert.equal(task.writes, targetAction.writes);
     assert.equal(task.risk, targetAction.risk);
     if (task.writes) {
-      assert.equal(task.confirmer.mode, "DUTY");
-      assert.equal(task.confirmer.dutyRef, task.confirmerDutyRef);
+      assert.ok(["DUTY", "ROLE"].includes(task.confirmer.mode));
+      assert.equal(
+        task.confirmer.mode === "DUTY"
+          ? task.confirmer.dutyRef
+          : task.confirmer.roleRef,
+        task.confirmerRef,
+      );
       assert.deepEqual(
         targetAction.inputFieldIds.filter((fieldId) => !task.previewFieldIds.includes(fieldId)),
         [],
@@ -3506,6 +3580,7 @@ test("publishes the complete AI task registry", () => {
 test("requires complete fail-closed AI task contracts", () => {
   const requiredProperties = [
     "taskType",
+    "capability",
     "clients",
     "naturalLanguageExamples",
     "parameterSchema",
@@ -3537,7 +3612,7 @@ test("rejects a read-only AI task that targets a write Action", () => {
     writes: false,
     confirmer: { mode: "NOT_REQUIRED" },
   });
-  delete task.confirmerDutyRef;
+  delete task.confirmerRef;
   model.aiTasks.push(task);
 
   assertHasCode(validateRequirementModel(model), "INVALID_AI_TARGET_ACTION");
@@ -3575,7 +3650,7 @@ test("requires student AI tasks to preserve every content-open policy gate", () 
     writes: false,
     confirmer: { mode: "NOT_REQUIRED" },
   });
-  delete task.confirmerDutyRef;
+  delete task.confirmerRef;
   delete task.studentAccessPolicy;
   model.aiTasks.push(task);
 
@@ -3589,7 +3664,7 @@ test("binds AI task audiences and confirmers to target Action ALLOW subjects", (
   ));
   assignmentTask.roleRefs = ["ROLE-TEACHER"];
   assignmentTask.dutyRefs = [];
-  assertNoCode(
+  assertHasCode(
     validateRequirementModel(roleAttachedDuty),
     "INVALID_AI_ACTOR_AUTHORIZATION",
   );
@@ -3613,12 +3688,129 @@ test("binds AI task audiences and confirmers to target Action ALLOW subjects", (
   const wrongConfirmerTask = wrongConfirmer.aiTasks.find(({ id }) => (
     id === "AI-TASK-ASSIGNMENT-DRAFT"
   ));
-  wrongConfirmerTask.confirmerDutyRef = "DUTY-HOMEROOM";
+  wrongConfirmerTask.confirmerRef = "DUTY-HOMEROOM";
   wrongConfirmerTask.confirmer.dutyRef = "DUTY-HOMEROOM";
   assertHasCode(
     validateRequirementModel(wrongConfirmer),
     "INVALID_AI_CONFIRMER_AUTHORIZATION",
   );
+});
+
+test("rejects duty-scoped AI audience widening to the parent role", () => {
+  const missedTaskIds = [];
+  for (const taskId of [
+    "AI-TASK-FEEDBACK-DRAFT",
+    "AI-TASK-IMPROVEMENT-PLAN-DRAFT",
+    "AI-TASK-CREATE-REMINDER",
+  ]) {
+    const model = structuredClone(requirementModel);
+    const task = model.aiTasks.find(({ id }) => id === taskId);
+    task.roleRefs = ["ROLE-TEACHER"];
+    task.dutyRefs = [];
+
+    if (!errorCodes(validateRequirementModel(model)).includes(
+      "INVALID_AI_ACTOR_AUTHORIZATION",
+    )) {
+      missedTaskIds.push(taskId);
+    }
+  }
+  assert.deepEqual(missedTaskIds, []);
+});
+
+test("rejects duty-scoped AI confirmer widening to the parent role", () => {
+  const missedTaskIds = [];
+  for (const taskId of [
+    "AI-TASK-FEEDBACK-DRAFT",
+    "AI-TASK-IMPROVEMENT-PLAN-DRAFT",
+    "AI-TASK-CREATE-REMINDER",
+  ]) {
+    const model = structuredClone(requirementModel);
+    const task = model.aiTasks.find(({ id }) => id === taskId);
+    task.confirmerRef = "ROLE-TEACHER";
+    task.confirmer = { mode: "ROLE", roleRef: "ROLE-TEACHER" };
+
+    if (!errorCodes(validateRequirementModel(model)).includes(
+      "INVALID_AI_CONFIRMER_AUTHORIZATION",
+    )) {
+      missedTaskIds.push(taskId);
+    }
+  }
+  assert.deepEqual(missedTaskIds, []);
+});
+
+test("keeps AI permission containment directional for ALLOW and DENY", () => {
+  const roleAllowsDuty = structuredClone(requirementModel);
+  const task = roleAllowsDuty.aiTasks
+    .find(({ id }) => id === "AI-TASK-FEEDBACK-DRAFT");
+  const action = roleAllowsDuty.modules.flatMap(({ actions }) => actions)
+    .find(({ id }) => id === task.actionId);
+  action.permissions = structuredClone(action.permissions);
+  const allow = action.permissions.find(({ effect }) => effect === "ALLOW");
+  delete allow.dutyRef;
+  allow.roleRef = "ROLE-TEACHER";
+  assertNoCode(validateRequirementModel(roleAllowsDuty), "INVALID_AI_ACTOR_AUTHORIZATION");
+  assertNoCode(validateRequirementModel(roleAllowsDuty), "INVALID_AI_CONFIRMER_AUTHORIZATION");
+
+  const dutyDeny = {
+    effect: "DENY",
+    dutyRef: "DUTY-SUBJECT-TEACHER",
+    condition: "the assigned subject-teacher duty is excluded from this operation",
+  };
+  const dutyDenyDoesNotCoverRole = structuredClone(roleAllowsDuty);
+  const widenedTask = dutyDenyDoesNotCoverRole.aiTasks
+    .find(({ id }) => id === task.id);
+  widenedTask.roleRefs = ["ROLE-TEACHER"];
+  widenedTask.dutyRefs = [];
+  widenedTask.confirmerRef = "ROLE-TEACHER";
+  widenedTask.confirmer = { mode: "ROLE", roleRef: "ROLE-TEACHER" };
+  dutyDenyDoesNotCoverRole.modules.flatMap(({ actions }) => actions)
+    .find(({ id }) => id === task.actionId).permissions.push(dutyDeny);
+  assertNoCode(
+    validateRequirementModel(dutyDenyDoesNotCoverRole),
+    "INVALID_AI_ACTOR_AUTHORIZATION",
+  );
+  assertNoCode(
+    validateRequirementModel(dutyDenyDoesNotCoverRole),
+    "INVALID_AI_CONFIRMER_AUTHORIZATION",
+  );
+
+  const dutyDenyBlocksSameDuty = structuredClone(roleAllowsDuty);
+  dutyDenyBlocksSameDuty.modules.flatMap(({ actions }) => actions)
+    .find(({ id }) => id === task.actionId).permissions.push(dutyDeny);
+  const blockedErrors = validateRequirementModel(dutyDenyBlocksSameDuty);
+  assertHasCode(blockedErrors, "INVALID_AI_ACTOR_AUTHORIZATION");
+  assertHasCode(blockedErrors, "INVALID_AI_CONFIRMER_AUTHORIZATION");
+});
+
+test("applies explicit DENY precedence to AI audiences and confirmers", () => {
+  const model = structuredClone(requirementModel);
+  const task = model.aiTasks.find(({ id }) => (
+    id === "AI-TASK-UPDATE-ACADEMIC-REPORT-SUBSCRIPTION"
+  ));
+  task.roleRefs = ["ROLE-PLATFORM-OPS"];
+  task.dutyRefs = [];
+  task.confirmerRef = "ROLE-PLATFORM-OPS";
+  task.confirmer = { mode: "ROLE", roleRef: "ROLE-PLATFORM-OPS" };
+
+  const errors = validateRequirementModel(model);
+  assertHasCode(errors, "INVALID_AI_ACTOR_AUTHORIZATION");
+  assertHasCode(errors, "INVALID_AI_CONFIRMER_AUTHORIZATION");
+});
+
+test("applies DENY CURRENT_ACTOR precedence to AI audiences and confirmers", () => {
+  const model = structuredClone(requirementModel);
+  const task = model.aiTasks.find(({ id }) => id === "AI-TASK-AD-HOC-REPORT");
+  const targetAction = model.modules.flatMap(({ actions }) => actions)
+    .find(({ id }) => id === task.actionId);
+  targetAction.permissions.push({
+    effect: "DENY",
+    actorRef: "CURRENT_ACTOR",
+    condition: "the current actor is explicitly excluded from this operation",
+  });
+
+  const errors = validateRequirementModel(model);
+  assertHasCode(errors, "INVALID_AI_ACTOR_AUTHORIZATION");
+  assertHasCode(errors, "INVALID_AI_CONFIRMER_AUTHORIZATION");
 });
 
 test("validates AI JSON schema property bodies and clarification parameters", () => {
@@ -3652,12 +3844,57 @@ test("validates AI JSON schema property bodies and clarification parameters", ()
   }
 });
 
+test("covers every required AI parameter with blocking clarification", () => {
+  for (const task of aiTasks) {
+    const required = new Set(task.parameterSchema.required);
+    const blockingMissing = task.clarificationRules
+      .filter(({ blocksExecution }) => blocksExecution === true)
+      .flatMap(({ whenMissing }) => whenMissing);
+    assert.deepEqual(new Set(blockingMissing), required, task.id);
+    assert.equal(blockingMissing.length, required.size, task.id);
+  }
+
+  const missingParameters = ["metricIds", "dataScope", "timeRange"];
+  const missedMutations = [];
+  for (const parameter of missingParameters) {
+    const model = structuredClone(requirementModel);
+    const task = model.aiTasks.find(({ id }) => id === "AI-TASK-AD-HOC-REPORT");
+    task.clarificationRules[0].whenMissing = task.clarificationRules[0].whenMissing
+      .filter((candidate) => candidate !== parameter);
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_AI_TASK_CONTRACT")) {
+      missedMutations.push(parameter);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+
+  const duplicateAcrossRules = structuredClone(requirementModel);
+  const task = duplicateAcrossRules.aiTasks.find(({ id }) => id === "AI-TASK-AD-HOC-REPORT");
+  task.clarificationRules = [
+    {
+      whenMissing: ["reportName", "metricIds", "dataScope"],
+      prompt: "Provide the report identity and authorized scope.",
+      blocksExecution: true,
+    },
+    {
+      whenMissing: ["metricIds", "timeRange"],
+      prompt: "Provide the report metrics and time range.",
+      blocksExecution: true,
+    },
+  ];
+  assertHasCode(
+    validateRequirementModel(duplicateAcrossRules),
+    "INVALID_AI_TASK_CONTRACT",
+  );
+});
+
 test("keeps AI task drafts temporary until authorized target Action confirmation", () => {
   const draftTasks = aiTasks.filter(({ taskType }) => taskType === "DRAFT");
   assert.equal(draftTasks.length, 3);
   for (const task of draftTasks) {
     assert.deepEqual(task.draftPolicy, {
-      previewActionId: "AIX-ACT-PREPARE-TASK-PREVIEW",
+      previewActionId: task.actionId.startsWith("AIX-")
+        ? task.actionId
+        : "AIX-ACT-PREPARE-TASK-PREVIEW",
       previewObjectId: "AIX-OBJ-TASK-PREVIEW",
       confirmationRequired: true,
       businessWriteBeforeConfirmation: false,
@@ -3675,6 +3912,292 @@ test("fails closed when an AI task write preview omits a target Action input", (
   task.previewFieldIds = task.previewFieldIds.slice(1);
 
   assertHasCode(validateRequirementModel(model), "AI_WRITE_WITHOUT_CONFIRMATION");
+});
+
+test("executes report authorization through closed audience scopes", () => {
+  const reportModule = moduleById(requirementModel, "RPT-001");
+  const definition = reportModule.objects.find(({ id }) => id === "RPT-OBJ-DEFINITION");
+  const scopeField = definition.fields.find(({ id }) => (
+    id === "RPT-DEFINITION-F-DATA-SCOPE"
+  ));
+  assert.deepEqual(scopeField.valueSource, {
+    kind: "OPTION_SET",
+    optionSetId: "OPT-ENUM-048",
+  });
+  assert.deepEqual(reportModule.dataScopeProfiles, [
+    {
+      code: "SUBJECT_ASSIGNED",
+      subjectScope: "ASSIGNED_SUBJECT",
+      classScope: "ASSIGNED_CLASSES",
+      aggregateOnly: false,
+      noStudentDetail: false,
+      requiresAuthorizedGrant: false,
+    },
+    {
+      code: "HOMEROOM_ASSIGNED_CLASS_AGGREGATE",
+      subjectScope: "ALL_SUBJECTS",
+      classScope: "ASSIGNED_HOMEROOM_CLASS",
+      aggregateOnly: true,
+      noStudentDetail: true,
+      requiresAuthorizedGrant: false,
+    },
+    {
+      code: "ACADEMIC_AUTHORIZED_AGGREGATE",
+      subjectScope: "AUTHORIZED_SUBJECTS",
+      classScope: "AUTHORIZED_CLASSES",
+      aggregateOnly: true,
+      noStudentDetail: true,
+      requiresAuthorizedGrant: true,
+    },
+  ]);
+
+  const expectedActions = [
+    ["RPT-ACT-CREATE-AD-HOC-DEFINITION", "SUBJECT_ASSIGNED", "dutyRef", "DUTY-SUBJECT-TEACHER"],
+    ["RPT-ACT-CREATE-HOMEROOM-DEFINITION", "HOMEROOM_ASSIGNED_CLASS_AGGREGATE", "dutyRef", "DUTY-HOMEROOM"],
+    ["RPT-ACT-CREATE-ACADEMIC-DEFINITION", "ACADEMIC_AUTHORIZED_AGGREGATE", "roleRef", "ROLE-ACADEMIC"],
+  ];
+  for (const [actionId, code, subjectKey, subjectRef] of expectedActions) {
+    const targetAction = reportModule.actions.find(({ id }) => id === actionId);
+    assert.deepEqual(targetAction.acceptedInputValues, [{
+      fieldId: "RPT-DEFINITION-F-DATA-SCOPE",
+      optionSetId: "OPT-ENUM-048",
+      partitionId: "RPT-DEFINITION-DATA-SCOPE",
+      codes: [code],
+    }]);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "ALLOW" && permission[subjectKey] === subjectRef
+    )), `${actionId} must allow only its scoped report author`);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "DENY" && permission.roleRef === "ROLE-PLATFORM-OPS"
+    )), `${actionId} must deny platform operations`);
+  }
+  const mutations = [
+    (model) => {
+      moduleById(model, "RPT-001").dataScopeProfiles[1].noStudentDetail = false;
+    },
+    (model) => {
+      moduleById(model, "RPT-001").actions
+        .find(({ id }) => id === "RPT-ACT-CREATE-AD-HOC-DEFINITION")
+        .acceptedInputValues[0].codes.push("HOMEROOM_ASSIGNED_CLASS_AGGREGATE");
+    },
+    (model) => {
+      const permissions = moduleById(model, "RPT-001").actions
+        .find(({ id }) => id === "RPT-ACT-CREATE-HOMEROOM-DEFINITION").permissions;
+      permissions.find(({ effect }) => effect === "ALLOW").dutyRef = "DUTY-SUBJECT-TEACHER";
+    },
+    (model) => {
+      const targetAction = moduleById(model, "RPT-001").actions
+        .find(({ id }) => id === "RPT-ACT-CREATE-ACADEMIC-DEFINITION");
+      targetAction.permissions = targetAction.permissions.filter(({ roleRef }) => (
+        roleRef !== "ROLE-PLATFORM-OPS"
+      ));
+    },
+  ];
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_REPORT_SCOPE_CONTRACT");
+  }
+});
+
+test("keeps report subscription management with the creating actor", () => {
+  const reportModule = moduleById(requirementModel, "RPT-001");
+  const subscription = reportModule.objects.find(({ id }) => (
+    id === "RPT-OBJ-SUBSCRIPTION"
+  ));
+  assert.equal(subscription.producerRef, "CURRENT_ACTOR");
+  assert.ok(subscription.fields.some(({ id }) => (
+    id === "RPT-SUBSCRIPTION-F-CREATOR-REF"
+  )));
+
+  for (const actionId of [
+    "RPT-ACT-CREATE-SUBSCRIPTION",
+    "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+    "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
+  ]) {
+    const targetAction = reportModule.actions.find(({ id }) => id === actionId);
+    assert.ok(targetAction.outputFieldIds.includes("RPT-SUBSCRIPTION-F-CREATOR-REF"));
+  }
+  for (const actionId of [
+    "RPT-ACT-UPDATE-SUBSCRIPTION",
+    "RPT-ACT-PAUSE-SUBSCRIPTION",
+    "RPT-ACT-CANCEL-SUBSCRIPTION",
+  ]) {
+    const targetAction = reportModule.actions.find(({ id }) => id === actionId);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "ALLOW"
+      && permission.actorRef === "CURRENT_ACTOR"
+      && permission.scope?.kind === "OWN_RECORD"
+      && permission.scope.subjectFieldId === "RPT-SUBSCRIPTION-F-CREATOR-REF"
+    )), `${actionId} must allow the creator's own subscription`);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "DENY"
+      && permission.actorRef === "CURRENT_ACTOR"
+      && permission.scope?.kind === "OTHER_RECORD"
+      && permission.scope.subjectFieldId === "RPT-SUBSCRIPTION-F-CREATOR-REF"
+    )), `${actionId} must deny another actor's subscription`);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "DENY" && permission.roleRef === "ROLE-PLATFORM-OPS"
+    )), `${actionId} must deny platform operations`);
+  }
+
+  const wrongProducer = structuredClone(requirementModel);
+  moduleById(wrongProducer, "RPT-001").objects
+    .find(({ id }) => id === "RPT-OBJ-SUBSCRIPTION").producerRef = "DUTY-SUBJECT-TEACHER";
+  assertHasCode(
+    validateRequirementModel(wrongProducer),
+    "INVALID_REPORT_SUBSCRIPTION_OWNERSHIP",
+  );
+
+  const crossActorUpdate = structuredClone(requirementModel);
+  const update = moduleById(crossActorUpdate, "RPT-001").actions
+    .find(({ id }) => id === "RPT-ACT-UPDATE-SUBSCRIPTION");
+  update.permissions = update.permissions.filter(({ scope }) => scope?.kind !== "OTHER_RECORD");
+  assertHasCode(
+    validateRequirementModel(crossActorUpdate),
+    "INVALID_REPORT_SUBSCRIPTION_OWNERSHIP",
+  );
+});
+
+test("binds AI report audiences and confirmers to scoped Actions", () => {
+  const actionById = new Map(modules.flatMap(({ actions }) => actions)
+    .map((targetAction) => [targetAction.id, targetAction]));
+  const audienceProfiles = [
+    [{ dutyRef: "DUTY-SUBJECT-TEACHER" }, "RPT-ACT-CREATE-AD-HOC-DEFINITION"],
+    [{ dutyRef: "DUTY-HOMEROOM" }, "RPT-ACT-CREATE-HOMEROOM-DEFINITION"],
+    [{ roleRef: "ROLE-ACADEMIC" }, "RPT-ACT-CREATE-ACADEMIC-DEFINITION"],
+  ];
+  const periodicActionIds = [
+    "RPT-ACT-CREATE-SUBSCRIPTION",
+    "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+    "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
+    "RPT-ACT-UPDATE-SUBSCRIPTION",
+    "RPT-ACT-PAUSE-SUBSCRIPTION",
+    "RPT-ACT-CANCEL-SUBSCRIPTION",
+  ];
+  for (const [subject, actionId] of audienceProfiles) {
+    const task = aiTasks.find((candidate) => (
+      candidate.actionId === actionId
+      && candidate.capability === "REPORT"
+      && (subject.dutyRef
+        ? candidate.dutyRefs.includes(subject.dutyRef)
+        : candidate.roleRefs.includes(subject.roleRef))
+    ));
+    assert.ok(task, `missing scoped ad-hoc report task for ${actionId}`);
+  }
+  for (const actionId of periodicActionIds) {
+    const targetAction = actionById.get(actionId);
+    const allowSubjects = targetAction.permissions
+      .filter(({ effect }) => effect === "ALLOW")
+      .map(({ dutyRef, roleRef, actorRef }) => ({ dutyRef, roleRef, actorRef }));
+    const tasks = aiTasks.filter((task) => (
+      task.actionId === actionId && task.capability === "PERIODIC"
+    ));
+    assert.equal(tasks.length > 0, true, actionId);
+    for (const task of tasks) {
+      const confirmerSubject = task.confirmer.mode === "DUTY"
+        ? { dutyRef: task.confirmer.dutyRef }
+        : task.confirmer.mode === "ROLE"
+          ? { roleRef: task.confirmer.roleRef }
+          : { actorRef: task.confirmer.actorRef };
+      assert.ok(allowSubjects.some((subject) => (
+        Object.entries(confirmerSubject).every(([key, value]) => subject[key] === value)
+        || subject.actorRef === "CURRENT_ACTOR"
+      )), `${task.id} confirmer must match an Action ALLOW subject`);
+    }
+  }
+
+  const wrongAudience = structuredClone(requirementModel);
+  const reportTask = wrongAudience.aiTasks.find(({ capability }) => capability === "REPORT");
+  reportTask.roleRefs = ["ROLE-PLATFORM-OPS"];
+  reportTask.dutyRefs = [];
+  assertHasCode(validateRequirementModel(wrongAudience), "INVALID_AI_ACTOR_AUTHORIZATION");
+
+  const wrongConfirmer = structuredClone(requirementModel);
+  const academicTask = wrongConfirmer.aiTasks.find((task) => (
+    task.capability === "REPORT" && task.roleRefs.includes("ROLE-ACADEMIC")
+  ));
+  academicTask.confirmer = { mode: "DUTY", dutyRef: "DUTY-HOMEROOM" };
+  assertHasCode(validateRequirementModel(wrongConfirmer), "INVALID_AI_CONFIRMER_AUTHORIZATION");
+});
+
+test("binds AI drafts to capability-matched temporary preview Actions", () => {
+  const actionById = new Map(modules.flatMap(({ actions }) => actions)
+    .map((targetAction) => [targetAction.id, targetAction]));
+  const objectById = new Map(modules.flatMap(({ objects }) => objects)
+    .map((targetObject) => [targetObject.id, targetObject]));
+  const expectedTargets = new Map([
+    ["AI-TASK-ASSIGNMENT-DRAFT", "HW-ACT-CREATE-DRAFT"],
+    ["AI-TASK-FEEDBACK-DRAFT", "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW"],
+    ["AI-TASK-IMPROVEMENT-PLAN-DRAFT", "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW"],
+  ]);
+  for (const [taskId, actionId] of expectedTargets) {
+    const task = aiTasks.find(({ id }) => id === taskId);
+    const targetAction = actionById.get(actionId);
+    assert.equal(task.capability, "DRAFT");
+    assert.equal(task.actionId, actionId);
+    assert.equal(targetAction.capability, "DRAFT");
+    if (targetAction.targetObjectId === "AIX-OBJ-TASK-PREVIEW") {
+      assert.equal(targetAction.operationKind, "CREATE");
+      assert.equal(
+        objectById.get(targetAction.targetObjectId).lifecyclePolicyId,
+        "LIFE-005",
+      );
+      assert.equal(task.draftPolicy.previewActionId, actionId);
+    }
+  }
+
+  for (const [taskId, actionId] of [
+    ["AI-TASK-FEEDBACK-DRAFT", "GRD-ACT-OVERRIDE-SCORE"],
+    ["AI-TASK-IMPROVEMENT-PLAN-DRAFT", "PLN-ACT-CONFIRM-PLAN"],
+    ["AI-TASK-ASSIGNMENT-DRAFT", "HW-ACT-PUBLISH-NOW"],
+  ]) {
+    const model = structuredClone(requirementModel);
+    model.aiTasks.find(({ id }) => id === taskId).actionId = actionId;
+    assertHasCode(validateRequirementModel(model), "INVALID_AI_TASK_CAPABILITY");
+  }
+});
+
+test("binds every AI draft to a purpose-scoped target", () => {
+  const mutations = [
+    ["AI-TASK-FEEDBACK-DRAFT", "GRD-ACT-OVERRIDE-SCORE"],
+    ["AI-TASK-IMPROVEMENT-PLAN-DRAFT", "PLN-ACT-CONFIRM-PLAN"],
+    ["AI-TASK-ASSIGNMENT-DRAFT", "HW-ACT-PUBLISH-NOW"],
+  ];
+  const missedMutations = [];
+  for (const [taskId, actionId] of mutations) {
+    const model = structuredClone(requirementModel);
+    const task = model.aiTasks.find(({ id }) => id === taskId);
+    const targetAction = model.modules.flatMap(({ actions }) => actions)
+      .find(({ id }) => id === actionId);
+    task.actionId = actionId;
+    task.risk = targetAction.risk;
+    task.previewFieldIds = [
+      ...targetAction.inputFieldIds,
+      ...targetAction.outputFieldIds,
+    ];
+    task.draftPolicy.previewActionId = "AIX-ACT-PREPARE-TASK-PREVIEW";
+    targetAction.capability = "DRAFT";
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_AI_DRAFT_PURPOSE")) {
+      missedMutations.push(taskId);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("anchors AI draft content purpose independently from Task and Action metadata", () => {
+  const changedPurpose = structuredClone(requirementModel);
+  const task = changedPurpose.aiTasks
+    .find(({ id }) => id === "AI-TASK-ASSIGNMENT-DRAFT");
+  const targetAction = changedPurpose.modules.flatMap(({ actions }) => actions)
+    .find(({ id }) => id === task.actionId);
+  task.draftPurpose.contentKind = "FEEDBACK";
+  targetAction.draftPurpose.contentKind = "FEEDBACK";
+  assertHasCode(validateRequirementModel(changedPurpose), "INVALID_AI_DRAFT_PURPOSE");
+
+  const missingRegistry = structuredClone(requirementModel);
+  moduleById(missingRegistry, "AIX-001").draftPurposeProfiles = [];
+  assertHasCode(validateRequirementModel(missingRegistry), "INVALID_AI_DRAFT_PURPOSE");
 });
 
 test("models report definition subscription run snapshot and delivery as five objects", () => {
@@ -3796,7 +4319,11 @@ test("guards report lineage with source-state-specific action applicability", ()
   const objectById = new Map(reportModule.objects.map((object) => [object.id, object]));
   const actionById = new Map(reportModule.actions.map((action) => [action.id, action]));
   for (const [objectId, refFieldId, actionIds, requiredState] of [
-    ["RPT-OBJ-SUBSCRIPTION", "RPT-SUBSCRIPTION-F-DEFINITION-REF", ["RPT-ACT-CREATE-SUBSCRIPTION"], "ACTIVE"],
+    ["RPT-OBJ-SUBSCRIPTION", "RPT-SUBSCRIPTION-F-DEFINITION-REF", [
+      "RPT-ACT-CREATE-SUBSCRIPTION",
+      "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+      "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
+    ], "ACTIVE"],
     ["RPT-OBJ-RUN", "RPT-RUN-F-DEFINITION-REF", ["RPT-ACT-CREATE-AD-HOC-RUN", "RPT-ACT-CREATE-RUN"], "ACTIVE"],
     ["RPT-OBJ-RUN", "RPT-RUN-F-SUBSCRIPTION-REF", ["RPT-ACT-CREATE-RUN"], "ACTIVE"],
     ["RPT-OBJ-SNAPSHOT", "RPT-SNAPSHOT-F-RUN-REF", ["RPT-ACT-MATERIALIZE-SNAPSHOT"], "SUCCEEDED"],
@@ -3867,8 +4394,8 @@ test("requires periodic report runs to pin definition and subscription action in
     assert.equal(action.outputFieldIds.includes("RPT-RUN-F-DEFINITION-REF"), false);
     assert.equal(action.outputFieldIds.includes("RPT-RUN-F-DEFINITION-VERSION"), false);
   }
-  assert.equal(periodicRun.outputFieldIds.includes("RPT-RUN-F-SUBSCRIPTION-REF"), false);
-  assert.equal(periodicRun.outputFieldIds.includes("RPT-RUN-F-SUBSCRIPTION-VERSION"), false);
+  assert.equal(periodicRun.outputFieldIds.includes("RPT-RUN-F-SUBSCRIPTION-REF"), true);
+  assert.equal(periodicRun.outputFieldIds.includes("RPT-RUN-F-SUBSCRIPTION-VERSION"), true);
 
   const periodicPath = flows.find(({ id }) => id === "DF-013").executionPaths
     .find(({ id }) => id === "PERIODIC");
@@ -4205,22 +4732,205 @@ test("validates declared-state reachability through a generic action graph", () 
   assertHasCode(validateRequirementModel(unreachableModel), "UNREACHABLE_OBJECT_STATE");
 });
 
-test("lets a student update only their own delivered notification", () => {
+test("rejects NONE for polymorphic or state-changing objects", () => {
+  const polymorphicModel = validFixture();
+  moduleById(polymorphicModel, "SUB-001").objects[0].stateReachability = {
+    mode: "ACTION_GRAPH",
+    initialStateIds: ["DRAFT"],
+  };
+  assert.deepEqual(validateRequirementModel(polymorphicModel), []);
+  moduleById(polymorphicModel, "SUB-001").objects[0].stateReachability = { mode: "NONE" };
+
+  const oneStateWriteModel = structuredClone(requirementModel);
+  const aixPreview = moduleById(oneStateWriteModel, "AIX-001").objects
+    .find(({ id }) => id === "AIX-OBJ-TASK-PREVIEW");
+  assert.deepEqual(aixPreview.states, ["PREVIEW_READY"]);
+  assert.equal(aixPreview.stateReachability.mode, "ACTION_GRAPH");
+  aixPreview.stateReachability = { mode: "NONE" };
+
+  const missedMutations = [];
+  for (const [name, model] of [
+    ["polymorphic update object", polymorphicModel],
+    ["one-state CREATE object", oneStateWriteModel],
+  ]) {
+    if (!errorCodes(validateRequirementModel(model)).includes(
+      "INVALID_STATE_REACHABILITY_POLICY",
+    )) {
+      missedMutations.push(name);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("reaches alternate Action scenario states in the generic graph", () => {
+  const model = validFixture();
+  const module = moduleById(model, "SUB-001");
+  module.objects[0].states.push("CONFLICT");
+  module.objects[0].stateReachability = {
+    mode: "ACTION_GRAPH",
+    initialStateIds: ["DRAFT"],
+  };
+  module.scenarios.find(({ kind }) => kind === "FAILURE").then.expectedState = {
+    mode: "STATE",
+    value: "CONFLICT",
+  };
+
+  assertNoCode(validateRequirementModel(model), "UNREACHABLE_OBJECT_STATE");
+});
+
+test("rejects terminal states as unauthored initial entries", () => {
+  const terminalInitial = structuredClone(requirementModel);
+  const assignment = moduleById(terminalInitial, "HW-001").objects
+    .find(({ id }) => id === "HW-OBJ-ASSIGNMENT");
+  assignment.stateReachability.initialStateIds = ["CLOSED"];
+
+  assertHasCode(validateRequirementModel(terminalInitial), "INVALID_STATE_ENTRY_SOURCE");
+});
+
+test("rejects multiple naked initial states on write objects without CREATE", () => {
+  const model = validFixture();
+  assertNoCode(validateRequirementModel(model), "INVALID_STATE_ENTRY_SOURCE");
+  moduleById(model, "SUB-001").objects[0].stateReachability.initialStateIds = [
+    "DRAFT",
+    "SUBMITTED",
+  ];
+
+  assertHasCode(validateRequirementModel(model), "INVALID_STATE_ENTRY_SOURCE");
+});
+
+test("rejects metadata-only external state entry sources", () => {
+  const model = structuredClone(requirementModel);
+  const school = moduleById(model, "ACC-001").objects
+    .find(({ id }) => id === "ACC-OBJ-SCHOOL");
+  school.stateReachability = {
+    mode: "ACTION_GRAPH",
+    initialStateIds: [],
+    entrySources: school.states.map((stateId) => ({
+      kind: "EXTERNAL_SOURCE",
+      stateId,
+      producerRef: school.producerRef,
+    })),
+  };
+
+  assertHasCode(validateRequirementModel(model), "INVALID_EXTERNAL_SOURCE_PROVENANCE");
+});
+
+test("models external projections as event-driven source-version sync", () => {
+  const contracts = [
+    ["ACC-001", "ACC-OBJ-SCHOOL", "ACC-ACT-SYNC-SCHOOL", "EVT-SCHOOL-DIRECTORY-SNAPSHOT-AVAILABLE", "ACC-SCHOOL-F-SOURCE-REF", "ACC-SCHOOL-F-SOURCE-VERSION"],
+    ["ACC-001", "ACC-OBJ-IDENTITY", "ACC-ACT-SYNC-IDENTITY", "EVT-IDENTITY-DIRECTORY-SNAPSHOT-AVAILABLE", "ACC-IDENTITY-F-SOURCE-REF", "ACC-IDENTITY-F-SOURCE-VERSION"],
+    ["IAM-001", "IAM-OBJ-ROLE-POLICY", "IAM-ACT-SYNC-ROLE-POLICY", "EVT-ROLE-POLICY-SNAPSHOT-AVAILABLE", "IAM-ROLE-F-SOURCE-REF", "IAM-ROLE-F-SOURCE-VERSION"],
+    ["DGV-001", "DGV-OBJ-POLICY", "DGV-ACT-SYNC-POLICY", "EVT-DATA-GOVERNANCE-POLICY-SNAPSHOT-AVAILABLE", "DGV-POLICY-F-SOURCE-REF", "DGV-POLICY-F-SOURCE-VERSION"],
+    ["TEA-001", "TEA-OBJ-TODO-VIEW", "TEA-ACT-SYNC-TODO-VIEW", "EVT-TEACHER-TODO-PROJECTION-AVAILABLE", "TEA-TODO-F-PROJECTION-SOURCE-REF", "TEA-TODO-F-PROJECTION-SOURCE-VERSION"],
+    ["HW-001", "HW-OBJ-RUBRIC", "HW-ACT-SYNC-RUBRIC", "EVT-RUBRIC-SNAPSHOT-AVAILABLE", "HW-RUBRIC-F-SOURCE-REF", "HW-RUBRIC-F-SOURCE-VERSION"],
+    ["GRD-001", "GRD-OBJ-CAPABILITY-RULE", "GRD-ACT-SYNC-CAPABILITY-RULE", "EVT-GRADING-CAPABILITY-SNAPSHOT-AVAILABLE", "GRD-CAP-F-SOURCE-REF", "GRD-CAP-F-SOURCE-VERSION"],
+  ];
+  for (const [
+    moduleId,
+    objectId,
+    actionId,
+    eventId,
+    sourceRefFieldId,
+    sourceVersionFieldId,
+  ] of contracts) {
+    const targetModule = moduleById(requirementModel, moduleId);
+    const targetObject = targetModule.objects.find(({ id }) => id === objectId);
+    const sourceAction = targetModule.actions.find(({ id }) => id === actionId);
+    const sourceEvent = events.find(({ id }) => id === eventId);
+    assert.ok(sourceAction, actionId);
+    assert.equal(Object.hasOwn(targetObject.stateReachability, "entrySources"), false);
+    assert.equal(sourceAction.operationKind, "CREATE");
+    assert.equal(sourceAction.executionMode, "SYSTEM_EVENT");
+    assert.equal(sourceAction.trigger.eventId, eventId);
+    for (const fieldId of [sourceRefFieldId, sourceVersionFieldId]) {
+      const sourceField = targetObject.fields.find(({ id }) => id === fieldId);
+      assert.ok(sourceField, fieldId);
+      assert.equal(sourceField.mutability, "IMMUTABLE", fieldId);
+      assert.ok(sourceAction.inputFieldIds.includes(fieldId), actionId);
+      assert.ok(sourceAction.outputFieldIds.includes(fieldId), actionId);
+    }
+    assert.ok(sourceEvent.triggeredActionIds.includes(actionId), eventId);
+    const successStates = new Set(targetModule.scenarios
+      .filter(({ actionId: scenarioActionId, kind }) => (
+        scenarioActionId === actionId && kind === "SUCCESS"
+      ))
+      .map(({ then }) => then.expectedState.value));
+    assert.deepEqual(successStates, new Set(targetObject.states), objectId);
+  }
+});
+
+test("rejects wrong or incomplete external projection provenance bindings", () => {
+  const contracts = [
+    ["ACC-ACT-SYNC-SCHOOL", "ACC-SCHOOL-F-SOURCE-REF", "ACC-SCHOOL-F-SOURCE-VERSION"],
+    ["ACC-ACT-SYNC-IDENTITY", "ACC-IDENTITY-F-SOURCE-REF", "ACC-IDENTITY-F-SOURCE-VERSION"],
+    ["IAM-ACT-SYNC-ROLE-POLICY", "IAM-ROLE-F-SOURCE-REF", "IAM-ROLE-F-SOURCE-VERSION"],
+    ["DGV-ACT-SYNC-POLICY", "DGV-POLICY-F-SOURCE-REF", "DGV-POLICY-F-SOURCE-VERSION"],
+    ["TEA-ACT-SYNC-TODO-VIEW", "TEA-TODO-F-PROJECTION-SOURCE-REF", "TEA-TODO-F-PROJECTION-SOURCE-VERSION"],
+    ["HW-ACT-SYNC-RUBRIC", "HW-RUBRIC-F-SOURCE-REF", "HW-RUBRIC-F-SOURCE-VERSION"],
+    ["GRD-ACT-SYNC-CAPABILITY-RULE", "GRD-CAP-F-SOURCE-REF", "GRD-CAP-F-SOURCE-VERSION"],
+  ];
+  const mutations = [
+    (action) => {
+      action.trigger.eventId = "EVT-AUDIT-APPEND-REQUESTED";
+    },
+    (action, sourceRefFieldId) => {
+      action.inputFieldIds = action.inputFieldIds
+        .filter((fieldId) => fieldId !== sourceRefFieldId);
+    },
+    (action, sourceRefFieldId, sourceVersionFieldId) => {
+      action.outputFieldIds = action.outputFieldIds
+        .filter((fieldId) => fieldId !== sourceVersionFieldId);
+    },
+  ];
+  const missedMutations = [];
+  for (const [actionId, sourceRefFieldId, sourceVersionFieldId] of contracts) {
+    for (const mutate of mutations) {
+      const model = structuredClone(requirementModel);
+      const sourceAction = model.modules.flatMap(({ actions }) => actions)
+        .find(({ id }) => id === actionId);
+      mutate(sourceAction, sourceRefFieldId, sourceVersionFieldId);
+      if (!errorCodes(validateRequirementModel(model)).includes(
+        "INVALID_EXTERNAL_SOURCE_PROVENANCE",
+      )) {
+        missedMutations.push(`${actionId}:${mutate.name || "mutation"}`);
+      }
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
+test("uses only successful CREATE outcomes as state graph entries", () => {
+  const model = structuredClone(requirementModel);
+  const aixModule = moduleById(model, "AIX-001");
+  const preview = aixModule.objects.find(({ id }) => id === "AIX-OBJ-TASK-PREVIEW");
+  preview.states.push("FAILED");
+  const createAction = aixModule.actions.find(({ id }) => (
+    id === "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW"
+  ));
+  const failureScenario = aixModule.scenarios.find(({ actionId, kind }) => (
+    actionId === createAction.id && kind === "FAILURE"
+  ));
+  failureScenario.then.expectedState = { mode: "STATE", value: "FAILED" };
+
+  assertHasCode(validateRequirementModel(model), "UNREACHABLE_OBJECT_STATE");
+});
+
+test("lets a recipient update only their own delivered notification", () => {
   const notificationModule = moduleById(requirementModel, "NOTI-001");
   for (const actionId of ["NOTI-ACT-MARK-READ", "NOTI-ACT-MARK-HANDLED"]) {
     const targetAction = notificationModule.actions.find(({ id }) => id === actionId);
     assert.ok(targetAction.permissions.some((permission) => (
       permission.effect === "ALLOW"
-      && permission.roleRef === "ROLE-STUDENT"
+      && permission.actorRef === "CURRENT_ACTOR"
       && permission.scope?.kind === "OWN_RECORD"
       && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
-    )), `${actionId} must allow the student recipient`);
+    )), `${actionId} must allow the current recipient`);
     assert.ok(targetAction.permissions.some((permission) => (
       permission.effect === "DENY"
-      && permission.roleRef === "ROLE-STUDENT"
+      && permission.actorRef === "CURRENT_ACTOR"
       && permission.scope?.kind === "OTHER_RECORD"
       && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
-    )), `${actionId} must deny another student's notification`);
+    )), `${actionId} must deny another recipient's notification`);
     assert.ok(targetAction.permissions.some((permission) => (
       permission.effect === "DENY" && permission.roleRef === "ROLE-PLATFORM-OPS"
     )), `${actionId} must deny platform operations by default`);
@@ -4231,6 +4941,190 @@ test("lets a student update only their own delivered notification", () => {
   const markHandled = notificationModule.actions
     .find(({ id }) => id === "NOTI-ACT-MARK-HANDLED");
   assert.deepEqual(markHandled.transition, { from: "READ", to: "HANDLED" });
+});
+
+test("lets every supported recipient mutate only their own notification", () => {
+  const notificationModule = moduleById(requirementModel, "NOTI-001");
+  const notification = notificationModule.objects.find(({ id }) => (
+    id === "NOTI-OBJ-NOTIFICATION"
+  ));
+  assert.deepEqual(notification.recipientPolicy, {
+    subjectFieldId: "NOTI-NOTIFICATION-F-RECIPIENT",
+    allowedRecipientSubjects: [
+      "ROLE-STUDENT",
+      "DUTY-SUBJECT-TEACHER",
+      "DUTY-HOMEROOM",
+      "ROLE-ACADEMIC",
+    ],
+    mutationSubject: "CURRENT_ACTOR",
+    ownershipMode: "OWN_RECORD_ONLY",
+  });
+  for (const actionId of ["NOTI-ACT-MARK-READ", "NOTI-ACT-MARK-HANDLED"]) {
+    const targetAction = notificationModule.actions.find(({ id }) => id === actionId);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "ALLOW"
+      && permission.actorRef === "CURRENT_ACTOR"
+      && permission.scope?.kind === "OWN_RECORD"
+      && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+    )), `${actionId} must allow every supported current recipient on the actor's own record`);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "DENY"
+      && permission.actorRef === "CURRENT_ACTOR"
+      && permission.scope?.kind === "OTHER_RECORD"
+      && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+    )), `${actionId} must deny every supported current recipient on another record`);
+    assert.ok(targetAction.permissions.some(({ effect, roleRef }) => (
+      effect === "DENY" && roleRef === "ROLE-PLATFORM-OPS"
+    )));
+  }
+
+  for (const mutate of [
+    (model) => {
+      moduleById(model, "NOTI-001").objects[0]
+        .recipientPolicy.allowedRecipientSubjects.pop();
+    },
+    (model) => {
+      const markRead = moduleById(model, "NOTI-001").actions
+        .find(({ id }) => id === "NOTI-ACT-MARK-READ");
+      const allow = markRead.permissions.find(({ effect }) => effect === "ALLOW");
+      delete allow.actorRef;
+      allow.roleRef = "ROLE-STUDENT";
+    },
+    (model) => {
+      const markHandled = moduleById(model, "NOTI-001").actions
+        .find(({ id }) => id === "NOTI-ACT-MARK-HANDLED");
+      markHandled.permissions = markHandled.permissions
+        .filter(({ scope }) => scope?.kind !== "OTHER_RECORD");
+    },
+  ]) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_NOTIFICATION_CONTRACT");
+  }
+});
+
+test("binds notification mutation fields to their exact declared writer Actions", () => {
+  const notificationModule = moduleById(requirementModel, "NOTI-001");
+  const notification = notificationModule.objects.find(({ id }) => (
+    id === "NOTI-OBJ-NOTIFICATION"
+  ));
+  const expectedBindings = [
+    ["NOTI-NOTIFICATION-F-DELIVERED-AT", "DELIVERED", ["NOTI-ACT-DELIVER"]],
+    ["NOTI-NOTIFICATION-F-FAILURE-CODE", "FAILED", ["NOTI-ACT-FAIL-DELIVERY"]],
+    ["NOTI-NOTIFICATION-F-RETRY-COUNT", "QUEUED", [
+      "NOTI-ACT-CREATE-REMINDER",
+      "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
+      "NOTI-ACT-RETRY-DELIVERY",
+    ]],
+    ["NOTI-NOTIFICATION-F-READ-AT", "READ", ["NOTI-ACT-MARK-READ"]],
+    ["NOTI-NOTIFICATION-F-HANDLED-AT", "HANDLED", ["NOTI-ACT-MARK-HANDLED"]],
+  ];
+  for (const [fieldId, state, actionIds] of expectedBindings) {
+    const targetField = notification.fields.find(({ id }) => id === fieldId);
+    assert.equal(typeof targetField.required.description, "string");
+    assert.deepEqual(targetField.required.whenStates, [state]);
+    assert.deepEqual(new Set(targetField.required.whenActionIds), new Set(actionIds));
+    const writers = notificationModule.actions
+      .filter(({ outputFieldIds }) => outputFieldIds.includes(fieldId))
+      .map(({ id }) => id);
+    assert.deepEqual(new Set(writers), new Set(actionIds), fieldId);
+
+    for (const actionId of actionIds) {
+      const model = structuredClone(requirementModel);
+      const targetAction = moduleById(model, "NOTI-001").actions
+        .find(({ id }) => id === actionId);
+      targetAction.outputFieldIds = targetAction.outputFieldIds
+        .filter((candidate) => candidate !== fieldId);
+      assertHasCode(validateRequirementModel(model), "INVALID_ACTION_REQUIRED_FIELD");
+    }
+  }
+  assert.deepEqual(notification.deliveryFailurePolicy, {
+    sourceBusinessFactRollback: false,
+    retryScope: "NOTIFICATION_DELIVERY_ONLY",
+    preserveAcceptedSourceVersion: true,
+  });
+});
+
+test("requires conditional field writers to exactly match whenActionIds", () => {
+  const model = structuredClone(requirementModel);
+  const markRead = moduleById(model, "NOTI-001").actions
+    .find(({ id }) => id === "NOTI-ACT-MARK-READ");
+  markRead.outputFieldIds.push("NOTI-NOTIFICATION-F-DELIVERED-AT");
+
+  assertHasCode(validateRequirementModel(model), "INVALID_FIELD_ACTION_BINDING");
+});
+
+test("initializes notification retry count at zero and increments only on retry", () => {
+  const notificationModule = moduleById(requirementModel, "NOTI-001");
+  const retryCount = notificationModule.objects[0].fields
+    .find(({ id }) => id === "NOTI-NOTIFICATION-F-RETRY-COUNT");
+  const initializerActionIds = [
+    "NOTI-ACT-CREATE-REMINDER",
+    "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
+  ];
+  const mutatorActionIds = ["NOTI-ACT-RETRY-DELIVERY"];
+  assert.deepEqual(retryCount.writeContract, {
+    initializers: { actionIds: initializerActionIds, value: 0 },
+    mutators: { actionIds: mutatorActionIds, operation: "INCREMENT", amount: 1 },
+  });
+  assert.deepEqual(
+    new Set(retryCount.required.whenActionIds),
+    new Set([...initializerActionIds, ...mutatorActionIds]),
+  );
+  for (const actionId of initializerActionIds) {
+    const targetAction = notificationModule.actions.find(({ id }) => id === actionId);
+    assert.ok(targetAction.outputFieldIds.includes(retryCount.id), actionId);
+    assert.deepEqual(targetAction.fieldWrites, [{
+      fieldId: retryCount.id,
+      mode: "INITIALIZE",
+      value: 0,
+    }]);
+  }
+  const retryAction = notificationModule.actions
+    .find(({ id }) => id === "NOTI-ACT-RETRY-DELIVERY");
+  assert.ok(retryAction.outputFieldIds.includes(retryCount.id));
+  assert.deepEqual(retryAction.fieldWrites, [{
+    fieldId: retryCount.id,
+    mode: "INCREMENT",
+    amount: 1,
+  }]);
+});
+
+test("rejects incomplete or incorrect initializer and mutator write contracts", () => {
+  const fieldId = "NOTI-NOTIFICATION-F-RETRY-COUNT";
+  const mutations = [
+    (module) => {
+      module.actions.find(({ id }) => id === "NOTI-ACT-CREATE-REMINDER")
+        .fieldWrites[0].value = 1;
+    },
+    (module) => {
+      const createReport = module.actions
+        .find(({ id }) => id === "NOTI-ACT-CREATE-REPORT-NOTIFICATION");
+      createReport.outputFieldIds = createReport.outputFieldIds
+        .filter((candidate) => candidate !== fieldId);
+    },
+    (module) => {
+      module.objects[0].fields.find(({ id }) => id === fieldId)
+        .writeContract.initializers.actionIds.pop();
+    },
+    (module) => {
+      module.actions.find(({ id }) => id === "NOTI-ACT-DELIVER")
+        .outputFieldIds.push(fieldId);
+    },
+    (module) => {
+      module.actions.find(({ id }) => id === "NOTI-ACT-RETRY-DELIVERY")
+        .fieldWrites[0].amount = 2;
+    },
+  ];
+  const missedMutations = [];
+  for (const [index, mutate] of mutations.entries()) {
+    const model = structuredClone(requirementModel);
+    mutate(moduleById(model, "NOTI-001"));
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_FIELD_WRITE_CONTRACT")) {
+      missedMutations.push(index);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
 });
 
 test("makes notification delivery failure and retry states explicitly reachable", () => {
@@ -4624,6 +5518,7 @@ test("models assignment fields and task-specific lifecycle actions", () => {
   ];
   assert.equal(requiredFieldIds.every((fieldId) => fieldIds.has(fieldId)), true);
   assert.deepEqual(assignment.actions.map(({ id }) => id), [
+    "HW-ACT-SYNC-RUBRIC",
     "HW-ACT-CREATE-DRAFT",
     "HW-ACT-CREATE-ITEM",
     "HW-ACT-EDIT-ITEM",
@@ -4721,10 +5616,11 @@ test("models submission payloads uploads receipts and App-first weak-network sem
     "SUB-ATTEMPT-F-RECEIPT-ISSUED-AT",
   ].every((fieldId) => fieldIds.has(fieldId)), true);
   assert.deepEqual(submission.actions.map(({ id }) => id), [
-    "SUB-ACT-SAVE-DRAFT",
-    "SUB-ACT-UPLOAD-CHUNK",
-    "SUB-ACT-RETRY-UPLOAD",
-    "SUB-ACT-SUBMIT",
+      "SUB-ACT-SAVE-DRAFT",
+      "SUB-ACT-UPLOAD-CHUNK",
+      "SUB-ACT-RETRY-UPLOAD",
+      "SUB-ACT-MARK-DRAFT-READY",
+      "SUB-ACT-SUBMIT",
     "SUB-ACT-RESUBMIT",
     "SUB-ACT-VIEW-RECEIPT",
     "SUB-ACT-HANDOFF-ACCEPTED",
@@ -5072,6 +5968,7 @@ test("returns stable validation errors for malformed grading Option Set values",
 test("keeps formal grading under corresponding subject-teacher confirmation", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   assert.deepEqual(grading.actions.map(({ id }) => id), [
+    "GRD-ACT-SYNC-CAPABILITY-RULE",
     "GRD-ACT-ENQUEUE",
     "GRD-ACT-PROCESS",
     "GRD-ACT-ROUTE",
@@ -5224,8 +6121,8 @@ test("writes grading lineage through system outputs and recovers conflicts throu
   assert.equal(lineageFieldIds.every((fieldId) => enqueue.outputFieldIds.includes(fieldId)), true);
   assert.equal(enqueue.inputFieldIds.some((fieldId) => lineageFieldIds.includes(fieldId)), false);
 
-  for (const action of grading.actions.filter(({ failureResults }) => (
-    failureResults.includes("VERSION_CONFLICT")
+  for (const action of grading.actions.filter(({ targetObjectId, failureResults }) => (
+    targetObjectId === decision.id && failureResults.includes("VERSION_CONFLICT")
   ))) {
     const conflictScenario = grading.scenarios.find(({ actionId, resultCode }) => (
       actionId === action.id && resultCode === "VERSION_CONFLICT"
@@ -7398,20 +8295,34 @@ test("publishes one distinct negative scenario per declared failure result", () 
 
 test("separates system and Flow actions from user pages and terminates audit recursion", () => {
   const expectedModes = new Map([
+    ["ACC-ACT-SYNC-SCHOOL", "SYSTEM_EVENT"],
+    ["ACC-ACT-SYNC-IDENTITY", "SYSTEM_EVENT"],
     ["ACC-ACT-EXPIRE-CONTEXT", "SYSTEM_EVENT"],
+    ["ACC-ACT-INVALIDATE-CONTEXT", "SYSTEM_EVENT"],
     ["ORG-ACT-FINALIZE-AUDITED-IMPORT", "FLOW_INTERNAL"],
     ["ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", "FLOW_INTERNAL"],
+    ["IAM-ACT-SYNC-ROLE-POLICY", "SYSTEM_EVENT"],
     ["IAM-ACT-EXPIRE-GRANT", "SYSTEM_EVENT"],
+    ["IAM-ACT-MARK-PERMISSION-STALE", "SYSTEM_EVENT"],
     ["IAM-ACT-EVALUATE-PERMISSION", "FLOW_INTERNAL"],
     ["IAM-ACT-RECALCULATE-PERMISSIONS", "FLOW_INTERNAL"],
+    ["DGV-ACT-SYNC-POLICY", "SYSTEM_EVENT"],
     ["DGV-ACT-GENERATE-EXPORT", "SYSTEM_EVENT"],
+    ["DGV-ACT-COMPLETE-EXPORT", "SYSTEM_EVENT"],
+    ["DGV-ACT-FAIL-EXPORT", "SYSTEM_EVENT"],
     ["DGV-ACT-EXPIRE-EXPORT", "SYSTEM_EVENT"],
     ["AUD-ACT-APPEND-EVENT", "SYSTEM_EVENT"],
+    ["AUD-ACT-ARCHIVE-EVENT", "SYSTEM_EVENT"],
+    ["AUD-ACT-EXPIRE-ACCESS-REQUEST", "SYSTEM_EVENT"],
     ["AUD-ACT-OPEN-SESSION", "SYSTEM_EVENT"],
+    ["AUD-ACT-ACTIVATE-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-SESSION", "SYSTEM_EVENT"],
+    ["TEA-ACT-SYNC-TODO-VIEW", "SYSTEM_EVENT"],
+    ["HW-ACT-SYNC-RUBRIC", "SYSTEM_EVENT"],
     ["HW-ACT-PUBLISH-SCHEDULED", "SYSTEM_EVENT"],
     ["HW-ACT-RESOLVE-GRADING-SNAPSHOT", "FLOW_INTERNAL"],
     ["SUB-ACT-HANDOFF-ACCEPTED", "FLOW_INTERNAL"],
+    ["GRD-ACT-SYNC-CAPABILITY-RULE", "SYSTEM_EVENT"],
     ["GRD-ACT-ENQUEUE", "FLOW_INTERNAL"],
     ["GRD-ACT-PROCESS", "FLOW_INTERNAL"],
     ["GRD-ACT-ROUTE", "FLOW_INTERNAL"],
@@ -7465,7 +8376,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 62);
+  assert.equal(expectedModes.size, 76);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -7497,12 +8408,19 @@ test("separates system and Flow actions from user pages and terminates audit rec
   assert.equal(appendAudit.failureResults.includes("AUDIT_FAILED"), false);
   assert.equal(
     actions
-      .filter(({ risk, id }) => risk === RISK.HIGH && id !== appendAudit.id)
+      .filter(({ risk, auditMode }) => (
+        risk === RISK.HIGH && auditMode !== "ATOMIC_SELF_RECORD"
+      ))
       .every(({ auditMode, failureResults }) => (
         auditMode === "REQUIRED" && failureResults.includes("AUDIT_FAILED")
       )),
     true,
   );
+  assert.ok(actions
+    .filter(({ auditMode }) => auditMode === "ATOMIC_SELF_RECORD")
+    .every(({ targetObjectId, failureResults }) => (
+      targetObjectId === "AUD-OBJ-EVENT" && !failureResults.includes("AUDIT_FAILED")
+    )));
 });
 
 test("represents platform-ops, homeroom, and subject-lead authorization boundaries", () => {
@@ -7940,6 +8858,54 @@ test("declares concrete success states for every foundation write action", () =>
   }
 });
 
+test("rejects low-risk or audit-open sensitive lifecycle transitions", () => {
+  const model = structuredClone(requirementModel);
+  const revoke = moduleById(model, "IAM-001").actions
+    .find(({ id }) => id === "IAM-ACT-REVOKE-DUTY-GRANT");
+  revoke.risk = RISK.LOW;
+  revoke.failureResults = revoke.failureResults
+    .filter((resultCode) => resultCode !== "AUDIT_FAILED");
+
+  assertHasCode(validateRequirementModel(model), "INVALID_LIFECYCLE_RISK");
+});
+
+test("keeps destructive S3 and S4 lifecycle transitions high-risk and audit fail-closed", () => {
+  const destructiveStates = new Set([
+    "SUSPENDED",
+    "DEACTIVATED",
+    "REVOKED",
+    "ARCHIVED",
+    "TRANSFERRED",
+    "EXPIRED",
+    "CANCELLED",
+    "SUPERSEDED",
+    "DEPRECATED",
+    "RETIRED",
+    "CLOSED",
+    "INVALIDATED",
+    "DISABLED",
+    "STALE",
+  ]);
+  const violations = [];
+  for (const module of modules) {
+    const objectById = new Map(module.objects.map((object) => [object.id, object]));
+    for (const action of module.actions) {
+      const targetObject = objectById.get(action.targetObjectId);
+      if (
+        !["S3", "S4"].includes(targetObject?.sensitivityId)
+        || !destructiveStates.has(action.transition?.to)
+      ) continue;
+      const auditClosed = action.auditMode === "ATOMIC_SELF_RECORD"
+        || (
+          action.auditMode === "REQUIRED"
+          && action.failureResults.includes("AUDIT_FAILED")
+        );
+      if (action.risk !== RISK.HIGH || !auditClosed) violations.push(action.id);
+    }
+  }
+  assert.deepEqual(violations, []);
+});
+
 test("provides App-native ORG scope, import notification, and anomaly confirmation tasks", () => {
   const organization = moduleById(requirementModel, "ORG-001");
   const expectedActionIds = [
@@ -7978,7 +8944,10 @@ test("publishes the usable knowledge mapping before the curriculum version", () 
   assert.deepEqual(mappingValidate.transition, { from: "DRAFT", to: "VALIDATED" });
   assert.ok(mappingPublish);
   assert.deepEqual(mappingPublish.transition, { from: "VALIDATED", to: "PUBLISHED" });
-  assert.deepEqual(curriculumValidate.transition, { from: "DRAFT", to: "VALIDATED" });
+  assert.deepEqual(curriculumValidate.transition, {
+    from: ["DRAFT", "VALIDATING"],
+    to: "VALIDATED",
+  });
   const flow = flows.find(({ id }) => id === "DF-003");
   assert.deepEqual(flow.steps.map(({ actionId }) => actionId), [
     "CURR-ACT-VALIDATE-MAPPING",
@@ -7996,7 +8965,15 @@ test("splits export and sensitive-access approval outcomes with reasons", () => 
   const governance = moduleById(requirementModel, "DGV-001");
   assert.deepEqual(
     governance.actions.filter(({ id }) => /EXPORT$/.test(id)).map(({ id }) => id),
-    ["DGV-ACT-REQUEST-EXPORT", "DGV-ACT-APPROVE-EXPORT", "DGV-ACT-DENY-EXPORT", "DGV-ACT-GENERATE-EXPORT", "DGV-ACT-EXPIRE-EXPORT"],
+    [
+      "DGV-ACT-REQUEST-EXPORT",
+      "DGV-ACT-APPROVE-EXPORT",
+      "DGV-ACT-DENY-EXPORT",
+      "DGV-ACT-GENERATE-EXPORT",
+      "DGV-ACT-COMPLETE-EXPORT",
+      "DGV-ACT-FAIL-EXPORT",
+      "DGV-ACT-EXPIRE-EXPORT",
+    ],
   );
   for (const actionId of ["DGV-ACT-APPROVE-EXPORT", "DGV-ACT-DENY-EXPORT"]) {
     assert.ok(governance.actions.find(({ id }) => id === actionId).inputFieldIds.includes("DGV-EXPORT-F-DECISION-REASON"));
@@ -8397,6 +9374,7 @@ test("registers every required Option Set concept with stable code-label values"
     "reportScheduleTimezone",
     "reportScheduleTime",
     "reportRecipientScope",
+    "reportDataScope",
     "reportMetric",
     "aiCapability",
     "aiCapabilityDecision",
@@ -8637,6 +9615,11 @@ test("registers every required Option Set concept with stable code-label values"
     notificationType: ["ASSIGNMENT", "SUBMISSION", "GRADING", "PUBLISH", "CORRECTION", "IMPROVEMENT", "REPORT", "PERMISSION", "SYSTEM"],
     notificationReadState: ["UNREAD", "READ", "HANDLED", "ARCHIVED"],
     notificationChannel: ["IN_PRODUCT"],
+    reportDataScope: [
+      "SUBJECT_ASSIGNED",
+      "HOMEROOM_ASSIGNED_CLASS_AGGREGATE",
+      "ACADEMIC_AUTHORIZED_AGGREGATE",
+    ],
     publicationEligibility: ["ELIGIBLE", "BLOCKED"],
     publicationNotificationPolicy: ["NONE", "ON-PUBLISH"],
     publicationNotificationStatus: ["PENDING", "SENT", "FAILED", "NOT-REQUIRED"],
@@ -9410,6 +10393,10 @@ test("rejects a page field owned by a different object in the same module", () =
         validField("SUB-F003"),
       ],
       states: ["DRAFT"],
+      stateReachability: {
+        mode: "ACTION_GRAPH",
+        initialStateIds: ["DRAFT"],
+      },
     },
   ));
   submissionModule.pages.push(validPage(
@@ -9442,6 +10429,10 @@ test("accepts page fields owned by one of its declared objects", () => {
         validField("SUB-F003"),
       ],
       states: ["DRAFT"],
+      stateReachability: {
+        mode: "ACTION_GRAPH",
+        initialStateIds: ["DRAFT"],
+      },
     },
   ));
   submissionModule.pages.push(validPage(
@@ -10011,21 +11002,28 @@ test("rejects an AI write task without confirmation", () => {
   assertHasCode(errors, "AI_WRITE_WITHOUT_CONFIRMATION");
 });
 
-test("rejects role-only confirmation for an AI write task", () => {
+test("accepts authorized role confirmation for an AI write task", () => {
   const model = validFixture();
-  model.aiTasks.push({
-    id: "AI-TASK-01",
-    actionId: "SUB-ACT-01",
-    risk: RISK.HIGH,
-    writes: true,
-    previewFieldIds: ["SUB-F001"],
-    roleRefs: ["ROLE-STUDENT"],
-    confirmerRef: "ROLE-TEACHER",
+  const action = moduleById(model, "SUB-001").actions[0];
+  action.permissions = action.permissions.filter(({ effect, roleRef }) => (
+    effect !== "DENY" || roleRef !== "ROLE-TEACHER"
+  ));
+  action.permissions.push({
+    effect: "DENY",
+    roleRef: "ROLE-PLATFORM-OPS",
+    condition: "platform operations cannot confirm the scoped AI-assisted write",
   });
+  action.permissions.push({
+    effect: "ALLOW",
+    roleRef: "ROLE-TEACHER",
+    condition: "an authorized academic or teacher role confirms the scoped AI-assisted write",
+  });
+  model.aiTasks.push(validAiTask("AI-TASK-01", {
+    confirmerRef: "ROLE-TEACHER",
+    confirmer: { mode: "ROLE", roleRef: "ROLE-TEACHER" },
+  }));
 
-  const errors = validateRequirementModel(model);
-
-  assertHasCode(errors, "AI_WRITE_WITHOUT_CONFIRMATION");
+  assert.deepEqual(validateRequirementModel(model), []);
 });
 
 test("accepts authorized duty confirmation for an AI write task", () => {
@@ -10035,7 +11033,16 @@ test("accepts authorized duty confirmation for an AI write task", () => {
     roleId: "ROLE-TEACHER",
     label: "subject teacher",
   });
-  moduleById(model, "SUB-001").actions[0].permissions.push({
+  const action = moduleById(model, "SUB-001").actions[0];
+  action.permissions = action.permissions.filter(({ effect, roleRef }) => (
+    effect !== "DENY" || roleRef !== "ROLE-TEACHER"
+  ));
+  action.permissions.push({
+    effect: "DENY",
+    roleRef: "ROLE-PLATFORM-OPS",
+    condition: "platform operations cannot confirm the scoped AI-assisted write",
+  });
+  action.permissions.push({
     effect: "ALLOW",
     dutyRef: "DUTY-SUBJECT-TEACHER",
     condition: "the assigned subject teacher confirms the AI-assisted write",
@@ -10051,15 +11058,10 @@ test("rejects AI confirmation by a duty not attached to a login role", () => {
     id: "DUTY-ORPHAN",
     roleId: "ROLE-MISSING",
   });
-  model.aiTasks.push({
-    id: "AI-TASK-01",
-    actionId: "SUB-ACT-01",
-    risk: RISK.HIGH,
-    writes: true,
-    previewFieldIds: ["SUB-F001"],
-    roleRefs: ["ROLE-STUDENT"],
-    confirmerDutyRef: "DUTY-ORPHAN",
-  });
+  model.aiTasks.push(validAiTask("AI-TASK-01", {
+    confirmerRef: "DUTY-ORPHAN",
+    confirmer: { mode: "DUTY", dutyRef: "DUTY-ORPHAN" },
+  }));
 
   const errors = validateRequirementModel(model);
 
@@ -10099,6 +11101,13 @@ test("accepts AI write preview fields from action inputs and outputs", () => {
   });
   const submissionModule = moduleById(model, "SUB-001");
   submissionModule.actions[0].outputFieldIds = ["SUB-F001", "SUB-F002"];
+  submissionModule.actions[0].permissions = submissionModule.actions[0].permissions
+    .filter(({ effect, roleRef }) => effect !== "DENY" || roleRef !== "ROLE-TEACHER");
+  submissionModule.actions[0].permissions.push({
+    effect: "DENY",
+    roleRef: "ROLE-PLATFORM-OPS",
+    condition: "platform operations cannot confirm the scoped AI-assisted write",
+  });
   submissionModule.actions[0].permissions.push({
     effect: "ALLOW",
     dutyRef: "DUTY-SUBJECT-TEACHER",

@@ -44,9 +44,48 @@ const EXTENSION_EXECUTABLE_KEYS = [
 
 const PERIODIC_REPORT_ACTION_IDS = new Set([
   "RPT-ACT-CREATE-SUBSCRIPTION",
+  "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+  "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
   "RPT-ACT-UPDATE-SUBSCRIPTION",
   "RPT-ACT-PAUSE-SUBSCRIPTION",
   "RPT-ACT-CANCEL-SUBSCRIPTION",
+]);
+
+const AI_TASK_CAPABILITIES = new Map([
+  ["QUERY", "QUERY"],
+  ["ANALYSIS", "ANALYSIS"],
+  ["DRAFT", "DRAFT"],
+  ["AD_HOC_REPORT", "REPORT"],
+  ["PERIODIC", "PERIODIC"],
+  ["REMINDER", "REMINDER"],
+  ["CONTROLLED_ACTION", "CONTROLLED"],
+]);
+
+const EXTERNAL_SOURCE_PROJECTION_CONTRACTS = [
+  ["ACC-OBJ-SCHOOL", "ACC-ACT-SYNC-SCHOOL", "EVT-SCHOOL-DIRECTORY-SNAPSHOT-AVAILABLE", "ACC-SCHOOL-F-SOURCE-REF", "ACC-SCHOOL-F-SOURCE-VERSION"],
+  ["ACC-OBJ-IDENTITY", "ACC-ACT-SYNC-IDENTITY", "EVT-IDENTITY-DIRECTORY-SNAPSHOT-AVAILABLE", "ACC-IDENTITY-F-SOURCE-REF", "ACC-IDENTITY-F-SOURCE-VERSION"],
+  ["IAM-OBJ-ROLE-POLICY", "IAM-ACT-SYNC-ROLE-POLICY", "EVT-ROLE-POLICY-SNAPSHOT-AVAILABLE", "IAM-ROLE-F-SOURCE-REF", "IAM-ROLE-F-SOURCE-VERSION"],
+  ["DGV-OBJ-POLICY", "DGV-ACT-SYNC-POLICY", "EVT-DATA-GOVERNANCE-POLICY-SNAPSHOT-AVAILABLE", "DGV-POLICY-F-SOURCE-REF", "DGV-POLICY-F-SOURCE-VERSION"],
+  ["TEA-OBJ-TODO-VIEW", "TEA-ACT-SYNC-TODO-VIEW", "EVT-TEACHER-TODO-PROJECTION-AVAILABLE", "TEA-TODO-F-PROJECTION-SOURCE-REF", "TEA-TODO-F-PROJECTION-SOURCE-VERSION"],
+  ["HW-OBJ-RUBRIC", "HW-ACT-SYNC-RUBRIC", "EVT-RUBRIC-SNAPSHOT-AVAILABLE", "HW-RUBRIC-F-SOURCE-REF", "HW-RUBRIC-F-SOURCE-VERSION"],
+  ["GRD-OBJ-CAPABILITY-RULE", "GRD-ACT-SYNC-CAPABILITY-RULE", "EVT-GRADING-CAPABILITY-SNAPSHOT-AVAILABLE", "GRD-CAP-F-SOURCE-REF", "GRD-CAP-F-SOURCE-VERSION"],
+];
+
+const DESTRUCTIVE_LIFECYCLE_STATES = new Set([
+  "SUSPENDED",
+  "DEACTIVATED",
+  "REVOKED",
+  "ARCHIVED",
+  "TRANSFERRED",
+  "EXPIRED",
+  "CANCELLED",
+  "SUPERSEDED",
+  "DEPRECATED",
+  "RETIRED",
+  "CLOSED",
+  "INVALIDATED",
+  "DISABLED",
+  "STALE",
 ]);
 
 function list(value) {
@@ -188,7 +227,8 @@ function conditionalRequiredErrors(index) {
   for (const fieldEntry of index.fields) {
     const required = fieldEntry.value?.required;
     if (!isRecord(required) || !Object.hasOwn(required, "whenActionIds")) continue;
-    for (const actionId of list(required.whenActionIds)) {
+    const declaredActionIds = list(required.whenActionIds);
+    for (const actionId of declaredActionIds) {
       const actionEntry = index.actionById.get(actionId);
       const action = actionEntry?.value;
       const concreteState = concreteActionState(index, action);
@@ -202,6 +242,19 @@ function conditionalRequiredErrors(index) {
           `INVALID_FIELD_CONTRACT ${formatValidationValue(fieldEntry.value?.id)} conditional action ${formatValidationValue(actionId)} must target the owning object in the same module and reach a declared required state`,
         );
       }
+    }
+    const writerActionIds = index.actions
+      .filter(({ moduleId, value: action }) => (
+        moduleId === fieldEntry.moduleId
+        && action?.targetObjectId === fieldEntry.objectId
+        && action?.writes === true
+        && list(action?.outputFieldIds).includes(fieldEntry.value?.id)
+      ))
+      .map(({ value }) => value.id);
+    if (!setEquals(new Set(declaredActionIds), new Set(writerActionIds))) {
+      errors.push(
+        `INVALID_FIELD_ACTION_BINDING ${formatValidationValue(fieldEntry.value?.id)} declared=${declaredActionIds.map(formatValidationValue).sort().join(",")} writers=${writerActionIds.map(formatValidationValue).sort().join(",")}`,
+      );
     }
   }
   for (const actionEntry of index.actions) {
@@ -218,6 +271,137 @@ function conditionalRequiredErrors(index) {
   return errors;
 }
 
+function fieldWriteContractErrors(index) {
+  const errors = [];
+  const fieldsWithContracts = index.fields.filter(({ value }) => (
+    isRecord(value?.writeContract)
+  ));
+  for (const fieldEntry of fieldsWithContracts) {
+    const field = fieldEntry.value;
+    const contract = field.writeContract;
+    const initializers = contract.initializers;
+    const mutators = contract.mutators;
+    const initializerActionIds = list(initializers?.actionIds);
+    const mutatorActionIds = list(mutators?.actionIds);
+    const declaredWriterIds = [...initializerActionIds, ...mutatorActionIds];
+    const actualWriterIds = index.actions
+      .filter(({ moduleId, value: action }) => (
+        moduleId === fieldEntry.moduleId
+        && action?.targetObjectId === fieldEntry.objectId
+        && action?.writes === true
+        && list(action?.outputFieldIds).includes(field?.id)
+      ))
+      .map(({ value }) => value.id);
+    const requiredActionIds = isRecord(field.required)
+      ? list(field.required.whenActionIds)
+      : [];
+    const actionSemanticsValid = declaredWriterIds.every((actionId) => {
+      const actionEntry = index.actionById.get(actionId);
+      const action = actionEntry?.value;
+      const initializer = initializerActionIds.includes(actionId);
+      const matchingWrites = records(action?.fieldWrites)
+        .filter(({ fieldId }) => fieldId === field.id);
+      const expectedMode = initializer ? "INITIALIZE" : mutators?.operation;
+      const expectedValueProperty = initializer ? "value" : "amount";
+      const expectedValue = initializer ? initializers?.value : mutators?.amount;
+      return actionEntry?.moduleId === fieldEntry.moduleId
+        && action?.targetObjectId === fieldEntry.objectId
+        && action?.operationKind === (initializer ? "CREATE" : "UPDATE")
+        && list(action?.outputFieldIds).includes(field.id)
+        && matchingWrites.length === 1
+        && matchingWrites[0].mode === expectedMode
+        && matchingWrites[0][expectedValueProperty] === expectedValue;
+    });
+    const valid = field.dataType === "INTEGER"
+      && field.valueSource?.kind === "SYSTEM"
+      && field.mutability === "SYSTEM_MANAGED"
+      && initializerActionIds.length > 0
+      && mutatorActionIds.length > 0
+      && new Set(declaredWriterIds).size === declaredWriterIds.length
+      && setEquals(new Set(actualWriterIds), new Set(declaredWriterIds))
+      && setEquals(new Set(requiredActionIds), new Set(declaredWriterIds))
+      && initializers?.value === 0
+      && mutators?.operation === "INCREMENT"
+      && mutators?.amount === 1
+      && actionSemanticsValid;
+    if (!valid) {
+      errors.push(
+        `INVALID_FIELD_WRITE_CONTRACT ${formatValidationValue(field.id)} writers must exactly match INITIALIZE 0 and INCREMENT 1 Action semantics`,
+      );
+    }
+  }
+  for (const actionEntry of index.actions) {
+    for (const fieldWrite of records(actionEntry.value?.fieldWrites)) {
+      const fieldEntry = index.fieldById.get(fieldWrite?.fieldId);
+      if (
+        fieldEntry?.moduleId !== actionEntry.moduleId
+        || fieldEntry?.objectId !== actionEntry.value?.targetObjectId
+        || !isRecord(fieldEntry.value?.writeContract)
+        || !list(actionEntry.value?.outputFieldIds).includes(fieldWrite?.fieldId)
+      ) {
+        errors.push(
+          `INVALID_FIELD_WRITE_CONTRACT ${formatValidationValue(actionEntry.value?.id)} -> ${formatValidationValue(fieldWrite?.fieldId)} must bind one declared target-field write contract`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+function eventActionRoutingErrors(index) {
+  const errors = [];
+  for (const eventEntry of index.events) {
+    const actionsByObjectId = new Map();
+    for (const actionId of list(eventEntry.value?.triggeredActionIds)) {
+      const action = index.actionById.get(actionId)?.value;
+      if (
+        action?.executionMode !== "SYSTEM_EVENT"
+        || action?.trigger?.eventId !== eventEntry.value?.id
+        || !isValidId(action?.targetObjectId)
+      ) continue;
+      const actions = actionsByObjectId.get(action.targetObjectId) ?? [];
+      actions.push(action);
+      actionsByObjectId.set(action.targetObjectId, actions);
+    }
+
+    for (const [objectId, actions] of actionsByObjectId) {
+      for (let leftIndex = 0; leftIndex < actions.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < actions.length; rightIndex += 1) {
+          const left = actions[leftIndex];
+          const right = actions[rightIndex];
+          const isImplicitCreateUpdate = (
+            left.operationKind === "CREATE"
+            && right.operationKind !== "CREATE"
+          ) || (
+            right.operationKind === "CREATE"
+            && left.operationKind !== "CREATE"
+          );
+          const leftFrom = new Set(list(
+            Array.isArray(left.transition?.from)
+              ? left.transition.from
+              : [left.transition?.from],
+          ).filter(isValidId));
+          const rightFrom = new Set(list(
+            Array.isArray(right.transition?.from)
+              ? right.transition.from
+              : [right.transition?.from],
+          ).filter(isValidId));
+          const hasOverlappingExclusiveTransitions = isRecord(left.transition)
+            && isRecord(right.transition)
+            && [...leftFrom].some((state) => rightFrom.has(state))
+            && left.transition.to !== right.transition.to;
+          if (isImplicitCreateUpdate || hasOverlappingExclusiveTransitions) {
+            errors.push(
+              `INVALID_EVENT_ACTION_ROUTING ${formatValidationValue(eventEntry.value?.id)} -> ${formatValidationValue(objectId)} cannot route ${formatValidationValue(left.id)} and ${formatValidationValue(right.id)} without an explicit ordered Flow and identity binding`,
+            );
+          }
+        }
+      }
+    }
+  }
+  return errors;
+}
+
 function stateReachabilityErrors(index) {
   const errors = [];
   for (const objectEntry of index.objects) {
@@ -226,6 +410,10 @@ function stateReachabilityErrors(index) {
     if (module?.phase !== 1) continue;
 
     const policy = object?.stateReachability;
+    const declaredStates = stateIds(object);
+    const objectActions = index.actions
+      .filter(({ value }) => value?.targetObjectId === object?.id)
+      .map(({ value }) => value);
     if (!isRecord(policy) || !["NONE", "ACTION_GRAPH"].includes(policy.mode)) {
       errors.push(
         `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} must declare NONE or ACTION_GRAPH`,
@@ -238,28 +426,73 @@ function stateReachabilityErrors(index) {
           `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} NONE must use the closed policy shape`,
         );
       }
+      const hasStateChangingAction = objectActions.some((action) => (
+        action?.writes === true
+        || isRecord(action?.transition)
+        || declaredStates.has(concreteActionState(index, action))
+      ));
+      if (declaredStates.size !== 1 || hasStateChangingAction) {
+        errors.push(
+          `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} NONE requires one trivial state and no state-changing Action`,
+        );
+      }
       continue;
     }
-    if (!hasExactKeys(policy, ["mode", "initialStateIds"])) {
+    const policyKeys = Object.hasOwn(policy, "entrySources")
+      ? ["mode", "initialStateIds", "entrySources"]
+      : ["mode", "initialStateIds"];
+    if (!hasExactKeys(policy, policyKeys)) {
       errors.push(
-        `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} ACTION_GRAPH must declare initialStateIds`,
+        `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} ACTION_GRAPH must use the closed initialStateIds and optional entrySources shape`,
       );
       continue;
     }
 
-    const declaredStates = stateIds(object);
     const initialStateIds = list(policy.initialStateIds);
     const validInitialStates = initialStateIds.every(isValidId)
       && new Set(initialStateIds).size === initialStateIds.length
       && initialStateIds.every((state) => declaredStates.has(state));
-    const objectActions = index.actions
-      .filter(({ value }) => value?.targetObjectId === object?.id)
-      .map(({ value }) => value);
-    const createEntryStates = objectActions
-      .filter(({ operationKind }) => operationKind === "CREATE")
-      .map((action) => concreteActionState(index, action))
-      .filter((state) => declaredStates.has(state));
-    const reachableStates = new Set([...initialStateIds, ...createEntryStates]);
+    const createActions = objectActions
+      .filter(({ operationKind }) => operationKind === "CREATE");
+    const declaredEntrySources = list(policy.entrySources);
+    const entrySources = records(policy.entrySources);
+    const externalSourceStates = new Set(entrySources.map(({ stateId }) => stateId));
+    const readOnlyExternal = !objectActions.some(({ writes }) => writes === true);
+    const validEntryContract = createActions.length > 0
+      ? initialStateIds.length === 0 && declaredEntrySources.length === 0
+      : readOnlyExternal
+        ? declaredStates.size === 1
+          && initialStateIds.length === 1
+          && declaredEntrySources.length === 0
+        : initialStateIds.length === 1 && declaredEntrySources.length === 0;
+    if (!validEntryContract) {
+      errors.push(
+        `INVALID_STATE_ENTRY_SOURCE ${formatValidationValue(object?.id)} must derive entries from CREATE success or closed producer-bound external source evidence`,
+      );
+    }
+    const scenarioStatesByActionId = new Map(objectActions.map((action) => [
+      action.id,
+      new Set(index.scenarios
+        .filter(({ value }) => (
+          value?.actionId === action.id
+          && value?.then?.expectedState?.mode === "STATE"
+          && declaredStates.has(value.then.expectedState.value)
+        ))
+        .map(({ value }) => value.then.expectedState.value)),
+    ]));
+    const createEntryStates = createActions.flatMap((action) => index.scenarios
+      .filter(({ value }) => (
+        value?.actionId === action.id
+        && value?.kind === "SUCCESS"
+        && value?.then?.expectedState?.mode === "STATE"
+        && declaredStates.has(value.then.expectedState.value)
+      ))
+      .map(({ value }) => value.then.expectedState.value));
+    const reachableStates = new Set([
+      ...(createActions.length === 0 ? initialStateIds : []),
+      ...externalSourceStates,
+      ...createEntryStates,
+    ]);
     if (!validInitialStates || reachableStates.size === 0) {
       errors.push(
         `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} ACTION_GRAPH requires a declared initial state or CREATE success state`,
@@ -272,16 +505,20 @@ function stateReachabilityErrors(index) {
       changed = false;
       for (const action of objectActions) {
         const transition = action?.transition;
-        if (!isRecord(transition) || !declaredStates.has(transition.to)) continue;
+        if (!isRecord(transition)) continue;
         const fromStates = Array.isArray(transition.from)
           ? transition.from
           : [transition.from];
-        if (
-          fromStates.some((state) => reachableStates.has(state))
-          && !reachableStates.has(transition.to)
-        ) {
-          reachableStates.add(transition.to);
-          changed = true;
+        if (!fromStates.some((state) => reachableStates.has(state))) continue;
+        const targetStates = new Set([
+          transition.to,
+          ...(scenarioStatesByActionId.get(action.id) ?? []),
+        ]);
+        for (const targetState of targetStates) {
+          if (declaredStates.has(targetState) && !reachableStates.has(targetState)) {
+            reachableStates.add(targetState);
+            changed = true;
+          }
         }
       }
     }
@@ -290,6 +527,78 @@ function stateReachabilityErrors(index) {
     if (unreachableStates.length > 0) {
       errors.push(
         `UNREACHABLE_OBJECT_STATE ${formatValidationValue(object?.id)} -> ${unreachableStates.map(formatValidationValue).join(",")}`,
+      );
+    }
+  }
+  return errors;
+}
+
+function externalSourceProvenanceErrors(index) {
+  const errors = index.objects
+    .filter(({ value }) => Object.hasOwn(value?.stateReachability ?? {}, "entrySources"))
+    .map(({ value }) => (
+      `INVALID_EXTERNAL_SOURCE_PROVENANCE ${formatValidationValue(value?.id)} metadata-only entrySources cannot replace a registered source Action, Event, and version binding`
+    ));
+  for (const [
+    objectId,
+    actionId,
+    eventId,
+    sourceRefFieldId,
+    sourceVersionFieldId,
+  ] of EXTERNAL_SOURCE_PROJECTION_CONTRACTS) {
+    const objectEntry = index.objectById.get(objectId);
+    if (!objectEntry) continue;
+    const object = objectEntry?.value;
+    const actionEntry = index.actionById.get(actionId);
+    const action = actionEntry?.value;
+    const event = index.eventById.get(eventId)?.value;
+    const sourceRefField = index.fieldById.get(sourceRefFieldId);
+    const sourceVersionField = index.fieldById.get(sourceVersionFieldId);
+    const identityField = records(object?.fields)
+      .find(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID");
+    const createActionIds = index.actions
+      .filter(({ value }) => (
+        value?.targetObjectId === objectId && value?.operationKind === "CREATE"
+      ))
+      .map(({ value }) => value.id);
+    const successStates = new Set(index.scenarios
+      .filter(({ value }) => (
+        value?.actionId === actionId
+        && value?.kind === "SUCCESS"
+        && value?.then?.expectedState?.mode === "STATE"
+      ))
+      .map(({ value }) => value.then.expectedState.value));
+    const sourceFieldsValid = [
+      [sourceRefField, "ID"],
+      [sourceVersionField, "INTEGER"],
+    ].every(([fieldEntry, dataType]) => (
+      fieldEntry?.objectId === objectId
+      && fieldEntry.value?.dataType === dataType
+      && fieldEntry.value?.valueSource?.kind === "SYSTEM"
+      && fieldEntry.value?.mutability === "IMMUTABLE"
+      && list(action?.inputFieldIds).includes(fieldEntry.value.id)
+      && list(action?.outputFieldIds).includes(fieldEntry.value.id)
+    ));
+    const valid = objectEntry
+      && actionEntry?.moduleId === objectEntry.moduleId
+      && action?.targetObjectId === objectId
+      && action?.operationKind === "CREATE"
+      && action?.executionMode === "SYSTEM_EVENT"
+      && action?.trigger?.kind === "EVENT"
+      && action.trigger.eventId === eventId
+      && setEquals(new Set(list(event?.triggeredActionIds)), new Set([actionId]))
+      && createActionIds.length === 1
+      && createActionIds[0] === actionId
+      && sourceFieldsValid
+      && isValidId(identityField?.id)
+      && !list(action?.inputFieldIds).includes(identityField.id)
+      && list(action?.outputFieldIds).includes(identityField.id)
+      && setEquals(successStates, stateIds(object))
+      && !Object.hasOwn(object?.stateReachability ?? {}, "entrySources")
+      && list(object?.stateReachability?.initialStateIds).length === 0;
+    if (!valid) {
+      errors.push(
+        `INVALID_EXTERNAL_SOURCE_PROVENANCE ${formatValidationValue(objectId)} must bind ${formatValidationValue(actionId)} to one registered source Event with immutable source reference and version inputs`,
       );
     }
   }
@@ -598,6 +907,29 @@ function actionErrors(index) {
     ) {
       errors.push(
         "INVALID_ACTION_INPUT_VALUES accepted action input partitions must be disjoint and exhaust their STATIC Option Set",
+      );
+    }
+  }
+  return errors;
+}
+
+function lifecycleRiskErrors(index) {
+  const errors = [];
+  for (const actionEntry of index.actions) {
+    const action = actionEntry.value;
+    const targetObject = index.objectById.get(action?.targetObjectId)?.value;
+    if (
+      !["S3", "S4"].includes(targetObject?.sensitivityId)
+      || !DESTRUCTIVE_LIFECYCLE_STATES.has(action?.transition?.to)
+    ) continue;
+    const auditClosed = action?.auditMode === "ATOMIC_SELF_RECORD"
+      || (
+        action?.auditMode === "REQUIRED"
+        && list(action?.failureResults).includes("AUDIT_FAILED")
+      );
+    if (action?.risk !== "HIGH" || !auditClosed) {
+      errors.push(
+        `INVALID_LIFECYCLE_RISK ${formatValidationValue(action?.id)} destructive ${formatValidationValue(targetObject?.sensitivityId)} transition must be HIGH risk and audit fail-closed`,
       );
     }
   }
@@ -1399,8 +1731,13 @@ function flowProfileErrors(index) {
             && index.fieldById.get(binding?.targetVersionFieldId)?.objectId === runObjectId
             && list(runAction?.inputFieldIds).includes(binding.targetRefFieldId)
             && list(runAction?.inputFieldIds).includes(binding.targetVersionFieldId)
-            && !list(runAction?.outputFieldIds).includes(binding.targetRefFieldId)
-            && !list(runAction?.outputFieldIds).includes(binding.targetVersionFieldId)
+            && [binding.targetRefFieldId, binding.targetVersionFieldId]
+              .every((fieldId) => {
+                const required = index.fieldById.get(fieldId)?.value?.required;
+                const persistsForAction = isRecord(required)
+                  && list(required.whenActionIds).includes(runAction?.id);
+                return list(runAction?.outputFieldIds).includes(fieldId) === persistsForAction;
+              })
           ))
           && sameSet(
             list(path?.idempotencyKeyParts?.identityFieldIds),
@@ -1513,19 +1850,59 @@ function flowProfileErrors(index) {
 function aiTaskErrors(index) {
   const errors = [];
   const dutyRoleById = new Map(index.duties.map(({ value }) => [value?.id, value?.roleId]));
-  const permissionAllowsUserSubject = (permission, subject) => {
-    if (permission?.effect !== "ALLOW") return false;
+  const draftPurposeProfiles = records(
+    index.moduleById.get("AIX-001")?.value?.draftPurposeProfiles,
+  );
+  const draftTasks = index.aiTasks
+    .filter(({ value }) => value?.taskType === "DRAFT")
+    .map(({ value }) => value);
+  const draftProfileTaskIds = draftPurposeProfiles.map(({ taskId }) => taskId);
+  if (
+    draftPurposeProfiles.length !== draftTasks.length
+    || new Set(draftProfileTaskIds).size !== draftProfileTaskIds.length
+    || draftTasks.some((task) => !draftProfileTaskIds.includes(task.id))
+    || draftPurposeProfiles.some((profile) => (
+      !draftTasks.some((task) => task.id === profile.taskId)
+    ))
+  ) {
+    errors.push(
+      "INVALID_AI_DRAFT_PURPOSE AIX-001 must declare exactly one independent profile for every DRAFT task",
+    );
+  }
+  const permissionMatchesUserSubject = (permission, subject) => {
     if (permission.actorRef === "CURRENT_ACTOR") return true;
     if (permission.actorRef === "SYSTEM" || permission.actorRef === "AI") return false;
     if (subject.roleRef) {
-      return permission.roleRef === subject.roleRef
-        || dutyRoleById.get(permission.dutyRef) === subject.roleRef;
+      return permission.roleRef === subject.roleRef;
     }
     if (subject.dutyRef) {
       return permission.dutyRef === subject.dutyRef
         || permission.roleRef === dutyRoleById.get(subject.dutyRef);
     }
     return false;
+  };
+  const permissionScopesOverlap = (left, right) => {
+    if (!isRecord(left?.scope) || !isRecord(right?.scope)) return true;
+    if (
+      left.scope.subjectFieldId === right.scope.subjectFieldId
+      && new Set([left.scope.kind, right.scope.kind]).size === 2
+      && [left.scope.kind, right.scope.kind].every((kind) => (
+        ["OWN_RECORD", "OTHER_RECORD"].includes(kind)
+      ))
+    ) return false;
+    return true;
+  };
+  const subjectIsAuthorized = (permissions, subject) => {
+    const matchingAllows = permissions.filter((permission) => (
+      permission?.effect === "ALLOW"
+      && permissionMatchesUserSubject(permission, subject)
+    ));
+    return matchingAllows.length > 0
+      && !permissions.some((permission) => (
+      permission?.effect === "DENY"
+      && permissionMatchesUserSubject(permission, subject)
+      && matchingAllows.some((allow) => permissionScopesOverlap(allow, permission))
+      ));
   };
   for (const taskEntry of index.aiTasks) {
     const task = taskEntry.value;
@@ -1547,10 +1924,17 @@ function aiTaskErrors(index) {
         `INVALID_AI_TARGET_ACTION ${formatValidationValue(task?.id)} must match the target Action write, risk, and client contract`,
       );
     }
+    if (
+      task?.capability !== AI_TASK_CAPABILITIES.get(task?.taskType)
+      || task?.capability !== targetAction?.capability
+    ) {
+      errors.push(
+        `INVALID_AI_TASK_CAPABILITY ${formatValidationValue(task?.id)} must match its task type and target Action capability`,
+      );
+    }
 
     if (targetActionEntry) {
-      const allowPermissions = records(targetAction?.permissions)
-        .filter(({ effect }) => effect === "ALLOW");
+      const permissions = records(targetAction?.permissions);
       const audiences = [
         ...list(task?.roleRefs).map((roleRef) => ({ roleRef })),
         ...list(task?.dutyRefs).map((dutyRef) => ({ dutyRef })),
@@ -1558,7 +1942,7 @@ function aiTaskErrors(index) {
       if (
         audiences.length === 0
         || audiences.some((subject) => (
-          !allowPermissions.some((permission) => permissionAllowsUserSubject(permission, subject))
+          !subjectIsAuthorized(permissions, subject)
         ))
       ) {
         errors.push(
@@ -1567,10 +1951,12 @@ function aiTaskErrors(index) {
       }
       if (
         task?.writes === true
-        && !allowPermissions.some((permission) => permissionAllowsUserSubject(
-          permission,
-          { dutyRef: task?.confirmerDutyRef },
-        ))
+        && !subjectIsAuthorized(
+          permissions,
+          task?.confirmer?.mode === "DUTY"
+            ? { dutyRef: task.confirmer.dutyRef }
+            : { roleRef: task?.confirmer?.roleRef },
+        )
       ) {
         errors.push(
           `INVALID_AI_CONFIRMER_AUTHORIZATION ${formatValidationValue(task?.id)} confirmer must be allowed by the target Action`,
@@ -1593,9 +1979,30 @@ function aiTaskErrors(index) {
 
     if (task?.taskType === "DRAFT") {
       const draftPolicy = task?.draftPolicy;
+      const draftPurpose = task?.draftPurpose;
+      const targetDraftPurpose = targetAction?.draftPurpose;
+      const targetObject = index.objectById.get(targetAction?.targetObjectId)?.value;
+      const targetLifecycle = index.lifecyclePolicyById
+        .get(targetObject?.lifecyclePolicyId)?.value;
+      const purposeProfiles = draftPurposeProfiles
+        .filter(({ taskId }) => taskId === task?.id);
+      const purposeProfile = purposeProfiles[0];
+      const successStates = index.scenarios
+        .filter(({ value }) => (
+          value?.actionId === targetAction?.id
+          && value?.kind === "SUCCESS"
+          && value?.then?.expectedState?.mode === "STATE"
+        ))
+        .map(({ value }) => value.then.expectedState.value);
       const previewActionEntry = index.actionById.get(draftPolicy?.previewActionId);
       const previewObjectEntry = index.objectById.get(draftPolicy?.previewObjectId);
-      const draftPolicyValid = draftPolicy?.previewActionId === "AIX-ACT-PREPARE-TASK-PREVIEW"
+      const targetIsTemporaryAixPreview = targetActionEntry?.moduleId === "AIX-001"
+        && targetAction?.targetObjectId === "AIX-OBJ-TASK-PREVIEW"
+        && targetAction?.operationKind === "CREATE"
+        && draftPolicy?.previewActionId === task?.actionId;
+      const targetUsesSeparateAixPreview = targetActionEntry?.moduleId !== "AIX-001"
+        && draftPolicy?.previewActionId === "AIX-ACT-PREPARE-TASK-PREVIEW";
+      const draftPolicyValid = (targetIsTemporaryAixPreview || targetUsesSeparateAixPreview)
         && draftPolicy?.previewObjectId === "AIX-OBJ-TASK-PREVIEW"
         && draftPolicy.confirmationRequired === true
         && draftPolicy.businessWriteBeforeConfirmation === false
@@ -1606,6 +2013,40 @@ function aiTaskErrors(index) {
       if (!draftPolicyValid) {
         errors.push(
           `INVALID_AI_DRAFT_POLICY ${formatValidationValue(task?.id)} must remain a temporary AIX preview until authorized confirmation`,
+        );
+      }
+      const purposeKeys = [
+        "contentKind",
+        "effectBoundary",
+        "targetLifecyclePolicyId",
+        "targetStateId",
+      ];
+      const draftPurposeValid = hasExactKeys(draftPurpose, purposeKeys)
+        && hasExactKeys(targetDraftPurpose, purposeKeys)
+        && purposeProfiles.length === 1
+        && purposeKeys.every((key) => draftPurpose[key] === targetDraftPurpose[key])
+        && purposeProfile?.actionId === task?.actionId
+        && purposeProfile?.targetObjectId === targetAction?.targetObjectId
+        && purposeKeys.every((key) => draftPurpose[key] === purposeProfile?.[key])
+        && targetAction?.operationKind === "CREATE"
+        && targetObject?.lifecyclePolicyId === draftPurpose?.targetLifecyclePolicyId
+        && successStates.length > 0
+        && successStates.every((state) => state === draftPurpose?.targetStateId)
+        && (
+          (
+            draftPurpose?.effectBoundary === "BUSINESS_DRAFT_ONLY"
+            && targetLifecycle?.scope === "VERSIONED_TEACHING_FACTS"
+            && draftPurpose?.targetStateId === "DRAFT"
+          )
+          || (
+            draftPurpose?.effectBoundary === "TEMPORARY_PREVIEW_ONLY"
+            && targetLifecycle?.scope === "TEMPORARY_AI_PREVIEWS"
+            && draftPolicy?.previewActionId === task?.actionId
+          )
+        );
+      if (!draftPurposeValid) {
+        errors.push(
+          `INVALID_AI_DRAFT_PURPOSE ${formatValidationValue(task?.id)} must bind its content purpose to a CREATE Action with the declared lifecycle and effect boundary`,
         );
       }
     }
@@ -1624,15 +2065,22 @@ function aiTaskErrors(index) {
     }
 
     if (!task?.writes) continue;
-    const registeredConfirmer = index.dutyIds.has(task?.confirmerDutyRef)
-      && task?.confirmer?.mode === "DUTY"
-      && task.confirmer.dutyRef === task.confirmerDutyRef;
+    const registeredConfirmer = task?.confirmerRef === (
+      task?.confirmer?.mode === "DUTY"
+        ? task.confirmer.dutyRef
+        : task?.confirmer?.mode === "ROLE"
+          ? task.confirmer.roleRef
+          : undefined
+    ) && (
+      (task?.confirmer?.mode === "DUTY" && index.dutyIds.has(task.confirmer.dutyRef))
+      || (task?.confirmer?.mode === "ROLE" && index.roleIds.has(task.confirmer.roleRef))
+    );
     const previewFieldIds = new Set(list(task?.previewFieldIds));
     const previewComplete = list(targetAction?.inputFieldIds)
       .every((fieldId) => previewFieldIds.has(fieldId));
     if (previewFieldIds.size === 0 || !previewComplete || !registeredConfirmer) {
       errors.push(
-        `AI_WRITE_WITHOUT_CONFIRMATION ${formatValidationValue(task?.id)} requires preview fields and an authorized duty confirmer`,
+        `AI_WRITE_WITHOUT_CONFIRMATION ${formatValidationValue(task?.id)} requires preview fields and an authorized confirmer`,
       );
     }
   }
@@ -1815,14 +2263,8 @@ function reportErrors(index) {
         "RPT-RUN-F-SUBSCRIPTION-VERSION",
       ]),
     )
-    && [adHocRun, periodicRun].every((action) => (
-      !list(action?.outputFieldIds).some((fieldId) => [
-        "RPT-RUN-F-DEFINITION-REF",
-        "RPT-RUN-F-DEFINITION-VERSION",
-        "RPT-RUN-F-SUBSCRIPTION-REF",
-        "RPT-RUN-F-SUBSCRIPTION-VERSION",
-      ].includes(fieldId))
-    ))
+    && list(periodicRun?.outputFieldIds).includes("RPT-RUN-F-SUBSCRIPTION-REF")
+    && list(periodicRun?.outputFieldIds).includes("RPT-RUN-F-SUBSCRIPTION-VERSION")
     && pathKeyValid(
       adHocPath,
       ["RPT-DEFINITION-F-ID", "APP-TODO-F-ID", "PLN-PLAN-F-ID"],
@@ -1867,6 +2309,160 @@ function reportErrors(index) {
     );
   }
   return errors;
+}
+
+function reportScopeErrors(index) {
+  const reportModule = index.moduleById.get("RPT-001")?.value;
+  if (!reportModule) return [];
+  const definition = index.objectById.get("RPT-OBJ-DEFINITION")?.value;
+  const scopeField = records(definition?.fields).find(({ id }) => (
+    id === "RPT-DEFINITION-F-DATA-SCOPE"
+  ));
+  const optionSet = index.optionSetById.get("OPT-ENUM-048")?.value;
+  const expectedProfiles = [
+    {
+      code: "SUBJECT_ASSIGNED",
+      subjectScope: "ASSIGNED_SUBJECT",
+      classScope: "ASSIGNED_CLASSES",
+      aggregateOnly: false,
+      noStudentDetail: false,
+      requiresAuthorizedGrant: false,
+    },
+    {
+      code: "HOMEROOM_ASSIGNED_CLASS_AGGREGATE",
+      subjectScope: "ALL_SUBJECTS",
+      classScope: "ASSIGNED_HOMEROOM_CLASS",
+      aggregateOnly: true,
+      noStudentDetail: true,
+      requiresAuthorizedGrant: false,
+    },
+    {
+      code: "ACADEMIC_AUTHORIZED_AGGREGATE",
+      subjectScope: "AUTHORIZED_SUBJECTS",
+      classScope: "AUTHORIZED_CLASSES",
+      aggregateOnly: true,
+      noStudentDetail: true,
+      requiresAuthorizedGrant: true,
+    },
+  ];
+  const expectedActions = [
+    ["RPT-ACT-CREATE-AD-HOC-DEFINITION", "SUBJECT_ASSIGNED", "dutyRef", "DUTY-SUBJECT-TEACHER"],
+    ["RPT-ACT-CREATE-HOMEROOM-DEFINITION", "HOMEROOM_ASSIGNED_CLASS_AGGREGATE", "dutyRef", "DUTY-HOMEROOM"],
+    ["RPT-ACT-CREATE-ACADEMIC-DEFINITION", "ACADEMIC_AUTHORIZED_AGGREGATE", "roleRef", "ROLE-ACADEMIC"],
+  ];
+  const actionsValid = expectedActions.every(([
+    actionId,
+    code,
+    subjectKey,
+    subjectRef,
+  ]) => {
+    const action = index.actionById.get(actionId)?.value;
+    const binding = records(action?.acceptedInputValues)[0];
+    const allows = records(action?.permissions).filter(({ effect }) => effect === "ALLOW");
+    return action?.targetObjectId === "RPT-OBJ-DEFINITION"
+      && action?.capability === "REPORT"
+      && records(action?.acceptedInputValues).length === 1
+      && hasExactKeys(binding, ["fieldId", "optionSetId", "partitionId", "codes"])
+      && binding.fieldId === "RPT-DEFINITION-F-DATA-SCOPE"
+      && binding.optionSetId === "OPT-ENUM-048"
+      && binding.partitionId === "RPT-DEFINITION-DATA-SCOPE"
+      && setEquals(new Set(list(binding.codes)), new Set([code]))
+      && allows.length === 1
+      && allows[0]?.[subjectKey] === subjectRef
+      && records(action?.permissions).some(({ effect, roleRef }) => (
+        effect === "DENY" && roleRef === "ROLE-PLATFORM-OPS"
+      ));
+  });
+  const valid = optionSet?.key === "reportDataScope"
+    && optionSet?.mode === "STATIC"
+    && setEquals(
+      new Set(records(optionSet?.values).map(({ code }) => code)),
+      new Set(expectedProfiles.map(({ code }) => code)),
+    )
+    && scopeField?.dataType === "STRING"
+    && scopeField?.valueSource?.kind === "OPTION_SET"
+    && scopeField.valueSource.optionSetId === "OPT-ENUM-048"
+    && JSON.stringify(reportModule.dataScopeProfiles) === JSON.stringify(expectedProfiles)
+    && definition?.producerRef === "CURRENT_ACTOR"
+    && actionsValid;
+  return valid ? [] : [
+    "INVALID_REPORT_SCOPE_CONTRACT RPT-001 must execute subject, homeroom aggregate, and authorized academic aggregate scopes through closed profiles and Actions",
+  ];
+}
+
+function reportSubscriptionOwnershipErrors(index) {
+  const subscription = index.objectById.get("RPT-OBJ-SUBSCRIPTION")?.value;
+  if (!subscription) return [];
+  const creatorFieldId = "RPT-SUBSCRIPTION-F-CREATOR-REF";
+  const scopeFieldId = "RPT-SUBSCRIPTION-F-DATA-SCOPE";
+  const fieldIds = new Set(records(subscription.fields).map(({ id }) => id));
+  const expectedCreateActions = [
+    ["RPT-ACT-CREATE-SUBSCRIPTION", "SUBJECT_ASSIGNED", "dutyRef", "DUTY-SUBJECT-TEACHER"],
+    ["RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION", "HOMEROOM_ASSIGNED_CLASS_AGGREGATE", "dutyRef", "DUTY-HOMEROOM"],
+    ["RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION", "ACADEMIC_AUTHORIZED_AGGREGATE", "roleRef", "ROLE-ACADEMIC"],
+  ];
+  const createActionsValid = expectedCreateActions.every(([
+    actionId,
+    code,
+    subjectKey,
+    subjectRef,
+  ]) => {
+    const action = index.actionById.get(actionId)?.value;
+    const binding = records(action?.acceptedInputValues)[0];
+    const allows = records(action?.permissions).filter(({ effect }) => effect === "ALLOW");
+    return action?.targetObjectId === subscription.id
+      && action?.operationKind === "CREATE"
+      && action?.capability === "PERIODIC"
+      && list(action?.outputFieldIds).includes(creatorFieldId)
+      && records(action?.acceptedInputValues).length === 1
+      && binding?.fieldId === scopeFieldId
+      && binding?.optionSetId === "OPT-ENUM-048"
+      && binding?.partitionId === "RPT-SUBSCRIPTION-DATA-SCOPE"
+      && setEquals(new Set(list(binding?.codes)), new Set([code]))
+      && allows.length === 1
+      && allows[0]?.[subjectKey] === subjectRef;
+  });
+  const managementActionsValid = [
+    "RPT-ACT-UPDATE-SUBSCRIPTION",
+    "RPT-ACT-PAUSE-SUBSCRIPTION",
+    "RPT-ACT-CANCEL-SUBSCRIPTION",
+  ].every((actionId) => {
+    const action = index.actionById.get(actionId)?.value;
+    const permissions = records(action?.permissions);
+    return action?.capability === "PERIODIC"
+      && permissions.some((permission) => (
+        permission.effect === "ALLOW"
+        && permission.actorRef === "CURRENT_ACTOR"
+        && permission.scope?.kind === "OWN_RECORD"
+        && permission.scope.subjectFieldId === creatorFieldId
+      ))
+      && permissions.some((permission) => (
+        permission.effect === "DENY"
+        && permission.actorRef === "CURRENT_ACTOR"
+        && permission.scope?.kind === "OTHER_RECORD"
+        && permission.scope.subjectFieldId === creatorFieldId
+      ))
+      && permissions.some(({ effect, roleRef }) => (
+        effect === "DENY" && roleRef === "ROLE-PLATFORM-OPS"
+      ));
+  });
+  const valid = subscription.producerRef === "CURRENT_ACTOR"
+    && fieldIds.has(creatorFieldId)
+    && fieldIds.has(scopeFieldId)
+    && hasExactKeys(subscription.scopeBinding, [
+      "definitionScopeFieldId",
+      "subscriptionScopeFieldId",
+      "mode",
+    ])
+    && subscription.scopeBinding.definitionScopeFieldId
+      === "RPT-DEFINITION-F-DATA-SCOPE"
+    && subscription.scopeBinding.subscriptionScopeFieldId === scopeFieldId
+    && subscription.scopeBinding.mode === "MATCH_REQUIRED"
+    && createActionsValid
+    && managementActionsValid;
+  return valid ? [] : [
+    "INVALID_REPORT_SUBSCRIPTION_OWNERSHIP RPT-001 subscriptions must retain their creator and deny cross-actor management",
+  ];
 }
 
 function learningPathErrors(index) {
@@ -2036,6 +2632,7 @@ function notificationErrors(index) {
   ];
   const fieldIds = new Set(records(notification.fields).map(({ id }) => id));
   const policy = notification.deliveryFailurePolicy;
+  const recipientPolicy = notification.recipientPolicy;
   const notificationActionById = new Map(index.actions
     .filter(({ moduleId }) => moduleId === "NOTI-001")
     .map(({ value }) => [value.id, value]));
@@ -2044,19 +2641,40 @@ function notificationErrors(index) {
       const permissions = records(notificationActionById.get(actionId)?.permissions);
       return permissions.some((permission) => (
         permission.effect === "ALLOW"
-        && permission.roleRef === "ROLE-STUDENT"
+        && permission.actorRef === "CURRENT_ACTOR"
         && permission.scope?.kind === "OWN_RECORD"
         && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
       )) && permissions.some((permission) => (
         permission.effect === "DENY"
-        && permission.roleRef === "ROLE-STUDENT"
+        && permission.actorRef === "CURRENT_ACTOR"
         && permission.scope?.kind === "OTHER_RECORD"
         && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+      )) && permissions.some(({ effect, roleRef }) => (
+        effect === "DENY" && roleRef === "ROLE-PLATFORM-OPS"
       ));
     });
   const valid = requiredFieldIds.every((fieldId) => fieldIds.has(fieldId))
     && notification?.stateReachability?.mode === "ACTION_GRAPH"
     && recipientActionsValid
+    && hasExactKeys(recipientPolicy, [
+      "subjectFieldId",
+      "allowedRecipientSubjects",
+      "mutationSubject",
+      "ownershipMode",
+    ])
+    && recipientPolicy.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+    && setEquals(
+      new Set(list(recipientPolicy.allowedRecipientSubjects)),
+      new Set([
+        "ROLE-STUDENT",
+        "DUTY-SUBJECT-TEACHER",
+        "DUTY-HOMEROOM",
+        "ROLE-ACADEMIC",
+      ]),
+    )
+    && list(recipientPolicy.allowedRecipientSubjects).length === 4
+    && recipientPolicy.mutationSubject === "CURRENT_ACTOR"
+    && recipientPolicy.ownershipMode === "OWN_RECORD_ONLY"
     && hasExactKeys(policy, [
       "sourceBusinessFactRollback",
       "retryScope",
@@ -2489,12 +3107,18 @@ export function validateModelSemantics(model) {
     ...flowErrors(index),
     ...flowProfileErrors(index),
     ...actionErrors(index),
+    ...lifecycleRiskErrors(index),
     ...actionApplicabilityErrors(index),
     ...conditionalRequiredErrors(index),
+    ...fieldWriteContractErrors(index),
+    ...eventActionRoutingErrors(index),
     ...stateReachabilityErrors(index),
+    ...externalSourceProvenanceErrors(index),
     ...ownerErrors(index),
     ...aiTaskErrors(index),
     ...reportErrors(index),
+    ...reportScopeErrors(index),
+    ...reportSubscriptionOwnershipErrors(index),
     ...learningPathErrors(index),
     ...notificationErrors(index),
     ...notificationChannelErrors(index),

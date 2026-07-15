@@ -129,10 +129,13 @@ function action({
   permissions,
   transition,
   successState,
+  successStates,
   successData,
   failureResults,
   failureOutcomes = {},
   idempotencyKey = `${id}:school:object:source-version:request-id`,
+  capability,
+  draftPurpose,
 }) {
   const effectiveOperationKind = operationKind
     ?? (writes === false ? "READ" : transition ? "UPDATE" : undefined);
@@ -153,8 +156,12 @@ function action({
   const stateOutcome = (state) => state
     ? { mode: "STATE", value: state }
     : { mode: "UNCHANGED" };
-  const successScenario = {
-    id: `${id}-SCN-SUCCESS`,
+  if (successStates && (successState || transition || successStates.length < 2)) {
+    throw new Error(`${id} successStates requires at least two CREATE outcomes without successState or transition`);
+  }
+  const declaredSuccessStates = successStates ?? [successState ?? transition?.to];
+  const successScenarios = declaredSuccessStates.map((state) => ({
+    id: successStates ? `${id}-SCN-SUCCESS-${state}` : `${id}-SCN-SUCCESS`,
     kind: "SUCCESS",
     actionId: id,
     ...(executionMode === USER_TASK ? {} : { trigger }),
@@ -162,11 +169,11 @@ function action({
     when: `the actor requests ${label}`,
     then: {
       expectedData: successData ?? `${label} returns the accepted versioned result`,
-      expectedState: stateOutcome(successState ?? transition?.to),
+      expectedState: stateOutcome(state),
       expectedPermission: "ALLOW",
       expectedVisibility: "authorized object scope only",
     },
-  };
+  }));
   const failureScenarios = effectiveFailureResults.map((resultCode) => {
     const outcome = failureOutcomes[resultCode] ?? {};
     return {
@@ -203,12 +210,17 @@ function action({
       executionMode,
       ...(executionMode === USER_TASK ? { clients } : { trigger }),
       permissions,
-      scenarioIds: [successScenario.id, ...failureScenarios.map(({ id: scenarioId }) => scenarioId)],
+      ...(capability ? { capability } : {}),
+      ...(draftPurpose ? { draftPurpose } : {}),
+      scenarioIds: [
+        ...successScenarios.map(({ id: scenarioId }) => scenarioId),
+        ...failureScenarios.map(({ id: scenarioId }) => scenarioId),
+      ],
       ...(effectiveWrites ? { idempotencyKey } : {}),
       auditMode: effectiveWrites ? AUDIT_REQUIRED : AUDIT_NOT_REQUIRED,
       failureResults: effectiveFailureResults,
     },
-    scenarios: [successScenario, ...failureScenarios],
+    scenarios: [...successScenarios, ...failureScenarios],
   };
 }
 
@@ -399,6 +411,16 @@ const hwRubricFields = [
     mutability: "IMMUTABLE",
     idempotencyRole: "OBJECT_VERSION",
   }),
+  field("HW-RUBRIC-F-SOURCE-REF", "Rubric Source Reference", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("HW-RUBRIC-F-SOURCE-VERSION", "Rubric Source Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
   field("HW-RUBRIC-F-CRITERIA", "Rubric Criteria", {
     dataType: "JSON",
     valueSource: { kind: "SYSTEM" },
@@ -415,6 +437,27 @@ const hwItemInputIds = hwItemFields
 
 const hwActions = [
   action({
+    id: "HW-ACT-SYNC-RUBRIC",
+    label: "Sync a Versioned Rubric Snapshot",
+    operationKind: "CREATE",
+    targetObjectId: "HW-OBJ-RUBRIC",
+    inputFieldIds: hwRubricFields
+      .filter(({ id }) => ![
+        "HW-RUBRIC-F-ID",
+        "HW-RUBRIC-F-RUBRIC-VERSION",
+      ].includes(id))
+      .map(({ id }) => id),
+    outputFieldIds: ["HW-RUBRIC-F-ID", "HW-RUBRIC-F-RUBRIC-VERSION", "HW-RUBRIC-F-SOURCE-REF", "HW-RUBRIC-F-SOURCE-VERSION", "HW-RUBRIC-F-CRITERIA"],
+    executionMode: SYSTEM_EVENT,
+    trigger: { kind: "EVENT", eventId: "EVT-RUBRIC-SNAPSHOT-AVAILABLE" },
+    permissions: [
+      permission("ALLOW", "SYSTEM", "the system accepts only a registered versioned subject-rubric snapshot"),
+      permission("DENY", "CURRENT_ACTOR", "a user cannot synthesize or replace a published rubric snapshot"),
+    ],
+    risk: RISK.HIGH,
+    successStates: ["PUBLISHED", "DEPRECATED"],
+  }),
+  action({
     id: "HW-ACT-CREATE-DRAFT",
     label: "Create Assignment Draft",
     operationKind: "CREATE",
@@ -423,6 +466,13 @@ const hwActions = [
     outputFieldIds: ["HW-ASSIGNMENT-F-ID", "HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
     permissions: subjectTeacherPermissions,
     successState: "DRAFT",
+    capability: "DRAFT",
+    draftPurpose: {
+      contentKind: "ASSIGNMENT",
+      effectBoundary: "BUSINESS_DRAFT_ONLY",
+      targetLifecyclePolicyId: "LIFE-003",
+      targetStateId: "DRAFT",
+    },
   }),
   action({
     id: "HW-ACT-CREATE-ITEM",
@@ -508,6 +558,7 @@ const hwActions = [
     risk: RISK.HIGH,
     permissions: subjectTeacherPermissions,
     transition: { from: "VALIDATED", to: "PUBLISHED" },
+    capability: "CONTROLLED",
   }),
   action({
     id: "HW-ACT-SCHEDULE-PUBLISH",
@@ -554,7 +605,10 @@ const hwActions = [
     label: "Revise Published Assignment",
     targetObjectId: "HW-OBJ-ASSIGNMENT",
     inputFieldIds: ["HW-ASSIGNMENT-F-REVISION-REASON"],
-    outputFieldIds: ["HW-ASSIGNMENT-F-PUBLICATION-VERSION"],
+    outputFieldIds: [
+      "HW-ASSIGNMENT-F-REVISION-REASON",
+      "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: subjectTeacherPermissions,
     transition: { from: "PUBLISHED", to: "REVISION_DRAFT" },
@@ -635,7 +689,7 @@ const hwModule = moduleFact({
       ["DRAFT", "VALIDATED", "SCHEDULED", "PUBLISHED", "CLOSED", "REVISION_DRAFT"],
       hwAssignmentFields,
       "HW-ASSIGNMENT-F-ID",
-      { mode: "NONE" }),
+      { mode: "ACTION_GRAPH", initialStateIds: [] }),
     object(
       "HW-OBJ-ITEM",
       "Assignment Item Version",
@@ -643,7 +697,7 @@ const hwModule = moduleFact({
       ["DRAFT", "VALIDATED", "PUBLISHED", "REVISION_DRAFT"],
       hwItemFields,
       "HW-ITEM-F-ID",
-      { mode: "NONE" }),
+      { mode: "ACTION_GRAPH", initialStateIds: [] }),
     object(
       "HW-OBJ-RUBRIC",
       "Published Rubric Version",
@@ -651,7 +705,7 @@ const hwModule = moduleFact({
       ["PUBLISHED", "DEPRECATED"],
       hwRubricFields,
       "HW-RUBRIC-F-ID",
-      { mode: "NONE" }),
+      { mode: "ACTION_GRAPH", initialStateIds: [] }),
   ],
   relationships: [
     {
@@ -875,6 +929,20 @@ const submissionActions = [
     failureResults: ["PERMISSION_DENIED", "CHUNK_REJECTED", "TRANSIENT_FAILURE", "VERSION_CONFLICT"],
   }),
   action({
+    id: "SUB-ACT-MARK-DRAFT-READY",
+    label: "Mark an Answer Draft Ready to Submit",
+    targetObjectId: "SUB-OBJ-DRAFT",
+    inputFieldIds: ["SUB-DRAFT-F-ANSWER-PAYLOAD"],
+    outputFieldIds: [
+      "SUB-DRAFT-F-IMAGE-QUALITY",
+      "SUB-DRAFT-F-DRAFT-VERSION",
+      "SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT",
+    ],
+    permissions: studentSubmissionPermissions,
+    transition: { from: ["DRAFT", "UPLOADING"], to: "READY_TO_SUBMIT" },
+    successData: "records that required answer payload and acknowledged media chunks are ready for final submission",
+  }),
+  action({
     id: "SUB-ACT-SUBMIT",
     label: "Submit Assignment Answers",
     operationKind: "CREATE",
@@ -915,6 +983,7 @@ const submissionActions = [
       "SUB-ATTEMPT-F-RESUBMISSION-OF",
     ],
     outputFieldIds: [
+      "SUB-ATTEMPT-F-RESUBMISSION-OF",
       "SUB-ATTEMPT-F-SUBMISSION-VERSION",
       "SUB-ATTEMPT-F-RECEIPT-ID",
       "SUB-ATTEMPT-F-RECEIPT-ISSUED-AT",
@@ -991,16 +1060,16 @@ const submissionModule = moduleFact({
       ["DRAFT", "UPLOADING", "READY_TO_SUBMIT"],
       submissionDraftFields,
       "SUB-DRAFT-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: ["DRAFT"] },
       { sensitivityId: "S3" }),
     object(
       "SUB-OBJ-ATTEMPT",
       "Submission Attempt Version",
       studentWorkResponsibility,
-      ["DRAFT", "SUBMITTED", "RESUBMITTED"],
+      ["SUBMITTED", "RESUBMITTED"],
       submissionAttemptFields,
       "SUB-ATTEMPT-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       { sensitivityId: "S3" }),
   ],
   relationships: [{
@@ -1031,6 +1100,7 @@ const submissionModule = moduleFact({
       [...submissionDraftFields, ...submissionAttemptFields].map(({ id }) => id),
       [
         "SUB-ACT-SAVE-DRAFT",
+        "SUB-ACT-MARK-DRAFT-READY",
         "SUB-ACT-SUBMIT",
         "SUB-ACT-RESUBMIT",
         "SUB-ACT-VIEW-RECEIPT",
@@ -1052,6 +1122,16 @@ const capabilityMatrixFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
     idempotencyRole: "OBJECT_VERSION",
+  }),
+  field("GRD-CAP-F-SOURCE-REF", "Capability Rule Source Reference", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("GRD-CAP-F-SOURCE-VERSION", "Capability Rule Source Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
   }),
   field("GRD-CAP-F-SUBJECT-FAMILY", "Subject Family", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-TL-003" },
@@ -1514,6 +1594,27 @@ const gradingVersionConflictOutcome = {
 };
 const gradingActions = [
   action({
+    id: "GRD-ACT-SYNC-CAPABILITY-RULE",
+    label: "Sync a Versioned Grading Capability Rule Snapshot",
+    operationKind: "CREATE",
+    targetObjectId: "GRD-OBJ-CAPABILITY-RULE",
+    inputFieldIds: capabilityMatrixFields
+      .filter(({ id }) => ![
+        "GRD-CAP-F-RULE-ID",
+        "GRD-CAP-F-RULE-VERSION",
+      ].includes(id))
+      .map(({ id }) => id),
+    outputFieldIds: ["GRD-CAP-F-RULE-ID", "GRD-CAP-F-RULE-VERSION", "GRD-CAP-F-SOURCE-REF", "GRD-CAP-F-SOURCE-VERSION"],
+    executionMode: SYSTEM_EVENT,
+    trigger: { kind: "EVENT", eventId: "EVT-GRADING-CAPABILITY-SNAPSHOT-AVAILABLE" },
+    permissions: [
+      permission("ALLOW", "SYSTEM", "the system accepts only a registered versioned grading-capability snapshot"),
+      permission("DENY", "CURRENT_ACTOR", "a user cannot synthesize or replace a grading-capability rule snapshot"),
+    ],
+    risk: RISK.HIGH,
+    successStates: ["ACTIVE", "RETIRED"],
+  }),
+  action({
     id: "GRD-ACT-ENQUEUE",
     label: "Enqueue Submission for Grading",
     operationKind: "CREATE",
@@ -1610,7 +1711,10 @@ const gradingActions = [
       "GRD-DECISION-F-RECOGNIZED-REGION",
       "GRD-DECISION-F-CORRECTION-REASON",
     ],
-    outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+    outputFieldIds: [
+      "GRD-DECISION-F-CORRECTION-REASON",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
     permissions: gradingTeacherPermissions,
     transition: { from: "ROUTED_REVIEW", to: "ROUTED_REVIEW" },
     failureOutcomes: gradingVersionConflictOutcome,
@@ -1643,11 +1747,13 @@ const gradingActions = [
     outputFieldIds: [
       "GRD-DECISION-F-OFFICIAL-SCORE",
       "GRD-DECISION-F-TEACHER-FEEDBACK",
+      "GRD-DECISION-F-CORRECTION-REASON",
       "GRD-DECISION-F-DECISION-VERSION",
     ],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
     transition: { from: "ROUTED_REVIEW", to: "TEACHER_CONFIRMED" },
+    capability: "CONTROLLED",
     failureResults: ["PERMISSION_DENIED", "CORRECTION_REASON_REQUIRED", "STALE_INPUT_VERSION", "VERSION_CONFLICT"],
     failureOutcomes: gradingVersionConflictOutcome,
   }),
@@ -1695,6 +1801,7 @@ const gradingActions = [
     targetObjectId: "GRD-OBJ-DECISION",
     inputFieldIds: ["GRD-DECISION-F-CORRECTION-REASON"],
     outputFieldIds: [
+      "GRD-DECISION-F-CORRECTION-REASON",
       "GRD-DECISION-F-PRIOR-DECISION-VERSION",
       "GRD-DECISION-F-DECISION-VERSION",
     ],
@@ -1714,7 +1821,10 @@ const gradingActions = [
       "GRD-DECISION-F-TEACHER-FEEDBACK",
       "GRD-DECISION-F-CORRECTION-REASON",
     ],
-    outputFieldIds: ["GRD-DECISION-F-DECISION-VERSION"],
+    outputFieldIds: [
+      "GRD-DECISION-F-CORRECTION-REASON",
+      "GRD-DECISION-F-DECISION-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: gradingTeacherPermissions,
     transition: { from: "REVISION_PENDING", to: "TEACHER_CONFIRMED" },
@@ -1736,6 +1846,7 @@ const gradingActions = [
       "GRD-DECISION-F-RUBRIC-VERSION",
       "GRD-DECISION-F-CAPABILITY-RULE-REF",
       "GRD-DECISION-F-CAPABILITY-RULE-VERSION",
+      "GRD-DECISION-F-CORRECTION-REASON",
       "GRD-DECISION-F-DECISION-VERSION",
     ],
     risk: RISK.HIGH,
@@ -1773,7 +1884,7 @@ const gradingModule = moduleFact({
       ["ACTIVE", "RETIRED"],
       capabilityMatrixFields,
       "GRD-CAP-F-RULE-ID",
-      { mode: "NONE" }),
+      { mode: "ACTION_GRAPH", initialStateIds: [] }),
     object(
       "GRD-OBJ-DECISION",
       "Grading Decision Version",
@@ -1788,7 +1899,7 @@ const gradingModule = moduleFact({
       ["QUEUED", "PROCESSING", "ROUTED_REVIEW", "ROUTED_MANUAL", "CONFLICT", "REVISION_PENDING", "TEACHER_CONFIRMED"],
       gradingDecisionFields,
       "GRD-DECISION-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -2456,7 +2567,7 @@ const publicationModule = moduleFact({
       ["DRAFT", "READY", "PUBLISHING", "PARTIAL_FAILED", "PUBLISHED"],
       publicationBatchFields,
       "PUB-BATCH-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: ["DRAFT"] },
       { sensitivityId: "S3" }),
     object(
       "PUB-OBJ-PREVIEW",
@@ -2472,7 +2583,7 @@ const publicationModule = moduleFact({
       ["GENERATED"],
       publicationPreviewFields,
       "PUB-PREVIEW-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       { lifecyclePolicyId: "LIFE-005", sensitivityId: "S3" }),
     object(
       "PUB-OBJ-RESULT",
@@ -2488,7 +2599,7 @@ const publicationModule = moduleFact({
       ["READY", "PUBLISHED", "PUBLISH_FAILED", "INVALIDATED"],
       publishedResultFields,
       "PUB-RESULT-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         readMode: "STUDENT_TIMED_RELEASE",
@@ -2543,7 +2654,7 @@ const publicationModule = moduleFact({
       ["RESOLVED"],
       dependencySnapshotFields,
       "PUB-DEPENDENCY-SNAPSHOT-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -2873,7 +2984,7 @@ const scoreModule = moduleFact({
       ["ACTIVE"],
       scoreViewFields,
       "SCO-VIEW-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -2911,7 +3022,7 @@ const scoreModule = moduleFact({
       ["OPEN"],
       scoreFollowUpFields,
       "SCO-FOLLOW-UP-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -3169,6 +3280,7 @@ const evidenceActions = [
     executionMode: FLOW_INTERNAL,
     trigger: { kind: "FLOW", flowIds: ["DF-009", "DF-010"] },
     permissions: evidenceFlowPermissions,
+    risk: RISK.HIGH,
     transition: { from: "STUDENT_VISIBLE", to: "STALE" },
     failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
     successData: "creates a stale evidence version with a reason while retaining the prior student-visible evidence and interpretation versions",
@@ -3245,6 +3357,7 @@ const evidenceActions = [
       permission("ALLOW", "ROLE-STUDENT", "the student reads only the student's own teacher-confirmed interpretation after its release time"),
       permission("DENY", "ROLE-PLATFORM-OPS", "platform operations has no default access to student evidence or mastery interpretation"),
     ],
+    capability: "ANALYSIS",
     failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "NOT_TEACHER_CONFIRMED", "NOT_YET_VISIBLE"],
   }),
 ];
@@ -3273,7 +3386,7 @@ const evidenceModule = moduleFact({
     ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "STALE"],
     evidenceFields,
     "INS-EVIDENCE-F-ID",
-    { mode: "NONE" },
+    { mode: "ACTION_GRAPH", initialStateIds: [] },
     {
       sensitivityId: "S3",
       readMode: "STUDENT_TIMED_RELEASE",
@@ -3676,6 +3789,7 @@ const planActions = [
       "PLN-PLAN-F-REVALIDATION-METHOD",
       "PLN-PLAN-F-TEACHER-CONFIRMER-REF",
     ],
+    capability: "CONTROLLED",
     outputFieldIds: [
       "PLN-PLAN-F-TEACHER-CONFIRMER-REF",
       "PLN-PLAN-F-PLAN-VERSION",
@@ -3723,7 +3837,12 @@ const planActions = [
       "PLN-PLAN-F-DUE-AT",
       "PLN-PLAN-F-ADJUSTMENT-REASON",
     ],
-    outputFieldIds: ["PLN-PLAN-F-PLAN-VERSION"],
+    outputFieldIds: [
+      "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF",
+      "PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION",
+      "PLN-PLAN-F-ADJUSTMENT-REASON",
+      "PLN-PLAN-F-PLAN-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: subjectTeacherWritePermissions,
     transition: { from: "ACTIVE", to: "ACTIVE" },
@@ -3734,7 +3853,10 @@ const planActions = [
     label: "Close an Improvement Plan",
     targetObjectId: "PLN-OBJ-PLAN",
     inputFieldIds: ["PLN-PLAN-F-CLOSE-REASON"],
-    outputFieldIds: ["PLN-PLAN-F-PLAN-VERSION"],
+    outputFieldIds: [
+      "PLN-PLAN-F-CLOSE-REASON",
+      "PLN-PLAN-F-PLAN-VERSION",
+    ],
     risk: RISK.HIGH,
     permissions: subjectTeacherWritePermissions,
     transition: { from: "ACTIVE", to: "CLOSED" },
@@ -3794,7 +3916,7 @@ const planModule = moduleFact({
       ["CANDIDATE", "ACTIVE", "CLOSED", "PENDING_RECONFIRM"],
       planFields,
       "PLN-PLAN-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -3838,7 +3960,7 @@ const planModule = moduleFact({
       ["DELIVERED"],
       subjectSyncFields,
       "PLN-SUBJECT-SYNC-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -3862,7 +3984,7 @@ const planModule = moduleFact({
       ["AVAILABLE"],
       homeroomCoordinationFields,
       "PLN-HOMEROOM-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -4141,7 +4263,7 @@ const studentExecutionModule = moduleFact({
     ["READY"],
     studentTodoFields,
     "APP-TODO-F-ID",
-    { mode: "NONE" },
+    { mode: "ACTION_GRAPH", initialStateIds: [] },
     {
       sensitivityId: "S3",
       readMode: "STUDENT_TIMED_RELEASE",
@@ -4734,7 +4856,7 @@ const correctionModule = moduleFact({
       ["OPEN", "OVERDUE", "AWAITING_RETRY", "COMPLETED"],
       correctionTaskFields,
       "CORR-TASK-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -4758,7 +4880,7 @@ const correctionModule = moduleFact({
       ["SUBMITTED", "JUDGED", "NEEDS_RETRY"],
       correctionAttemptFields,
       "CORR-ATTEMPT-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -4790,7 +4912,7 @@ const correctionModule = moduleFact({
       ["RECORDED"],
       invalidationFields,
       "CORR-INVALIDATION-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         targetKindContract: [
@@ -5010,6 +5132,7 @@ const studentProfileActions = [
     outputFieldIds: studentProfileViewFields.map(({ id }) => id),
     writes: false,
     permissions: teacherAndHomeroomReadPermissions,
+    capability: "QUERY",
   }),
   action({
     id: "STU-ACT-SAVE-VIEW",
@@ -5074,7 +5197,7 @@ const studentProfileModule = moduleFact({
       ["READY"],
       studentProfileViewFields,
       "STU-PROFILE-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -5112,7 +5235,7 @@ const studentProfileModule = moduleFact({
       ["OPEN"],
       studentAttentionFields,
       "STU-ATTENTION-F-ID",
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         sensitivityId: "S3",
         lineageBindings: [{

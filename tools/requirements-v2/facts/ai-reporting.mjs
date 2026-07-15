@@ -81,8 +81,10 @@ function action({
   label,
   targetObjectId,
   inputFieldIds = [],
+  acceptedInputValues,
   relatedStateGuards,
   outputFieldIds = [],
+  fieldWrites,
   operationKind,
   writes,
   transition,
@@ -93,6 +95,8 @@ function action({
   permissions,
   failureResults,
   channel,
+  capability,
+  draftPurpose,
 }) {
   const effectiveOperationKind = operationKind
     ?? (writes === false ? "READ" : transition ? "UPDATE" : "CREATE");
@@ -142,8 +146,10 @@ function action({
       label,
       targetObjectId,
       inputFieldIds,
+      ...(acceptedInputValues ? { acceptedInputValues } : {}),
       ...(relatedStateGuards ? { relatedStateGuards } : {}),
       outputFieldIds,
+      ...(fieldWrites ? { fieldWrites } : {}),
       ...(transition ? { transition } : {}),
       operationKind: effectiveOperationKind,
       writes: effectiveWrites,
@@ -151,6 +157,8 @@ function action({
       executionMode,
       ...(executionMode === USER_TASK ? { clients: WEB_APP } : { trigger }),
       permissions,
+      ...(capability ? { capability } : {}),
+      ...(draftPurpose ? { draftPurpose } : {}),
       ...(channel ? { channel } : {}),
       scenarioIds: [successScenario.id, ...failureScenarios.map(({ id: scenarioId }) => scenarioId)],
       ...(effectiveWrites ? {
@@ -276,6 +284,63 @@ const prepareAiPreview = action({
   ],
   successState: "PREVIEW_READY",
   permissions: teacherWritePermissions,
+  capability: "DRAFT",
+});
+
+const createFeedbackDraftPreview = action({
+  id: "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+  label: "Create a Temporary AI Feedback Draft Preview",
+  targetObjectId: "AIX-OBJ-TASK-PREVIEW",
+  inputFieldIds: [
+    "AIX-PREVIEW-F-TASK-ID",
+    "AIX-PREVIEW-F-TARGET-ACTION-ID",
+    "AIX-PREVIEW-F-PARAMETERS",
+  ],
+  outputFieldIds: [
+    "AIX-PREVIEW-F-ID",
+    "AIX-PREVIEW-F-PERMISSION-RESULT",
+    "AIX-PREVIEW-F-SOURCE-VERSIONS",
+    "AIX-PREVIEW-F-PAYLOAD",
+    "AIX-PREVIEW-F-EXPIRES-AT",
+    "AIX-PREVIEW-F-VERSION",
+  ],
+  successState: "PREVIEW_READY",
+  permissions: teacherWritePermissions,
+  capability: "DRAFT",
+  draftPurpose: {
+    contentKind: "FEEDBACK",
+    effectBoundary: "TEMPORARY_PREVIEW_ONLY",
+    targetLifecyclePolicyId: "LIFE-005",
+    targetStateId: "PREVIEW_READY",
+  },
+});
+
+const createPlanDraftPreview = action({
+  id: "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+  label: "Create a Temporary AI Improvement-plan Draft Preview",
+  targetObjectId: "AIX-OBJ-TASK-PREVIEW",
+  inputFieldIds: [
+    "AIX-PREVIEW-F-TASK-ID",
+    "AIX-PREVIEW-F-TARGET-ACTION-ID",
+    "AIX-PREVIEW-F-PARAMETERS",
+  ],
+  outputFieldIds: [
+    "AIX-PREVIEW-F-ID",
+    "AIX-PREVIEW-F-PERMISSION-RESULT",
+    "AIX-PREVIEW-F-SOURCE-VERSIONS",
+    "AIX-PREVIEW-F-PAYLOAD",
+    "AIX-PREVIEW-F-EXPIRES-AT",
+    "AIX-PREVIEW-F-VERSION",
+  ],
+  successState: "PREVIEW_READY",
+  permissions: teacherWritePermissions,
+  capability: "DRAFT",
+  draftPurpose: {
+    contentKind: "IMPROVEMENT_PLAN",
+    effectBoundary: "TEMPORARY_PREVIEW_ONLY",
+    targetLifecyclePolicyId: "LIFE-005",
+    targetStateId: "PREVIEW_READY",
+  },
 });
 
 const aixModule = moduleFact({
@@ -286,24 +351,57 @@ const aixModule = moduleFact({
   objective: "Resolve registered Web and App AI tasks into authorized structured previews without creating a second business fact",
   entryConditions: ["the user selects an active school, term, role, and authorized AI task"],
   exitConditions: ["the preview names one target Action and retains permission and source-version results"],
+  draftPurposeProfiles: [
+    {
+      taskId: "AI-TASK-ASSIGNMENT-DRAFT",
+      actionId: "HW-ACT-CREATE-DRAFT",
+      contentKind: "ASSIGNMENT",
+      effectBoundary: "BUSINESS_DRAFT_ONLY",
+      targetObjectId: "HW-OBJ-ASSIGNMENT",
+      targetLifecyclePolicyId: "LIFE-003",
+      targetStateId: "DRAFT",
+    },
+    {
+      taskId: "AI-TASK-FEEDBACK-DRAFT",
+      actionId: "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+      contentKind: "FEEDBACK",
+      effectBoundary: "TEMPORARY_PREVIEW_ONLY",
+      targetObjectId: "AIX-OBJ-TASK-PREVIEW",
+      targetLifecyclePolicyId: "LIFE-005",
+      targetStateId: "PREVIEW_READY",
+    },
+    {
+      taskId: "AI-TASK-IMPROVEMENT-PLAN-DRAFT",
+      actionId: "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+      contentKind: "IMPROVEMENT_PLAN",
+      effectBoundary: "TEMPORARY_PREVIEW_ONLY",
+      targetObjectId: "AIX-OBJ-TASK-PREVIEW",
+      targetLifecyclePolicyId: "LIFE-005",
+      targetStateId: "PREVIEW_READY",
+    },
+  ],
   baselineDecisionIds: ["BASE-003", "BASE-007", "BASE-009"],
   nfrIds: ["NFR-006", "NFR-008"],
   objects: [object(
     "AIX-OBJ-TASK-PREVIEW",
     "Temporary Registered AI Task Preview",
-    subjectTeacherResponsibility,
+    { ...subjectTeacherResponsibility, producerRef: "CURRENT_ACTOR" },
     "LIFE-005",
     ["PREVIEW_READY"],
     aixPreviewFields,
-    { mode: "NONE" })],
+    { mode: "ACTION_GRAPH", initialStateIds: [] })],
   relationships: [],
-  actions: [prepareAiPreview],
+  actions: [prepareAiPreview, createFeedbackDraftPreview, createPlanDraftPreview],
   pages: [page(
     "AIX-PAGE-CONVERSATION",
     "AI Conversation and Structured Confirmation",
     ["AIX-OBJ-TASK-PREVIEW"],
     aixPreviewFields.map(({ id }) => id),
-    ["AIX-ACT-PREPARE-TASK-PREVIEW"],
+    [
+      "AIX-ACT-PREPARE-TASK-PREVIEW",
+      "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+      "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+    ],
   )],
 });
 
@@ -314,12 +412,19 @@ const reportDefinitionFields = [
     dataType: "STRING_ARRAY",
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-037" },
   }),
-  field("RPT-DEFINITION-F-DATA-SCOPE", "Authorized Data Scope", { dataType: "JSON" }),
+  field("RPT-DEFINITION-F-DATA-SCOPE", "Authorized Data Scope", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-048" },
+  }),
   field("RPT-DEFINITION-F-TIME-RANGE", "Report Time Range", { dataType: "JSON" }),
   versionField("RPT-DEFINITION-F-VERSION", "Report Definition Version"),
 ];
 const reportSubscriptionFields = [
   identityField("RPT-SUBSCRIPTION-F-ID", "Report Subscription ID"),
+  field("RPT-SUBSCRIPTION-F-CREATOR-REF", "Report Subscription Creator", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
   {
     ...versionPinnedField(
       "RPT-SUBSCRIPTION-F-DEFINITION-REF",
@@ -330,7 +435,13 @@ const reportSubscriptionFields = [
     ),
     required: true,
     stateGuardPolicy: "CREATE_REQUIRED",
-    actionApplicability: { requiredActionIds: ["RPT-ACT-CREATE-SUBSCRIPTION"] },
+    actionApplicability: {
+      requiredActionIds: [
+        "RPT-ACT-CREATE-SUBSCRIPTION",
+        "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+        "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
+      ],
+    },
   },
   {
     ...pinnedVersionField(
@@ -351,6 +462,10 @@ const reportSubscriptionFields = [
   field("RPT-SUBSCRIPTION-F-RECIPIENTS", "Authorized Report Recipients", {
     dataType: "STRING_ARRAY",
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-015" },
+  }),
+  field("RPT-SUBSCRIPTION-F-DATA-SCOPE", "Subscription Data Scope", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-048" },
+    mutability: "IMMUTABLE",
   }),
   versionField("RPT-SUBSCRIPTION-F-VERSION", "Report Subscription Version"),
 ];
@@ -510,42 +625,210 @@ const reportEventPermissions = [
   permission("DENY", "CURRENT_ACTOR", "a user cannot invoke report state events directly"),
 ];
 
+const subjectReportPermissions = [
+  permission(
+    "ALLOW",
+    "DUTY-SUBJECT-TEACHER",
+    "the corresponding subject teacher acts only inside assigned subject, class, and student scope",
+  ),
+  permission(
+    "DENY",
+    "DUTY-HOMEROOM",
+    "homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment",
+  ),
+  permission(
+    "DENY",
+    "ROLE-ACADEMIC",
+    "academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action",
+  ),
+  permission(
+    "DENY",
+    "ROLE-PLATFORM-OPS",
+    "platform operations has no default student-detail or aggregate report access",
+  ),
+];
+
+const homeroomReportPermissions = [
+  permission(
+    "ALLOW",
+    "DUTY-HOMEROOM",
+    "homeroom duty acts only on aggregate data for the assigned homeroom class across subjects",
+  ),
+  permission(
+    "DENY",
+    "ROLE-PLATFORM-OPS",
+    "platform operations has no default homeroom aggregate report access",
+  ),
+];
+
+const academicReportPermissions = [
+  permission(
+    "ALLOW",
+    "ROLE-ACADEMIC",
+    "academic staff acts only on aggregate data covered by an active authorized scope grant",
+  ),
+  permission(
+    "DENY",
+    "ROLE-PLATFORM-OPS",
+    "platform operations has no default academic aggregate report access",
+  ),
+];
+
+const subscriptionOwnerPermissions = [
+  permission(
+    "ALLOW",
+    "CURRENT_ACTOR",
+    "the authenticated actor manages only the subscription created by that actor",
+    { kind: "OWN_RECORD", subjectFieldId: "RPT-SUBSCRIPTION-F-CREATOR-REF" },
+  ),
+  permission(
+    "DENY",
+    "CURRENT_ACTOR",
+    "the authenticated actor cannot manage a subscription created by another actor or role",
+    { kind: "OTHER_RECORD", subjectFieldId: "RPT-SUBSCRIPTION-F-CREATOR-REF" },
+  ),
+  permission(
+    "DENY",
+    "ROLE-PLATFORM-OPS",
+    "platform operations has no default report subscription access",
+  ),
+];
+
+const reportDefinitionInputFieldIds = [
+  "RPT-DEFINITION-F-NAME",
+  "RPT-DEFINITION-F-METRIC-IDS",
+  "RPT-DEFINITION-F-DATA-SCOPE",
+  "RPT-DEFINITION-F-TIME-RANGE",
+];
+
+const reportSubscriptionInputFieldIds = [
+  "RPT-SUBSCRIPTION-F-DEFINITION-REF",
+  "RPT-SUBSCRIPTION-F-DEFINITION-VERSION",
+  "RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY",
+  "RPT-SUBSCRIPTION-F-EXECUTION-TIME",
+  "RPT-SUBSCRIPTION-F-TIMEZONE",
+  "RPT-SUBSCRIPTION-F-RECIPIENTS",
+  "RPT-SUBSCRIPTION-F-DATA-SCOPE",
+];
+
+const subscriptionDefinitionGuard = {
+  refFieldId: "RPT-SUBSCRIPTION-F-DEFINITION-REF",
+  versionFieldId: "RPT-SUBSCRIPTION-F-DEFINITION-VERSION",
+  targetObjectId: "RPT-OBJ-DEFINITION",
+  requiredState: "ACTIVE",
+};
+
 const reportActions = [
   action({
     id: "RPT-ACT-CREATE-AD-HOC-DEFINITION",
     label: "Create an Ad-hoc Report Definition",
     targetObjectId: "RPT-OBJ-DEFINITION",
-    inputFieldIds: [
-      "RPT-DEFINITION-F-NAME",
-      "RPT-DEFINITION-F-METRIC-IDS",
-      "RPT-DEFINITION-F-DATA-SCOPE",
-      "RPT-DEFINITION-F-TIME-RANGE",
-    ],
+    inputFieldIds: reportDefinitionInputFieldIds,
+    acceptedInputValues: [{
+      fieldId: "RPT-DEFINITION-F-DATA-SCOPE",
+      optionSetId: "OPT-ENUM-048",
+      partitionId: "RPT-DEFINITION-DATA-SCOPE",
+      codes: ["SUBJECT_ASSIGNED"],
+    }],
     outputFieldIds: ["RPT-DEFINITION-F-ID", "RPT-DEFINITION-F-VERSION"],
     successState: "ACTIVE",
-    permissions: teacherWritePermissions,
+    permissions: subjectReportPermissions,
+    capability: "REPORT",
+  }),
+  action({
+    id: "RPT-ACT-CREATE-HOMEROOM-DEFINITION",
+    label: "Create an Assigned-class Homeroom Aggregate Report Definition",
+    targetObjectId: "RPT-OBJ-DEFINITION",
+    inputFieldIds: reportDefinitionInputFieldIds,
+    acceptedInputValues: [{
+      fieldId: "RPT-DEFINITION-F-DATA-SCOPE",
+      optionSetId: "OPT-ENUM-048",
+      partitionId: "RPT-DEFINITION-DATA-SCOPE",
+      codes: ["HOMEROOM_ASSIGNED_CLASS_AGGREGATE"],
+    }],
+    outputFieldIds: ["RPT-DEFINITION-F-ID", "RPT-DEFINITION-F-VERSION"],
+    successState: "ACTIVE",
+    permissions: homeroomReportPermissions,
+    capability: "REPORT",
+  }),
+  action({
+    id: "RPT-ACT-CREATE-ACADEMIC-DEFINITION",
+    label: "Create an Authorized Academic Aggregate Report Definition",
+    targetObjectId: "RPT-OBJ-DEFINITION",
+    inputFieldIds: reportDefinitionInputFieldIds,
+    acceptedInputValues: [{
+      fieldId: "RPT-DEFINITION-F-DATA-SCOPE",
+      optionSetId: "OPT-ENUM-048",
+      partitionId: "RPT-DEFINITION-DATA-SCOPE",
+      codes: ["ACADEMIC_AUTHORIZED_AGGREGATE"],
+    }],
+    outputFieldIds: ["RPT-DEFINITION-F-ID", "RPT-DEFINITION-F-VERSION"],
+    successState: "ACTIVE",
+    permissions: academicReportPermissions,
+    capability: "REPORT",
   }),
   action({
     id: "RPT-ACT-CREATE-SUBSCRIPTION",
-    label: "Create a Report Subscription",
+    label: "Create an Assigned-subject Report Subscription",
     targetObjectId: "RPT-OBJ-SUBSCRIPTION",
-    inputFieldIds: [
-      "RPT-SUBSCRIPTION-F-DEFINITION-REF",
-      "RPT-SUBSCRIPTION-F-DEFINITION-VERSION",
-      "RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY",
-      "RPT-SUBSCRIPTION-F-EXECUTION-TIME",
-      "RPT-SUBSCRIPTION-F-TIMEZONE",
-      "RPT-SUBSCRIPTION-F-RECIPIENTS",
-    ],
-    relatedStateGuards: [{
-      refFieldId: "RPT-SUBSCRIPTION-F-DEFINITION-REF",
-      versionFieldId: "RPT-SUBSCRIPTION-F-DEFINITION-VERSION",
-      targetObjectId: "RPT-OBJ-DEFINITION",
-      requiredState: "ACTIVE",
+    inputFieldIds: reportSubscriptionInputFieldIds,
+    acceptedInputValues: [{
+      fieldId: "RPT-SUBSCRIPTION-F-DATA-SCOPE",
+      optionSetId: "OPT-ENUM-048",
+      partitionId: "RPT-SUBSCRIPTION-DATA-SCOPE",
+      codes: ["SUBJECT_ASSIGNED"],
     }],
-    outputFieldIds: ["RPT-SUBSCRIPTION-F-ID", "RPT-SUBSCRIPTION-F-VERSION"],
+    relatedStateGuards: [subscriptionDefinitionGuard],
+    outputFieldIds: [
+      "RPT-SUBSCRIPTION-F-ID",
+      "RPT-SUBSCRIPTION-F-CREATOR-REF",
+      "RPT-SUBSCRIPTION-F-VERSION",
+    ],
     successState: "ACTIVE",
-    permissions: teacherWritePermissions,
+    permissions: subjectReportPermissions,
+    capability: "PERIODIC",
+  }),
+  action({
+    id: "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+    label: "Create an Assigned-class Homeroom Aggregate Report Subscription",
+    targetObjectId: "RPT-OBJ-SUBSCRIPTION",
+    inputFieldIds: reportSubscriptionInputFieldIds,
+    acceptedInputValues: [{
+      fieldId: "RPT-SUBSCRIPTION-F-DATA-SCOPE",
+      optionSetId: "OPT-ENUM-048",
+      partitionId: "RPT-SUBSCRIPTION-DATA-SCOPE",
+      codes: ["HOMEROOM_ASSIGNED_CLASS_AGGREGATE"],
+    }],
+    relatedStateGuards: [subscriptionDefinitionGuard],
+    outputFieldIds: [
+      "RPT-SUBSCRIPTION-F-ID",
+      "RPT-SUBSCRIPTION-F-CREATOR-REF",
+      "RPT-SUBSCRIPTION-F-VERSION",
+    ],
+    successState: "ACTIVE",
+    permissions: homeroomReportPermissions,
+    capability: "PERIODIC",
+  }),
+  action({
+    id: "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
+    label: "Create an Authorized Academic Aggregate Report Subscription",
+    targetObjectId: "RPT-OBJ-SUBSCRIPTION",
+    inputFieldIds: reportSubscriptionInputFieldIds,
+    acceptedInputValues: [{
+      fieldId: "RPT-SUBSCRIPTION-F-DATA-SCOPE",
+      optionSetId: "OPT-ENUM-048",
+      partitionId: "RPT-SUBSCRIPTION-DATA-SCOPE",
+      codes: ["ACADEMIC_AUTHORIZED_AGGREGATE"],
+    }],
+    relatedStateGuards: [subscriptionDefinitionGuard],
+    outputFieldIds: [
+      "RPT-SUBSCRIPTION-F-ID",
+      "RPT-SUBSCRIPTION-F-CREATOR-REF",
+      "RPT-SUBSCRIPTION-F-VERSION",
+    ],
+    successState: "ACTIVE",
+    permissions: academicReportPermissions,
+    capability: "PERIODIC",
   }),
   action({
     id: "RPT-ACT-UPDATE-SUBSCRIPTION",
@@ -560,7 +843,8 @@ const reportActions = [
     ],
     outputFieldIds: ["RPT-SUBSCRIPTION-F-VERSION"],
     transition: { from: ["ACTIVE", "PAUSED"], to: "ACTIVE" },
-    permissions: teacherWritePermissions,
+    permissions: subscriptionOwnerPermissions,
+    capability: "PERIODIC",
   }),
   action({
     id: "RPT-ACT-PAUSE-SUBSCRIPTION",
@@ -569,7 +853,8 @@ const reportActions = [
     inputFieldIds: ["RPT-SUBSCRIPTION-F-ID"],
     outputFieldIds: ["RPT-SUBSCRIPTION-F-VERSION"],
     transition: { from: "ACTIVE", to: "PAUSED" },
-    permissions: teacherWritePermissions,
+    permissions: subscriptionOwnerPermissions,
+    capability: "PERIODIC",
   }),
   action({
     id: "RPT-ACT-CANCEL-SUBSCRIPTION",
@@ -578,7 +863,9 @@ const reportActions = [
     inputFieldIds: ["RPT-SUBSCRIPTION-F-ID"],
     outputFieldIds: ["RPT-SUBSCRIPTION-F-VERSION"],
     transition: { from: ["ACTIVE", "PAUSED"], to: "CANCELLED" },
-    permissions: teacherWritePermissions,
+    permissions: subscriptionOwnerPermissions,
+    risk: RISK.HIGH,
+    capability: "PERIODIC",
   }),
   action({
     id: "RPT-ACT-CREATE-AD-HOC-RUN",
@@ -619,6 +906,8 @@ const reportActions = [
     ],
     outputFieldIds: [
       "RPT-RUN-F-ID",
+      "RPT-RUN-F-SUBSCRIPTION-REF",
+      "RPT-RUN-F-SUBSCRIPTION-VERSION",
       "RPT-RUN-F-DATA-CUTOFF",
       "RPT-RUN-F-PERMISSION-RESULT",
       "RPT-RUN-F-SOURCE-VERSIONS",
@@ -773,6 +1062,32 @@ const reportModule = moduleFact({
     adHoc: "SESSION_ANALYSIS_SAVED_ONLY_ON_CONFIRMATION",
     periodic: "SUBSCRIPTION_WITH_INDEPENDENT_RUN_SNAPSHOT_AND_DELIVERY",
   },
+  dataScopeProfiles: [
+    {
+      code: "SUBJECT_ASSIGNED",
+      subjectScope: "ASSIGNED_SUBJECT",
+      classScope: "ASSIGNED_CLASSES",
+      aggregateOnly: false,
+      noStudentDetail: false,
+      requiresAuthorizedGrant: false,
+    },
+    {
+      code: "HOMEROOM_ASSIGNED_CLASS_AGGREGATE",
+      subjectScope: "ALL_SUBJECTS",
+      classScope: "ASSIGNED_HOMEROOM_CLASS",
+      aggregateOnly: true,
+      noStudentDetail: true,
+      requiresAuthorizedGrant: false,
+    },
+    {
+      code: "ACADEMIC_AUTHORIZED_AGGREGATE",
+      subjectScope: "AUTHORIZED_SUBJECTS",
+      classScope: "AUTHORIZED_CLASSES",
+      aggregateOnly: true,
+      noStudentDetail: true,
+      requiresAuthorizedGrant: true,
+    },
+  ],
   lifecycleBoundaries: {
     subscriptionObjectId: "RPT-OBJ-SUBSCRIPTION",
     runObjectId: "RPT-OBJ-RUN",
@@ -781,16 +1096,39 @@ const reportModule = moduleFact({
   baselineDecisionIds: ["BASE-003", "BASE-008", "BASE-010"],
   nfrIds: ["NFR-002", "NFR-008"],
   objects: [
-    object("RPT-OBJ-DEFINITION", "Report Definition", subjectTeacherResponsibility, "LIFE-006", ["ACTIVE"], reportDefinitionFields, { mode: "NONE" }),
+    object(
+      "RPT-OBJ-DEFINITION",
+      "Report Definition",
+      {
+        ...subjectTeacherResponsibility,
+        producerRef: "CURRENT_ACTOR",
+        ownerRef: "CURRENT_ACTOR",
+        confirmerRef: "CURRENT_ACTOR",
+      },
+      "LIFE-006",
+      ["ACTIVE"],
+      reportDefinitionFields,
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
+    ),
     object(
       "RPT-OBJ-SUBSCRIPTION",
       "Report Subscription",
-      subjectTeacherResponsibility,
+      {
+        ...subjectTeacherResponsibility,
+        producerRef: "CURRENT_ACTOR",
+        ownerRef: "CURRENT_ACTOR",
+        confirmerRef: "CURRENT_ACTOR",
+      },
       "LIFE-006",
       ["ACTIVE", "PAUSED", "CANCELLED"],
       reportSubscriptionFields,
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
+        scopeBinding: {
+          definitionScopeFieldId: "RPT-DEFINITION-F-DATA-SCOPE",
+          subscriptionScopeFieldId: "RPT-SUBSCRIPTION-F-DATA-SCOPE",
+          mode: "MATCH_REQUIRED",
+        },
         lineageBindings: [{
           refFieldId: "RPT-SUBSCRIPTION-F-DEFINITION-REF",
           versionFieldId: "RPT-SUBSCRIPTION-F-DEFINITION-VERSION",
@@ -836,7 +1174,7 @@ const reportModule = moduleFact({
       "LIFE-006",
       ["AVAILABLE"],
       reportSnapshotFields,
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         lineageBindings: [{
           refFieldId: "RPT-SNAPSHOT-F-RUN-REF",
@@ -1208,7 +1546,13 @@ const learningPathActions = [
       "LPATH-INTERPRETATION-F-LIMITATIONS",
       "LPATH-INTERPRETATION-F-TEACHER-CONFIRMER",
     ],
-    outputFieldIds: ["LPATH-INTERPRETATION-F-VERSION"],
+    outputFieldIds: [
+      "LPATH-INTERPRETATION-F-EXPLANATION",
+      "LPATH-INTERPRETATION-F-CONFIDENCE",
+      "LPATH-INTERPRETATION-F-LIMITATIONS",
+      "LPATH-INTERPRETATION-F-TEACHER-CONFIRMER",
+      "LPATH-INTERPRETATION-F-VERSION",
+    ],
     transition: { from: "CANDIDATE", to: "TEACHER_CONFIRMED" },
     risk: RISK.HIGH,
     permissions: pathWritePermissions,
@@ -1227,7 +1571,11 @@ const learningPathActions = [
       targetObjectId: "LPATH-OBJ-INTERPRETATION",
       requiredState: "STUDENT_VISIBLE",
     }],
-    outputFieldIds: ["LPATH-INTERPRETATION-F-VERSION"],
+    outputFieldIds: [
+      "LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF",
+      "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
+      "LPATH-INTERPRETATION-F-VERSION",
+    ],
     transition: {
       from: ["TEACHER_CONFIRMED", "STUDENT_VISIBLE"],
       to: "SUPERSEDED",
@@ -1253,6 +1601,7 @@ const learningPathActions = [
       eventId: "EVT-LEARNING-PATH-INTERPRETATION-STALE",
     },
     permissions: flowWritePermissions,
+    risk: RISK.HIGH,
     failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
   }),
   action({
@@ -1260,7 +1609,10 @@ const learningPathActions = [
     label: "Publish a Teacher-confirmed Learning Path Interpretation",
     targetObjectId: "LPATH-OBJ-INTERPRETATION",
     inputFieldIds: ["LPATH-INTERPRETATION-F-VISIBLE-FROM"],
-    outputFieldIds: ["LPATH-INTERPRETATION-F-VERSION"],
+    outputFieldIds: [
+      "LPATH-INTERPRETATION-F-VISIBLE-FROM",
+      "LPATH-INTERPRETATION-F-VERSION",
+    ],
     transition: { from: "TEACHER_CONFIRMED", to: "STUDENT_VISIBLE" },
     risk: RISK.HIGH,
     permissions: pathWritePermissions,
@@ -1301,7 +1653,7 @@ const learningPathModule = moduleFact({
       "LIFE-007",
       ["RECORDED"],
       timelineFields,
-      { mode: "NONE" },
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
         readMode: "AUTHORIZED",
         crossTerm: true,
@@ -1369,31 +1721,70 @@ const notificationFields = [
   }),
   field("NOTI-NOTIFICATION-F-DELIVERED-AT", "Delivered At", {
     dataType: "DATETIME",
-    required: false,
+    required: {
+      description: "required only when NOTI-ACT-DELIVER succeeds",
+      whenStates: ["DELIVERED"],
+      whenActionIds: ["NOTI-ACT-DELIVER"],
+    },
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
   field("NOTI-NOTIFICATION-F-READ-AT", "Read At", {
     dataType: "DATETIME",
-    required: false,
+    required: {
+      description: "required only when NOTI-ACT-MARK-READ succeeds",
+      whenStates: ["READ"],
+      whenActionIds: ["NOTI-ACT-MARK-READ"],
+    },
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
   field("NOTI-NOTIFICATION-F-HANDLED-AT", "Handled At", {
     dataType: "DATETIME",
-    required: false,
+    required: {
+      description: "required only when NOTI-ACT-MARK-HANDLED succeeds",
+      whenStates: ["HANDLED"],
+      whenActionIds: ["NOTI-ACT-MARK-HANDLED"],
+    },
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
   field("NOTI-NOTIFICATION-F-FAILURE-CODE", "Delivery Failure Code", {
-    required: false,
+    required: {
+      description: "required only when NOTI-ACT-FAIL-DELIVERY succeeds",
+      whenStates: ["FAILED"],
+      whenActionIds: ["NOTI-ACT-FAIL-DELIVERY"],
+    },
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
   field("NOTI-NOTIFICATION-F-RETRY-COUNT", "Delivery Retry Count", {
     dataType: "INTEGER",
+    required: {
+      description: "required when notification creation initializes or retry increments the counter",
+      whenStates: ["QUEUED"],
+      whenActionIds: [
+        "NOTI-ACT-CREATE-REMINDER",
+        "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
+        "NOTI-ACT-RETRY-DELIVERY",
+      ],
+    },
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
+    writeContract: {
+      initializers: {
+        actionIds: [
+          "NOTI-ACT-CREATE-REMINDER",
+          "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
+        ],
+        value: 0,
+      },
+      mutators: {
+        actionIds: ["NOTI-ACT-RETRY-DELIVERY"],
+        operation: "INCREMENT",
+        amount: 1,
+      },
+    },
   }),
   versionField("NOTI-NOTIFICATION-F-VERSION", "Notification Version"),
 ];
@@ -1413,9 +1804,15 @@ const createReminder = action({
     "NOTI-NOTIFICATION-F-RETRY-COUNT",
     "NOTI-NOTIFICATION-F-VERSION",
   ],
+  fieldWrites: [{
+    fieldId: "NOTI-NOTIFICATION-F-RETRY-COUNT",
+    mode: "INITIALIZE",
+    value: 0,
+  }],
   successState: "QUEUED",
   permissions: teacherWritePermissions,
   channel: IN_PRODUCT_CHANNEL,
+  capability: "REMINDER",
 });
 const createReportNotification = action({
   id: "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
@@ -1431,6 +1828,11 @@ const createReportNotification = action({
     "NOTI-NOTIFICATION-F-RETRY-COUNT",
     "NOTI-NOTIFICATION-F-VERSION",
   ],
+  fieldWrites: [{
+    fieldId: "NOTI-NOTIFICATION-F-RETRY-COUNT",
+    mode: "INITIALIZE",
+    value: 0,
+  }],
   successState: "QUEUED",
   executionMode: "FLOW_INTERNAL",
   trigger: { kind: "FLOW", flowIds: ["DF-013"] },
@@ -1445,14 +1847,14 @@ const notificationDeliveryPermissions = [
 const notificationRecipientPermissions = [
   permission(
     "ALLOW",
-    "ROLE-STUDENT",
-    "the authenticated student is the notification recipient",
+    "CURRENT_ACTOR",
+    "the authenticated recipient is acting on the recipient's own notification",
     { kind: "OWN_RECORD", subjectFieldId: "NOTI-NOTIFICATION-F-RECIPIENT" },
   ),
   permission(
     "DENY",
-    "ROLE-STUDENT",
-    "the authenticated student is not the notification recipient",
+    "CURRENT_ACTOR",
+    "the authenticated actor is not the notification recipient",
     { kind: "OTHER_RECORD", subjectFieldId: "NOTI-NOTIFICATION-F-RECIPIENT" },
   ),
   permission(
@@ -1499,6 +1901,11 @@ const retryNotificationDelivery = action({
     "NOTI-NOTIFICATION-F-RETRY-COUNT",
     "NOTI-NOTIFICATION-F-VERSION",
   ],
+  fieldWrites: [{
+    fieldId: "NOTI-NOTIFICATION-F-RETRY-COUNT",
+    mode: "INCREMENT",
+    amount: 1,
+  }],
   transition: { from: "FAILED", to: "QUEUED" },
   executionMode: "SYSTEM_EVENT",
   trigger: { kind: "EVENT", eventId: "EVT-NOTIFICATION-DELIVERY-RETRY-DUE" },
@@ -1512,7 +1919,6 @@ const markNotificationRead = action({
   targetObjectId: "NOTI-OBJ-NOTIFICATION",
   inputFieldIds: ["NOTI-NOTIFICATION-F-ID"],
   outputFieldIds: [
-    "NOTI-NOTIFICATION-F-DELIVERED-AT",
     "NOTI-NOTIFICATION-F-READ-AT",
     "NOTI-NOTIFICATION-F-VERSION",
   ],
@@ -1563,6 +1969,17 @@ const notificationModule = moduleFact({
         retryScope: "NOTIFICATION_DELIVERY_ONLY",
         preserveAcceptedSourceVersion: true,
       },
+      recipientPolicy: {
+        subjectFieldId: "NOTI-NOTIFICATION-F-RECIPIENT",
+        allowedRecipientSubjects: [
+          "ROLE-STUDENT",
+          "DUTY-SUBJECT-TEACHER",
+          "DUTY-HOMEROOM",
+          "ROLE-ACADEMIC",
+        ],
+        mutationSubject: "CURRENT_ACTOR",
+        ownershipMode: "OWN_RECORD_ONLY",
+      },
     })],
   relationships: [],
   actions: [
@@ -1594,6 +2011,7 @@ function schema(required, properties) {
 function aiTask({
   id,
   taskType,
+  capability,
   roleRefs = [],
   dutyRefs = [],
   examples,
@@ -1603,7 +2021,9 @@ function aiTask({
   risk,
   writes,
   previewFieldIds,
-  confirmerDutyRef,
+  confirmerRef,
+  draftPreviewActionId = "AIX-ACT-PREPARE-TASK-PREVIEW",
+  draftPurpose,
   studentAccessPolicy,
   reversal,
 }) {
@@ -1611,6 +2031,7 @@ function aiTask({
   return {
     id,
     taskType,
+    capability,
     roleRefs,
     dutyRefs,
     clients: WEB_APP,
@@ -1622,8 +2043,9 @@ function aiTask({
       blocksExecution: true,
     }],
     ...(taskType === "DRAFT" ? {
+      draftPurpose,
       draftPolicy: {
-        previewActionId: "AIX-ACT-PREPARE-TASK-PREVIEW",
+        previewActionId: draftPreviewActionId,
         previewObjectId: "AIX-OBJ-TASK-PREVIEW",
         confirmationRequired: true,
         businessWriteBeforeConfirmation: false,
@@ -1634,8 +2056,10 @@ function aiTask({
     writes,
     previewFieldIds,
     ...(writes ? {
-      confirmerDutyRef,
-      confirmer: { mode: "DUTY", dutyRef: confirmerDutyRef },
+      confirmerRef,
+      confirmer: confirmerRef.startsWith("DUTY-")
+        ? { mode: "DUTY", dutyRef: confirmerRef }
+        : { mode: "ROLE", roleRef: confirmerRef },
     } : {
       confirmer: { mode: "NOT_REQUIRED" },
     }),
@@ -1672,6 +2096,7 @@ export const aiReportingAiTasks = deepFreeze([
   aiTask({
     id: "AI-TASK-AUTHORIZED-DATA-QUERY",
     taskType: "QUERY",
+    capability: "QUERY",
     dutyRefs: ["DUTY-SUBJECT-TEACHER", "DUTY-HOMEROOM"],
     examples: ["Show the authorized learning profile for this student"],
     parameters: { studentProfileId: { type: "string" } },
@@ -1685,6 +2110,7 @@ export const aiReportingAiTasks = deepFreeze([
   aiTask({
     id: "AI-TASK-LEARNING-ANALYSIS",
     taskType: "ANALYSIS",
+    capability: "ANALYSIS",
     roleRefs: ["ROLE-STUDENT"],
     examples: ["Explain my teacher-confirmed mastery for this knowledge point"],
     parameters: { studentId: { type: "string" }, knowledgePointId: { type: "string" } },
@@ -1703,6 +2129,7 @@ export const aiReportingAiTasks = deepFreeze([
   aiTask({
     id: "AI-TASK-ASSIGNMENT-DRAFT",
     taskType: "DRAFT",
+    capability: "DRAFT",
     dutyRefs: ["DUTY-SUBJECT-TEACHER"],
     examples: ["Draft a mathematics assignment for class two due Friday"],
     parameters: { assignmentBrief: { type: "string" } },
@@ -1727,63 +2154,77 @@ export const aiReportingAiTasks = deepFreeze([
       "HW-ASSIGNMENT-F-FEEDBACK-POLICY",
       "HW-ASSIGNMENT-F-NOTIFICATION-POLICY",
     ],
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+    confirmerRef: "DUTY-SUBJECT-TEACHER",
+    draftPurpose: {
+      contentKind: "ASSIGNMENT",
+      effectBoundary: "BUSINESS_DRAFT_ONLY",
+      targetLifecyclePolicyId: "LIFE-003",
+      targetStateId: "DRAFT",
+    },
     reversal: "the teacher may discard the draft or revise it before publication",
   }),
   aiTask({
     id: "AI-TASK-FEEDBACK-DRAFT",
     taskType: "DRAFT",
+    capability: "DRAFT",
     dutyRefs: ["DUTY-SUBJECT-TEACHER"],
     examples: ["Draft feedback for this reviewed submission"],
     parameters: { decisionId: { type: "string" }, feedbackIntent: { type: "string" } },
     clarification: "Which reviewed decision and correction reason should the feedback use?",
-    actionId: "GRD-ACT-OVERRIDE-SCORE",
-    risk: RISK.HIGH,
+    actionId: "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+    risk: RISK.LOW,
     writes: true,
     previewFieldIds: [
-      "GRD-DECISION-F-OFFICIAL-SCORE",
-      "GRD-DECISION-F-TEACHER-FEEDBACK",
-      "GRD-DECISION-F-CORRECTION-REASON",
+      "AIX-PREVIEW-F-TASK-ID",
+      "AIX-PREVIEW-F-TARGET-ACTION-ID",
+      "AIX-PREVIEW-F-PARAMETERS",
     ],
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
-    reversal: "a confirmed decision is corrected only through its versioned revision path",
+    confirmerRef: "DUTY-SUBJECT-TEACHER",
+    draftPreviewActionId: "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+    draftPurpose: {
+      contentKind: "FEEDBACK",
+      effectBoundary: "TEMPORARY_PREVIEW_ONLY",
+      targetLifecyclePolicyId: "LIFE-005",
+      targetStateId: "PREVIEW_READY",
+    },
+    reversal: "the teacher may discard the temporary feedback preview; official score and feedback remain unchanged",
   }),
   aiTask({
     id: "AI-TASK-IMPROVEMENT-PLAN-DRAFT",
     taskType: "DRAFT",
+    capability: "DRAFT",
     dutyRefs: ["DUTY-SUBJECT-TEACHER"],
     examples: ["Draft a two-week improvement plan from the confirmed evidence"],
     parameters: { candidateId: { type: "string" }, planIntent: { type: "string" } },
     clarification: "Which candidate, goal, workload, deadline, evidence, and revalidation method apply?",
-    actionId: "PLN-ACT-CONFIRM-PLAN",
-    risk: RISK.HIGH,
+    actionId: "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+    risk: RISK.LOW,
     writes: true,
     previewFieldIds: [
-      "PLN-PLAN-F-GOAL",
-      "PLN-PLAN-F-SUBJECT",
-      "PLN-PLAN-F-KNOWLEDGE-POINT-REF",
-      "PLN-PLAN-F-KNOWLEDGE-POINT-VERSION",
-      "PLN-PLAN-F-PRIORITY",
-      "PLN-PLAN-F-TASK-CONTENT",
-      "PLN-PLAN-F-WORKLOAD",
-      "PLN-PLAN-F-DUE-AT",
-      "PLN-PLAN-F-SUCCESS-CONDITION",
-      "PLN-PLAN-F-EVIDENCE-REQUIREMENT",
-      "PLN-PLAN-F-REVALIDATION-METHOD",
-      "PLN-PLAN-F-TEACHER-CONFIRMER-REF",
+      "AIX-PREVIEW-F-TASK-ID",
+      "AIX-PREVIEW-F-TARGET-ACTION-ID",
+      "AIX-PREVIEW-F-PARAMETERS",
     ],
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
-    reversal: "an active plan changes only through the target plan adjustment or closure Action",
+    confirmerRef: "DUTY-SUBJECT-TEACHER",
+    draftPreviewActionId: "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+    draftPurpose: {
+      contentKind: "IMPROVEMENT_PLAN",
+      effectBoundary: "TEMPORARY_PREVIEW_ONLY",
+      targetLifecyclePolicyId: "LIFE-005",
+      targetStateId: "PREVIEW_READY",
+    },
+    reversal: "the teacher may discard the temporary plan preview; no official improvement plan is changed",
   }),
   aiTask({
     id: "AI-TASK-AD-HOC-REPORT",
     taskType: "AD_HOC_REPORT",
+    capability: "REPORT",
     dutyRefs: ["DUTY-SUBJECT-TEACHER"],
     examples: ["Create a temporary report of this week's submission rate"],
     parameters: {
       reportName: { type: "string" },
       metricIds: { type: "array", items: { type: "string" } },
-      dataScope: { type: "object" },
+      dataScope: { type: "string" },
       timeRange: { type: "object" },
     },
     clarification: "What report name and authorized analysis intent should be used?",
@@ -1796,18 +2237,76 @@ export const aiReportingAiTasks = deepFreeze([
       "RPT-DEFINITION-F-DATA-SCOPE",
       "RPT-DEFINITION-F-TIME-RANGE",
     ],
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+    confirmerRef: "DUTY-SUBJECT-TEACHER",
     reversal: "the report definition may be archived without changing any source fact",
   }),
+  aiTask({
+    id: "AI-TASK-HOMEROOM-AD-HOC-REPORT",
+    taskType: "AD_HOC_REPORT",
+    capability: "REPORT",
+    dutyRefs: ["DUTY-HOMEROOM"],
+    examples: ["Create a temporary all-subject aggregate report for my homeroom class"],
+    parameters: {
+      reportName: { type: "string" },
+      metricIds: { type: "array", items: { type: "string" } },
+      dataScope: { type: "string" },
+      timeRange: { type: "object" },
+    },
+    clarification: "Which assigned homeroom class, aggregate metrics, and time range should be used?",
+    actionId: "RPT-ACT-CREATE-HOMEROOM-DEFINITION",
+    risk: RISK.LOW,
+    writes: true,
+    previewFieldIds: reportDefinitionInputFieldIds,
+    confirmerRef: "DUTY-HOMEROOM",
+    reversal: "the aggregate report definition may be archived without changing any source fact",
+  }),
+  aiTask({
+    id: "AI-TASK-ACADEMIC-AD-HOC-REPORT",
+    taskType: "AD_HOC_REPORT",
+    capability: "REPORT",
+    roleRefs: ["ROLE-ACADEMIC"],
+    examples: ["Create an aggregate report for my currently authorized academic scope"],
+    parameters: {
+      reportName: { type: "string" },
+      metricIds: { type: "array", items: { type: "string" } },
+      dataScope: { type: "string" },
+      timeRange: { type: "object" },
+    },
+    clarification: "Which authorized aggregate scope, metrics, and time range should be used?",
+    actionId: "RPT-ACT-CREATE-ACADEMIC-DEFINITION",
+    risk: RISK.LOW,
+    writes: true,
+    previewFieldIds: reportDefinitionInputFieldIds,
+    confirmerRef: "ROLE-ACADEMIC",
+    reversal: "the aggregate report definition may be archived without changing any source fact",
+  }),
   ...[
-    ["CREATE", "Create", "RPT-ACT-CREATE-SUBSCRIPTION", [
-      "RPT-SUBSCRIPTION-F-DEFINITION-REF",
-      "RPT-SUBSCRIPTION-F-DEFINITION-VERSION",
-      "RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY",
-      "RPT-SUBSCRIPTION-F-EXECUTION-TIME",
-      "RPT-SUBSCRIPTION-F-TIMEZONE",
-      "RPT-SUBSCRIPTION-F-RECIPIENTS",
-    ]],
+    {
+      taskIdSuffix: "",
+      dutyRefs: ["DUTY-SUBJECT-TEACHER"],
+      roleRefs: [],
+      confirmerRef: "DUTY-SUBJECT-TEACHER",
+      createActionId: "RPT-ACT-CREATE-SUBSCRIPTION",
+      audienceLabel: "assigned-subject",
+    },
+    {
+      taskIdSuffix: "-HOMEROOM",
+      dutyRefs: ["DUTY-HOMEROOM"],
+      roleRefs: [],
+      confirmerRef: "DUTY-HOMEROOM",
+      createActionId: "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+      audienceLabel: "assigned-class homeroom aggregate",
+    },
+    {
+      taskIdSuffix: "-ACADEMIC",
+      dutyRefs: [],
+      roleRefs: ["ROLE-ACADEMIC"],
+      confirmerRef: "ROLE-ACADEMIC",
+      createActionId: "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
+      audienceLabel: "authorized academic aggregate",
+    },
+  ].flatMap((audience) => [
+    ["CREATE", "Create", audience.createActionId, reportSubscriptionInputFieldIds],
     ["UPDATE", "Update", "RPT-ACT-UPDATE-SUBSCRIPTION", [
       "RPT-SUBSCRIPTION-F-ID",
       "RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY",
@@ -1818,22 +2317,25 @@ export const aiReportingAiTasks = deepFreeze([
     ["PAUSE", "Pause", "RPT-ACT-PAUSE-SUBSCRIPTION", ["RPT-SUBSCRIPTION-F-ID"]],
     ["CANCEL", "Cancel", "RPT-ACT-CANCEL-SUBSCRIPTION", ["RPT-SUBSCRIPTION-F-ID"]],
   ].map(([verb, label, actionId, previewFieldIds]) => aiTask({
-    id: `AI-TASK-${verb}-REPORT-SUBSCRIPTION`,
+    id: `AI-TASK-${verb}${audience.taskIdSuffix}-REPORT-SUBSCRIPTION`,
     taskType: "PERIODIC",
-    dutyRefs: ["DUTY-SUBJECT-TEACHER"],
-    examples: [`${label} my authorized weekly learning report subscription`],
+    capability: "PERIODIC",
+    dutyRefs: audience.dutyRefs,
+    roleRefs: audience.roleRefs,
+    examples: [`${label} my ${audience.audienceLabel} weekly report subscription`],
     parameters: { subscriptionRequest: { type: "string" } },
     clarification: "Which authorized report subscription and schedule should be managed?",
     actionId,
-    risk: RISK.LOW,
+    risk: verb === "CANCEL" ? RISK.HIGH : RISK.LOW,
     writes: true,
     previewFieldIds,
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+    confirmerRef: audience.confirmerRef,
     reversal: "subscription changes retain history and can be superseded by another authorized subscription Action",
-  })),
+  }))),
   aiTask({
     id: "AI-TASK-CREATE-REMINDER",
     taskType: "REMINDER",
+    capability: "REMINDER",
     dutyRefs: ["DUTY-SUBJECT-TEACHER"],
     examples: ["Remind this student in the App to finish the correction task tomorrow"],
     parameters: {
@@ -1852,12 +2354,13 @@ export const aiReportingAiTasks = deepFreeze([
       "NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE",
       "NOTI-NOTIFICATION-F-DEEP-LINK",
     ],
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+    confirmerRef: "DUTY-SUBJECT-TEACHER",
     reversal: "a queued reminder can be superseded without changing the source business fact",
   }),
   aiTask({
     id: "AI-TASK-PUBLISH-ASSIGNMENT",
     taskType: "CONTROLLED_ACTION",
+    capability: "CONTROLLED",
     dutyRefs: ["DUTY-SUBJECT-TEACHER"],
     examples: ["Publish this validated assignment now"],
     parameters: { assignmentId: { type: "string" } },
@@ -1869,7 +2372,7 @@ export const aiReportingAiTasks = deepFreeze([
       "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
       "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
     ],
-    confirmerDutyRef: "DUTY-SUBJECT-TEACHER",
+    confirmerRef: "DUTY-SUBJECT-TEACHER",
     reversal: "published assignments change only through the target module's revision Action",
   }),
 ]);
