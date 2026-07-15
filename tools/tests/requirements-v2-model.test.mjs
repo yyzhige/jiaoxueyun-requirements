@@ -952,6 +952,26 @@ test("validates action-specific required rule bindings", () => {
   assert.deepEqual(missedMutations, []);
 });
 
+test("requires action-level coverage for action-specific required fields", () => {
+  const mutations = [
+    ["HW-ACT-REVISE", "HW-ASSIGNMENT-F-REVISION-REASON"],
+    ["PLN-ACT-CLOSE-PLAN", "PLN-PLAN-F-CLOSE-REASON"],
+    ["STU-ACT-SAVE-VIEW", "STU-PROFILE-F-SAVED-VIEW-DEFINITION"],
+  ];
+  const missedMutations = [];
+  for (const [actionId, fieldId] of mutations) {
+    const model = structuredClone(requirementModel);
+    const action = model.modules.flatMap(({ actions }) => actions)
+      .find(({ id }) => id === actionId);
+    action.inputFieldIds = action.inputFieldIds.filter((id) => id !== fieldId);
+    action.outputFieldIds = action.outputFieldIds.filter((id) => id !== fieldId);
+    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_ACTION_REQUIRED_FIELD")) {
+      missedMutations.push(actionId);
+    }
+  }
+  assert.deepEqual(missedMutations, []);
+});
+
 test("rejects invalid field required, mutability, and visibility rules", () => {
   const mutations = [
     (field) => { field.required = ""; },
@@ -2581,6 +2601,7 @@ test("inherits required fields only when every UPDATE from state requires them",
   }));
   submission.actions[0].transition.from = ["DRAFT", "SUBMITTED"];
   assertNoCode(validateRequirementModel(inheritedModel), "INVALID_FLOW_TERMINAL_STATE");
+  assertNoCode(validateRequirementModel(inheritedModel), "INVALID_ACTION_REQUIRED_FIELD");
 
   const partialInheritance = structuredClone(inheritedModel);
   moduleById(partialInheritance, "SUB-001").objects[0].fields
@@ -2591,6 +2612,10 @@ test("inherits required fields only when every UPDATE from state requires them",
   assertHasCode(
     validateRequirementModel(partialInheritance),
     "INVALID_FLOW_TERMINAL_STATE",
+  );
+  assertHasCode(
+    validateRequirementModel(partialInheritance),
+    "INVALID_ACTION_REQUIRED_FIELD",
   );
 });
 

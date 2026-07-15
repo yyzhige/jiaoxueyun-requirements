@@ -154,6 +154,28 @@ function inheritedRequiredFieldIds(action, targetObject) {
     .map(({ id }) => id));
 }
 
+function actionStateCoverageFieldIds(action, targetObject, providedFieldIds = []) {
+  return new Set([
+    ...inheritedRequiredFieldIds(action, targetObject),
+    ...list(action?.inputFieldIds),
+    ...providedFieldIds,
+    ...list(action?.outputFieldIds),
+  ]);
+}
+
+function missingActionStateFieldIds(index, action, targetObject, providedFieldIds = []) {
+  const concreteState = concreteActionState(index, action);
+  const coveredFieldIds = actionStateCoverageFieldIds(
+    action,
+    targetObject,
+    providedFieldIds,
+  );
+  return records(targetObject?.fields)
+    .filter((field) => fieldIsRequiredForState(field, concreteState, action?.id))
+    .map(({ id }) => id)
+    .filter((fieldId) => !coveredFieldIds.has(fieldId));
+}
+
 function conditionalRequiredErrors(index) {
   const errors = [];
   for (const fieldEntry of index.fields) {
@@ -173,6 +195,17 @@ function conditionalRequiredErrors(index) {
           `INVALID_FIELD_CONTRACT ${formatValidationValue(fieldEntry.value?.id)} conditional action ${formatValidationValue(actionId)} must target the owning object in the same module and reach a declared required state`,
         );
       }
+    }
+  }
+  for (const actionEntry of index.actions) {
+    const action = actionEntry.value;
+    const targetObject = index.objectById.get(action?.targetObjectId)?.value;
+    const concreteState = concreteActionState(index, action);
+    const missingFieldIds = missingActionStateFieldIds(index, action, targetObject);
+    if (missingFieldIds.length > 0) {
+      errors.push(
+        `INVALID_ACTION_REQUIRED_FIELD ${formatValidationValue(action?.id)} state=${formatValidationValue(concreteState)} missing ${missingFieldIds.map(formatValidationValue).join(",")}`,
+      );
     }
   }
   return errors;
@@ -803,18 +836,14 @@ function flowErrors(index) {
             `INVALID_FLOW_INPUT_RESOLUTION ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} step=${formatValidationValue(stepOrder)} action=${formatValidationValue(action.id)} missing ${missingInputFieldIds.map(formatValidationValue).join(",")}`,
           );
         }
-        const concreteState = concreteActionState(index, action);
         const targetObject = index.objectById.get(action?.targetObjectId)?.value;
-        const stateCoverageFieldIds = new Set([
-          ...inheritedRequiredFieldIds(action, targetObject),
-          ...list(action.inputFieldIds),
-          ...providedFieldIds,
-          ...list(action.outputFieldIds),
-        ]);
-        const missingStateFieldIds = records(targetObject?.fields)
-          .filter((field) => fieldIsRequiredForState(field, concreteState, action.id))
-          .map(({ id }) => id)
-          .filter((fieldId) => !stateCoverageFieldIds.has(fieldId));
+        const concreteState = concreteActionState(index, action);
+        const missingStateFieldIds = missingActionStateFieldIds(
+          index,
+          action,
+          targetObject,
+          providedFieldIds,
+        );
         if (missingStateFieldIds.length > 0) {
           errors.push(
             `INVALID_FLOW_TERMINAL_STATE ${formatValidationValue(flow?.id)} path=${formatValidationValue(executionPath?.id)} step=${formatValidationValue(stepOrder)} action=${formatValidationValue(action.id)} state=${formatValidationValue(concreteState)} missing ${missingStateFieldIds.map(formatValidationValue).join(",")}`,
