@@ -1,7 +1,12 @@
 import { MODEL_COLLECTIONS } from "../model.mjs";
 import { studentDataClassificationMatchesRegistry } from "../facts/student-data-classification.mjs";
 import { STUDENT_DETAIL_ACCESS_EXCEPTION_KIND } from "../facts/student-detail-access-exceptions.mjs";
-import { PROFESSIONAL_WRITE_BOUNDARY_KIND } from "../facts/professional-write-authorization.mjs";
+import {
+  PROFESSIONAL_WRITE_BOUNDARY_KIND,
+  isProfessionalWriteAuthorizationBoundary,
+  isProfessionalWritePolicy,
+  matchesRegisteredProfessionalWriteException,
+} from "../facts/professional-write-authorization.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 
@@ -681,11 +686,7 @@ function validateObject(errors, object, path, strict) {
     }
     if (Object.hasOwn(object, "professionalWritePolicy")) {
       const policy = object.professionalWritePolicy;
-      if (
-        !isRecord(policy)
-        || Object.keys(policy).length !== 1
-        || policy.requiredAuthorizationBoundaryKind !== PROFESSIONAL_WRITE_BOUNDARY_KIND
-      ) {
+      if (!isProfessionalWritePolicy(policy)) {
         errors.push(
           `INVALID_OBJECT_CONTRACT ${path}.professionalWritePolicy must use the closed ${PROFESSIONAL_WRITE_BOUNDARY_KIND} shape`,
         );
@@ -1339,15 +1340,19 @@ function validateAction(errors, action, path, strict) {
   }
   if (Object.hasOwn(action, "authorizationBoundary")) {
     const boundary = action.authorizationBoundary;
-    if (
-      !isRecord(boundary)
-      || Object.keys(boundary).length !== 1
-      || boundary.kind !== PROFESSIONAL_WRITE_BOUNDARY_KIND
-    ) {
+    if (!isProfessionalWriteAuthorizationBoundary(boundary)) {
       errors.push(
         `INVALID_ACTION_CONTRACT ${path}.authorizationBoundary must use the closed ${PROFESSIONAL_WRITE_BOUNDARY_KIND} shape`,
       );
     }
+  }
+  if (
+    Object.hasOwn(action, "professionalWriteException")
+    && !matchesRegisteredProfessionalWriteException(action)
+  ) {
+    errors.push(
+      `INVALID_ACTION_CONTRACT ${path}.professionalWriteException must exactly match a registered non-professional protected-object write`,
+    );
   }
   if (!EXECUTION_MODES.has(action.executionMode)) {
     errors.push(

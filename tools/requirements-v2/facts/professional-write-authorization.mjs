@@ -1,4 +1,5 @@
 export const PROFESSIONAL_WRITE_BOUNDARY_KIND = "SUBJECT_COURSE_PROFESSIONAL_WRITE";
+export const NON_PROFESSIONAL_WRITE_EXCEPTION_KIND = "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE";
 
 const professionalWriteActionIds = new Set([
   "GRD-ACT-CORRECT-RECOGNITION",
@@ -60,20 +61,115 @@ const professionalWriteObjectIds = new Set([
   "EXM-OBJ-SUBJECT-SCORE",
 ]);
 
+const professionalWriteExceptionRegistry = new Map([
+  ["CORR-ACT-SUBMIT-INITIAL", {
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    purpose: "STUDENT_SUBMISSION",
+    allowRoleRef: "ROLE-STUDENT",
+  }],
+  ["CORR-ACT-SUBMIT-LATE", {
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    purpose: "STUDENT_SUBMISSION",
+    allowRoleRef: "ROLE-STUDENT",
+  }],
+  ["CORR-ACT-RESUBMIT", {
+    targetObjectId: "CORR-OBJ-ATTEMPT",
+    purpose: "STUDENT_SUBMISSION",
+    allowRoleRef: "ROLE-STUDENT",
+  }],
+  ["EXM-ACT-CREATE-SUBJECT-SCORE", {
+    targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+    purpose: "ACADEMIC_SCORE_ADMINISTRATION",
+    allowRoleRef: "ROLE-ACADEMIC",
+  }],
+  ["EXM-ACT-PUBLISH-SUBJECT-SCORE", {
+    targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+    purpose: "ACADEMIC_SCORE_ADMINISTRATION",
+    allowRoleRef: "ROLE-ACADEMIC",
+  }],
+  ["EXM-ACT-REPUBLISH-CORRECTED-SCORE", {
+    targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+    purpose: "ACADEMIC_SCORE_ADMINISTRATION",
+    allowRoleRef: "ROLE-ACADEMIC",
+  }],
+]);
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function isRegisteredProfessionalWriteAction(action) {
+  return professionalWriteActionIds.has(action?.id);
+}
+
+export function isRegisteredProfessionalWriteObject(object) {
+  return professionalWriteObjectIds.has(object?.id);
+}
+
+export function isProfessionalWriteAuthorizationBoundary(boundary) {
+  return isRecord(boundary)
+    && Object.keys(boundary).length === 1
+    && boundary.kind === PROFESSIONAL_WRITE_BOUNDARY_KIND;
+}
+
+export function isProfessionalWritePolicy(policy) {
+  return isRecord(policy)
+    && Object.keys(policy).length === 1
+    && policy.requiredAuthorizationBoundaryKind === PROFESSIONAL_WRITE_BOUNDARY_KIND;
+}
+
+export function resolveProfessionalWriteAuthorizationBoundary(action) {
+  if (!isRegisteredProfessionalWriteAction(action)) return null;
+  return { kind: PROFESSIONAL_WRITE_BOUNDARY_KIND };
+}
+
+export function resolveProfessionalWritePolicy(object) {
+  if (!isRegisteredProfessionalWriteObject(object)) return null;
+  return { requiredAuthorizationBoundaryKind: PROFESSIONAL_WRITE_BOUNDARY_KIND };
+}
+
+export function resolveProfessionalWriteException(action) {
+  const registered = professionalWriteExceptionRegistry.get(action?.id);
+  if (!registered) return null;
+  return {
+    targetObjectId: registered.targetObjectId,
+    declaration: {
+      kind: NON_PROFESSIONAL_WRITE_EXCEPTION_KIND,
+      purpose: registered.purpose,
+      allowRoleRef: registered.allowRoleRef,
+    },
+  };
+}
+
+export function matchesRegisteredProfessionalWriteException(action) {
+  const registered = resolveProfessionalWriteException(action);
+  const exception = action?.professionalWriteException;
+  return registered !== null
+    && isRecord(exception)
+    && Object.keys(exception).length === 3
+    && exception.kind === registered.declaration.kind
+    && exception.purpose === registered.declaration.purpose
+    && exception.allowRoleRef === registered.declaration.allowRoleRef;
+}
+
 export function withProfessionalWriteAuthorization(action) {
-  if (!professionalWriteActionIds.has(action?.id)) return action;
+  const authorizationBoundary = resolveProfessionalWriteAuthorizationBoundary(action);
+  const registeredException = resolveProfessionalWriteException(action);
+  if (!authorizationBoundary && !registeredException) return action;
   return {
     ...action,
-    authorizationBoundary: { kind: PROFESSIONAL_WRITE_BOUNDARY_KIND },
+    ...(authorizationBoundary ? { authorizationBoundary } : {}),
+    ...(registeredException ? {
+      professionalWriteException: registeredException.declaration,
+    } : {}),
   };
 }
 
 export function withProfessionalWritePolicy(object) {
-  if (!professionalWriteObjectIds.has(object?.id)) return object;
+  const professionalWritePolicy = resolveProfessionalWritePolicy(object);
+  if (!professionalWritePolicy) return object;
   return {
     ...object,
-    professionalWritePolicy: {
-      requiredAuthorizationBoundaryKind: PROFESSIONAL_WRITE_BOUNDARY_KIND,
-    },
+    professionalWritePolicy,
   };
 }

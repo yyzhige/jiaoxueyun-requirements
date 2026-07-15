@@ -832,7 +832,10 @@ function copyActionPermissions(action) {
   return action.permissions;
 }
 
-function addCompleteGradingProfessionalWrite(model, { declareBoundary }) {
+function addCompleteGradingProfessionalWrite(
+  model,
+  { declareBoundary, allowDutyRef = "DUTY-SUBJECT-TEACHER" },
+) {
   const module = moduleById(model, "GRD-001");
   const actionId = declareBoundary
     ? "TEST-GRD-ACT-DECLARED-PROFESSIONAL-WRITE"
@@ -855,7 +858,7 @@ function addCompleteGradingProfessionalWrite(model, { declareBoundary }) {
     permissions: [
       {
         effect: "ALLOW",
-        dutyRef: "DUTY-SUBJECT-TEACHER",
+        dutyRef: allowDutyRef,
         condition: "the assigned subject teacher records a professional grading decision",
       },
       {
@@ -7580,6 +7583,96 @@ test("binds every declared professional write to assigned subject-course scope",
   }
 });
 
+test("declares every protected-object non-professional write as a closed registry exception", () => {
+  const exceptions = modules.flatMap((module) => module.actions)
+    .filter((action) => Object.hasOwn(action, "professionalWriteException"));
+  assert.deepEqual(
+    Object.fromEntries(exceptions.map((action) => [
+      action.id,
+      {
+        targetObjectId: action.targetObjectId,
+        ...action.professionalWriteException,
+      },
+    ])),
+    {
+      "CORR-ACT-SUBMIT-INITIAL": {
+        targetObjectId: "CORR-OBJ-ATTEMPT",
+        kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
+        purpose: "STUDENT_SUBMISSION",
+        allowRoleRef: "ROLE-STUDENT",
+      },
+      "CORR-ACT-SUBMIT-LATE": {
+        targetObjectId: "CORR-OBJ-ATTEMPT",
+        kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
+        purpose: "STUDENT_SUBMISSION",
+        allowRoleRef: "ROLE-STUDENT",
+      },
+      "CORR-ACT-RESUBMIT": {
+        targetObjectId: "CORR-OBJ-ATTEMPT",
+        kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
+        purpose: "STUDENT_SUBMISSION",
+        allowRoleRef: "ROLE-STUDENT",
+      },
+      "EXM-ACT-CREATE-SUBJECT-SCORE": {
+        targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+        kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
+        purpose: "ACADEMIC_SCORE_ADMINISTRATION",
+        allowRoleRef: "ROLE-ACADEMIC",
+      },
+      "EXM-ACT-PUBLISH-SUBJECT-SCORE": {
+        targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+        kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
+        purpose: "ACADEMIC_SCORE_ADMINISTRATION",
+        allowRoleRef: "ROLE-ACADEMIC",
+      },
+      "EXM-ACT-REPUBLISH-CORRECTED-SCORE": {
+        targetObjectId: "EXM-OBJ-SUBJECT-SCORE",
+        kind: "NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE",
+        purpose: "ACADEMIC_SCORE_ADMINISTRATION",
+        allowRoleRef: "ROLE-ACADEMIC",
+      },
+    },
+  );
+});
+
+test("rejects extra missing and rebound non-professional write exceptions", () => {
+  const mutations = [
+    ["extra", (model) => {
+      const student = moduleById(model, "STU-001").actions
+        .find(({ id }) => id === "STU-ACT-SAVE-VIEW");
+      const correction = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-SUBMIT-INITIAL");
+      student.professionalWriteException = structuredClone(correction.professionalWriteException);
+      return student.id;
+    }, true],
+    ["missing", (model) => {
+      const action = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-SUBMIT-INITIAL");
+      delete action.professionalWriteException;
+      return action.id;
+    }, false],
+    ["rebound", (model) => {
+      const correction = moduleById(model, "CORR-001").actions
+        .find(({ id }) => id === "CORR-ACT-SUBMIT-INITIAL");
+      const exam = moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE");
+      correction.professionalWriteException = structuredClone(exam.professionalWriteException);
+      return correction.id;
+    }, true],
+  ];
+
+  for (const [name, mutate, expectStructureError] of mutations) {
+    const model = structuredClone(requirementModel);
+    const actionId = mutate(model);
+    const errors = validateRequirementModel(model);
+    const boundaryErrors = errors
+      .filter((error) => error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY"));
+    assert.equal(boundaryErrors.length, 1, name);
+    assert.match(boundaryErrors[0], new RegExp(actionId), name);
+    assert.equal(errorCodes(errors).includes("INVALID_ACTION_CONTRACT"), expectStructureError, name);
+  }
+});
+
 test("rejects malformed professional write declarations and object policies", () => {
   const mutations = [
     ["action boundary", (model) => {
@@ -7677,6 +7770,45 @@ for (const [moduleId, actionId] of [
     assert.match(boundaryErrors[0], new RegExp(actionId));
   });
 }
+
+test("rejects a registered professional write after coordinated duty and declaration tampering", () => {
+  const model = structuredClone(requirementModel);
+  const action = moduleById(model, "STU-001").actions
+    .find(({ id }) => id === "STU-ACT-SAVE-VIEW");
+  copyActionPermissions(action);
+  const allow = action.permissions.find(({ effect, dutyRef }) => (
+    effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+  ));
+  allow.dutyRef = "DUTY-SUBJECT-LEAD";
+  delete action.authorizationBoundary;
+
+  const errors = validateRequirementModel(model);
+  const boundaryErrors = errors
+    .filter((error) => error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY"));
+  assert.deepEqual(
+    errors.filter((error) => !error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY")),
+    [],
+  );
+  assert.equal(boundaryErrors.length, 1);
+  assert.match(boundaryErrors[0], /STU-ACT-SAVE-VIEW/);
+});
+
+test("rejects a new policy-targeted professional write with the wrong duty ALLOW", () => {
+  const model = structuredClone(requirementModel);
+  const actionId = addCompleteGradingProfessionalWrite(model, {
+    declareBoundary: false,
+    allowDutyRef: "DUTY-SUBJECT-LEAD",
+  });
+  const errors = validateRequirementModel(model);
+  const boundaryErrors = errors
+    .filter((error) => error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY"));
+  assert.deepEqual(
+    errors.filter((error) => !error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY")),
+    [],
+  );
+  assert.equal(boundaryErrors.length, 1);
+  assert.match(boundaryErrors[0], new RegExp(actionId));
+});
 
 for (const declareBoundary of [true, false]) {
   test(`rejects a new GRD professional write ${declareBoundary ? "with invalid scope" : "without a boundary declaration"}`, () => {

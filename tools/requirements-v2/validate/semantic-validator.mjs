@@ -5,7 +5,14 @@ import {
   STUDENT_DETAIL_ACCESS_EXCEPTION_KIND,
   resolveStudentDetailAccessException,
 } from "../facts/student-detail-access-exceptions.mjs";
-import { PROFESSIONAL_WRITE_BOUNDARY_KIND } from "../facts/professional-write-authorization.mjs";
+import {
+  isProfessionalWriteAuthorizationBoundary,
+  isProfessionalWritePolicy,
+  isRegisteredProfessionalWriteAction,
+  isRegisteredProfessionalWriteObject,
+  matchesRegisteredProfessionalWriteException,
+  resolveProfessionalWriteException,
+} from "../facts/professional-write-authorization.mjs";
 
 const FORBIDDEN_ACTION_NAMES = new Set([
   "对象查询与范围筛选",
@@ -375,23 +382,47 @@ function academicAccessBoundaryErrors(index) {
     ));
     const allowScope = subjectTeacherAllows[0]?.scope;
     const targetObject = index.objectById.get(action?.targetObjectId)?.value;
-    const targetRequiresBoundary = targetObject?.professionalWritePolicy
-      ?.requiredAuthorizationBoundaryKind === PROFESSIONAL_WRITE_BOUNDARY_KIND;
-    const hasAssignedScope = subjectTeacherAllows.some(({ scope }) => (
-      scope?.kind === "ASSIGNED_SUBJECT_COURSE"
-    ));
+    const registeredAction = isRegisteredProfessionalWriteAction(action);
+    const registeredTarget = isRegisteredProfessionalWriteObject(targetObject);
+    const targetDeclaresPolicy = Object.hasOwn(targetObject ?? {}, "professionalWritePolicy");
     const isUserWrite = action?.executionMode === "USER_TASK"
       && action?.operationKind !== "READ"
       && action?.writes === true;
     const hasBoundaryDeclaration = Object.hasOwn(action ?? {}, "authorizationBoundary");
-    const isProfessionalCandidate = isUserWrite
-      && subjectTeacherAllows.length > 0
-      && (targetRequiresBoundary || hasAssignedScope);
-    if (!hasBoundaryDeclaration && !isProfessionalCandidate) continue;
+    const hasExceptionDeclaration = Object.hasOwn(action ?? {}, "professionalWriteException");
+    const registeredException = resolveProfessionalWriteException(action);
+    const permissionDeniedScenarioValid = index.scenarios.some(({ value: scenario }) => (
+      scenario?.actionId === action?.id
+      && scenario?.resultCode === "PERMISSION_DENIED"
+      && scenario?.then?.expectedPermission === "DENY"
+      && scenario?.then?.expectedState?.mode === "UNCHANGED"
+    ));
+    const isPolicyTargetedUserWrite = action?.executionMode === "USER_TASK"
+      && action?.operationKind !== "READ"
+      && (registeredTarget || targetDeclaresPolicy);
+    if (registeredException || hasExceptionDeclaration) {
+      const allows = permissions.filter(({ effect }) => effect === "ALLOW");
+      const validException = !registeredAction
+        && isUserWrite
+        && registeredTarget
+        && isProfessionalWritePolicy(targetObject?.professionalWritePolicy)
+        && registeredException?.targetObjectId === action.targetObjectId
+        && matchesRegisteredProfessionalWriteException(action)
+        && allows.length === 1
+        && allows[0].roleRef === registeredException?.declaration.allowRoleRef
+        && permissionDeniedScenarioValid;
+      if (!validException) {
+        errors.push(
+          `INVALID_ACADEMIC_ACCESS_BOUNDARY ${action.id} requires a registry-consistent professional-write boundary or explicit non-professional exception`,
+        );
+      }
+      continue;
+    }
+    if (!registeredAction && !isPolicyTargetedUserWrite && !hasBoundaryDeclaration) continue;
     const valid = isUserWrite
-      && hasExactKeys(action.authorizationBoundary, ["kind"])
-      && action.authorizationBoundary.kind === PROFESSIONAL_WRITE_BOUNDARY_KIND
-      && targetRequiresBoundary
+      && isProfessionalWriteAuthorizationBoundary(action.authorizationBoundary)
+      && registeredTarget
+      && isProfessionalWritePolicy(targetObject?.professionalWritePolicy)
       && subjectTeacherAllows.length === 1
       && hasExactKeys(allowScope, ["kind", "subjectMatch", "courseMatch"])
       && allowScope.kind === "ASSIGNED_SUBJECT_COURSE"
@@ -403,12 +434,7 @@ function academicAccessBoundaryErrors(index) {
       && !permissions.some(({ effect, dutyRef }) => (
         effect === "ALLOW" && dutyRef === "DUTY-HOMEROOM"
       ))
-      && index.scenarios.some(({ value: scenario }) => (
-        scenario?.actionId === action.id
-        && scenario?.resultCode === "PERMISSION_DENIED"
-        && scenario?.then?.expectedPermission === "DENY"
-        && scenario?.then?.expectedState?.mode === "UNCHANGED"
-      ));
+      && permissionDeniedScenarioValid;
     if (!valid) {
       errors.push(
         `INVALID_ACADEMIC_ACCESS_BOUNDARY ${action.id} requires a declared professional-write boundary, assigned subject-course scope, and homeroom default deny`,
