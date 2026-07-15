@@ -75,6 +75,7 @@ function object(
   states,
   fields,
   identityFieldId,
+  stateReachability,
   overrides = {},
 ) {
   const identityFields = fields.filter(({ id, idempotencyRole }) => (
@@ -99,6 +100,7 @@ function object(
     stewardRef,
     lifecyclePolicyId,
     sensitivityId,
+    stateReachability,
     states,
     fields: fields.map((fieldValue) => fieldValue.id === identityFieldId ? {
       ...fieldValue,
@@ -499,7 +501,7 @@ const accModule = moduleFact({
         field("ACC-SCHOOL-F-SERVICE-STATE", "Service State", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
       ],
       "ACC-SCHOOL-F-ID",
-    ),
+      { mode: "NONE" }),
     object(
       "ACC-OBJ-MEMBERSHIP",
       "Account Membership",
@@ -522,7 +524,7 @@ const accModule = moduleFact({
         field("ACC-MEMBER-F-STATE", "Membership State", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
       ],
       "ACC-MEMBER-F-ID",
-    ),
+      { mode: "NONE" }),
     object(
       "ACC-OBJ-IDENTITY",
       "Work Identity Assignment",
@@ -546,7 +548,7 @@ const accModule = moduleFact({
         field("ACC-IDENTITY-F-EXPIRY", "Expires At", { dataType: "DATETIME", required: false }),
       ],
       "ACC-IDENTITY-F-ID",
-    ),
+      { mode: "NONE" }),
     object(
       "ACC-OBJ-CONTEXT",
       "Active Work Context",
@@ -571,7 +573,7 @@ const accModule = moduleFact({
         field("ACC-CONTEXT-F-STATUS", "Context Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
       ],
       "ACC-CONTEXT-F-ID",
-    ),
+      { mode: "NONE" }),
   ],
   relationships: [
     {
@@ -611,55 +613,55 @@ const orgObjects = [
     field("ORG-TERM-F-END", "End Date", { dataType: "DATE" }),
     field("ORG-TERM-F-TERM-VERSION", "Term Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED", idempotencyRole: "OBJECT_VERSION" }),
     field("ORG-TERM-F-STATUS", "Term Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-TERM-F-ID"),
+  ], "ORG-TERM-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-GRADE", "Grade", responsibility("SCHOOL_GRADE", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["ACTIVE", "HISTORICAL"], [
     field("ORG-GRADE-F-ID", "Grade ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-GRADE-F-NAME", "Grade Name"),
     field("ORG-GRADE-F-TERM-ID", "Term ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-004" } }),
     field("ORG-GRADE-F-STATUS", "Grade Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-GRADE-F-ID"),
+  ], "ORG-GRADE-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-CLASS", "Class", responsibility("SCHOOL_CLASS", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["ACTIVE", "HISTORICAL", "DEACTIVATED"], [
     field("ORG-CLASS-F-ID", "Class ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-CLASS-F-NAME", "Class Name"),
     field("ORG-CLASS-F-GRADE-ID", "Grade ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-005" } }),
     field("ORG-CLASS-F-STATUS", "Class Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-CLASS-F-ID"),
+  ], "ORG-CLASS-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-SUBJECT", "Subject Catalog", responsibility("SCHOOL_SUBJECT_CATALOG", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["ACTIVE", "DEPRECATED"], [
     field("ORG-SUBJECT-F-ID", "Subject ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-SUBJECT-F-NAME", "Subject Name"),
     field("ORG-SUBJECT-F-STATUS", "Subject Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-SUBJECT-F-ID"),
+  ], "ORG-SUBJECT-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-COURSE", "Course", responsibility("SCHOOL_COURSE", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["DRAFT", "ACTIVE", "ENDED"], [
     field("ORG-COURSE-F-ID", "Course ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-COURSE-F-NAME", "Course Name"),
     field("ORG-COURSE-F-SUBJECT-ID", "Subject ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-007" } }),
     field("ORG-COURSE-F-TERM-ID", "Term ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-004" } }),
     field("ORG-COURSE-F-STATUS", "Course Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-COURSE-F-ID"),
+  ], "ORG-COURSE-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-TEACHER", "Teacher Profile", responsibility("TEACHER", "ROLE-ACADEMIC", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-002", "S3", ["ACTIVE", "SUSPENDED", "DEACTIVATED"], [
     field("ORG-TEACHER-F-ID", "Teacher ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-TEACHER-F-NAME", "Teacher Name"),
     field("ORG-TEACHER-F-MEMBER-STATE", "Member State", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-TEACHER-F-ID"),
+  ], "ORG-TEACHER-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-STUDENT", "Student Profile", responsibility("STUDENT", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S3", ["ACTIVE", "TRANSFERRED", "DEACTIVATED"], [
     field("ORG-STUDENT-F-ID", "Student ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-STUDENT-F-NAME", "Student Name"),
     field("ORG-STUDENT-F-CLASS-ID", "Class ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-006" } }),
     field("ORG-STUDENT-F-MEMBER-STATE", "Member State", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-STUDENT-F-ID"),
+  ], "ORG-STUDENT-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-TEACHING-ASSIGNMENT", "Teaching Assignment", responsibility("TEACHER_COURSE_ASSIGNMENT", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["PLANNED", "EFFECTIVE", "EXPIRED", "REVOKED"], [
     field("ORG-TEACHING-F-ID", "Teaching Assignment ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-TEACHING-F-TEACHER-ID", "Teacher ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-009" } }),
     field("ORG-TEACHING-F-COURSE-ID", "Course ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-008" } }),
     field("ORG-TEACHING-F-CLASS-ID", "Class ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-006" } }),
     field("ORG-TEACHING-F-EFFECTIVE", "Effective Range"),
-  ], "ORG-TEACHING-F-ID"),
+  ], "ORG-TEACHING-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-HOMEROOM-ASSIGNMENT", "Homeroom Assignment", responsibility("HOMEROOM_TEACHER_ASSIGNMENT", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC", "ROLE-ACADEMIC"), "LIFE-002", "S2", ["PLANNED", "EFFECTIVE", "EXPIRED", "REVOKED"], [
     field("ORG-HOMEROOM-F-ID", "Homeroom Assignment ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("ORG-HOMEROOM-F-TEACHER-ID", "Homeroom Teacher ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-009" } }),
     field("ORG-HOMEROOM-F-CLASS-ID", "Homeroom Class ID", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-006" } }),
     field("ORG-HOMEROOM-F-EFFECTIVE", "Effective Range"),
-  ], "ORG-HOMEROOM-F-ID"),
+  ], "ORG-HOMEROOM-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-IMPORT-BATCH", "Import Batch", responsibility("ORGANIZATION_IMPORT", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"), "LIFE-002", "S3", ["UPLOADED", "MAPPED", "VALIDATED", "PENDING_OUTCOME_AUDIT", "PENDING_PARTIAL_OUTCOME_AUDIT", "PARTIAL_SUCCESS", "COMPLETED", "REJECTED"], [
     field("ORG-IMPORT-F-ID", "Import Batch ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("ORG-IMPORT-F-OBJECT-TYPE", "Import Object Type", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-020" } }),
@@ -667,7 +669,7 @@ const orgObjects = [
     field("ORG-IMPORT-F-MAPPING", "Field Mapping", { dataType: "JSON", required: false }),
     field("ORG-IMPORT-F-BATCH-VERSION", "Import Batch Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED", idempotencyRole: "OBJECT_VERSION" }),
     field("ORG-IMPORT-F-STATUS", "Import Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "ORG-IMPORT-F-ID"),
+  ], "ORG-IMPORT-F-ID", { mode: "NONE" }),
   object("ORG-OBJ-IMPORT-ROW", "Import Row Result", responsibility("ORGANIZATION_IMPORT_OBJECT", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"), "LIFE-002", "S3", ["PENDING", "VALIDATED", "CREATE", "UPDATE", "NO_CHANGE", "REJECT", "DEACTIVATE", "RETRYABLE"], [
     field("ORG-IMPORT-ROW-F-ID", "Import Row ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("ORG-IMPORT-ROW-F-BATCH-ID", "Import Batch ID", { valueSource: { kind: "SYSTEM" } }),
@@ -679,7 +681,7 @@ const orgObjects = [
     field("ORG-IMPORT-ROW-F-OBJECT-ID", "Affected Object ID", { required: false, valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
     field("ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION", "Anomaly Confirmation", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-001" } }),
     field("ORG-IMPORT-ROW-F-CONFIRMATION-NOTE", "Anomaly Confirmation Note", { dataType: "TEXT", required: false }),
-  ], "ORG-IMPORT-ROW-F-ID"),
+  ], "ORG-IMPORT-ROW-F-ID", { mode: "NONE" }),
 ];
 
 const orgAdminPermissions = permissions(
@@ -756,7 +758,7 @@ const iamObjects = [
     field("IAM-ROLE-F-ROLE", "Login Role", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-003" } }),
     field("IAM-ROLE-F-ACTIONS", "Allowed Action Set", { dataType: "STRING_ARRAY", referenceType: "AUTHORIZABLE_ACTION", valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-016" } }),
     field("IAM-ROLE-F-VERSION", "Policy Version", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-  ], "IAM-ROLE-F-ID"),
+  ], "IAM-ROLE-F-ID", { mode: "NONE" }),
   object("IAM-OBJ-DUTY-GRANT", "Duty Grant", responsibility("SCHOOL_DUTY_GRANT", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-002", "S4", ["PLANNED", "EFFECTIVE", "EXPIRED", "REVOKED"], [
     field("IAM-DUTY-F-ID", "Duty Grant ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-DUTY-F-GRANTOR-AUTHORITY", "Grantor Authority", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -768,7 +770,7 @@ const iamObjects = [
     field("IAM-DUTY-F-EXPIRY", "Expires At", { dataType: "DATETIME", required: false }),
     field("IAM-DUTY-F-REASON", "Grant Reason"),
     field("IAM-DUTY-F-STATUS", "Duty Grant Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "IAM-DUTY-F-ID"),
+  ], "IAM-DUTY-F-ID", { mode: "NONE" }),
   object("IAM-OBJ-SCOPE-GRANT", "Data Scope Grant", responsibility("SCHOOL_SCOPE_GRANT", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-002", "S4", ["PLANNED", "EFFECTIVE", "EXPIRED", "REVOKED"], [
     field("IAM-SCOPE-F-ID", "Data Scope Grant ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-SCOPE-F-GRANTOR-AUTHORITY", "Scope Grantor Authority", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -780,7 +782,7 @@ const iamObjects = [
     field("IAM-SCOPE-F-EXPIRY", "Scope Expires At", { dataType: "DATETIME", required: false }),
     field("IAM-SCOPE-F-REASON", "Scope Grant Reason"),
     field("IAM-SCOPE-F-STATUS", "Scope Grant Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "IAM-SCOPE-F-ID"),
+  ], "IAM-SCOPE-F-ID", { mode: "NONE" }),
   object("IAM-OBJ-PERMISSION-DECISION", "Permission Decision", responsibility("PERMISSION_EVALUATION", "SYSTEM", "SYSTEM", "SYSTEM", "ROLE-SCHOOL-ADMIN"), "LIFE-004", "S4", ["ALLOW", "DENY", "STALE"], [
     field("IAM-DECISION-F-ID", "Permission Decision ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("IAM-DECISION-F-SUBJECT", "Decision Subject ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -790,7 +792,7 @@ const iamObjects = [
     field("IAM-DECISION-F-REASON", "Permission Reason", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-DECISION-F-SOURCE-VERSIONS", "Permission Source Versions", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-DECISION-F-DECISION-VERSION", "Permission Decision Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_VERSION" }),
-  ], "IAM-DECISION-F-ID"),
+  ], "IAM-DECISION-F-ID", { mode: "NONE" }),
   object("IAM-OBJ-TEMP-GRANT", "Temporary Grant", responsibility("TEMPORARY_SCHOOL_GRANT", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-001", "S4", ["PLANNED", "EFFECTIVE", "EXPIRED", "REVOKED"], [
     field("IAM-TEMP-F-ID", "Temporary Grant ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("IAM-TEMP-F-GRANTOR-AUTHORITY", "Temporary Grantor Authority", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -802,7 +804,7 @@ const iamObjects = [
     field("IAM-TEMP-F-EXPIRY", "Mandatory Expiry", { dataType: "DATETIME" }),
     field("IAM-TEMP-F-REASON", "Temporary Grant Reason"),
     field("IAM-TEMP-F-STATUS", "Temporary Grant Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "IAM-TEMP-F-ID"),
+  ], "IAM-TEMP-F-ID", { mode: "NONE" }),
 ];
 
 const iamAdminPermissions = permissions(
@@ -856,21 +858,21 @@ const dgvObjects = [
     field("DGV-POLICY-F-SCHOOL-ID", "Governed School ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("DGV-POLICY-F-VERSION", "Governance Policy Version", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("DGV-POLICY-F-EXPLANATION", "Data Use Explanation", { dataType: "TEXT" }),
-  ], "DGV-POLICY-F-ID"),
+  ], "DGV-POLICY-F-ID", { mode: "NONE" }),
   object("DGV-OBJ-RETENTION", "Data Retention Rule", responsibility("SCHOOL_RETENTION_CONFIGURATION", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-001", "S4", ["UNSET", "ACTIVE", "SUPERSEDED"], [
     field("DGV-RETENTION-F-ID", "Retention Rule ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("DGV-RETENTION-F-CATEGORY", "Data Category", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-044" } }),
     field("DGV-RETENTION-F-PERIOD", "School-owned Retention Period", { dataType: "DURATION" }),
     field("DGV-RETENTION-F-ACTIVATED-BY", "Activated By School Administrator", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("DGV-RETENTION-F-STATUS", "Retention Configuration Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "DGV-RETENTION-F-ID"),
+  ], "DGV-RETENTION-F-ID", { mode: "NONE" }),
   object("DGV-OBJ-AI-RULE", "AI Data Use Rule", responsibility("SCHOOL_AI_DATA_USE", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-001", "S4", ["BLOCKED_UNSET_RETENTION", "ACTIVE", "DISABLED", "SUPERSEDED"], [
     field("DGV-AI-F-ID", "AI Data Use Rule ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("DGV-AI-F-DATA-SCOPE", "Allowed AI Data Scope", { dataType: "JSON" }),
     field("DGV-AI-F-PURPOSE", "Allowed AI Purpose"),
     field("DGV-AI-F-MODEL-USE", "Model Training Use", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-045" }, validation: "must explicitly deny model training unless separately approved" }),
     field("DGV-AI-F-STATUS", "AI Data Use Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "DGV-AI-F-ID"),
+  ], "DGV-AI-F-ID", { mode: "NONE" }),
   object("DGV-OBJ-EXPORT", "Export Request", responsibility("EXPORT_REQUESTER_AND_SCOPED_DATA", "CURRENT_ACTOR", "CURRENT_ACTOR", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-008", "S4", ["REQUESTED", "APPROVED", "DENIED", "GENERATING", "AVAILABLE", "EXPIRED", "FAILED"], [
     field("DGV-EXPORT-F-ID", "Export Request ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("DGV-EXPORT-F-SCOPE", "Export Object Scope", { dataType: "JSON" }),
@@ -880,7 +882,7 @@ const dgvObjects = [
     field("DGV-EXPORT-F-EXPIRY", "Export File Expiry", { dataType: "DATETIME" }),
     field("DGV-EXPORT-F-RESULT", "Export Result", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
     field("DGV-EXPORT-F-AUDIT-REF", "Export Audit Reference", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-  ], "DGV-EXPORT-F-ID"),
+  ], "DGV-EXPORT-F-ID", { mode: "NONE" }),
 ];
 
 const dgvAdminPermissions = permissions("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "school administrator owns activation governance and explicit export authorization", "platform operations has no default student-detail export or AI use access without school authorization");
@@ -933,7 +935,7 @@ const audObjects = [
     field("AUD-EVENT-F-SCOPE", "Audited Object Scope", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-EVENT-F-RESULT", "Audited Result", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-EVENT-F-EVENT-VERSION", "Audit Event Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-  ], "AUD-EVENT-F-ID", { semanticType: "AUDIT_EVENT_SINK" }),
+  ], "AUD-EVENT-F-ID", { mode: "NONE" }, { semanticType: "AUDIT_EVENT_SINK" }),
   object("AUD-OBJ-ACCESS-REQUEST", "Sensitive Access Request", responsibility("ACCESS_REQUESTER_AND_SCOPED_DATA", "CURRENT_ACTOR", "CURRENT_ACTOR", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-004", "S4", ["REQUESTED", "APPROVED", "DENIED", "EXPIRED"], [
     field("AUD-REQUEST-F-ID", "Sensitive Access Request ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-REQUEST-F-REQUESTER", "Access Requester ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -943,7 +945,7 @@ const audObjects = [
     field("AUD-REQUEST-F-APPROVER", "School Approver ID", { required: requiredWhen("required before APPROVED", ["APPROVED"]), valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-REQUEST-F-DECISION-REASON", "Sensitive Access Decision Reason", { dataType: "TEXT", required: requiredWhen("required for APPROVED or DENIED", ["APPROVED", "DENIED"]) }),
     field("AUD-REQUEST-F-RESULT", "Access Decision Result", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "AUD-REQUEST-F-ID"),
+  ], "AUD-REQUEST-F-ID", { mode: "NONE" }),
   object("AUD-OBJ-ACCESS-SESSION", "Sensitive Access Session", responsibility("APPROVED_SENSITIVE_ACCESS", "SYSTEM", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-004", "S4", ["PENDING", "ACTIVE", "EXPIRED", "REVOKED"], [
     field("AUD-SESSION-F-ID", "Sensitive Session ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-SESSION-F-REQUEST-ID", "Approved Request ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -951,14 +953,14 @@ const audObjects = [
     field("AUD-SESSION-F-START", "Session Start", { dataType: "DATETIME", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-SESSION-F-EXPIRY", "Session Expiry", { dataType: "DATETIME", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-SESSION-F-STATUS", "Session Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "AUD-SESSION-F-ID"),
+  ], "AUD-SESSION-F-ID", { mode: "NONE" }),
   object("AUD-OBJ-REVIEW", "Audit Review Case", responsibility("AUDIT_REVIEW_CASE", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN", "ROLE-SCHOOL-ADMIN"), "LIFE-004", "S4", ["OPEN", "INVESTIGATING", "RESOLVED", "CLOSED"], [
     field("AUD-REVIEW-F-ID", "Review Case ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("AUD-REVIEW-F-EVENT-IDS", "Related Audit Event IDs", { dataType: "STRING_ARRAY" }),
     field("AUD-REVIEW-F-REASON", "Review Reason"),
     field("AUD-REVIEW-F-RESOLUTION", "Review Resolution", { required: requiredWhen("required before RESOLVED", ["RESOLVED"]) }),
     field("AUD-REVIEW-F-STATUS", "Review Case Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "AUD-REVIEW-F-ID"),
+  ], "AUD-REVIEW-F-ID", { mode: "NONE" }),
 ];
 
 const audSchoolPermissions = permissions("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "school administrator acts inside school audit scope", "platform operations has no default student-detail access and requires school authorization, limited scope and time");
@@ -1010,28 +1012,28 @@ const currObjects = [
     field("CURR-CURRICULUM-F-STATUS", "Curriculum Version Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
     field("CURR-CURRICULUM-F-VALIDATION", "Version Validation Result", { dataType: "JSON", required: requiredWhen("required when the curriculum version reaches VALIDATED", ["VALIDATED"]), valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
     field("CURR-CURRICULUM-F-PUBLISHED-AT", "Published At", { dataType: "DATETIME", required: false, valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
-  ], "CURR-CURRICULUM-F-ID"),
+  ], "CURR-CURRICULUM-F-ID", { mode: "NONE" }),
   object("CURR-OBJ-TEXTBOOK", "Textbook Version", responsibility("SUBJECT_CURRICULUM", "ROLE-ACADEMIC", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
     field("CURR-TEXTBOOK-F-ID", "Textbook Version ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("CURR-TEXTBOOK-F-CURRICULUM-ID", "Curriculum Version ID", { valueSource: { kind: "SYSTEM" } }),
     field("CURR-TEXTBOOK-F-NAME", "Textbook Name"),
     field("CURR-TEXTBOOK-F-EDITION", "Textbook Edition"),
     field("CURR-TEXTBOOK-F-STATUS", "Textbook Version Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "CURR-TEXTBOOK-F-ID"),
+  ], "CURR-TEXTBOOK-F-ID", { mode: "NONE" }),
   object("CURR-OBJ-CHAPTER", "Chapter", responsibility("SUBJECT_CURRICULUM", "ROLE-ACADEMIC", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
     field("CURR-CHAPTER-F-ID", "Chapter ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("CURR-CHAPTER-F-TEXTBOOK-ID", "Textbook Version ID", { valueSource: { kind: "SYSTEM" } }),
     field("CURR-CHAPTER-F-TITLE", "Chapter Title"),
     field("CURR-CHAPTER-F-ORDER", "Chapter Order", { dataType: "INTEGER" }),
     field("CURR-CHAPTER-F-STATUS", "Chapter Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "CURR-CHAPTER-F-ID"),
+  ], "CURR-CHAPTER-F-ID", { mode: "NONE" }),
   object("CURR-OBJ-KNOWLEDGE-POINT", "Knowledge Point", responsibility("SUBJECT_CURRICULUM", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "ACTIVE", "DEPRECATED"], [
     field("CURR-KP-F-ID", "Knowledge Point ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("CURR-KP-F-NAME", "Knowledge Point Name"),
     field("CURR-KP-F-DEFINITION", "Knowledge Point Definition", { dataType: "TEXT" }),
     field("CURR-KP-F-PARENT-ID", "Parent Knowledge Point ID", { required: false }),
     field("CURR-KP-F-STATUS", "Knowledge Point Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "CURR-KP-F-ID"),
+  ], "CURR-KP-F-ID", { mode: "NONE" }),
   object("CURR-OBJ-MAPPING", "Knowledge Mapping", responsibility("SUBJECT_CURRICULUM", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD", "DUTY-SUBJECT-LEAD"), "LIFE-003", "S2", ["DRAFT", "VALIDATED", "PUBLISHED", "DEPRECATED"], [
     field("CURR-MAPPING-F-ID", "Knowledge Mapping ID", { dataType: "ID", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_ID" }),
     field("CURR-MAPPING-F-CHAPTER-ID", "Mapped Chapter ID"),
@@ -1039,7 +1041,7 @@ const currObjects = [
     field("CURR-MAPPING-F-RELATION", "Mapping Relation", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-043" } }),
     field("CURR-MAPPING-F-VERSION", "Mapping Source Version", { dataType: "INTEGER", valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE", idempotencyRole: "OBJECT_VERSION" }),
     field("CURR-MAPPING-F-STATUS", "Mapping Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "CURR-MAPPING-F-ID"),
+  ], "CURR-MAPPING-F-ID", { mode: "NONE" }),
 ];
 
 const currAdminPermissions = permissions("ROLE-ACADEMIC", "ROLE-PLATFORM-OPS", "academic staff maintains curriculum facts inside school and subject scope", "platform operations cannot change school curriculum facts by default");
@@ -1098,7 +1100,7 @@ const teaObjects = [
     field("TEA-TODO-F-SUBJECT-SCOPE", "Subject Assignment Scope", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY" }),
     field("TEA-TODO-F-SOURCE-REFS", "External Todo Source References", { dataType: "JSON", valueSource: { kind: "SYSTEM" }, mutability: "READ_ONLY", historyPolicy: "retain source identifiers only and never copy professional facts" }),
     field("TEA-TODO-F-FILTER", "Todo View Filter", { dataType: "JSON", required: false }),
-  ], "TEA-TODO-F-ID"),
+  ], "TEA-TODO-F-ID", { mode: "NONE" }),
   object("TEA-OBJ-COORDINATION", "Homeroom Coordination Item", responsibility("HOMEROOM_CLASS_COORDINATION", "CURRENT_ACTOR", "DUTY-HOMEROOM", "DUTY-HOMEROOM", "ROLE-SCHOOL-ADMIN"), "LIFE-003", "S3", ["OPEN", "IN_PROGRESS", "CLOSED", "CANCELLED"], [
     field("TEA-COORD-F-ID", "Coordination Item ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("TEA-COORD-F-CLASS-ID", "Coordinated Class ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
@@ -1106,13 +1108,13 @@ const teaObjects = [
     field("TEA-COORD-F-TITLE", "Coordination Title"),
     field("TEA-COORD-F-NOTE", "Coordination Note", { dataType: "TEXT" }),
     field("TEA-COORD-F-STATUS", "Coordination Status", { valueSource: { kind: "SYSTEM" }, mutability: "SYSTEM_MANAGED" }),
-  ], "TEA-COORD-F-ID"),
+  ], "TEA-COORD-F-ID", { mode: "NONE" }),
   object("TEA-OBJ-PREFERENCE", "Teacher Work Preference", responsibility("CURRENT_TEACHER_PREFERENCE", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR", "CURRENT_ACTOR"), "LIFE-001", "S2", ["ACTIVE", "SUPERSEDED"], [
     field("TEA-PREF-F-ID", "Work Preference ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("TEA-PREF-F-TEACHER-ID", "Preference Teacher ID", { valueSource: { kind: "SYSTEM" }, mutability: "IMMUTABLE" }),
     field("TEA-PREF-F-DEFAULT-VIEW", "Default Workspace View", { valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-046" } }),
     field("TEA-PREF-F-FILTERS", "Saved Workspace Filters", { dataType: "JSON", required: false }),
-  ], "TEA-PREF-F-ID"),
+  ], "TEA-PREF-F-ID", { mode: "NONE" }),
 ];
 
 const teaActions = [
@@ -1170,6 +1172,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-001",
     label: "School Context Establishment",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["ACC-001", "ORG-001", "IAM-001"],
     steps: [
@@ -1273,6 +1276,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-002",
     label: "Organization Import and Permission Refresh",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["ORG-001", "IAM-001", "AUD-001"],
     steps: [
@@ -1358,6 +1362,7 @@ export const foundationFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-003",
     label: "Curriculum Version Publication",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["CURR-001"],
     steps: [

@@ -37,7 +37,16 @@ function versionField(id, label) {
   });
 }
 
-function object(id, label, responsibility, lifecyclePolicyId, states, fields, overrides = {}) {
+function object(
+  id,
+  label,
+  responsibility,
+  lifecyclePolicyId,
+  states,
+  fields,
+  stateReachability,
+  overrides = {},
+) {
   return {
     id,
     label,
@@ -45,6 +54,7 @@ function object(id, label, responsibility, lifecyclePolicyId, states, fields, ov
     lifecyclePolicyId,
     sensitivityId: "S3",
     readMode: "NO_DIRECT_READ",
+    stateReachability,
     states,
     fields,
     ...overrides,
@@ -285,7 +295,7 @@ const aixModule = moduleFact({
     "LIFE-005",
     ["PREVIEW_READY"],
     aixPreviewFields,
-  )],
+    { mode: "NONE" })],
   relationships: [],
   actions: [prepareAiPreview],
   pages: [page(
@@ -771,7 +781,7 @@ const reportModule = moduleFact({
   baselineDecisionIds: ["BASE-003", "BASE-008", "BASE-010"],
   nfrIds: ["NFR-002", "NFR-008"],
   objects: [
-    object("RPT-OBJ-DEFINITION", "Report Definition", subjectTeacherResponsibility, "LIFE-006", ["ACTIVE"], reportDefinitionFields),
+    object("RPT-OBJ-DEFINITION", "Report Definition", subjectTeacherResponsibility, "LIFE-006", ["ACTIVE"], reportDefinitionFields, { mode: "NONE" }),
     object(
       "RPT-OBJ-SUBSCRIPTION",
       "Report Subscription",
@@ -779,6 +789,7 @@ const reportModule = moduleFact({
       "LIFE-006",
       ["ACTIVE", "PAUSED", "CANCELLED"],
       reportSubscriptionFields,
+      { mode: "NONE" },
       {
         lineageBindings: [{
           refFieldId: "RPT-SUBSCRIPTION-F-DEFINITION-REF",
@@ -786,8 +797,7 @@ const reportModule = moduleFact({
           targetObjectId: "RPT-OBJ-DEFINITION",
           targetVersionFieldId: "RPT-DEFINITION-F-VERSION",
         }],
-      },
-    ),
+      }),
     object(
       "RPT-OBJ-RUN",
       "Report Run",
@@ -795,8 +805,8 @@ const reportModule = moduleFact({
       "LIFE-006",
       ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED_PERMISSION"],
       reportRunFields,
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
-        stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
         executionPolicy: {
           permissionCheck: "RECHECK_EACH_RUN",
           dataCutoff: "RESOLVE_AT_RUN_START",
@@ -818,8 +828,7 @@ const reportModule = moduleFact({
             targetVersionFieldId: "RPT-SUBSCRIPTION-F-VERSION",
           },
         ],
-      },
-    ),
+      }),
     object(
       "RPT-OBJ-SNAPSHOT",
       "Immutable Report Snapshot",
@@ -827,6 +836,7 @@ const reportModule = moduleFact({
       "LIFE-006",
       ["AVAILABLE"],
       reportSnapshotFields,
+      { mode: "NONE" },
       {
         lineageBindings: [{
           refFieldId: "RPT-SNAPSHOT-F-RUN-REF",
@@ -834,8 +844,7 @@ const reportModule = moduleFact({
           targetObjectId: "RPT-OBJ-RUN",
           targetVersionFieldId: "RPT-RUN-F-VERSION",
         }],
-      },
-    ),
+      }),
     object(
       "RPT-OBJ-DELIVERY",
       "In-product Report Delivery",
@@ -843,8 +852,8 @@ const reportModule = moduleFact({
       "LIFE-006",
       ["PENDING", "DELIVERED", "FAILED"],
       reportDeliveryFields,
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
-        stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
         channelPolicy: {
           mode: "PHASE_ONE_CLOSED",
           fieldId: "RPT-DELIVERY-F-CHANNEL",
@@ -857,8 +866,7 @@ const reportModule = moduleFact({
           targetObjectId: "RPT-OBJ-SNAPSHOT",
           targetVersionFieldId: "RPT-SNAPSHOT-F-VERSION",
         }],
-      },
-    ),
+      }),
   ],
   relationships: [
     {
@@ -1293,6 +1301,7 @@ const learningPathModule = moduleFact({
       "LIFE-007",
       ["RECORDED"],
       timelineFields,
+      { mode: "NONE" },
       {
         readMode: "AUTHORIZED",
         crossTerm: true,
@@ -1306,8 +1315,7 @@ const learningPathModule = moduleFact({
           targetObjectId: binding.targetObjectId,
           targetVersionFieldId: binding.targetVersionFieldId,
         })),
-      },
-    ),
+      }),
     object(
       "LPATH-OBJ-INTERPRETATION",
       "Teacher-confirmed Learning Path Interpretation Version",
@@ -1315,8 +1323,8 @@ const learningPathModule = moduleFact({
       "LIFE-007",
       ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "SUPERSEDED", "STALE"],
       interpretationFields,
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
       {
-        stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
         lineageBindings: [
           {
             refFieldId: "LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF",
@@ -1331,8 +1339,7 @@ const learningPathModule = moduleFact({
             targetVersionFieldId: "LPATH-INTERPRETATION-F-VERSION",
           },
         ],
-      },
-    ),
+      }),
   ],
   relationships: [],
   actions: learningPathActions,
@@ -1543,8 +1550,8 @@ const notificationModule = moduleFact({
     "LIFE-003",
     ["QUEUED", "DELIVERED", "READ", "HANDLED", "FAILED"],
     notificationFields,
+    { mode: "ACTION_GRAPH", initialStateIds: [] },
     {
-      stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
       channelPolicy: {
         mode: "PHASE_ONE_CLOSED",
         fieldId: "NOTI-NOTIFICATION-F-CHANNEL",
@@ -1556,8 +1563,7 @@ const notificationModule = moduleFact({
         retryScope: "NOTIFICATION_DELIVERY_ONLY",
         preserveAcceptedSourceVersion: true,
       },
-    },
-  )],
+    })],
   relationships: [],
   actions: [
     createReminder,

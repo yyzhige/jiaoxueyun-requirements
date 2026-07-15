@@ -9,6 +9,7 @@ import {
 import * as modelValidatorExports from "../requirements-v2/validate/model-validator.mjs";
 import * as requirementModelExports from "../requirements-v2/model.mjs";
 import * as aiReportingFactExports from "../requirements-v2/facts/ai-reporting.mjs";
+import * as foundationFactExports from "../requirements-v2/facts/foundation.mjs";
 import * as teachingLoopFactExports from "../requirements-v2/facts/teaching-loop.mjs";
 import { prepareRequirementModel } from "../requirements-v2/validate/structure-validator.mjs";
 import {
@@ -3188,7 +3189,7 @@ test("rejects a Flow whose data-reference modules differ from declared participa
   assertHasCode(validateRequirementModel(model), "FLOW_DATA_PARTICIPANT_MISMATCH");
 });
 
-test("requires closed source-only Flow participant roles", () => {
+test("reserves source-only Flow participants for learning-path aggregation", () => {
   const validModel = validFixture();
   const flow = validModel.flows[0];
   flow.moduleIds = ["SUB-001", "HW-001"];
@@ -3199,15 +3200,30 @@ test("requires closed source-only Flow participant roles", () => {
     version: "HW-F001",
     cardinality: "ZERO_MANY",
   });
-  assertNoCode(validateRequirementModel(validModel), "FLOW_PARTICIPANT_MISMATCH");
+  assertHasCode(validateRequirementModel(validModel), "INVALID_FLOW_PROFILE");
 
-  const missingRole = structuredClone(validModel);
-  delete missingRole.flows[0].sourceOnlyModuleIds;
-  assertHasCode(validateRequirementModel(missingRole), "FLOW_PARTICIPANT_MISMATCH");
+  for (const [flowId, sourceOnlyModuleId] of [
+    ["DF-001", "ACC-001"],
+    ["DF-005", "HW-001"],
+    ["DF-008", "GRD-001"],
+    ["DF-012", "INS-001"],
+    ["DF-014", "SCO-001"],
+  ]) {
+    const model = structuredClone(requirementModel);
+    const actionModuleById = new Map(model.modules.flatMap((module) => (
+      module.actions.map(({ id }) => [id, module.id])
+    )));
+    const candidate = model.flows.find(({ id }) => id === flowId);
+    candidate.steps = candidate.steps.filter(({ actionId }) => (
+      actionModuleById.get(actionId) !== sourceOnlyModuleId
+    ));
+    candidate.sourceOnlyModuleIds = [sourceOnlyModuleId];
+    assertHasCode(validateRequirementModel(model), "INVALID_FLOW_PROFILE");
+  }
 
-  const actionMisclassified = structuredClone(validModel);
-  actionMisclassified.flows[0].sourceOnlyModuleIds = ["SUB-001"];
-  assertHasCode(validateRequirementModel(actionMisclassified), "FLOW_PARTICIPANT_MISMATCH");
+  const reportModel = structuredClone(requirementModel);
+  reportModel.flows.find(({ id }) => id === "DF-013").sourceOnlyModuleIds = ["APP-001"];
+  assertHasCode(validateRequirementModel(reportModel), "INVALID_FLOW_PROFILE");
 });
 
 test("rejects a Flow phase that differs from its participant modules", () => {
@@ -3294,6 +3310,38 @@ test("assembles the shared facts into the phase-one executable model", () => {
     extensions,
   });
   assert.deepEqual(validateRequirementModel(requirementModel), []);
+});
+
+test("authors reachability and Flow profiles in source facts without assembly defaults", () => {
+  const factGroups = [
+    {
+      modules: foundationFactExports.foundationModules,
+      flows: foundationFactExports.foundationFlows,
+      objectCount: 36,
+      flowCount: 3,
+    },
+    {
+      modules: teachingLoopFactExports.teachingLoopModules,
+      flows: teachingLoopFactExports.teachingLoopFlows,
+      objectCount: 23,
+      flowCount: 9,
+    },
+    {
+      modules: aiReportingFactExports.aiReportingModules,
+      flows: aiReportingFactExports.aiReportingFlows,
+      objectCount: 9,
+      flowCount: 2,
+    },
+  ];
+  for (const group of factGroups) {
+    const objects = group.modules.flatMap((module) => module.objects);
+    assert.equal(objects.length, group.objectCount);
+    assert.equal(group.flows.length, group.flowCount);
+    assert.ok(objects.every((object) => Object.hasOwn(object, "stateReachability")));
+    assert.ok(group.flows.every((flow) => Object.hasOwn(flow, "contractProfile")));
+  }
+  assert.equal(modules[0], foundationFactExports.foundationModules[0]);
+  assert.equal(flows[0], foundationFactExports.foundationFlows[0]);
 });
 
 test("declares the direct read mode for every phase-one object", () => {
@@ -4265,6 +4313,27 @@ test("closes phase-one notification channels to explicit in-product delivery", (
   expandedOptionSet.optionSets.find(({ id }) => id === "OPT-ENUM-047")
     .values.push({ code: "WECHAT", label: "微信" });
   assertHasCode(validateRequirementModel(expandedOptionSet), "INVALID_NOTIFICATION_CHANNEL");
+});
+
+test("requires the exact unique in-product notification channel tuple", () => {
+  const mutations = [
+    (model) => {
+      model.optionSets.find(({ id }) => id === "OPT-ENUM-047").values[0].label = "微信";
+    },
+    (model) => {
+      model.optionSets.find(({ id }) => id === "OPT-ENUM-047")
+        .values.push({ code: "WECHAT", label: "微信" });
+    },
+    (model) => {
+      model.optionSets.find(({ id }) => id === "OPT-ENUM-047")
+        .values.push({ code: "IN_PRODUCT", label: "站内" });
+    },
+  ];
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_NOTIFICATION_CHANNEL");
+  }
 });
 
 test("adds only DF-011 and DF-013 while preserving the Task 6 Flow boundary", () => {

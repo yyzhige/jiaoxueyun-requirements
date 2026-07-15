@@ -1416,6 +1416,11 @@ function validateFlow(errors, flow, path) {
     { nonEmpty: true },
   );
   if (Object.hasOwn(flow, "sourceOnlyModuleIds")) {
+    if (flow.contractProfile !== "LEARNING_PATH_AGGREGATION") {
+      errors.push(
+        `INVALID_FLOW_PROFILE ${path}.sourceOnlyModuleIds is reserved for LEARNING_PATH_AGGREGATION`,
+      );
+    }
     const sourceOnlyModuleIds = contractStringArray(
       errors,
       flow,
@@ -1429,6 +1434,10 @@ function validateFlow(errors, flow, path) {
       sourceOnlyModuleIds,
       `${path}.sourceOnlyModuleIds`,
       "INVALID_FLOW_CONTRACT",
+    );
+  } else if (flow.contractProfile === "LEARNING_PATH_AGGREGATION") {
+    errors.push(
+      `INVALID_FLOW_PROFILE ${path}.sourceOnlyModuleIds is required for LEARNING_PATH_AGGREGATION`,
     );
   }
   const steps = contractArray(

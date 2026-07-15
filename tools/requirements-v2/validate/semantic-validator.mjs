@@ -2080,7 +2080,9 @@ function notificationChannelErrors(index) {
     const allowedCodeSet = new Set(allowedCodes);
     const field = records(object?.fields).find(({ id }) => id === policy?.fieldId);
     const optionSet = index.optionSetById.get(policy?.optionSetId)?.value;
-    const optionCodes = records(optionSet?.values).map(({ code }) => code);
+    const optionValues = records(optionSet?.values);
+    const optionCodes = optionValues.map(({ code }) => code);
+    const channelValue = optionValues[0];
     const targetActions = index.actions.filter(({ value }) => (
       value?.targetObjectId === object?.id
     ));
@@ -2097,6 +2099,13 @@ function notificationChannelErrors(index) {
       && field?.valueSource?.kind === "OPTION_SET"
       && field.valueSource.optionSetId === policy.optionSetId
       && optionSet?.mode === "STATIC"
+      && optionSet?.key === "notificationChannel"
+      && optionValues.length === 1
+      && hasExactKeys(channelValue, ["code", "label"])
+      && channelValue.code === "IN_PRODUCT"
+      && channelValue.label === "站内"
+      && allowedCodes.length === 1
+      && allowedCodes[0] === "IN_PRODUCT"
       && setEquals(new Set(optionCodes), allowedCodeSet)
       && targetActions.length > 0
       && targetActions.every(({ value }) => allowedCodeSet.has(value?.channel));

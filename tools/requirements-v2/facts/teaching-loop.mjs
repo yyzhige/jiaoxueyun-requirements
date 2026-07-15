@@ -47,6 +47,7 @@ function object(
   states,
   fields,
   identityFieldId,
+  stateReachability,
   overrides = {},
 ) {
   const identityFields = fields.filter(({ id: fieldId, idempotencyRole }) => (
@@ -66,6 +67,7 @@ function object(
     ...responsibility,
     lifecyclePolicyId: "LIFE-003",
     sensitivityId: "S2",
+    stateReachability,
     states,
     fields: fields.map((fieldValue) => fieldValue.id === identityFieldId ? {
       ...fieldValue,
@@ -633,7 +635,7 @@ const hwModule = moduleFact({
       ["DRAFT", "VALIDATED", "SCHEDULED", "PUBLISHED", "CLOSED", "REVISION_DRAFT"],
       hwAssignmentFields,
       "HW-ASSIGNMENT-F-ID",
-    ),
+      { mode: "NONE" }),
     object(
       "HW-OBJ-ITEM",
       "Assignment Item Version",
@@ -641,7 +643,7 @@ const hwModule = moduleFact({
       ["DRAFT", "VALIDATED", "PUBLISHED", "REVISION_DRAFT"],
       hwItemFields,
       "HW-ITEM-F-ID",
-    ),
+      { mode: "NONE" }),
     object(
       "HW-OBJ-RUBRIC",
       "Published Rubric Version",
@@ -649,7 +651,7 @@ const hwModule = moduleFact({
       ["PUBLISHED", "DEPRECATED"],
       hwRubricFields,
       "HW-RUBRIC-F-ID",
-    ),
+      { mode: "NONE" }),
   ],
   relationships: [
     {
@@ -989,8 +991,8 @@ const submissionModule = moduleFact({
       ["DRAFT", "UPLOADING", "READY_TO_SUBMIT"],
       submissionDraftFields,
       "SUB-DRAFT-F-ID",
-      { sensitivityId: "S3" },
-    ),
+      { mode: "NONE" },
+      { sensitivityId: "S3" }),
     object(
       "SUB-OBJ-ATTEMPT",
       "Submission Attempt Version",
@@ -998,8 +1000,8 @@ const submissionModule = moduleFact({
       ["DRAFT", "SUBMITTED", "RESUBMITTED"],
       submissionAttemptFields,
       "SUB-ATTEMPT-F-ID",
-      { sensitivityId: "S3" },
-    ),
+      { mode: "NONE" },
+      { sensitivityId: "S3" }),
   ],
   relationships: [{
     id: "SUB-REL-ATTEMPT-DRAFT",
@@ -1771,7 +1773,7 @@ const gradingModule = moduleFact({
       ["ACTIVE", "RETIRED"],
       capabilityMatrixFields,
       "GRD-CAP-F-RULE-ID",
-    ),
+      { mode: "NONE" }),
     object(
       "GRD-OBJ-DECISION",
       "Grading Decision Version",
@@ -1786,6 +1788,7 @@ const gradingModule = moduleFact({
       ["QUEUED", "PROCESSING", "ROUTED_REVIEW", "ROUTED_MANUAL", "CONFLICT", "REVISION_PENDING", "TEACHER_CONFIRMED"],
       gradingDecisionFields,
       "GRD-DECISION-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -1814,8 +1817,7 @@ const gradingModule = moduleFact({
             targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
           },
         ],
-      },
-    ),
+      }),
   ],
   relationships: [{
     id: "GRD-REL-CAPABILITY-DECISION",
@@ -2454,8 +2456,8 @@ const publicationModule = moduleFact({
       ["DRAFT", "READY", "PUBLISHING", "PARTIAL_FAILED", "PUBLISHED"],
       publicationBatchFields,
       "PUB-BATCH-F-ID",
-      { sensitivityId: "S3" },
-    ),
+      { mode: "NONE" },
+      { sensitivityId: "S3" }),
     object(
       "PUB-OBJ-PREVIEW",
       "Transient Student Publication Preview",
@@ -2470,8 +2472,8 @@ const publicationModule = moduleFact({
       ["GENERATED"],
       publicationPreviewFields,
       "PUB-PREVIEW-F-ID",
-      { lifecyclePolicyId: "LIFE-005", sensitivityId: "S3" },
-    ),
+      { mode: "NONE" },
+      { lifecyclePolicyId: "LIFE-005", sensitivityId: "S3" }),
     object(
       "PUB-OBJ-RESULT",
       "Published Student Result Version",
@@ -2486,6 +2488,7 @@ const publicationModule = moduleFact({
       ["READY", "PUBLISHED", "PUBLISH_FAILED", "INVALIDATED"],
       publishedResultFields,
       "PUB-RESULT-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         readMode: "STUDENT_TIMED_RELEASE",
@@ -2525,8 +2528,7 @@ const publicationModule = moduleFact({
             },
           ],
         }],
-      },
-    ),
+      }),
     object(
       "PUB-OBJ-DEPENDENCY-SNAPSHOT",
       "Published Result Dependency Snapshot",
@@ -2541,6 +2543,7 @@ const publicationModule = moduleFact({
       ["RESOLVED"],
       dependencySnapshotFields,
       "PUB-DEPENDENCY-SNAPSHOT-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -2549,8 +2552,7 @@ const publicationModule = moduleFact({
           targetObjectId: "PUB-OBJ-RESULT",
           targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
         }],
-      },
-    ),
+      }),
   ],
   relationships: [
     {
@@ -2871,6 +2873,7 @@ const scoreModule = moduleFact({
       ["ACTIVE"],
       scoreViewFields,
       "SCO-VIEW-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -2893,8 +2896,7 @@ const scoreModule = moduleFact({
             targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
           },
         ],
-      },
-    ),
+      }),
     object(
       "SCO-OBJ-FOLLOW-UP",
       "Gradebook Follow-up and Attention Record",
@@ -2909,6 +2911,7 @@ const scoreModule = moduleFact({
       ["OPEN"],
       scoreFollowUpFields,
       "SCO-FOLLOW-UP-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -2917,8 +2920,7 @@ const scoreModule = moduleFact({
           targetObjectId: "SCO-OBJ-VIEW",
           targetVersionFieldId: "SCO-VIEW-F-VIEW-VERSION",
         }],
-      },
-    ),
+      }),
   ],
   relationships: [{
     id: "SCO-REL-FOLLOW-UP-VIEW",
@@ -3271,6 +3273,7 @@ const evidenceModule = moduleFact({
     ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "STALE"],
     evidenceFields,
     "INS-EVIDENCE-F-ID",
+    { mode: "NONE" },
     {
       sensitivityId: "S3",
       readMode: "STUDENT_TIMED_RELEASE",
@@ -3317,8 +3320,7 @@ const evidenceModule = moduleFact({
           ],
         }],
       }],
-    },
-  )],
+    })],
   relationships: [],
   actions: evidenceActions,
   pages: [
@@ -3792,6 +3794,7 @@ const planModule = moduleFact({
       ["CANDIDATE", "ACTIVE", "CLOSED", "PENDING_RECONFIRM"],
       planFields,
       "PLN-PLAN-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -3820,8 +3823,7 @@ const planModule = moduleFact({
             targetVersionFieldId: "CORR-INVALIDATION-F-INVALIDATION-VERSION",
           },
         ],
-      },
-    ),
+      }),
     object(
       "PLN-OBJ-SUBJECT-SYNC",
       "Subject Teacher Plan Sync Output",
@@ -3836,6 +3838,7 @@ const planModule = moduleFact({
       ["DELIVERED"],
       subjectSyncFields,
       "PLN-SUBJECT-SYNC-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -3844,8 +3847,7 @@ const planModule = moduleFact({
           targetObjectId: "PLN-OBJ-PLAN",
           targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
         }],
-      },
-    ),
+      }),
     object(
       "PLN-OBJ-HOMEROOM-COORDINATION",
       "Homeroom Cross-subject Coordination Output",
@@ -3860,6 +3862,7 @@ const planModule = moduleFact({
       ["AVAILABLE"],
       homeroomCoordinationFields,
       "PLN-HOMEROOM-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -3868,8 +3871,7 @@ const planModule = moduleFact({
           targetObjectId: "PLN-OBJ-PLAN",
           targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
         }],
-      },
-    ),
+      }),
   ],
   relationships: [
     {
@@ -4139,6 +4141,7 @@ const studentExecutionModule = moduleFact({
     ["READY"],
     studentTodoFields,
     "APP-TODO-F-ID",
+    { mode: "NONE" },
     {
       sensitivityId: "S3",
       readMode: "STUDENT_TIMED_RELEASE",
@@ -4191,8 +4194,7 @@ const studentExecutionModule = moduleFact({
           ],
         }],
       }],
-    },
-  )],
+    })],
   relationships: [],
   actions: studentTodoActions,
   pages: [page(
@@ -4732,6 +4734,7 @@ const correctionModule = moduleFact({
       ["OPEN", "OVERDUE", "AWAITING_RETRY", "COMPLETED"],
       correctionTaskFields,
       "CORR-TASK-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -4740,8 +4743,7 @@ const correctionModule = moduleFact({
           targetObjectId: "PUB-OBJ-RESULT",
           targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
         }],
-      },
-    ),
+      }),
     object(
       "CORR-OBJ-ATTEMPT",
       "Student Correction Attempt Version",
@@ -4756,6 +4758,7 @@ const correctionModule = moduleFact({
       ["SUBMITTED", "JUDGED", "NEEDS_RETRY"],
       correctionAttemptFields,
       "CORR-ATTEMPT-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -4772,8 +4775,7 @@ const correctionModule = moduleFact({
             targetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
           },
         ],
-      },
-    ),
+      }),
     object(
       "CORR-OBJ-INVALIDATION",
       "Result Correction Invalidation Record",
@@ -4788,6 +4790,7 @@ const correctionModule = moduleFact({
       ["RECORDED"],
       invalidationFields,
       "CORR-INVALIDATION-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         targetKindContract: [
@@ -4814,8 +4817,7 @@ const correctionModule = moduleFact({
             targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
           },
         ],
-      },
-    ),
+      }),
   ],
   relationships: [{
     id: "CORR-REL-TASK-ATTEMPT",
@@ -5072,6 +5074,7 @@ const studentProfileModule = moduleFact({
       ["READY"],
       studentProfileViewFields,
       "STU-PROFILE-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [
@@ -5094,8 +5097,7 @@ const studentProfileModule = moduleFact({
             targetVersionFieldId: "PLN-PLAN-F-PLAN-VERSION",
           },
         ],
-      },
-    ),
+      }),
     object(
       "STU-OBJ-ATTENTION",
       "Student Attention and Follow-up Record",
@@ -5110,6 +5112,7 @@ const studentProfileModule = moduleFact({
       ["OPEN"],
       studentAttentionFields,
       "STU-ATTENTION-F-ID",
+      { mode: "NONE" },
       {
         sensitivityId: "S3",
         lineageBindings: [{
@@ -5118,8 +5121,7 @@ const studentProfileModule = moduleFact({
           targetObjectId: "STU-OBJ-PROFILE",
           targetVersionFieldId: "STU-PROFILE-F-PROFILE-VERSION",
         }],
-      },
-    ),
+      }),
   ],
   relationships: [{
     id: "STU-REL-ATTENTION-PROFILE",
@@ -5248,6 +5250,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-004",
     label: "Assignment Validation and Publication",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["HW-001", "APP-001"],
     steps: [
@@ -5359,6 +5362,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-005",
     label: "Published Assignment Student Submission",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["HW-001", "SUB-001"],
     steps: [
@@ -5449,6 +5453,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-006",
     label: "Submission Grading Routing",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["HW-001", "SUB-001", "GRD-001"],
     steps: [
@@ -5578,6 +5583,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-007",
     label: "Subject Teacher Grading Confirmation",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "ACTION_CHOICE_REQUIRED",
     moduleIds: ["GRD-001"],
     steps: [
@@ -5734,6 +5740,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-008",
     label: "Confirmed Result Publication",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["GRD-001", "PUB-001", "CORR-001"],
     steps: [
@@ -5949,6 +5956,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-009",
     label: "Published Result Correction",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["GRD-001", "PUB-001", "INS-001", "PLN-001", "CORR-001"],
     steps: [
@@ -6247,6 +6255,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-010",
     label: "Correction Submission Judgment and New Evidence",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "OPTION_VALUE_REQUIRED",
     moduleIds: ["PUB-001", "INS-001", "PLN-001", "CORR-001"],
     steps: [
@@ -6585,6 +6594,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-012",
     label: "Improvement Candidate to Subject Plan and Cross-subject Coordination",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["INS-001", "PLN-001", "APP-001"],
     steps: [
@@ -6733,6 +6743,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
     id: "DF-014",
     label: "Student Management Profile Aggregation",
     phase: PHASE.FIRST,
+    contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["SCO-001", "INS-001", "PLN-001", "APP-001", "STU-001"],
     steps: [
