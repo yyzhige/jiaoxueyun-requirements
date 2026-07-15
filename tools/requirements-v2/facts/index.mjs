@@ -75,6 +75,12 @@ export const aiTasks = deepFreeze([
   ...extensionAiTasks,
 ]);
 
+export const reviewStatus = deepFreeze({
+  code: "SEMANTIC_RECONSTRUCTION",
+  label: "v2.0 semantic reconstruction pending human promotion",
+  reviewedAt: "2026-07-15",
+});
+
 const collectionFacts = {
   baselineDecisions,
   roles,
@@ -93,6 +99,7 @@ const collectionFacts = {
 
 export const requirementModel = defineRequirementModel({
   profile: "ZHIXU_V2",
+  reviewStatus,
   ...Object.fromEntries(
     MODEL_COLLECTIONS.map(({ key }) => [key, collectionFacts[key]]),
   ),

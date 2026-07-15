@@ -33,6 +33,7 @@ import {
   flows,
   modules,
   requirementModel,
+  reviewStatus,
   roles,
   sensitivities,
 } from "../requirements-v2/facts/index.mjs";
@@ -3345,7 +3346,7 @@ test("publishes one frozen manifest for required top-level collections", () => {
   assertDeepFrozen(requirementModelExports.MODEL_COLLECTIONS);
   assert.deepEqual(
     Object.keys(requirementModel),
-    ["profile", ...expected.map(({ key }) => key)],
+    ["profile", "reviewStatus", ...expected.map(({ key }) => key)],
   );
 });
 
@@ -3371,6 +3372,7 @@ test("accepts explicitly present empty top-level collections", () => {
 test("assembles the shared facts into the phase-one executable model", () => {
   assert.deepEqual(requirementModel, {
     profile: "ZHIXU_V2",
+    reviewStatus,
     baselineDecisions,
     roles,
     duties,
