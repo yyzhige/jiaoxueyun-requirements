@@ -169,6 +169,21 @@ test("renders student-data classification and the AUD access exception", () => {
   }
 });
 
+test("blocks unauthorized access exceptions before rendering artifacts", () => {
+  const model = structuredClone(requirementModel);
+  const platform = model.modules.find(({ id }) => id === "PLAT-001");
+  const publication = model.modules.find(({ id }) => id === "PUB-001");
+  const canonicalGuard = platform.actions
+    .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS").accessGuard;
+  publication.actions
+    .find(({ id }) => id === "PUB-ACT-VIEW-RESULT").accessGuard = structuredClone(canonicalGuard);
+
+  assert.throws(
+    () => buildRequirementArtifacts(model),
+    /INVALID_STUDENT_DETAIL_ACCESS_EXCEPTION/,
+  );
+});
+
 test("renders Flow failure granularity providers compensation and invalidation", () => {
   const output = renderDataFlowCatalog(requirementModel);
 

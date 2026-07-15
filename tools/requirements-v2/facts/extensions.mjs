@@ -1,5 +1,9 @@
 import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
-import { withStudentDataClassification } from "./student-data-classification.mjs";
+import {
+  STUDENT_DATA_KIND,
+  withStudentDataClassification,
+} from "./student-data-classification.mjs";
+import { STUDENT_DETAIL_ACCESS_EXCEPTION_KIND } from "./student-detail-access-exceptions.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 
@@ -1402,6 +1406,7 @@ const examObjects = [
     responsibility: academic,
     states: ["DRAFT", "PUBLISHED", "CORRECTION_OPEN"],
     fields: examEventFields,
+    overrides: { studentDataKind: STUDENT_DATA_KIND.NONE },
   }),
   domainObject({
     id: "EXM-OBJ-SCORE-IMPORT",
@@ -1411,6 +1416,7 @@ const examObjects = [
     states: ["PENDING", "PASSED", "REJECTED", "ACCEPTED"],
     fields: scoreImportFields,
     sensitivityId: "S3",
+    overrides: { studentDataKind: STUDENT_DATA_KIND.DETAIL },
   }),
   domainObject({
     id: "EXM-OBJ-AGGREGATE-RULE",
@@ -1419,6 +1425,7 @@ const examObjects = [
     responsibility: academic,
     states: ["DRAFT", "ACTIVE"],
     fields: aggregateRuleFields,
+    overrides: { studentDataKind: STUDENT_DATA_KIND.NONE },
   }),
   domainObject({
     id: "EXM-OBJ-SUBJECT-SCORE",
@@ -1971,6 +1978,7 @@ const scheduleObjects = [
     responsibility: academic,
     states: ["DRAFT", "PUBLISHED"],
     fields: calendarFields,
+    overrides: { studentDataKind: STUDENT_DATA_KIND.NONE },
   }),
   domainObject({
     id: "SCH-OBJ-CONSTRAINT",
@@ -1980,6 +1988,7 @@ const scheduleObjects = [
     states: ["DRAFT", "ACTIVE"],
     fields: constraintFields,
     overrides: {
+      studentDataKind: STUDENT_DATA_KIND.NONE,
       exclusiveSourceGroups: [
         {
           id: "TEACHER_AVAILABILITY",
@@ -2007,6 +2016,7 @@ const scheduleObjects = [
     responsibility: academic,
     states: ["DRAFT", "ACTIVE", "REPLACED"],
     fields: constraintSnapshotFields,
+    overrides: { studentDataKind: STUDENT_DATA_KIND.NONE },
   }),
   domainObject({
     id: "SCH-OBJ-CANDIDATE",
@@ -2016,6 +2026,7 @@ const scheduleObjects = [
     states: ["GENERATED", "REVIEWED", "CONFIRMED", "PUBLISHED", "STALE"],
     fields: candidateFields,
     overrides: {
+      studentDataKind: STUDENT_DATA_KIND.NONE,
       lineageBindings: [
         {
           refFieldId: "SCH-CANDIDATE-F-CALENDAR-REF",
@@ -2478,7 +2489,7 @@ const supportCaseFields = [
   }),
 ];
 const supportSessionAccessGuard = {
-  exceptionKind: "AUD_SESSION_STUDENT_DETAIL",
+  exceptionKind: STUDENT_DETAIL_ACCESS_EXCEPTION_KIND,
   sessionRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
   pinnedSessionVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
   authorizedActorFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",

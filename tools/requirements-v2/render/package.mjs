@@ -19,6 +19,7 @@ import {
 import { renderModulePrd } from "./module-prd.mjs";
 import { markdownList, markdownTable, normalizeDocument } from "./markdown.mjs";
 import { renderModuleWireframe } from "./wireframe.mjs";
+import { assertValidRequirementModel } from "../validate/index.mjs";
 
 export const REQUIREMENT_PACKAGE_ROOT = "docs/requirements/zhixu-handoff-v2.0";
 
@@ -340,6 +341,7 @@ function renderHandoff(title, audience, model, focus) {
 
 export function buildRequirementArtifacts(model) {
   validateReviewStatus(model?.reviewStatus);
+  assertValidRequirementModel(model);
   if (!Array.isArray(model?.modules) || model.modules.length === 0) {
     throw new Error("model.modules must be a non-empty array");
   }

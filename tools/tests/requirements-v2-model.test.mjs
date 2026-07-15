@@ -57,7 +57,7 @@ function validObject(id, ownerRef, field, overrides = {}) {
   return {
     id,
     label: `${id} label`,
-    dataSubject: "FIXTURE_RECORD",
+    dataSubject: "SCHOOL_CONFIGURATION",
     controlSubject: "SCHOOL",
     producerRef: ownerRef,
     ownerRef,
@@ -727,6 +727,104 @@ function moduleById(model, moduleId) {
   const module = model.modules.find(({ id }) => id === moduleId);
   assert.ok(module, `fixture module ${moduleId} must exist`);
   return module;
+}
+
+function addCompletePrivilegedRead(model, {
+  family,
+  moduleId,
+  objectId,
+  allowRoleRef,
+  outputFieldIds,
+}) {
+  const module = moduleById(model, moduleId);
+  const object = module.objects.find(({ id }) => id === objectId);
+  const identityFieldId = object?.fields
+    .find(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")?.id;
+  assert.ok(identityFieldId, `${family}:${objectId}`);
+  const resolvedOutputFieldIds = outputFieldIds ?? [identityFieldId];
+  const suffix = family.replace(/[^A-Za-z]+/g, "-").toUpperCase();
+  const actionId = `TEST-ACT-${suffix}-PRIVILEGED-READ`;
+  const pageId = `TEST-PAGE-${suffix}-PRIVILEGED-READ`;
+  const successScenarioId = `${actionId}-SCN-SUCCESS`;
+  const permissionScenarioId = `${actionId}-SCN-PERMISSION-DENIED`;
+  const notFoundScenarioId = `${actionId}-SCN-NOT-FOUND`;
+  const deniedRoleRef = allowRoleRef === "ROLE-SCHOOL-ADMIN"
+    ? "ROLE-PLATFORM-OPS"
+    : "ROLE-SCHOOL-ADMIN";
+
+  module.actions.push({
+    id: actionId,
+    label: `Read protected ${family} detail directly`,
+    targetObjectId: objectId,
+    inputFieldIds: [identityFieldId],
+    outputFieldIds: resolvedOutputFieldIds,
+    operationKind: "READ",
+    writes: false,
+    risk: RISK.READ,
+    executionMode: "USER_TASK",
+    clients: [CLIENT.WEB],
+    permissions: [
+      {
+        effect: "ALLOW",
+        roleRef: allowRoleRef,
+        condition: `the privileged role reads ${family} detail by default`,
+      },
+      {
+        effect: "DENY",
+        roleRef: deniedRoleRef,
+        condition: `the other privileged role cannot read ${family} detail`,
+      },
+    ],
+    scenarioIds: [successScenarioId, permissionScenarioId, notFoundScenarioId],
+    auditMode: "NOT_REQUIRED",
+    failureResults: ["PERMISSION_DENIED", "NOT_FOUND"],
+    ...(moduleId === "NOTI-001" ? { channel: "IN_PRODUCT" } : {}),
+  });
+  module.pages.push({
+    id: pageId,
+    label: `Protected ${family} detail reader`,
+    clients: [CLIENT.WEB],
+    objectIds: [objectId],
+    fieldIds: [...new Set([identityFieldId, ...resolvedOutputFieldIds])],
+    actionIds: [actionId],
+    regions: ["CONTEXT_HEADER", "TASK_WORK_AREA", "RESULT_AND_FAILURE_STATUS"],
+    viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN"],
+  });
+  module.scenarios.push(
+    {
+      id: successScenarioId,
+      kind: "SUCCESS",
+      actionId,
+      pageId,
+      given: `the privileged role has a default ${family} context`,
+      when: `the privileged role reads ${family} detail`,
+      then: {
+        expectedData: `the ${family} detail is returned`,
+        expectedState: { mode: "UNCHANGED" },
+        expectedPermission: "ALLOW",
+        expectedVisibility: "privileged default scope",
+      },
+    },
+    ...[
+      [permissionScenarioId, "PERMISSION_DENIED"],
+      [notFoundScenarioId, "NOT_FOUND"],
+    ].map(([id, resultCode]) => ({
+      id,
+      kind: "FAILURE",
+      resultCode,
+      actionId,
+      pageId,
+      given: `${resultCode} applies to the protected ${family} read`,
+      when: `the privileged role reads ${family} detail`,
+      then: {
+        expectedData: `${resultCode} returns no ${family} detail`,
+        expectedState: { mode: "UNCHANGED" },
+        expectedPermission: "DENY",
+        expectedVisibility: `no ${family} detail is visible`,
+      },
+    })),
+  );
+  return actionId;
 }
 
 function errorCodes(errors) {
@@ -7546,6 +7644,47 @@ test("rejects fail-open school-admin and platform-ops student-detail reads", () 
   }
 });
 
+test("derives student-data read boundaries from the registry instead of authored claims", () => {
+  const mutations = [
+    ["legal but false NONE", (plan) => {
+      plan.studentDataClassification = {
+        kind: "NONE",
+        privilegedReadPolicy: "NOT_APPLICABLE",
+      };
+    }],
+    ["unknown data subject", (plan) => {
+      plan.dataSubject = "UNKNOWN_STUDENT_DATA";
+      plan.studentDataClassification = {
+        kind: "NONE",
+        privilegedReadPolicy: "NOT_APPLICABLE",
+      };
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    const plan = moduleById(model, "PLN-001").objects
+      .find(({ id }) => id === "PLN-OBJ-PLAN");
+    mutate(plan);
+    addCompletePrivilegedRead(model, {
+      family: `registry ${name}`,
+      moduleId: "PLN-001",
+      objectId: "PLN-OBJ-PLAN",
+      allowRoleRef: "ROLE-SCHOOL-ADMIN",
+    });
+    const errors = validateRequirementModel(model);
+    assertHasCode(errors, "INVALID_STUDENT_DATA_CLASSIFICATION");
+    assertHasCode(errors, "INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY");
+    assert.deepEqual(
+      errors.filter((error) => ![
+        "INVALID_STUDENT_DATA_CLASSIFICATION",
+        "INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY",
+      ].includes(error.split(" ", 1)[0])),
+      [],
+      name,
+    );
+  }
+});
+
 test("rejects structurally complete privileged reads across every student-detail family", () => {
   const cases = [
     ["submission", "SUB-001", "SUB-OBJ-DRAFT", "ROLE-SCHOOL-ADMIN"],
@@ -7557,97 +7696,24 @@ test("rejects structurally complete privileged reads across every student-detail
     ["report", "RPT-001", "RPT-OBJ-SNAPSHOT", "ROLE-SCHOOL-ADMIN"],
     ["path", "LPATH-001", "LPATH-OBJ-INTERPRETATION", "ROLE-PLATFORM-OPS"],
     ["notification", "NOTI-001", "NOTI-OBJ-NOTIFICATION", "ROLE-SCHOOL-ADMIN"],
+    [
+      "exam import",
+      "EXM-001",
+      "EXM-OBJ-SCORE-IMPORT",
+      "ROLE-SCHOOL-ADMIN",
+      ["EXM-IMPORT-F-FILE", "EXM-IMPORT-F-EVIDENCE"],
+    ],
   ];
 
-  for (const [family, moduleId, objectId, allowRoleRef] of cases) {
+  for (const [family, moduleId, objectId, allowRoleRef, outputFieldIds] of cases) {
     const model = structuredClone(requirementModel);
-    const module = moduleById(model, moduleId);
-    const object = module.objects.find(({ id }) => id === objectId);
-    const identityFieldId = object.fields
-      .find(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID")?.id;
-    assert.ok(identityFieldId, `${family}:${objectId}`);
-    const suffix = family.replace(/[^A-Za-z]+/g, "-").toUpperCase();
-    const actionId = `TEST-ACT-${suffix}-PRIVILEGED-READ`;
-    const pageId = `TEST-PAGE-${suffix}-PRIVILEGED-READ`;
-    const successScenarioId = `${actionId}-SCN-SUCCESS`;
-    const permissionScenarioId = `${actionId}-SCN-PERMISSION-DENIED`;
-    const notFoundScenarioId = `${actionId}-SCN-NOT-FOUND`;
-    const deniedRoleRef = allowRoleRef === "ROLE-SCHOOL-ADMIN"
-      ? "ROLE-PLATFORM-OPS"
-      : "ROLE-SCHOOL-ADMIN";
-
-    module.actions.push({
-      id: actionId,
-      label: `Read protected ${family} detail directly`,
-      targetObjectId: objectId,
-      inputFieldIds: [identityFieldId],
-      outputFieldIds: [identityFieldId],
-      operationKind: "READ",
-      writes: false,
-      risk: RISK.READ,
-      executionMode: "USER_TASK",
-      clients: [CLIENT.WEB],
-      permissions: [
-        {
-          effect: "ALLOW",
-          roleRef: allowRoleRef,
-          condition: `the privileged role reads ${family} detail by default`,
-        },
-        {
-          effect: "DENY",
-          roleRef: deniedRoleRef,
-          condition: `the other privileged role cannot read ${family} detail`,
-        },
-      ],
-      scenarioIds: [successScenarioId, permissionScenarioId, notFoundScenarioId],
-      auditMode: "NOT_REQUIRED",
-      failureResults: ["PERMISSION_DENIED", "NOT_FOUND"],
-      ...(moduleId === "NOTI-001" ? { channel: "IN_PRODUCT" } : {}),
+    addCompletePrivilegedRead(model, {
+      family,
+      moduleId,
+      objectId,
+      allowRoleRef,
+      outputFieldIds,
     });
-    module.pages.push({
-      id: pageId,
-      label: `Protected ${family} detail reader`,
-      clients: [CLIENT.WEB],
-      objectIds: [objectId],
-      fieldIds: [identityFieldId],
-      actionIds: [actionId],
-      regions: ["CONTEXT_HEADER", "TASK_WORK_AREA", "RESULT_AND_FAILURE_STATUS"],
-      viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN"],
-    });
-    module.scenarios.push(
-      {
-        id: successScenarioId,
-        kind: "SUCCESS",
-        actionId,
-        pageId,
-        given: `the privileged role has a default ${family} context`,
-        when: `the privileged role reads ${family} detail`,
-        then: {
-          expectedData: `the ${family} detail is returned`,
-          expectedState: { mode: "UNCHANGED" },
-          expectedPermission: "ALLOW",
-          expectedVisibility: "privileged default scope",
-        },
-      },
-      ...[
-        [permissionScenarioId, "PERMISSION_DENIED"],
-        [notFoundScenarioId, "NOT_FOUND"],
-      ].map(([id, resultCode]) => ({
-        id,
-        kind: "FAILURE",
-        resultCode,
-        actionId,
-        pageId,
-        given: `${resultCode} applies to the protected ${family} read`,
-        when: `the privileged role reads ${family} detail`,
-        then: {
-          expectedData: `${resultCode} returns no ${family} detail`,
-          expectedState: { mode: "UNCHANGED" },
-          expectedPermission: "DENY",
-          expectedVisibility: `no ${family} detail is visible`,
-        },
-      })),
-    );
 
     const errors = validateRequirementModel(model);
     assert.deepEqual(
@@ -7669,7 +7735,7 @@ test("classifies every phase-one object with a closed student-data access fact",
       ...counts,
       [object.studentDataClassification.kind]: counts[object.studentDataClassification.kind] + 1,
     }), { NONE: 0, DETAIL: 0, AGGREGATE: 0 }),
-    { NONE: 58, DETAIL: 24, AGGREGATE: 5 },
+    { NONE: 57, DETAIL: 25, AGGREGATE: 5 },
   );
   assert.equal(phaseOneObjects.every((object) => {
     const classification = object.studentDataClassification;
@@ -7697,6 +7763,65 @@ test("classifies every phase-one object with a closed student-data access fact",
     kind: "AGGREGATE",
     privilegedReadPolicy: "DEFAULT_DENY",
   });
+  assert.deepEqual(objectById.get("EXM-OBJ-SCORE-IMPORT").studentDataClassification, {
+    kind: "DETAIL",
+    privilegedReadPolicy: "DEFAULT_DENY",
+  });
+});
+
+test("locks every mixed broad data subject to its registered object classification", () => {
+  const mixedObjects = modules
+    .filter(({ phase }) => phase === PHASE.FIRST)
+    .flatMap((module) => module.objects)
+    .filter(({ dataSubject }) => [
+      "SUBJECT_TEACHING_TASK",
+      "ACADEMIC_OPERATION",
+    ].includes(dataSubject));
+  const actual = Object.fromEntries(mixedObjects.map((object) => [
+    object.id,
+    `${object.studentDataClassification.kind}/${object.studentDataClassification.privilegedReadPolicy}`,
+  ]));
+  assert.deepEqual(actual, {
+    "AIX-OBJ-TASK-PREVIEW": "DETAIL/DEFAULT_DENY",
+    "RPT-OBJ-DEFINITION": "NONE/NOT_APPLICABLE",
+    "RPT-OBJ-SUBSCRIPTION": "NONE/NOT_APPLICABLE",
+    "RPT-OBJ-RUN": "AGGREGATE/DEFAULT_DENY",
+    "RPT-OBJ-SNAPSHOT": "AGGREGATE/DEFAULT_DENY",
+    "RPT-OBJ-DELIVERY": "AGGREGATE/DEFAULT_DENY",
+    "LPATH-OBJ-TIMELINE-ENTRY": "DETAIL/DEFAULT_DENY",
+    "LPATH-OBJ-INTERPRETATION": "DETAIL/DEFAULT_DENY",
+    "NOTI-OBJ-NOTIFICATION": "DETAIL/DEFAULT_DENY",
+    "EXM-OBJ-EXAM-EVENT": "NONE/NOT_APPLICABLE",
+    "EXM-OBJ-SCORE-IMPORT": "DETAIL/DEFAULT_DENY",
+    "EXM-OBJ-AGGREGATE-RULE": "NONE/NOT_APPLICABLE",
+    "SCH-OBJ-CALENDAR": "NONE/NOT_APPLICABLE",
+    "SCH-OBJ-CONSTRAINT": "NONE/NOT_APPLICABLE",
+    "SCH-OBJ-CONSTRAINT-SNAPSHOT": "NONE/NOT_APPLICABLE",
+    "SCH-OBJ-CANDIDATE": "NONE/NOT_APPLICABLE",
+  });
+});
+
+test("rejects legal classification pairs assigned to the wrong mixed-subject object", () => {
+  const mutations = [
+    ["report definition aggregate", "RPT-001", "RPT-OBJ-DEFINITION", {
+      kind: "AGGREGATE",
+      privilegedReadPolicy: "DEFAULT_DENY",
+    }],
+    ["exam event detail", "EXM-001", "EXM-OBJ-EXAM-EVENT", {
+      kind: "DETAIL",
+      privilegedReadPolicy: "DEFAULT_DENY",
+    }],
+  ];
+  for (const [name, moduleId, objectId, classification] of mutations) {
+    const model = structuredClone(requirementModel);
+    moduleById(model, moduleId).objects
+      .find(({ id }) => id === objectId).studentDataClassification = classification;
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_STUDENT_DATA_CLASSIFICATION",
+      name,
+    );
+  }
 });
 
 test("rejects missing or contradictory phase-one student-data classifications", () => {
@@ -11545,6 +11670,90 @@ test("requires a closed AUD student-detail exception guard shape", () => {
     mutate(use.accessGuard);
     assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT", name);
   }
+});
+
+test("rejects every student-detail access exception outside the authorization directory", () => {
+  const mutations = [
+    ["existing publication read", (model, guard) => {
+      moduleById(model, "PUB-001").actions
+        .find(({ id }) => id === "PUB-ACT-VIEW-RESULT").accessGuard = guard;
+    }],
+    ["new plan read", (model, guard) => {
+      const actionId = addCompletePrivilegedRead(model, {
+        family: "unauthorized exception",
+        moduleId: "PLN-001",
+        objectId: "PLN-OBJ-PLAN",
+        allowRoleRef: "ROLE-SCHOOL-ADMIN",
+      });
+      moduleById(model, "PLN-001").actions
+        .find(({ id }) => id === actionId).accessGuard = guard;
+    }],
+    ["missing canonical guard", (model) => {
+      delete moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS").accessGuard;
+    }],
+    ["canonical wrong target", (model) => {
+      moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS")
+        .targetObjectId = "PLAT-OBJ-SERVICE-PLAN";
+    }],
+    ["canonical wrong operation", (model) => {
+      moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS")
+        .operationKind = "UPDATE";
+    }],
+    ["canonical wrong execution mode", (model) => {
+      moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS")
+        .executionMode = "FLOW_INTERNAL";
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    const guard = structuredClone(moduleById(model, "PLAT-001").actions
+      .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS").accessGuard);
+    mutate(model, guard);
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_STUDENT_DETAIL_ACCESS_EXCEPTION",
+      name,
+    );
+  }
+});
+
+test("binds the AUD student-detail exception to exactly two PLAT actions", () => {
+  const occurrences = modules.flatMap((module) => module.actions
+    .filter((action) => Object.hasOwn(action, "accessGuard"))
+    .map((action) => ({
+      moduleId: module.id,
+      actionId: action.id,
+      targetObjectId: action.targetObjectId,
+      operationKind: action.operationKind,
+      executionMode: action.executionMode,
+      exceptionKind: action.accessGuard.exceptionKind,
+    })));
+  assert.deepEqual(occurrences, [
+    {
+      moduleId: "PLAT-001",
+      actionId: "PLAT-ACT-CREATE-SUPPORT-CASE",
+      targetObjectId: "PLAT-OBJ-SUPPORT-CASE",
+      operationKind: "CREATE",
+      executionMode: "USER_TASK",
+      exceptionKind: "AUD_SESSION_STUDENT_DETAIL",
+    },
+    {
+      moduleId: "PLAT-001",
+      actionId: "PLAT-ACT-USE-SUPPORT-ACCESS",
+      targetObjectId: "PLAT-OBJ-SUPPORT-CASE",
+      operationKind: "READ",
+      executionMode: "USER_TASK",
+      exceptionKind: "AUD_SESSION_STUDENT_DETAIL",
+    },
+  ]);
+  assertNoCode(
+    validateRequirementModel(requirementModel),
+    "INVALID_STUDENT_DETAIL_ACCESS_EXCEPTION",
+  );
 });
 
 test("rejects support access self-approval scope expiry and audit bypass mutations", () => {

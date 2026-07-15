@@ -1,5 +1,10 @@
 import { buildModelIndex } from "./model-validator.mjs";
 import { formatValidationValue } from "./structure-validator.mjs";
+import { resolveStudentDataClassification } from "../facts/student-data-classification.mjs";
+import {
+  STUDENT_DETAIL_ACCESS_EXCEPTION_KIND,
+  resolveStudentDetailAccessException,
+} from "../facts/student-detail-access-exceptions.mjs";
 
 const FORBIDDEN_ACTION_NAMES = new Set([
   "对象查询与范围筛选",
@@ -431,7 +436,12 @@ function studentDetailAccessBoundaryErrors(index) {
     if (
       action?.executionMode !== "USER_TASK"
       || action?.operationKind !== "READ"
-      || targetObject?.studentDataClassification?.privilegedReadPolicy !== "DEFAULT_DENY"
+      || !targetObject
+    ) continue;
+    const registeredClassification = resolveStudentDataClassification(targetObject);
+    if (
+      registeredClassification
+      && registeredClassification.privilegedReadPolicy !== "DEFAULT_DENY"
     ) continue;
     const permissions = records(action?.permissions);
     const roleBoundariesValid = ["ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS"]
@@ -452,6 +462,28 @@ function studentDetailAccessBoundaryErrors(index) {
     if (!roleBoundariesValid || !deniedScenarioValid) {
       errors.push(
         `INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY ${action.id} must deny school-admin and platform-ops default student-detail reads`,
+      );
+    }
+  }
+  return errors;
+}
+
+function studentDetailAccessExceptionErrors(index) {
+  const errors = [];
+  for (const { moduleId, value: action } of index.actions) {
+    const expected = resolveStudentDetailAccessException(action?.id);
+    const hasAccessGuard = Object.hasOwn(action ?? {}, "accessGuard");
+    if (!expected && !hasAccessGuard) continue;
+    const valid = expected
+      && hasAccessGuard
+      && action.accessGuard?.exceptionKind === expected.exceptionKind
+      && moduleId === expected.moduleId
+      && action.targetObjectId === expected.targetObjectId
+      && action.operationKind === expected.operationKind
+      && action.executionMode === expected.executionMode;
+    if (!valid) {
+      errors.push(
+        `INVALID_STUDENT_DETAIL_ACCESS_EXCEPTION ${formatValidationValue(action?.id)} is not an authorized student-detail access exception occurrence`,
       );
     }
   }
@@ -4408,7 +4440,7 @@ function platformAuditErrors(index) {
     targetVersionFieldId: "AUD-SESSION-F-VERSION",
   };
   const expectedGuard = {
-    exceptionKind: "AUD_SESSION_STUDENT_DETAIL",
+    exceptionKind: STUDENT_DETAIL_ACCESS_EXCEPTION_KIND,
     sessionRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
     pinnedSessionVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
     authorizedActorFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",
@@ -5234,6 +5266,7 @@ export function validateModelSemantics(model) {
     ...examGovernanceErrors(index),
     ...scheduleSourceErrors(index),
     ...preparationHandoffErrors(index),
+    ...studentDetailAccessExceptionErrors(index),
     ...platformAuditErrors(index),
     ...task8BusinessFailureErrors(index),
     ...flowErrors(index),

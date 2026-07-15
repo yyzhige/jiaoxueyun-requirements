@@ -1,4 +1,6 @@
 import { MODEL_COLLECTIONS } from "../model.mjs";
+import { studentDataClassificationMatchesRegistry } from "../facts/student-data-classification.mjs";
+import { STUDENT_DETAIL_ACCESS_EXCEPTION_KIND } from "../facts/student-detail-access-exceptions.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 
@@ -671,20 +673,9 @@ function validateObject(errors, object, path, strict) {
         `INVALID_OBJECT_CONTRACT ${path}.readMode must be AUTHORIZED, NO_DIRECT_READ, or STUDENT_TIMED_RELEASE`,
       );
     }
-    const classification = object.studentDataClassification;
-    const classificationKeys = new Set(["kind", "privilegedReadPolicy"]);
-    const classificationValid = isRecord(classification)
-      && Object.keys(classification).length === classificationKeys.size
-      && Object.keys(classification).every((key) => classificationKeys.has(key))
-      && (
-        (classification.kind === "NONE"
-          && classification.privilegedReadPolicy === "NOT_APPLICABLE")
-        || (["DETAIL", "AGGREGATE"].includes(classification.kind)
-          && classification.privilegedReadPolicy === "DEFAULT_DENY")
-      );
-    if (!classificationValid) {
+    if (!studentDataClassificationMatchesRegistry(object)) {
       errors.push(
-        `INVALID_STUDENT_DATA_CLASSIFICATION ${path}.studentDataClassification must use a closed valid kind and privilegedReadPolicy combination`,
+        `INVALID_STUDENT_DATA_CLASSIFICATION ${path}.studentDataClassification must exactly match the registered dataSubject and object classification`,
       );
     }
     const reachability = object.stateReachability;
@@ -1326,9 +1317,9 @@ function validateAction(errors, action, path, strict) {
           "INVALID_ACTION_CONTRACT",
         );
       }
-      if (guard.exceptionKind !== "AUD_SESSION_STUDENT_DETAIL") {
+      if (guard.exceptionKind !== STUDENT_DETAIL_ACCESS_EXCEPTION_KIND) {
         errors.push(
-          `INVALID_ACTION_CONTRACT ${guardPath}.exceptionKind must be AUD_SESSION_STUDENT_DETAIL`,
+          `INVALID_ACTION_CONTRACT ${guardPath}.exceptionKind must be ${STUDENT_DETAIL_ACCESS_EXCEPTION_KIND}`,
         );
       }
     }

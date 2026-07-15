@@ -6,7 +6,30 @@ export const STUDENT_DATA_KIND = Object.freeze({
   AGGREGATE: "AGGREGATE",
 });
 
-const defaultKindByDataSubject = new Map([
+const objectKindOverridesByDataSubject = new Map([
+  ["SUBJECT_TEACHING_TASK", new Map([
+    ["AIX-OBJ-TASK-PREVIEW", STUDENT_DATA_KIND.DETAIL],
+    ["RPT-OBJ-DEFINITION", STUDENT_DATA_KIND.NONE],
+    ["RPT-OBJ-SUBSCRIPTION", STUDENT_DATA_KIND.NONE],
+    ["RPT-OBJ-RUN", STUDENT_DATA_KIND.AGGREGATE],
+    ["RPT-OBJ-SNAPSHOT", STUDENT_DATA_KIND.AGGREGATE],
+    ["RPT-OBJ-DELIVERY", STUDENT_DATA_KIND.AGGREGATE],
+    ["LPATH-OBJ-TIMELINE-ENTRY", STUDENT_DATA_KIND.DETAIL],
+    ["LPATH-OBJ-INTERPRETATION", STUDENT_DATA_KIND.DETAIL],
+    ["NOTI-OBJ-NOTIFICATION", STUDENT_DATA_KIND.DETAIL],
+  ])],
+  ["ACADEMIC_OPERATION", new Map([
+    ["EXM-OBJ-EXAM-EVENT", STUDENT_DATA_KIND.NONE],
+    ["EXM-OBJ-SCORE-IMPORT", STUDENT_DATA_KIND.DETAIL],
+    ["EXM-OBJ-AGGREGATE-RULE", STUDENT_DATA_KIND.NONE],
+    ["SCH-OBJ-CALENDAR", STUDENT_DATA_KIND.NONE],
+    ["SCH-OBJ-CONSTRAINT", STUDENT_DATA_KIND.NONE],
+    ["SCH-OBJ-CONSTRAINT-SNAPSHOT", STUDENT_DATA_KIND.NONE],
+    ["SCH-OBJ-CANDIDATE", STUDENT_DATA_KIND.NONE],
+  ])],
+]);
+
+const registeredKindByDataSubject = new Map([
   ...[
     "SCHOOL_CONFIGURATION",
     "SCHOOL_MEMBER_ACCOUNT",
@@ -42,7 +65,6 @@ const defaultKindByDataSubject = new Map([
     "GRADING_CAPABILITY",
     "SUBJECT_TEACHING_PREPARATION",
     "VERSIONED_TEACHING_CONTENT",
-    "ACADEMIC_OPERATION",
     "SCHOOL_SERVICE_CONFIGURATION",
     "AUDIT_PINNED_SUPPORT_CASE",
     "FUTURE_REPORTING_CONTRACT",
@@ -71,38 +93,64 @@ const defaultKindByDataSubject = new Map([
     "CURRENT_TEACHER_WORK_VIEW",
     "HOMEROOM_CLASS_COORDINATION",
   ].map((dataSubject) => [dataSubject, STUDENT_DATA_KIND.AGGREGATE]),
-  ["SUBJECT_TEACHING_TASK", OBJECT_OVERRIDE_REQUIRED],
+  ...[...objectKindOverridesByDataSubject.keys()].map((dataSubject) => [
+    dataSubject,
+    OBJECT_OVERRIDE_REQUIRED,
+  ]),
 ]);
 
+function classificationForKind(kind) {
+  return {
+    kind,
+    privilegedReadPolicy: kind === STUDENT_DATA_KIND.NONE
+      ? "NOT_APPLICABLE"
+      : "DEFAULT_DENY",
+  };
+}
+
+export function resolveStudentDataClassification(object) {
+  const registeredKind = registeredKindByDataSubject.get(object?.dataSubject);
+  if (!registeredKind) return null;
+  if (registeredKind !== OBJECT_OVERRIDE_REQUIRED) {
+    return classificationForKind(registeredKind);
+  }
+  const kind = objectKindOverridesByDataSubject
+    .get(object.dataSubject)
+    ?.get(object?.id);
+  return kind ? classificationForKind(kind) : null;
+}
+
+export function studentDataClassificationMatchesRegistry(object) {
+  const expected = resolveStudentDataClassification(object);
+  const classification = object?.studentDataClassification;
+  return expected
+    && classification
+    && typeof classification === "object"
+    && !Array.isArray(classification)
+    && Object.keys(classification).length === 2
+    && Object.hasOwn(classification, "kind")
+    && Object.hasOwn(classification, "privilegedReadPolicy")
+    && classification.kind === expected.kind
+    && classification.privilegedReadPolicy === expected.privilegedReadPolicy;
+}
+
 export function withStudentDataClassification(object, overrideKind) {
-  const defaultKind = defaultKindByDataSubject.get(object?.dataSubject);
-  if (!defaultKind) {
+  const registeredKind = registeredKindByDataSubject.get(object?.dataSubject);
+  const expected = resolveStudentDataClassification(object);
+  if (!registeredKind) {
     throw new Error(`${object?.id ?? "object"} has an unclassified dataSubject`);
   }
-  if (defaultKind === OBJECT_OVERRIDE_REQUIRED && !overrideKind) {
+  if (!expected) {
+    throw new Error(`${object?.id ?? "object"} has no registered object classification`);
+  }
+  if (registeredKind === OBJECT_OVERRIDE_REQUIRED && !overrideKind) {
     throw new Error(`${object?.id ?? "object"} requires an object-level student data kind`);
   }
-  if (
-    overrideKind
-    && !Object.values(STUDENT_DATA_KIND).includes(overrideKind)
-  ) {
-    throw new Error(`${object?.id ?? "object"} has an invalid student data kind`);
+  if (overrideKind && overrideKind !== expected.kind) {
+    throw new Error(`${object?.id ?? "object"} contradicts its registered classification`);
   }
-  if (
-    defaultKind !== OBJECT_OVERRIDE_REQUIRED
-    && overrideKind
-    && overrideKind !== defaultKind
-  ) {
-    throw new Error(`${object?.id ?? "object"} contradicts its dataSubject classification`);
-  }
-  const kind = overrideKind ?? defaultKind;
   return {
     ...object,
-    studentDataClassification: {
-      kind,
-      privilegedReadPolicy: kind === STUDENT_DATA_KIND.NONE
-        ? "NOT_APPLICABLE"
-        : "DEFAULT_DENY",
-    },
+    studentDataClassification: expected,
   };
 }
