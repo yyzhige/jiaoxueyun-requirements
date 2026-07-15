@@ -315,6 +315,60 @@ export const events = [
     definition: "敏感访问会话达到批准期限时触发会话过期动作。",
     triggeredActionIds: ["AUD-ACT-EXPIRE-SESSION"],
   },
+  {
+    id: "EVT-NOTIFICATION-DELIVERY-SUCCEEDED",
+    label: "站内通知投递成功",
+    definition: "站内通知获得产品内投递回执后记录送达状态。",
+    triggeredActionIds: ["NOTI-ACT-DELIVER"],
+  },
+  {
+    id: "EVT-NOTIFICATION-DELIVERY-FAILED",
+    label: "站内通知投递失败",
+    definition: "站内通知投递失败后记录独立失败状态且不回滚来源事实。",
+    triggeredActionIds: ["NOTI-ACT-FAIL-DELIVERY"],
+  },
+  {
+    id: "EVT-NOTIFICATION-DELIVERY-RETRY-DUE",
+    label: "站内通知投递重试到期",
+    definition: "失败的站内通知达到重试条件后重新排队。",
+    triggeredActionIds: ["NOTI-ACT-RETRY-DELIVERY"],
+  },
+  {
+    id: "EVT-REPORT-RUN-FAILED",
+    label: "报表运行失败",
+    definition: "已开始的报表运行失败后记录独立失败状态。",
+    triggeredActionIds: ["RPT-ACT-FAIL-RUN"],
+  },
+  {
+    id: "EVT-REPORT-RUN-PERMISSION-BLOCKED",
+    label: "报表运行权限阻断",
+    definition: "报表运行时权限复核失败后进入权限阻断状态。",
+    triggeredActionIds: ["RPT-ACT-BLOCK-RUN-PERMISSION"],
+  },
+  {
+    id: "EVT-REPORT-DELIVERY-SUCCEEDED",
+    label: "报表站内交付成功",
+    definition: "报表快照获得站内交付回执后记录送达状态。",
+    triggeredActionIds: ["RPT-ACT-MARK-DELIVERED"],
+  },
+  {
+    id: "EVT-REPORT-DELIVERY-FAILED",
+    label: "报表站内交付失败",
+    definition: "报表站内交付失败后保留快照并记录独立失败状态。",
+    triggeredActionIds: ["RPT-ACT-FAIL-DELIVERY"],
+  },
+  {
+    id: "EVT-REPORT-DELIVERY-RETRY-DUE",
+    label: "报表站内交付重试到期",
+    definition: "失败的报表交付达到重试条件后重新进入待交付状态。",
+    triggeredActionIds: ["RPT-ACT-RETRY-DELIVERY"],
+  },
+  {
+    id: "EVT-LEARNING-PATH-INTERPRETATION-STALE",
+    label: "学习路径解释失效",
+    definition: "已引用来源版本失效后，将依赖的学习路径解释标记为失效并保留历史。",
+    triggeredActionIds: ["LPATH-ACT-MARK-INTERPRETATION-STALE"],
+  },
 ];
 
 export const metrics = [
@@ -889,6 +943,9 @@ export const optionSets = [
     ["GRADING_QUEUE", "批改队列"],
     ["HOMEROOM_OVERVIEW", "班主任全科概览"],
     ["REPORTS", "报告摘要"],
+  ]),
+  optionSet("OPT-ENUM-047", "notificationChannel", "通知渠道", [
+    ["IN_PRODUCT", "站内"],
   ]),
 ];
 

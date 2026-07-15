@@ -63,6 +63,7 @@ function validObject(id, ownerRef, field, overrides = {}) {
     lifecyclePolicyId: "LIFE-TEST",
     sensitivityId: "S2",
     readMode: "AUTHORIZED",
+    stateReachability: { mode: "NONE" },
     states: ["DRAFT", "SUBMITTED"],
     fields: [field],
     ...overrides,
@@ -150,7 +151,7 @@ function validAiTask(id, overrides = {}) {
       required: ["data", "sourceVersions", "permissionResult"],
       properties: {
         data: { type: "object" },
-        sourceVersions: { type: "array" },
+        sourceVersions: { type: "array", items: { type: "object" } },
         permissionResult: { type: "string" },
       },
       additionalProperties: false,
@@ -372,6 +373,7 @@ function validFixture() {
       id: "DF-TEST",
       label: "Fixture submission flow",
       phase: PHASE.FIRST,
+      contractProfile: "GENERIC",
       routingPolicy: "NONE",
       moduleIds: ["SUB-001"],
       steps: [{
@@ -1655,7 +1657,7 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 61);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 66);
 
   const requiredPairs = [
     ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
@@ -2467,8 +2469,8 @@ test("declares one closed routing policy for every Flow", () => {
     ["DF-010", "OPTION_VALUE_REQUIRED"],
     ["DF-012", "NONE"],
     ["DF-014", "NONE"],
-    ["DF-011", "NONE"],
-    ["DF-013", "NONE"],
+    ["DF-011", "ACTION_CHOICE_REQUIRED"],
+    ["DF-013", "ACTION_CHOICE_REQUIRED"],
   ]));
 });
 
@@ -3186,6 +3188,28 @@ test("rejects a Flow whose data-reference modules differ from declared participa
   assertHasCode(validateRequirementModel(model), "FLOW_DATA_PARTICIPANT_MISMATCH");
 });
 
+test("requires closed source-only Flow participant roles", () => {
+  const validModel = validFixture();
+  const flow = validModel.flows[0];
+  flow.moduleIds = ["SUB-001", "HW-001"];
+  flow.sourceOnlyModuleIds = ["HW-001"];
+  flow.sourceDataRefs.push({
+    objectId: "DAT-HW-01",
+    fieldId: "HW-F001",
+    version: "HW-F001",
+    cardinality: "ZERO_MANY",
+  });
+  assertNoCode(validateRequirementModel(validModel), "FLOW_PARTICIPANT_MISMATCH");
+
+  const missingRole = structuredClone(validModel);
+  delete missingRole.flows[0].sourceOnlyModuleIds;
+  assertHasCode(validateRequirementModel(missingRole), "FLOW_PARTICIPANT_MISMATCH");
+
+  const actionMisclassified = structuredClone(validModel);
+  actionMisclassified.flows[0].sourceOnlyModuleIds = ["SUB-001"];
+  assertHasCode(validateRequirementModel(actionMisclassified), "FLOW_PARTICIPANT_MISMATCH");
+});
+
 test("rejects a Flow phase that differs from its participant modules", () => {
   const model = validFixture();
   model.flows[0].phase = PHASE.SECOND;
@@ -3510,6 +3534,76 @@ test("requires student AI tasks to preserve every content-open policy gate", () 
   assertHasCode(validateRequirementModel(model), "MISSING_AI_STUDENT_POLICY");
 });
 
+test("binds AI task audiences and confirmers to target Action ALLOW subjects", () => {
+  const roleAttachedDuty = structuredClone(requirementModel);
+  const assignmentTask = roleAttachedDuty.aiTasks.find(({ id }) => (
+    id === "AI-TASK-ASSIGNMENT-DRAFT"
+  ));
+  assignmentTask.roleRefs = ["ROLE-TEACHER"];
+  assignmentTask.dutyRefs = [];
+  assertNoCode(
+    validateRequirementModel(roleAttachedDuty),
+    "INVALID_AI_ACTOR_AUTHORIZATION",
+  );
+  assertNoCode(
+    validateRequirementModel(roleAttachedDuty),
+    "INVALID_AI_CONFIRMER_AUTHORIZATION",
+  );
+
+  const wrongAudience = structuredClone(requirementModel);
+  const wrongAudienceTask = wrongAudience.aiTasks.find(({ id }) => (
+    id === "AI-TASK-ASSIGNMENT-DRAFT"
+  ));
+  wrongAudienceTask.roleRefs = [];
+  wrongAudienceTask.dutyRefs = ["DUTY-HOMEROOM"];
+  assertHasCode(
+    validateRequirementModel(wrongAudience),
+    "INVALID_AI_ACTOR_AUTHORIZATION",
+  );
+
+  const wrongConfirmer = structuredClone(requirementModel);
+  const wrongConfirmerTask = wrongConfirmer.aiTasks.find(({ id }) => (
+    id === "AI-TASK-ASSIGNMENT-DRAFT"
+  ));
+  wrongConfirmerTask.confirmerDutyRef = "DUTY-HOMEROOM";
+  wrongConfirmerTask.confirmer.dutyRef = "DUTY-HOMEROOM";
+  assertHasCode(
+    validateRequirementModel(wrongConfirmer),
+    "INVALID_AI_CONFIRMER_AUTHORIZATION",
+  );
+});
+
+test("validates AI JSON schema property bodies and clarification parameters", () => {
+  const mutations = [
+    (model) => {
+      model.aiTasks.find(({ id }) => id === "AI-TASK-ASSIGNMENT-DRAFT")
+        .parameterSchema.properties.assignmentBrief = {};
+    },
+    (model) => {
+      delete model.aiTasks.find(({ id }) => id === "AI-TASK-AD-HOC-REPORT")
+        .parameterSchema.properties.metricIds.items;
+    },
+    (model) => {
+      model.aiTasks.find(({ id }) => id === "AI-TASK-ASSIGNMENT-DRAFT")
+        .clarificationRules[0].whenMissing.push("unknownParameter");
+    },
+    (model) => {
+      const rule = model.aiTasks.find(({ id }) => id === "AI-TASK-ASSIGNMENT-DRAFT")
+        .clarificationRules[0];
+      rule.whenMissing.push(rule.whenMissing[0]);
+    },
+    (model) => {
+      model.aiTasks.find(({ id }) => id === "AI-TASK-ASSIGNMENT-DRAFT")
+        .resultSchema.properties.permissionResult = {};
+    },
+  ];
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_AI_TASK_CONTRACT");
+  }
+});
+
 test("keeps AI task drafts temporary until authorized target Action confirmation", () => {
   const draftTasks = aiTasks.filter(({ taskType }) => taskType === "DRAFT");
   assert.equal(draftTasks.length, 3);
@@ -3594,6 +3688,7 @@ test("rechecks permission and data cutoff for every report run", () => {
     permissionCheck: "RECHECK_EACH_RUN",
     dataCutoff: "RESOLVE_AT_RUN_START",
     permissionFailureState: "BLOCKED_PERMISSION",
+    permissionFailureActionId: "RPT-ACT-BLOCK-RUN-PERMISSION",
     sourceVersionCapture: "PIN_BEFORE_QUERY",
   });
 
@@ -3652,20 +3747,164 @@ test("guards report lineage with source-state-specific action applicability", ()
   const reportModule = moduleById(requirementModel, "RPT-001");
   const objectById = new Map(reportModule.objects.map((object) => [object.id, object]));
   const actionById = new Map(reportModule.actions.map((action) => [action.id, action]));
-  for (const [objectId, refFieldId, actionId, requiredState] of [
-    ["RPT-OBJ-SUBSCRIPTION", "RPT-SUBSCRIPTION-F-DEFINITION-REF", "RPT-ACT-CREATE-SUBSCRIPTION", "ACTIVE"],
-    ["RPT-OBJ-RUN", "RPT-RUN-F-DEFINITION-REF", "RPT-ACT-CREATE-RUN", "ACTIVE"],
-    ["RPT-OBJ-RUN", "RPT-RUN-F-SUBSCRIPTION-REF", "RPT-ACT-CREATE-RUN", "ACTIVE"],
-    ["RPT-OBJ-SNAPSHOT", "RPT-SNAPSHOT-F-RUN-REF", "RPT-ACT-MATERIALIZE-SNAPSHOT", "SUCCEEDED"],
-    ["RPT-OBJ-DELIVERY", "RPT-DELIVERY-F-SNAPSHOT-REF", "RPT-ACT-CREATE-DELIVERY", "AVAILABLE"],
+  for (const [objectId, refFieldId, actionIds, requiredState] of [
+    ["RPT-OBJ-SUBSCRIPTION", "RPT-SUBSCRIPTION-F-DEFINITION-REF", ["RPT-ACT-CREATE-SUBSCRIPTION"], "ACTIVE"],
+    ["RPT-OBJ-RUN", "RPT-RUN-F-DEFINITION-REF", ["RPT-ACT-CREATE-AD-HOC-RUN", "RPT-ACT-CREATE-RUN"], "ACTIVE"],
+    ["RPT-OBJ-RUN", "RPT-RUN-F-SUBSCRIPTION-REF", ["RPT-ACT-CREATE-RUN"], "ACTIVE"],
+    ["RPT-OBJ-SNAPSHOT", "RPT-SNAPSHOT-F-RUN-REF", ["RPT-ACT-MATERIALIZE-SNAPSHOT"], "SUCCEEDED"],
+    ["RPT-OBJ-DELIVERY", "RPT-DELIVERY-F-SNAPSHOT-REF", ["RPT-ACT-CREATE-DELIVERY"], "AVAILABLE"],
   ]) {
     const field = objectById.get(objectId).fields.find(({ id }) => id === refFieldId);
     assert.equal(field.stateGuardPolicy, "CREATE_REQUIRED", refFieldId);
-    assert.deepEqual(field.actionApplicability, { requiredActionIds: [actionId] });
-    assert.ok(actionById.get(actionId).relatedStateGuards.some((guard) => (
-      guard.refFieldId === refFieldId && guard.requiredState === requiredState
-    )));
+    assert.deepEqual(field.actionApplicability, { requiredActionIds: actionIds });
+    for (const actionId of actionIds) {
+      assert.ok(actionById.get(actionId).relatedStateGuards.some((guard) => (
+        guard.refFieldId === refFieldId && guard.requiredState === requiredState
+      )));
+    }
   }
+});
+
+test("executes an ad-hoc report definition without a subscription", () => {
+  const flow = flows.find(({ id }) => id === "DF-013");
+  assert.equal(flow.routingPolicy, "ACTION_CHOICE_REQUIRED");
+  const adHocPath = flow.executionPaths.find(({ id }) => id === "AD_HOC");
+  assert.deepEqual(adHocPath.stepOrders, [1, 2, 3, 5, 6, 7, 8, 9]);
+  assert.deepEqual(adHocPath.route, {
+    kind: "ACTION_CHOICE",
+    consumerStepOrder: 3,
+  });
+  assert.deepEqual(adHocPath.sourceBindings, [{
+    sourceObjectId: "RPT-OBJ-DEFINITION",
+    sourceIdentityFieldId: "RPT-DEFINITION-F-ID",
+    sourceVersionFieldId: "RPT-DEFINITION-F-VERSION",
+    consumerStepOrder: 3,
+    targetRefFieldId: "RPT-RUN-F-DEFINITION-REF",
+    targetVersionFieldId: "RPT-RUN-F-DEFINITION-VERSION",
+    cardinality: "ONE",
+  }]);
+
+  const model = structuredClone(requirementModel);
+  model.flows.find(({ id }) => id === "DF-013").executionPaths
+    .find(({ id }) => id === "AD_HOC").sourceBindings.push({
+      sourceObjectId: "RPT-OBJ-SUBSCRIPTION",
+      sourceIdentityFieldId: "RPT-SUBSCRIPTION-F-ID",
+      sourceVersionFieldId: "RPT-SUBSCRIPTION-F-VERSION",
+      consumerStepOrder: 3,
+      targetRefFieldId: "RPT-RUN-F-SUBSCRIPTION-REF",
+      targetVersionFieldId: "RPT-RUN-F-SUBSCRIPTION-VERSION",
+      cardinality: "ONE",
+    });
+  assertHasCode(validateRequirementModel(model), "INVALID_REPORT_EXECUTION_PATH");
+});
+
+test("requires periodic report runs to pin definition and subscription action inputs", () => {
+  const reportModule = moduleById(requirementModel, "RPT-001");
+  const adHocRun = reportModule.actions
+    .find(({ id }) => id === "RPT-ACT-CREATE-AD-HOC-RUN");
+  const periodicRun = reportModule.actions.find(({ id }) => id === "RPT-ACT-CREATE-RUN");
+  assert.ok(adHocRun, "ad-hoc report run action must exist");
+  assert.ok(periodicRun, "periodic report run action must exist");
+  assert.deepEqual(adHocRun.inputFieldIds, [
+    "RPT-RUN-F-DEFINITION-REF",
+    "RPT-RUN-F-DEFINITION-VERSION",
+  ]);
+  assert.deepEqual(periodicRun.inputFieldIds, [
+    "RPT-RUN-F-DEFINITION-REF",
+    "RPT-RUN-F-DEFINITION-VERSION",
+    "RPT-RUN-F-SUBSCRIPTION-REF",
+    "RPT-RUN-F-SUBSCRIPTION-VERSION",
+  ]);
+  for (const action of [adHocRun, periodicRun]) {
+    assert.equal(action.outputFieldIds.includes("RPT-RUN-F-DEFINITION-REF"), false);
+    assert.equal(action.outputFieldIds.includes("RPT-RUN-F-DEFINITION-VERSION"), false);
+  }
+  assert.equal(periodicRun.outputFieldIds.includes("RPT-RUN-F-SUBSCRIPTION-REF"), false);
+  assert.equal(periodicRun.outputFieldIds.includes("RPT-RUN-F-SUBSCRIPTION-VERSION"), false);
+
+  const periodicPath = flows.find(({ id }) => id === "DF-013").executionPaths
+    .find(({ id }) => id === "PERIODIC");
+  assert.deepEqual(
+    periodicPath.sourceBindings.map(({ sourceObjectId }) => sourceObjectId),
+    ["RPT-OBJ-DEFINITION", "RPT-OBJ-SUBSCRIPTION"],
+  );
+
+  const model = structuredClone(requirementModel);
+  moduleById(model, "RPT-001").actions.find(({ id }) => id === "RPT-ACT-CREATE-RUN")
+    .inputFieldIds = ["RPT-RUN-F-DEFINITION-REF", "RPT-RUN-F-DEFINITION-VERSION"];
+  assertHasCode(validateRequirementModel(model), "INVALID_REPORT_EXECUTION_PATH");
+});
+
+test("keys DF-013 runs by definition and periodic subscription source versions", () => {
+  const flow = flows.find(({ id }) => id === "DF-013");
+  assert.ok(flow.executionPaths, "DF-013 execution paths must exist");
+  const pathById = new Map(flow.executionPaths.map((path) => [path.id, path]));
+  assert.deepEqual(pathById.get("AD_HOC").idempotencyKeyParts, {
+    identityFieldIds: [
+      "RPT-DEFINITION-F-ID",
+      "APP-TODO-F-ID",
+      "PLN-PLAN-F-ID",
+    ],
+    versionFieldIds: [
+      "RPT-DEFINITION-F-VERSION",
+      "APP-TODO-F-AGGREGATION-VERSION",
+      "PLN-PLAN-F-PLAN-VERSION",
+      "PLN-HOMEROOM-F-OUTPUT-VERSION",
+    ],
+    fanoutFieldId: "APP-TODO-F-STUDENT-REF",
+  });
+  assert.deepEqual(pathById.get("PERIODIC").idempotencyKeyParts, {
+    identityFieldIds: [
+      "RPT-DEFINITION-F-ID",
+      "RPT-SUBSCRIPTION-F-ID",
+      "APP-TODO-F-ID",
+      "PLN-PLAN-F-ID",
+    ],
+    versionFieldIds: [
+      "RPT-DEFINITION-F-VERSION",
+      "RPT-SUBSCRIPTION-F-VERSION",
+      "APP-TODO-F-AGGREGATION-VERSION",
+      "PLN-PLAN-F-PLAN-VERSION",
+      "PLN-HOMEROOM-F-OUTPUT-VERSION",
+    ],
+    fanoutFieldId: "APP-TODO-F-STUDENT-REF",
+  });
+
+  const model = structuredClone(requirementModel);
+  model.flows.find(({ id }) => id === "DF-013").executionPaths
+    .find(({ id }) => id === "PERIODIC").idempotencyKeyParts.versionFieldIds
+    .splice(1, 1);
+  assertHasCode(validateRequirementModel(model), "INVALID_REPORT_EXECUTION_PATH");
+});
+
+test("makes every report run and delivery state explicitly reachable", () => {
+  const reportModule = moduleById(requirementModel, "RPT-001");
+  const actionById = new Map(reportModule.actions.map((action) => [action.id, action]));
+  for (const [actionId, transition] of [
+    ["RPT-ACT-START-RUN", { from: "QUEUED", to: "RUNNING" }],
+    ["RPT-ACT-COMPLETE-RUN", { from: "RUNNING", to: "SUCCEEDED" }],
+    ["RPT-ACT-FAIL-RUN", { from: "RUNNING", to: "FAILED" }],
+    ["RPT-ACT-BLOCK-RUN-PERMISSION", { from: "QUEUED", to: "BLOCKED_PERMISSION" }],
+    ["RPT-ACT-MARK-DELIVERED", { from: "PENDING", to: "DELIVERED" }],
+    ["RPT-ACT-FAIL-DELIVERY", { from: "PENDING", to: "FAILED" }],
+    ["RPT-ACT-RETRY-DELIVERY", { from: "FAILED", to: "PENDING" }],
+  ]) {
+    assert.deepEqual(actionById.get(actionId)?.transition, transition, actionId);
+  }
+  const permissionFailureScenario = reportModule.scenarios.find(({ actionId, kind }) => (
+    actionId === "RPT-ACT-BLOCK-RUN-PERMISSION" && kind === "SUCCESS"
+  ));
+  assert.deepEqual(permissionFailureScenario.then.expectedState, {
+    mode: "STATE",
+    value: "BLOCKED_PERMISSION",
+  });
+
+  const model = structuredClone(requirementModel);
+  const blockedScenario = moduleById(model, "RPT-001").scenarios.find(({ actionId, kind }) => (
+    actionId === "RPT-ACT-BLOCK-RUN-PERMISSION" && kind === "SUCCESS"
+  ));
+  blockedScenario.then.expectedState = { mode: "UNCHANGED" };
+  assertHasCode(validateRequirementModel(model), "MISSING_ACTION_STATE_EFFECT");
 });
 
 test("separates ad-hoc periodic reports from long-term learning paths", () => {
@@ -3703,6 +3942,82 @@ test("models learning path timeline entries as cross-term version-pinned fact re
   }
 });
 
+test("appends each learning-path timeline entry from exactly one of five source groups", () => {
+  const pathModule = moduleById(requirementModel, "LPATH-001");
+  const timeline = pathModule.objects.find(({ id }) => id === "LPATH-OBJ-TIMELINE-ENTRY");
+  const expectedGroups = [
+    ["PUBLISHED-RESULT", "LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE"],
+    ["EVIDENCE", "LPATH-ACT-APPEND-EVIDENCE-TIMELINE"],
+    ["CORRECTION", "LPATH-ACT-APPEND-CORRECTION-TIMELINE"],
+    ["PLAN-EXECUTION", "LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE"],
+    ["TEACHER-CONFIRMATION", "LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE"],
+  ];
+  assert.deepEqual(timeline.exclusiveSourceGroups, expectedGroups.map(([kind]) => ({
+    id: kind,
+    fieldIds: [
+      `LPATH-ENTRY-F-${kind}-REF`,
+      `LPATH-ENTRY-F-${kind}-VERSION`,
+    ],
+  })));
+  for (const [kind, actionId] of expectedGroups) {
+    const appendAction = pathModule.actions.find(({ id }) => id === actionId);
+    assert.ok(appendAction, `${actionId} must exist`);
+    const coveredGroups = timeline.exclusiveSourceGroups.filter(({ fieldIds }) => (
+      fieldIds.every((fieldId) => appendAction.outputFieldIds.includes(fieldId))
+    ));
+    assert.deepEqual(coveredGroups.map(({ id }) => id), [kind]);
+  }
+
+  for (const mutate of [
+    (action) => {
+      action.outputFieldIds = action.outputFieldIds.filter((fieldId) => (
+        fieldId !== "LPATH-ENTRY-F-EVIDENCE-VERSION"
+      ));
+    },
+    (action) => {
+      action.outputFieldIds.push(
+        "LPATH-ENTRY-F-CORRECTION-REF",
+        "LPATH-ENTRY-F-CORRECTION-VERSION",
+      );
+    },
+  ]) {
+    const model = structuredClone(requirementModel);
+    const appendEvidence = moduleById(model, "LPATH-001").actions
+      .find(({ id }) => id === "LPATH-ACT-APPEND-EVIDENCE-TIMELINE");
+    mutate(appendEvidence);
+    assertHasCode(validateRequirementModel(model), "INVALID_ACTION_CONTRACT");
+  }
+});
+
+test("routes DF-011 through five closed exactly-one source-binding paths", () => {
+  const flow = flows.find(({ id }) => id === "DF-011");
+  assert.equal(flow.routingPolicy, "ACTION_CHOICE_REQUIRED");
+  assert.deepEqual(flow.executionPaths.map(({ id, sourceBindings }) => ({
+    id,
+    sourceObjectIds: sourceBindings.map(({ sourceObjectId }) => sourceObjectId),
+  })), [
+    { id: "PUBLISHED_RESULT", sourceObjectIds: ["PUB-OBJ-RESULT"] },
+    { id: "EVIDENCE", sourceObjectIds: ["INS-OBJ-EVIDENCE"] },
+    { id: "CORRECTION", sourceObjectIds: ["CORR-OBJ-ATTEMPT"] },
+    { id: "PLAN_EXECUTION", sourceObjectIds: ["APP-OBJ-TODO"] },
+    { id: "TEACHER_CONFIRMATION", sourceObjectIds: ["GRD-OBJ-DECISION"] },
+  ]);
+  assert.ok(flow.executionPaths.every(({ sourceBindings }) => sourceBindings.length === 1));
+
+  const model = structuredClone(requirementModel);
+  model.flows.find(({ id }) => id === "DF-011").executionPaths
+    .find(({ id }) => id === "EVIDENCE").sourceBindings.push({
+      sourceObjectId: "PUB-OBJ-RESULT",
+      sourceIdentityFieldId: "PUB-RESULT-F-ID",
+      sourceVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+      consumerStepOrder: 2,
+      targetRefFieldId: "LPATH-ENTRY-F-PUBLISHED-RESULT-REF",
+      targetVersionFieldId: "LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION",
+      cardinality: "ONE",
+    });
+  assertHasCode(validateRequirementModel(model), "INVALID_LEARNING_PATH_SOURCE_PATH");
+});
+
 test("versions every teacher-confirmed learning path interpretation", () => {
   const pathModule = moduleById(requirementModel, "LPATH-001");
   const interpretation = pathModule.objects.find(({ id }) => (
@@ -3733,6 +4048,33 @@ test("versions every teacher-confirmed learning path interpretation", () => {
     "SUPERSEDED",
     "STALE",
   ]);
+});
+
+test("makes learning-path superseded and stale states explicitly reachable", () => {
+  const pathModule = moduleById(requirementModel, "LPATH-001");
+  const interpretation = pathModule.objects.find(({ id }) => (
+    id === "LPATH-OBJ-INTERPRETATION"
+  ));
+  assert.equal(interpretation.stateReachability.mode, "ACTION_GRAPH");
+  const actionById = new Map(pathModule.actions.map((action) => [action.id, action]));
+  assert.deepEqual(actionById.get("LPATH-ACT-SUPERSEDE-INTERPRETATION")?.transition, {
+    from: ["TEACHER_CONFIRMED", "STUDENT_VISIBLE"],
+    to: "SUPERSEDED",
+  });
+  assert.deepEqual(actionById.get("LPATH-ACT-MARK-INTERPRETATION-STALE")?.transition, {
+    from: ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE"],
+    to: "STALE",
+  });
+
+  const model = structuredClone(requirementModel);
+  const mutatedPath = moduleById(model, "LPATH-001");
+  mutatedPath.actions = mutatedPath.actions.filter(({ id }) => (
+    id !== "LPATH-ACT-SUPERSEDE-INTERPRETATION"
+  ));
+  mutatedPath.scenarios = mutatedPath.scenarios.filter(({ actionId }) => (
+    actionId !== "LPATH-ACT-SUPERSEDE-INTERPRETATION"
+  ));
+  assertHasCode(validateRequirementModel(model), "UNREACHABLE_OBJECT_STATE");
 });
 
 test("keeps learning path history immutable and creates a new explanation version", () => {
@@ -3802,6 +4144,74 @@ test("models notification delivery retry without rolling back source business fa
   assertHasCode(validateRequirementModel(model), "INVALID_NOTIFICATION_CONTRACT");
 });
 
+test("validates declared-state reachability through a generic action graph", () => {
+  const validModel = validFixture();
+  moduleById(validModel, "SUB-001").objects[0].stateReachability = {
+    mode: "ACTION_GRAPH",
+    initialStateIds: ["DRAFT"],
+  };
+  assert.deepEqual(validateRequirementModel(validModel), []);
+
+  const unreachableModel = structuredClone(validModel);
+  delete moduleById(unreachableModel, "SUB-001").actions[0].transition;
+  assertHasCode(validateRequirementModel(unreachableModel), "UNREACHABLE_OBJECT_STATE");
+});
+
+test("lets a student update only their own delivered notification", () => {
+  const notificationModule = moduleById(requirementModel, "NOTI-001");
+  for (const actionId of ["NOTI-ACT-MARK-READ", "NOTI-ACT-MARK-HANDLED"]) {
+    const targetAction = notificationModule.actions.find(({ id }) => id === actionId);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "ALLOW"
+      && permission.roleRef === "ROLE-STUDENT"
+      && permission.scope?.kind === "OWN_RECORD"
+      && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+    )), `${actionId} must allow the student recipient`);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "DENY"
+      && permission.roleRef === "ROLE-STUDENT"
+      && permission.scope?.kind === "OTHER_RECORD"
+      && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+    )), `${actionId} must deny another student's notification`);
+    assert.ok(targetAction.permissions.some((permission) => (
+      permission.effect === "DENY" && permission.roleRef === "ROLE-PLATFORM-OPS"
+    )), `${actionId} must deny platform operations by default`);
+  }
+
+  const markRead = notificationModule.actions.find(({ id }) => id === "NOTI-ACT-MARK-READ");
+  assert.deepEqual(markRead.transition, { from: "DELIVERED", to: "READ" });
+  const markHandled = notificationModule.actions
+    .find(({ id }) => id === "NOTI-ACT-MARK-HANDLED");
+  assert.deepEqual(markHandled.transition, { from: "READ", to: "HANDLED" });
+});
+
+test("makes notification delivery failure and retry states explicitly reachable", () => {
+  const notificationModule = moduleById(requirementModel, "NOTI-001");
+  const actionById = new Map(notificationModule.actions.map((action) => [action.id, action]));
+  assert.deepEqual(actionById.get("NOTI-ACT-DELIVER")?.transition, {
+    from: "QUEUED",
+    to: "DELIVERED",
+  });
+  assert.deepEqual(actionById.get("NOTI-ACT-FAIL-DELIVERY")?.transition, {
+    from: "QUEUED",
+    to: "FAILED",
+  });
+  assert.deepEqual(actionById.get("NOTI-ACT-RETRY-DELIVERY")?.transition, {
+    from: "FAILED",
+    to: "QUEUED",
+  });
+
+  const model = structuredClone(requirementModel);
+  const mutatedNotification = moduleById(model, "NOTI-001");
+  mutatedNotification.actions = mutatedNotification.actions.filter(({ id }) => (
+    id !== "NOTI-ACT-DELIVER"
+  ));
+  mutatedNotification.scenarios = mutatedNotification.scenarios.filter(({ actionId }) => (
+    actionId !== "NOTI-ACT-DELIVER"
+  ));
+  assertHasCode(validateRequirementModel(model), "UNREACHABLE_OBJECT_STATE");
+});
+
 test("keeps third-party notification channels as phase-two metadata only", () => {
   const extension = extensions.find(({ id }) => id === "EXT-THIRD-PARTY-NOTIFICATIONS");
   assert.deepEqual(Object.keys(extension).sort(), [
@@ -3821,6 +4231,40 @@ test("keeps third-party notification channels as phase-two metadata only", () =>
     ))),
     false,
   );
+});
+
+test("closes phase-one notification channels to explicit in-product delivery", () => {
+  const channelOptionSet = optionSets.find(({ id }) => id === "OPT-ENUM-047");
+  assert.ok(channelOptionSet, "phase-one notification channel Option Set must exist");
+  assert.deepEqual(channelOptionSet.values, [{ code: "IN_PRODUCT", label: "站内" }]);
+  const channelObjects = modules.flatMap((module) => module.objects)
+    .filter(({ channelPolicy }) => channelPolicy?.mode === "PHASE_ONE_CLOSED");
+  assert.deepEqual(channelObjects.map(({ id }) => id), [
+    "RPT-OBJ-DELIVERY",
+    "NOTI-OBJ-NOTIFICATION",
+  ]);
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+  for (const object of channelObjects) {
+    const channelField = object.fields.find(({ id }) => id === object.channelPolicy.fieldId);
+    assert.equal(channelField.valueSource.optionSetId, "OPT-ENUM-047");
+    const targetActions = [...actionById.values()].filter(({ targetObjectId }) => (
+      targetObjectId === object.id
+    ));
+    assert.ok(targetActions.length > 0);
+    assert.ok(targetActions.every(({ channel }) => channel === "IN_PRODUCT"));
+  }
+
+  const wrongActionChannel = structuredClone(requirementModel);
+  moduleById(wrongActionChannel, "NOTI-001").actions
+    .find(({ id }) => id === "NOTI-ACT-CREATE-REMINDER").channel = "WECHAT";
+  assertHasCode(validateRequirementModel(wrongActionChannel), "INVALID_NOTIFICATION_CHANNEL");
+
+  const expandedOptionSet = structuredClone(requirementModel);
+  expandedOptionSet.optionSets.find(({ id }) => id === "OPT-ENUM-047")
+    .values.push({ code: "WECHAT", label: "微信" });
+  assertHasCode(validateRequirementModel(expandedOptionSet), "INVALID_NOTIFICATION_CHANNEL");
 });
 
 test("adds only DF-011 and DF-013 while preserving the Task 6 Flow boundary", () => {
@@ -3863,22 +4307,180 @@ test("adds only DF-011 and DF-013 while preserving the Task 6 Flow boundary", ()
   );
 });
 
-test("defines DF-011 as evidence-to-learning-path versioned aggregation", () => {
+test("requires one closed contract profile for every Flow", () => {
+  assert.deepEqual(
+    flows.map(({ id, contractProfile }) => [id, contractProfile]),
+    [
+      ["DF-001", "GENERIC"],
+      ["DF-002", "GENERIC"],
+      ["DF-003", "GENERIC"],
+      ["DF-004", "GENERIC"],
+      ["DF-005", "GENERIC"],
+      ["DF-006", "GENERIC"],
+      ["DF-007", "GENERIC"],
+      ["DF-008", "GENERIC"],
+      ["DF-009", "GENERIC"],
+      ["DF-010", "GENERIC"],
+      ["DF-012", "GENERIC"],
+      ["DF-014", "GENERIC"],
+      ["DF-011", "LEARNING_PATH_AGGREGATION"],
+      ["DF-013", "REPORT_MATERIALIZATION"],
+    ],
+  );
+
+  for (const mutate of [
+    (model) => { delete model.flows.find(({ id }) => id === "DF-011").contractProfile; },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-013").contractProfile = "GENERIC";
+    },
+    (model) => { model.flows[0].contractProfile = "UNREGISTERED"; },
+  ]) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_FLOW_PROFILE");
+  }
+});
+
+test("validates specialized Flow profiles from closed semantic roles", () => {
+  const learningPathFlow = flows.find(({ id }) => id === "DF-011");
+  const reportFlow = flows.find(({ id }) => id === "DF-013");
+  assert.deepEqual(learningPathFlow.participantRoles?.map(({ role }) => role), [
+    "PUBLISHED_RESULT_SOURCE",
+    "EVIDENCE_SOURCE",
+    "CORRECTION_SOURCE",
+    "PLAN_EXECUTION_SOURCE",
+    "TEACHER_CONFIRMATION_SOURCE",
+    "LEARNING_PATH_DERIVATION",
+  ]);
+  assert.deepEqual(learningPathFlow.steps.map(({ semanticRole }) => semanticRole), [
+    "APPEND_PUBLISHED_RESULT",
+    "APPEND_EVIDENCE",
+    "APPEND_CORRECTION",
+    "APPEND_PLAN_EXECUTION",
+    "APPEND_TEACHER_CONFIRMATION",
+    "CREATE_INTERPRETATION_CANDIDATE",
+  ]);
+  assert.deepEqual(reportFlow.participantRoles?.map(({ role }) => role), [
+    "STUDENT_EXECUTION_SOURCE",
+    "PLAN_COORDINATION_SOURCE",
+    "REPORT_PIPELINE",
+    "NOTIFICATION_SINK",
+  ]);
+  assert.deepEqual(reportFlow.steps.map(({ semanticRole }) => semanticRole), [
+    "READ_STUDENT_EXECUTION",
+    "READ_PLAN_COORDINATION",
+    "CREATE_AD_HOC_RUN",
+    "CREATE_PERIODIC_RUN",
+    "START_RUN",
+    "COMPLETE_RUN",
+    "MATERIALIZE_SNAPSHOT",
+    "CREATE_DELIVERY",
+    "CREATE_NOTIFICATION",
+  ]);
+
+  const mutations = [
+    (model) => {
+      const steps = model.flows.find(({ id }) => id === "DF-011").steps;
+      [steps[0].actionId, steps[1].actionId] = [steps[1].actionId, steps[0].actionId];
+    },
+    (model) => {
+      const retryable = model.flows.find(({ id }) => id === "DF-013")
+        .retryPolicy.retryableFailureResults;
+      retryable.splice(retryable.indexOf("DELIVERY_FAILED"), 1);
+    },
+    (model) => {
+      const flow = model.flows.find(({ id }) => id === "DF-013");
+      flow.sourceDataRefs = flow.sourceDataRefs.filter(({ fieldId }) => (
+        fieldId !== "RPT-DEFINITION-F-VERSION"
+      ));
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-013")
+        .idempotencyKeyParts.fanoutFieldId = "PLN-PLAN-F-ID";
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-013").moduleIds[0] = "STU-001";
+    },
+    (model) => {
+      const steps = model.flows.find(({ id }) => id === "DF-013").steps;
+      [steps[0].semanticRole, steps[1].semanticRole] = [
+        steps[1].semanticRole,
+        steps[0].semanticRole,
+      ];
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-011").executionPaths[0]
+        .sourceBindings[0].targetRefFieldId = "LPATH-ENTRY-F-EVIDENCE-REF";
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-013").executionPaths[0]
+        .idempotencyKeyParts.versionFieldIds.pop();
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-013").compensation.strategy = "ROLLBACK_SOURCE";
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-011").failureGranularity = "FLOW";
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-011").sourceDataRefs[0].semanticRole
+        = "SOURCE_PAYLOAD";
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-013").targetDataRefs[0].semanticRole
+        = "TARGET_PAYLOAD";
+    },
+    (model) => {
+      model.flows.find(({ id }) => id === "DF-011").participantRoles[0].role
+        = "EVIDENCE_SOURCE";
+    },
+  ];
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_FLOW_PROFILE");
+  }
+});
+
+test("defines DF-011 as five-source learning-path versioned aggregation", () => {
   const flow = flows.find(({ id }) => id === "DF-011");
   assert.ok(flow, "DF-011 must exist");
-  assert.equal(flow.routingPolicy, "NONE");
-  assert.deepEqual(flow.moduleIds, ["INS-001", "LPATH-001"]);
+  assert.equal(flow.routingPolicy, "ACTION_CHOICE_REQUIRED");
+  assert.deepEqual(flow.moduleIds, [
+    "PUB-001",
+    "INS-001",
+    "CORR-001",
+    "APP-001",
+    "GRD-001",
+    "LPATH-001",
+  ]);
+  assert.deepEqual(flow.sourceOnlyModuleIds, [
+    "PUB-001",
+    "INS-001",
+    "CORR-001",
+    "APP-001",
+    "GRD-001",
+  ]);
   assert.deepEqual(flow.steps.map(({ actionId, providedInputs }) => ({
     actionId,
     providedInputs,
   })), [
-    { actionId: "INS-ACT-READ-CONFIRMED-EVIDENCE", providedInputs: [] },
+    { actionId: "LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE", providedInputs: [] },
     { actionId: "LPATH-ACT-APPEND-EVIDENCE-TIMELINE", providedInputs: [] },
+    { actionId: "LPATH-ACT-APPEND-CORRECTION-TIMELINE", providedInputs: [] },
+    { actionId: "LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE", providedInputs: [] },
+    { actionId: "LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE", providedInputs: [] },
     { actionId: "LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE", providedInputs: [] },
   ]);
   assert.deepEqual(
     [...new Set(flow.sourceDataRefs.map(({ objectId }) => objectId))],
-    ["INS-OBJ-EVIDENCE"],
+    [
+      "PUB-OBJ-RESULT",
+      "INS-OBJ-EVIDENCE",
+      "CORR-OBJ-ATTEMPT",
+      "APP-OBJ-TODO",
+      "GRD-OBJ-DECISION",
+    ],
   );
   assert.deepEqual(
     [...new Set(flow.targetDataRefs.map(({ objectId }) => objectId))],
@@ -3889,7 +4491,7 @@ test("defines DF-011 as evidence-to-learning-path versioned aggregation", () => 
 test("defines DF-013 as student execution report materialization with in-product delivery", () => {
   const flow = flows.find(({ id }) => id === "DF-013");
   assert.ok(flow, "DF-013 must exist");
-  assert.equal(flow.routingPolicy, "NONE");
+  assert.equal(flow.routingPolicy, "ACTION_CHOICE_REQUIRED");
   assert.deepEqual(flow.moduleIds, ["APP-001", "PLN-001", "RPT-001", "NOTI-001"]);
   assert.deepEqual(flow.steps.map(({ actionId, providedInputs }) => ({
     actionId,
@@ -3897,14 +4499,30 @@ test("defines DF-013 as student execution report materialization with in-product
   })), [
     { actionId: "APP-ACT-VIEW-TODOS", providedInputs: [] },
     { actionId: "PLN-ACT-VIEW-HOMEROOM-COORDINATION", providedInputs: [] },
-    { actionId: "RPT-ACT-CREATE-RUN", providedInputs: [] },
+    {
+      actionId: "RPT-ACT-CREATE-AD-HOC-RUN",
+      providedInputs: [
+        { fieldId: "RPT-RUN-F-DEFINITION-REF", provider: { actorRef: "SYSTEM" } },
+        { fieldId: "RPT-RUN-F-DEFINITION-VERSION", provider: { actorRef: "SYSTEM" } },
+      ],
+    },
+    {
+      actionId: "RPT-ACT-CREATE-RUN",
+      providedInputs: [
+        { fieldId: "RPT-RUN-F-DEFINITION-REF", provider: { actorRef: "SYSTEM" } },
+        { fieldId: "RPT-RUN-F-DEFINITION-VERSION", provider: { actorRef: "SYSTEM" } },
+        { fieldId: "RPT-RUN-F-SUBSCRIPTION-REF", provider: { actorRef: "SYSTEM" } },
+        { fieldId: "RPT-RUN-F-SUBSCRIPTION-VERSION", provider: { actorRef: "SYSTEM" } },
+      ],
+    },
+    { actionId: "RPT-ACT-START-RUN", providedInputs: [] },
     { actionId: "RPT-ACT-COMPLETE-RUN", providedInputs: [] },
     { actionId: "RPT-ACT-MATERIALIZE-SNAPSHOT", providedInputs: [] },
     { actionId: "RPT-ACT-CREATE-DELIVERY", providedInputs: [] },
     { actionId: "NOTI-ACT-CREATE-REPORT-NOTIFICATION", providedInputs: [] },
   ]);
   const model = structuredClone(requirementModel);
-  model.flows.find(({ id }) => id === "DF-013").steps[6].actionId = "THIRD-PARTY-NOTIFICATION";
+  model.flows.find(({ id }) => id === "DF-013").steps[8].actionId = "THIRD-PARTY-NOTIFICATION";
   assertHasCode(validateRequirementModel(model), "MISSING_FLOW_ACTION");
 });
 
@@ -6228,7 +6846,7 @@ test("declares field-derived guard policies for every version-pinned reference",
   assert.equal(attempt.fields.find(({ id }) => (
     id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
   )).stateGuardPolicy, "CREATE_REQUIRED");
-  assert.equal(pinnedRefs.filter(({ field }) => field.stateGuardPolicy === "NONE").length, 37);
+  assert.equal(pinnedRefs.filter(({ field }) => field.stateGuardPolicy === "NONE").length, 36);
 });
 
 test("declares exact action applicability for every version-pinned reference", () => {
@@ -6257,7 +6875,7 @@ test("declares exact action applicability for every version-pinned reference", (
   )).actionApplicability.requiredActionIds, ["CORR-ACT-RESUBMIT"]);
   assert.equal(pinnedRefs.filter(({ field }) => (
     field.actionApplicability.requiredActionIds.length === 0
-  )).length, 37);
+  )).length, 36);
 });
 
 test("fails closed when version-pinned action applicability is malformed", () => {
@@ -6751,19 +7369,34 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["CORR-ACT-MARK-TASK-AWAITING-RETRY", "FLOW_INTERNAL"],
     ["CORR-ACT-RECORD-INVALIDATION", "FLOW_INTERNAL"],
     ["STU-ACT-BUILD-PROFILE", "FLOW_INTERNAL"],
+    ["RPT-ACT-CREATE-AD-HOC-RUN", "FLOW_INTERNAL"],
     ["RPT-ACT-CREATE-RUN", "FLOW_INTERNAL"],
+    ["RPT-ACT-START-RUN", "FLOW_INTERNAL"],
     ["RPT-ACT-COMPLETE-RUN", "FLOW_INTERNAL"],
+    ["RPT-ACT-FAIL-RUN", "SYSTEM_EVENT"],
+    ["RPT-ACT-BLOCK-RUN-PERMISSION", "SYSTEM_EVENT"],
     ["RPT-ACT-MATERIALIZE-SNAPSHOT", "FLOW_INTERNAL"],
     ["RPT-ACT-CREATE-DELIVERY", "FLOW_INTERNAL"],
+    ["RPT-ACT-MARK-DELIVERED", "SYSTEM_EVENT"],
+    ["RPT-ACT-FAIL-DELIVERY", "SYSTEM_EVENT"],
+    ["RPT-ACT-RETRY-DELIVERY", "SYSTEM_EVENT"],
+    ["LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE", "FLOW_INTERNAL"],
     ["LPATH-ACT-APPEND-EVIDENCE-TIMELINE", "FLOW_INTERNAL"],
+    ["LPATH-ACT-APPEND-CORRECTION-TIMELINE", "FLOW_INTERNAL"],
+    ["LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE", "FLOW_INTERNAL"],
+    ["LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE", "FLOW_INTERNAL"],
     ["LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE", "FLOW_INTERNAL"],
+    ["LPATH-ACT-MARK-INTERPRETATION-STALE", "SYSTEM_EVENT"],
     ["NOTI-ACT-CREATE-REPORT-NOTIFICATION", "FLOW_INTERNAL"],
+    ["NOTI-ACT-DELIVER", "SYSTEM_EVENT"],
+    ["NOTI-ACT-FAIL-DELIVERY", "SYSTEM_EVENT"],
+    ["NOTI-ACT-RETRY-DELIVERY", "SYSTEM_EVENT"],
   ]);
   const actions = modules.flatMap((module) => module.actions);
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 47);
+  assert.equal(expectedModes.size, 62);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -7362,7 +7995,11 @@ test("keeps every Flow action participant and data reference valid and symmetric
   assert.equal(flows.length, 14);
   for (const flow of flows) {
     const actionModuleIds = new Set(flow.steps.map(({ actionId }) => moduleByActionId.get(actionId)));
-    assert.deepEqual(new Set(flow.moduleIds), actionModuleIds, flow.id);
+    const sourceOnlyModuleIds = new Set(flow.sourceOnlyModuleIds ?? []);
+    const expectedActionModuleIds = new Set(
+      flow.moduleIds.filter((moduleId) => !sourceOnlyModuleIds.has(moduleId)),
+    );
+    assert.deepEqual(expectedActionModuleIds, actionModuleIds, flow.id);
     for (const dataRef of [...flow.sourceDataRefs, ...flow.targetDataRefs]) {
       const owner = objectById.get(dataRef.objectId);
       assert.ok(owner, `${flow.id}:${dataRef.objectId}`);
@@ -7698,6 +8335,7 @@ test("registers every required Option Set concept with stable code-label values"
     "aiTaskStatus",
     "notificationType",
     "notificationReadState",
+    "notificationChannel",
     "publicationEligibility",
     "publicationNotificationPolicy",
     "publicationNotificationStatus",
@@ -7929,6 +8567,7 @@ test("registers every required Option Set concept with stable code-label values"
     ],
     notificationType: ["ASSIGNMENT", "SUBMISSION", "GRADING", "PUBLISH", "CORRECTION", "IMPROVEMENT", "REPORT", "PERMISSION", "SYSTEM"],
     notificationReadState: ["UNREAD", "READ", "HANDLED", "ARCHIVED"],
+    notificationChannel: ["IN_PRODUCT"],
     publicationEligibility: ["ELIGIBLE", "BLOCKED"],
     publicationNotificationPolicy: ["NONE", "ON-PUBLISH"],
     publicationNotificationStatus: ["PENDING", "SENT", "FAILED", "NOT-REQUIRED"],
@@ -9327,6 +9966,11 @@ test("accepts authorized duty confirmation for an AI write task", () => {
     roleId: "ROLE-TEACHER",
     label: "subject teacher",
   });
+  moduleById(model, "SUB-001").actions[0].permissions.push({
+    effect: "ALLOW",
+    dutyRef: "DUTY-SUBJECT-TEACHER",
+    condition: "the assigned subject teacher confirms the AI-assisted write",
+  });
   model.aiTasks.push(validAiTask("AI-TASK-01"));
 
   assert.deepEqual(validateRequirementModel(model), []);
@@ -9386,6 +10030,11 @@ test("accepts AI write preview fields from action inputs and outputs", () => {
   });
   const submissionModule = moduleById(model, "SUB-001");
   submissionModule.actions[0].outputFieldIds = ["SUB-F001", "SUB-F002"];
+  submissionModule.actions[0].permissions.push({
+    effect: "ALLOW",
+    dutyRef: "DUTY-SUBJECT-TEACHER",
+    condition: "the assigned subject teacher confirms the AI-assisted write",
+  });
   model.aiTasks.push(validAiTask("AI-TASK-01", {
     previewFieldIds: ["SUB-F001", "SUB-F002"],
   }));

@@ -49,16 +49,28 @@ export {
   sensitivities,
 };
 
-export const modules = deepFreeze([
+const authoredModules = [
   ...foundationModules,
   ...teachingLoopModules,
   ...aiReportingModules,
-]);
-export const flows = deepFreeze([
+];
+
+export const modules = deepFreeze(authoredModules.map((module) => ({
+  ...module,
+  objects: module.objects.map((object) => ({
+    ...object,
+    stateReachability: object.stateReachability ?? { mode: "NONE" },
+  })),
+})));
+const authoredFlows = [
   ...foundationFlows,
   ...teachingLoopFlows,
   ...aiReportingFlows,
-]);
+];
+export const flows = deepFreeze(authoredFlows.map((flow) => ({
+  ...flow,
+  contractProfile: flow.contractProfile ?? "GENERIC",
+})));
 export const aiTasks = deepFreeze(aiReportingAiTasks);
 
 const collectionFacts = {

@@ -32,6 +32,24 @@ const FLOW_ROUTING_POLICIES = new Set([
   "ACTION_CHOICE_REQUIRED",
   "OPTION_VALUE_REQUIRED",
 ]);
+const FLOW_CONTRACT_PROFILES = new Set([
+  "GENERIC",
+  "LEARNING_PATH_AGGREGATION",
+  "REPORT_MATERIALIZATION",
+]);
+const FLOW_SOURCE_SEMANTIC_ROLES = new Set([
+  "SOURCE_IDENTITY",
+  "SOURCE_VERSION",
+  "SOURCE_FANOUT",
+  "SOURCE_PAYLOAD",
+]);
+const FLOW_TARGET_SEMANTIC_ROLES = new Set([
+  "TARGET_IDENTITY",
+  "TARGET_VERSION",
+  "TARGET_LINEAGE",
+  "TARGET_PAYLOAD",
+  "TARGET_STATE",
+]);
 const AI_TASK_TYPES = new Set([
   "QUERY",
   "ANALYSIS",
@@ -41,12 +59,21 @@ const AI_TASK_TYPES = new Set([
   "REMINDER",
   "CONTROLLED_ACTION",
 ]);
+const JSON_SCHEMA_TYPES = new Set([
+  "string",
+  "number",
+  "integer",
+  "boolean",
+  "object",
+  "array",
+]);
 const PERMISSION_ALLOWED_KEYS = new Set([
   "effect",
   "condition",
   "actorRef",
   "roleRef",
   "dutyRef",
+  "scope",
 ]);
 const SCENARIO_KINDS = new Set(["SUCCESS", "FAILURE", "BOUNDARY"]);
 const DATA_TYPES = new Set([
@@ -1068,6 +1095,21 @@ function validateAction(errors, action, path, strict) {
         `INVALID_ACTION_CONTRACT ${permissionPath}.condition must be a non-empty string`,
       );
     }
+    if (Object.hasOwn(permission, "scope")) {
+      const scope = permission.scope;
+      const scopeKeys = new Set(["kind", "subjectFieldId"]);
+      if (
+        !isRecord(scope)
+        || Object.keys(scope).length !== scopeKeys.size
+        || Object.keys(scope).some((key) => !scopeKeys.has(key))
+        || !["OWN_RECORD", "OTHER_RECORD"].includes(scope.kind)
+        || !isValidId(scope.subjectFieldId)
+      ) {
+        errors.push(
+          `INVALID_ACTION_CONTRACT ${permissionPath}.scope must declare an OWN_RECORD or OTHER_RECORD subject field`,
+        );
+      }
+    }
     const subjectProperties = ["actorRef", "roleRef", "dutyRef"]
       .filter((property) => Object.hasOwn(permission, property));
     if (subjectProperties.length !== 1) {
@@ -1310,6 +1352,53 @@ function validateModule(errors, module, path) {
 
 function validateFlow(errors, flow, path) {
   contractString(errors, flow, "label", path, "INVALID_FLOW_CONTRACT");
+  const specializedProfile = FLOW_CONTRACT_PROFILES.has(flow.contractProfile)
+    && flow.contractProfile !== "GENERIC";
+  if (!FLOW_CONTRACT_PROFILES.has(flow.contractProfile)) {
+    errors.push(
+      `INVALID_FLOW_PROFILE ${path}.contractProfile must be GENERIC, LEARNING_PATH_AGGREGATION, or REPORT_MATERIALIZATION`,
+    );
+  }
+  if (specializedProfile) {
+    const participantRoles = contractArray(
+      errors,
+      flow,
+      "participantRoles",
+      path,
+      "INVALID_FLOW_PROFILE",
+      { nonEmpty: true },
+    );
+    const seenModules = new Set();
+    const seenRoles = new Set();
+    participantRoles.forEach((participant, index) => {
+      const participantPath = `${path}.participantRoles[${index}]`;
+      const participantKeys = new Set(["moduleId", "role"]);
+      if (
+        !isRecord(participant)
+        || Object.keys(participant).length !== participantKeys.size
+        || Object.keys(participant).some((key) => !participantKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_FLOW_PROFILE ${participantPath} must use the closed moduleId and role shape`,
+        );
+        return;
+      }
+      for (const property of ["moduleId", "role"]) {
+        contractString(errors, participant, property, participantPath, "INVALID_FLOW_PROFILE");
+      }
+      if (seenModules.has(participant.moduleId) || seenRoles.has(participant.role)) {
+        errors.push(
+          `INVALID_FLOW_PROFILE ${participantPath} moduleId and role must be unique`,
+        );
+      }
+      seenModules.add(participant.moduleId);
+      seenRoles.add(participant.role);
+    });
+  } else if (flow.contractProfile === "GENERIC" && Object.hasOwn(flow, "participantRoles")) {
+    errors.push(
+      `INVALID_FLOW_PROFILE ${path} GENERIC forbids specialized participant roles`,
+    );
+  }
   if (![1, 2].includes(flow.phase)) {
     errors.push(`INVALID_FLOW_CONTRACT ${path}.phase must be 1 or 2`);
   }
@@ -1326,6 +1415,22 @@ function validateFlow(errors, flow, path) {
     "INVALID_FLOW_CONTRACT",
     { nonEmpty: true },
   );
+  if (Object.hasOwn(flow, "sourceOnlyModuleIds")) {
+    const sourceOnlyModuleIds = contractStringArray(
+      errors,
+      flow,
+      "sourceOnlyModuleIds",
+      path,
+      "INVALID_FLOW_CONTRACT",
+      { nonEmpty: true },
+    );
+    validateUniqueStrings(
+      errors,
+      sourceOnlyModuleIds,
+      `${path}.sourceOnlyModuleIds`,
+      "INVALID_FLOW_CONTRACT",
+    );
+  }
   const steps = contractArray(
     errors,
     flow,
@@ -1347,6 +1452,11 @@ function validateFlow(errors, flow, path) {
       errors.push(`INVALID_FLOW_CONTRACT ${stepPath}.order must be ${index + 1}`);
     }
     contractString(errors, step, "actionId", stepPath, "INVALID_FLOW_CONTRACT");
+    if (specializedProfile) {
+      contractString(errors, step, "semanticRole", stepPath, "INVALID_FLOW_PROFILE");
+    } else if (flow.contractProfile === "GENERIC" && Object.hasOwn(step, "semanticRole")) {
+      errors.push(`INVALID_FLOW_PROFILE ${stepPath} GENERIC forbids a semantic role`);
+    }
     if (Object.hasOwn(step, "condition") && !isValidId(step.condition)) {
       errors.push(
         `INVALID_FLOW_CONTRACT ${stepPath}.condition must be a non-empty string when present`,
@@ -1445,13 +1555,20 @@ function validateFlow(errors, flow, path) {
         errors.push(`INVALID_FLOW_CONTRACT ${executionPathPath} must be an object`);
         return;
       }
-      const expectedPathKeys = new Set(["id", "stepOrders", "providedInputs", "route"]);
+      const expectedPathKeys = new Set([
+        "id",
+        "stepOrders",
+        "providedInputs",
+        "route",
+        "sourceBindings",
+        "idempotencyKeyParts",
+        ...(specializedProfile ? ["semanticRole"] : []),
+      ]);
       if (
-        Object.keys(executionPath).length !== expectedPathKeys.size
-        || Object.keys(executionPath).some((key) => !expectedPathKeys.has(key))
+        Object.keys(executionPath).some((key) => !expectedPathKeys.has(key))
       ) {
         errors.push(
-          `INVALID_FLOW_CONTRACT ${executionPathPath} must use the closed id, stepOrders, providedInputs, and route shape`,
+          `INVALID_FLOW_CONTRACT ${executionPathPath} contains unsupported path contract keys`,
         );
       }
       contractString(
@@ -1461,6 +1578,22 @@ function validateFlow(errors, flow, path) {
         executionPathPath,
         "INVALID_FLOW_CONTRACT",
       );
+      if (specializedProfile) {
+        contractString(
+          errors,
+          executionPath,
+          "semanticRole",
+          executionPathPath,
+          "INVALID_FLOW_PROFILE",
+        );
+      } else if (
+        flow.contractProfile === "GENERIC"
+        && Object.hasOwn(executionPath, "semanticRole")
+      ) {
+        errors.push(
+          `INVALID_FLOW_PROFILE ${executionPathPath} GENERIC forbids a semantic role`,
+        );
+      }
       if (seenPathIds.has(executionPath.id)) {
         errors.push(`INVALID_FLOW_CONTRACT ${executionPathPath}.id must be unique`);
       }
@@ -1628,6 +1761,123 @@ function validateFlow(errors, flow, path) {
           );
         }
       });
+      if (Object.hasOwn(executionPath, "sourceBindings")) {
+        const sourceBindings = contractArray(
+          errors,
+          executionPath,
+          "sourceBindings",
+          executionPathPath,
+          "INVALID_FLOW_CONTRACT",
+          { nonEmpty: true },
+        );
+        const seenBindings = new Set();
+        sourceBindings.forEach((binding, bindingIndex) => {
+          const bindingPath = `${executionPathPath}.sourceBindings[${bindingIndex}]`;
+          if (!isRecord(binding)) {
+            errors.push(`INVALID_FLOW_CONTRACT ${bindingPath} must be an object`);
+            return;
+          }
+          const bindingKeys = new Set([
+            "sourceObjectId",
+            "sourceIdentityFieldId",
+            "sourceVersionFieldId",
+            "consumerStepOrder",
+            "targetRefFieldId",
+            "targetVersionFieldId",
+            "cardinality",
+          ]);
+          if (
+            Object.keys(binding).length !== bindingKeys.size
+            || Object.keys(binding).some((key) => !bindingKeys.has(key))
+          ) {
+            errors.push(
+              `INVALID_FLOW_CONTRACT ${bindingPath} must use the closed source lineage binding shape`,
+            );
+          }
+          for (const property of [
+            "sourceObjectId",
+            "sourceIdentityFieldId",
+            "sourceVersionFieldId",
+            "targetRefFieldId",
+            "targetVersionFieldId",
+          ]) {
+            contractString(errors, binding, property, bindingPath, "INVALID_FLOW_CONTRACT");
+          }
+          if (
+            !Number.isInteger(binding.consumerStepOrder)
+            || !seenStepOrders.has(binding.consumerStepOrder)
+          ) {
+            errors.push(
+              `INVALID_FLOW_CONTRACT ${bindingPath}.consumerStepOrder must reference a step on the same path`,
+            );
+          }
+          if (binding.cardinality !== "ONE") {
+            errors.push(`INVALID_FLOW_CONTRACT ${bindingPath}.cardinality must be ONE`);
+          }
+          const bindingKey = [
+            binding.consumerStepOrder,
+            binding.targetRefFieldId,
+            binding.targetVersionFieldId,
+          ].join(":" );
+          if (seenBindings.has(bindingKey)) {
+            errors.push(`INVALID_FLOW_CONTRACT ${bindingPath} must be unique within the path`);
+          }
+          seenBindings.add(bindingKey);
+        });
+      }
+      if (Object.hasOwn(executionPath, "idempotencyKeyParts")) {
+        const keyParts = executionPath.idempotencyKeyParts;
+        const keyPartKeys = new Set([
+          "identityFieldIds",
+          "versionFieldIds",
+          "fanoutFieldId",
+        ]);
+        if (
+          !isRecord(keyParts)
+          || Object.keys(keyParts).length !== keyPartKeys.size
+          || Object.keys(keyParts).some((key) => !keyPartKeys.has(key))
+        ) {
+          errors.push(
+            `INVALID_FLOW_CONTRACT ${executionPathPath}.idempotencyKeyParts must use the closed identity, version, and fanout shape`,
+          );
+        } else {
+          const identities = contractStringArray(
+            errors,
+            keyParts,
+            "identityFieldIds",
+            `${executionPathPath}.idempotencyKeyParts`,
+            "INVALID_FLOW_CONTRACT",
+            { nonEmpty: true },
+          );
+          const versions = contractStringArray(
+            errors,
+            keyParts,
+            "versionFieldIds",
+            `${executionPathPath}.idempotencyKeyParts`,
+            "INVALID_FLOW_CONTRACT",
+            { nonEmpty: true },
+          );
+          validateUniqueStrings(
+            errors,
+            identities,
+            `${executionPathPath}.idempotencyKeyParts.identityFieldIds`,
+            "INVALID_FLOW_CONTRACT",
+          );
+          validateUniqueStrings(
+            errors,
+            versions,
+            `${executionPathPath}.idempotencyKeyParts.versionFieldIds`,
+            "INVALID_FLOW_CONTRACT",
+          );
+          contractString(
+            errors,
+            keyParts,
+            "fanoutFieldId",
+            `${executionPathPath}.idempotencyKeyParts`,
+            "INVALID_FLOW_CONTRACT",
+          );
+        }
+      }
     });
     for (const stepOrder of validStepOrders) {
       if (!coveredStepOrders.has(stepOrder)) {
@@ -1667,7 +1917,13 @@ function validateFlow(errors, flow, path) {
         );
       }
       if (property === "sourceDataRefs") {
-        const expectedKeys = new Set(["objectId", "fieldId", "version", "cardinality"]);
+        const expectedKeys = new Set([
+          "objectId",
+          "fieldId",
+          "version",
+          "cardinality",
+          ...(specializedProfile ? ["semanticRole"] : []),
+        ]);
         if (
           Object.keys(dataRef).length !== expectedKeys.size
           || Object.keys(dataRef).some((key) => !expectedKeys.has(key))
@@ -1681,6 +1937,21 @@ function validateFlow(errors, flow, path) {
             `INVALID_FLOW_CONTRACT ${dataRefPath}.cardinality must be ONE or ZERO_MANY`,
           );
         }
+      }
+      if (specializedProfile) {
+        const allowedRoles = property === "sourceDataRefs"
+          ? FLOW_SOURCE_SEMANTIC_ROLES
+          : FLOW_TARGET_SEMANTIC_ROLES;
+        if (!allowedRoles.has(dataRef.semanticRole)) {
+          errors.push(
+            `INVALID_FLOW_PROFILE ${dataRefPath}.semanticRole is not registered for ${property}`,
+          );
+        }
+      } else if (
+        flow.contractProfile === "GENERIC"
+        && Object.hasOwn(dataRef, "semanticRole")
+      ) {
+        errors.push(`INVALID_FLOW_PROFILE ${dataRefPath} GENERIC forbids a semantic role`);
       }
     });
   }
@@ -1836,36 +2107,58 @@ function validateAiTask(errors, task, path) {
   }
   contractStringArray(errors, task, "previewFieldIds", path, code);
 
-  const validateSchema = (schema, schemaPath) => {
+  const validateSchemaNode = (schema, schemaPath, { root = false } = {}) => {
     if (!isRecord(schema)) {
-      errors.push(`${code} ${schemaPath} must be an object schema`);
+      errors.push(`${code} ${schemaPath} must be a schema object`);
       return;
     }
-    if (schema.type !== "object") {
+    if (!JSON_SCHEMA_TYPES.has(schema.type)) {
+      errors.push(`${code} ${schemaPath}.type must be a supported JSON schema type`);
+      return;
+    }
+    if (root && schema.type !== "object") {
       errors.push(`${code} ${schemaPath}.type must be object`);
     }
-    const required = contractStringArray(
-      errors,
-      schema,
-      "required",
-      schemaPath,
-      code,
-    );
-    if (!isRecord(schema.properties)) {
-      errors.push(`${code} ${schemaPath}.properties must be an object`);
-    } else {
+
+    if (schema.type === "array") {
+      if (!isRecord(schema.items)) {
+        errors.push(`${code} ${schemaPath}.items must be a schema object`);
+      } else {
+        validateSchemaNode(schema.items, `${schemaPath}.items`);
+      }
+    }
+
+    if (schema.type === "object") {
+      let properties;
+      if (Object.hasOwn(schema, "properties")) {
+        if (!isRecord(schema.properties)) {
+          errors.push(`${code} ${schemaPath}.properties must be an object`);
+        } else {
+          properties = schema.properties;
+          for (const [property, propertySchema] of Object.entries(properties)) {
+            validateSchemaNode(propertySchema, `${schemaPath}.properties.${property}`);
+          }
+        }
+      } else if (root) {
+        errors.push(`${code} ${schemaPath}.properties must be an object`);
+      }
+
+      const required = Object.hasOwn(schema, "required") || root
+        ? contractStringArray(errors, schema, "required", schemaPath, code)
+        : [];
       for (const property of required) {
-        if (!Object.hasOwn(schema.properties, property)) {
+        if (!properties || !Object.hasOwn(properties, property)) {
           errors.push(`${code} ${schemaPath}.required references missing ${property}`);
         }
       }
     }
-    if (schema.additionalProperties !== false) {
+
+    if (root && schema.additionalProperties !== false) {
       errors.push(`${code} ${schemaPath}.additionalProperties must be false`);
     }
   };
-  validateSchema(task.parameterSchema, `${path}.parameterSchema`);
-  validateSchema(task.resultSchema, `${path}.resultSchema`);
+  validateSchemaNode(task.parameterSchema, `${path}.parameterSchema`, { root: true });
+  validateSchemaNode(task.resultSchema, `${path}.resultSchema`, { root: true });
 
   const clarificationRules = contractArray(
     errors,
@@ -1881,7 +2174,22 @@ function validateAiTask(errors, task, path) {
       errors.push(`${code} ${rulePath} must be an object`);
       return;
     }
-    contractStringArray(errors, rule, "whenMissing", rulePath, code, { nonEmpty: true });
+    const whenMissing = contractStringArray(
+      errors,
+      rule,
+      "whenMissing",
+      rulePath,
+      code,
+      { nonEmpty: true },
+    );
+    const parameterProperties = isRecord(task.parameterSchema?.properties)
+      ? task.parameterSchema.properties
+      : {};
+    for (const parameter of whenMissing) {
+      if (!Object.hasOwn(parameterProperties, parameter)) {
+        errors.push(`${code} ${rulePath}.whenMissing references missing ${parameter}`);
+      }
+    }
     contractString(errors, rule, "prompt", rulePath, code);
     if (rule.blocksExecution !== true) {
       errors.push(`${code} ${rulePath}.blocksExecution must be true`);

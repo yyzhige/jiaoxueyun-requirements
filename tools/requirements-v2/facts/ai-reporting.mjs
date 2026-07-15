@@ -2,6 +2,7 @@ import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
 const USER_TASK = "USER_TASK";
+const IN_PRODUCT_CHANNEL = "IN_PRODUCT";
 
 function field(id, label, overrides = {}) {
   return {
@@ -56,8 +57,13 @@ function actorReference(actorRef) {
   return { actorRef };
 }
 
-function permission(effect, actorRef, condition) {
-  return { effect, ...actorReference(actorRef), condition };
+function permission(effect, actorRef, condition, scope) {
+  return {
+    effect,
+    ...actorReference(actorRef),
+    condition,
+    ...(scope ? { scope } : {}),
+  };
 }
 
 function action({
@@ -76,6 +82,7 @@ function action({
   trigger,
   permissions,
   failureResults,
+  channel,
 }) {
   const effectiveOperationKind = operationKind
     ?? (writes === false ? "READ" : transition ? "UPDATE" : "CREATE");
@@ -134,6 +141,7 @@ function action({
       executionMode,
       ...(executionMode === USER_TASK ? { clients: WEB_APP } : { trigger }),
       permissions,
+      ...(channel ? { channel } : {}),
       scenarioIds: [successScenario.id, ...failureScenarios.map(({ id: scenarioId }) => scenarioId)],
       ...(effectiveWrites ? {
         idempotencyKey: `${id}:school:object:source-version:request-id`,
@@ -348,7 +356,9 @@ const reportRunFields = [
     ),
     required: true,
     stateGuardPolicy: "CREATE_REQUIRED",
-    actionApplicability: { requiredActionIds: ["RPT-ACT-CREATE-RUN"] },
+    actionApplicability: {
+      requiredActionIds: ["RPT-ACT-CREATE-AD-HOC-RUN", "RPT-ACT-CREATE-RUN"],
+    },
   },
   {
     ...pinnedVersionField("RPT-RUN-F-DEFINITION-VERSION", "Run Report Definition Version"),
@@ -362,13 +372,21 @@ const reportRunFields = [
       "RPT-RUN-F-SUBSCRIPTION-VERSION",
       "RPT-SUBSCRIPTION-F-VERSION",
     ),
-    required: true,
+    required: {
+      description: "required only for a periodic report run",
+      whenStates: ["QUEUED"],
+      whenActionIds: ["RPT-ACT-CREATE-RUN"],
+    },
     stateGuardPolicy: "CREATE_REQUIRED",
     actionApplicability: { requiredActionIds: ["RPT-ACT-CREATE-RUN"] },
   },
   {
     ...pinnedVersionField("RPT-RUN-F-SUBSCRIPTION-VERSION", "Run Report Subscription Version"),
-    required: true,
+    required: {
+      description: "required only for a periodic report run",
+      whenStates: ["QUEUED"],
+      whenActionIds: ["RPT-ACT-CREATE-RUN"],
+    },
   },
   field("RPT-RUN-F-DATA-CUTOFF", "Run Data Cutoff", {
     dataType: "DATETIME",
@@ -461,6 +479,10 @@ const reportDeliveryFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
+  field("RPT-DELIVERY-F-CHANNEL", "Delivery Channel", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-047" },
+    mutability: "IMMUTABLE",
+  }),
   field("RPT-DELIVERY-F-STATE", "Report Delivery State", {
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
@@ -471,6 +493,11 @@ const reportDeliveryFields = [
 const reportFlowPermissions = [
   permission("ALLOW", "SYSTEM", "the verified report Flow writes only authorized source-pinned report records"),
   permission("DENY", "CURRENT_ACTOR", "a user cannot invoke an internal report materialization action directly"),
+];
+
+const reportEventPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified report event updates only the target run or delivery"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot invoke report state events directly"),
 ];
 
 const reportActions = [
@@ -544,15 +571,44 @@ const reportActions = [
     permissions: teacherWritePermissions,
   }),
   action({
-    id: "RPT-ACT-CREATE-RUN",
-    label: "Create a Permission-rechecked Report Run",
+    id: "RPT-ACT-CREATE-AD-HOC-RUN",
+    label: "Create an Ad-hoc Permission-rechecked Report Run",
     targetObjectId: "RPT-OBJ-RUN",
+    inputFieldIds: [
+      "RPT-RUN-F-DEFINITION-REF",
+      "RPT-RUN-F-DEFINITION-VERSION",
+    ],
     outputFieldIds: [
       "RPT-RUN-F-ID",
+      "RPT-RUN-F-DATA-CUTOFF",
+      "RPT-RUN-F-PERMISSION-RESULT",
+      "RPT-RUN-F-SOURCE-VERSIONS",
+      "RPT-RUN-F-VERSION",
+    ],
+    relatedStateGuards: [{
+      refFieldId: "RPT-RUN-F-DEFINITION-REF",
+      versionFieldId: "RPT-RUN-F-DEFINITION-VERSION",
+      targetObjectId: "RPT-OBJ-DEFINITION",
+      requiredState: "ACTIVE",
+    }],
+    successState: "QUEUED",
+    executionMode: "FLOW_INTERNAL",
+    trigger: { kind: "FLOW", flowIds: ["DF-013"] },
+    permissions: reportFlowPermissions,
+    failureResults: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "RPT-ACT-CREATE-RUN",
+    label: "Create a Periodic Permission-rechecked Report Run",
+    targetObjectId: "RPT-OBJ-RUN",
+    inputFieldIds: [
       "RPT-RUN-F-DEFINITION-REF",
       "RPT-RUN-F-DEFINITION-VERSION",
       "RPT-RUN-F-SUBSCRIPTION-REF",
       "RPT-RUN-F-SUBSCRIPTION-VERSION",
+    ],
+    outputFieldIds: [
+      "RPT-RUN-F-ID",
       "RPT-RUN-F-DATA-CUTOFF",
       "RPT-RUN-F-PERMISSION-RESULT",
       "RPT-RUN-F-SOURCE-VERSIONS",
@@ -572,11 +628,22 @@ const reportActions = [
         requiredState: "ACTIVE",
       },
     ],
-    successState: "RUNNING",
+    successState: "QUEUED",
     executionMode: "FLOW_INTERNAL",
     trigger: { kind: "FLOW", flowIds: ["DF-013"] },
     permissions: reportFlowPermissions,
-    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+    failureResults: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "RPT-ACT-START-RUN",
+    label: "Start a Permission-cleared Report Run",
+    targetObjectId: "RPT-OBJ-RUN",
+    outputFieldIds: ["RPT-RUN-F-VERSION"],
+    transition: { from: "QUEUED", to: "RUNNING" },
+    executionMode: "FLOW_INTERNAL",
+    trigger: { kind: "FLOW", flowIds: ["DF-013"] },
+    permissions: reportFlowPermissions,
+    failureResults: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
   }),
   action({
     id: "RPT-ACT-COMPLETE-RUN",
@@ -588,6 +655,28 @@ const reportActions = [
     trigger: { kind: "FLOW", flowIds: ["DF-013"] },
     permissions: reportFlowPermissions,
     failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "RPT-ACT-FAIL-RUN",
+    label: "Record a Failed Report Run",
+    targetObjectId: "RPT-OBJ-RUN",
+    outputFieldIds: ["RPT-RUN-F-VERSION"],
+    transition: { from: "RUNNING", to: "FAILED" },
+    executionMode: "SYSTEM_EVENT",
+    trigger: { kind: "EVENT", eventId: "EVT-REPORT-RUN-FAILED" },
+    permissions: reportEventPermissions,
+    failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+  }),
+  action({
+    id: "RPT-ACT-BLOCK-RUN-PERMISSION",
+    label: "Block a Report Run after Permission Recheck Failure",
+    targetObjectId: "RPT-OBJ-RUN",
+    outputFieldIds: ["RPT-RUN-F-PERMISSION-RESULT", "RPT-RUN-F-VERSION"],
+    transition: { from: "QUEUED", to: "BLOCKED_PERMISSION" },
+    executionMode: "SYSTEM_EVENT",
+    trigger: { kind: "EVENT", eventId: "EVT-REPORT-RUN-PERMISSION-BLOCKED" },
+    permissions: reportEventPermissions,
+    failureResults: ["VERSION_CONFLICT"],
   }),
   action({
     id: "RPT-ACT-MATERIALIZE-SNAPSHOT",
@@ -622,6 +711,43 @@ const reportActions = [
     trigger: { kind: "FLOW", flowIds: ["DF-013"] },
     permissions: reportFlowPermissions,
     failureResults: ["PERMISSION_DENIED", "DELIVERY_FAILED", "VERSION_CONFLICT"],
+    channel: IN_PRODUCT_CHANNEL,
+  }),
+  action({
+    id: "RPT-ACT-MARK-DELIVERED",
+    label: "Record a Delivered In-product Report",
+    targetObjectId: "RPT-OBJ-DELIVERY",
+    outputFieldIds: ["RPT-DELIVERY-F-STATE", "RPT-DELIVERY-F-VERSION"],
+    transition: { from: "PENDING", to: "DELIVERED" },
+    executionMode: "SYSTEM_EVENT",
+    trigger: { kind: "EVENT", eventId: "EVT-REPORT-DELIVERY-SUCCEEDED" },
+    permissions: reportEventPermissions,
+    failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+    channel: IN_PRODUCT_CHANNEL,
+  }),
+  action({
+    id: "RPT-ACT-FAIL-DELIVERY",
+    label: "Record a Failed In-product Report Delivery",
+    targetObjectId: "RPT-OBJ-DELIVERY",
+    outputFieldIds: ["RPT-DELIVERY-F-STATE", "RPT-DELIVERY-F-VERSION"],
+    transition: { from: "PENDING", to: "FAILED" },
+    executionMode: "SYSTEM_EVENT",
+    trigger: { kind: "EVENT", eventId: "EVT-REPORT-DELIVERY-FAILED" },
+    permissions: reportEventPermissions,
+    failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+    channel: IN_PRODUCT_CHANNEL,
+  }),
+  action({
+    id: "RPT-ACT-RETRY-DELIVERY",
+    label: "Retry a Failed In-product Report Delivery",
+    targetObjectId: "RPT-OBJ-DELIVERY",
+    outputFieldIds: ["RPT-DELIVERY-F-STATE", "RPT-DELIVERY-F-VERSION"],
+    transition: { from: "FAILED", to: "PENDING" },
+    executionMode: "SYSTEM_EVENT",
+    trigger: { kind: "EVENT", eventId: "EVT-REPORT-DELIVERY-RETRY-DUE" },
+    permissions: reportEventPermissions,
+    failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+    channel: IN_PRODUCT_CHANNEL,
   }),
 ];
 
@@ -670,10 +796,12 @@ const reportModule = moduleFact({
       ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED_PERMISSION"],
       reportRunFields,
       {
+        stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
         executionPolicy: {
           permissionCheck: "RECHECK_EACH_RUN",
           dataCutoff: "RESOLVE_AT_RUN_START",
           permissionFailureState: "BLOCKED_PERMISSION",
+          permissionFailureActionId: "RPT-ACT-BLOCK-RUN-PERMISSION",
           sourceVersionCapture: "PIN_BEFORE_QUERY",
         },
         lineageBindings: [
@@ -716,6 +844,13 @@ const reportModule = moduleFact({
       ["PENDING", "DELIVERED", "FAILED"],
       reportDeliveryFields,
       {
+        stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
+        channelPolicy: {
+          mode: "PHASE_ONE_CLOSED",
+          fieldId: "RPT-DELIVERY-F-CHANNEL",
+          optionSetId: "OPT-ENUM-047",
+          allowedCodes: [IN_PRODUCT_CHANNEL],
+        },
         lineageBindings: [{
           refFieldId: "RPT-DELIVERY-F-SNAPSHOT-REF",
           versionFieldId: "RPT-DELIVERY-F-SNAPSHOT-VERSION",
@@ -918,20 +1053,42 @@ const interpretationFields = [
       whenActionIds: ["LPATH-ACT-PUBLISH-INTERPRETATION"],
     },
   }),
-  versionPinnedField(
-    "LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF",
-    "Superseding Interpretation Reference",
-    "LPATH-OBJ-INTERPRETATION",
-    "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
-    "LPATH-INTERPRETATION-F-VERSION",
-  ),
-  pinnedVersionField(
-    "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
-    "Superseding Interpretation Version",
-  ),
+  {
+    ...versionPinnedField(
+      "LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF",
+      "Superseding Interpretation Reference",
+      "LPATH-OBJ-INTERPRETATION",
+      "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
+      "LPATH-INTERPRETATION-F-VERSION",
+    ),
+    required: {
+      description: "required when a prior interpretation is superseded",
+      whenStates: ["SUPERSEDED"],
+      whenActionIds: ["LPATH-ACT-SUPERSEDE-INTERPRETATION"],
+    },
+    stateGuardPolicy: "UPDATE_REQUIRED",
+    actionApplicability: {
+      requiredActionIds: ["LPATH-ACT-SUPERSEDE-INTERPRETATION"],
+    },
+  },
+  {
+    ...pinnedVersionField(
+      "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
+      "Superseding Interpretation Version",
+    ),
+    required: {
+      description: "required when a prior interpretation is superseded",
+      whenStates: ["SUPERSEDED"],
+      whenActionIds: ["LPATH-ACT-SUPERSEDE-INTERPRETATION"],
+    },
+  },
   field("LPATH-INTERPRETATION-F-STALE-REASON", "Interpretation Stale Reason", {
     dataType: "TEXT",
-    required: false,
+    required: {
+      description: "required when a source version makes the interpretation stale",
+      whenStates: ["STALE"],
+      whenActionIds: ["LPATH-ACT-MARK-INTERPRETATION-STALE"],
+    },
     valueSource: { kind: "SYSTEM" },
     mutability: "SYSTEM_MANAGED",
   }),
@@ -984,27 +1141,33 @@ const flowWritePermissions = [
   permission("DENY", "CURRENT_ACTOR", "a user cannot invoke an internal Flow action directly"),
 ];
 
+const timelineCommonOutputFieldIds = [
+  "LPATH-ENTRY-F-ID",
+  "LPATH-ENTRY-F-STUDENT-REF",
+  "LPATH-ENTRY-F-TERM-ID",
+  "LPATH-ENTRY-F-EVENT-TYPE",
+  "LPATH-ENTRY-F-RECORDED-AT",
+  "LPATH-ENTRY-F-VERSION",
+];
+
+const timelineAppendActions = timelineSourceBindings.map((binding) => action({
+  id: `LPATH-ACT-APPEND-${binding.kind}-TIMELINE`,
+  label: `Append a ${binding.kind} Learning Timeline Entry`,
+  targetObjectId: "LPATH-OBJ-TIMELINE-ENTRY",
+  outputFieldIds: [
+    ...timelineCommonOutputFieldIds,
+    binding.refFieldId,
+    binding.versionFieldId,
+  ],
+  successState: "RECORDED",
+  executionMode: "FLOW_INTERNAL",
+  trigger: { kind: "FLOW", flowIds: ["DF-011"] },
+  permissions: flowWritePermissions,
+  failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+}));
+
 const learningPathActions = [
-  action({
-    id: "LPATH-ACT-APPEND-EVIDENCE-TIMELINE",
-    label: "Append a Confirmed Evidence Timeline Entry",
-    targetObjectId: "LPATH-OBJ-TIMELINE-ENTRY",
-    outputFieldIds: [
-      "LPATH-ENTRY-F-ID",
-      "LPATH-ENTRY-F-STUDENT-REF",
-      "LPATH-ENTRY-F-TERM-ID",
-      "LPATH-ENTRY-F-EVENT-TYPE",
-      "LPATH-ENTRY-F-EVIDENCE-REF",
-      "LPATH-ENTRY-F-EVIDENCE-VERSION",
-      "LPATH-ENTRY-F-RECORDED-AT",
-      "LPATH-ENTRY-F-VERSION",
-    ],
-    successState: "RECORDED",
-    executionMode: "FLOW_INTERNAL",
-    trigger: { kind: "FLOW", flowIds: ["DF-011"] },
-    permissions: flowWritePermissions,
-    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
-  }),
+  ...timelineAppendActions,
   action({
     id: "LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE",
     label: "Create a Version-pinned Learning Path Interpretation Candidate",
@@ -1041,6 +1204,48 @@ const learningPathActions = [
     transition: { from: "CANDIDATE", to: "TEACHER_CONFIRMED" },
     risk: RISK.HIGH,
     permissions: pathWritePermissions,
+  }),
+  action({
+    id: "LPATH-ACT-SUPERSEDE-INTERPRETATION",
+    label: "Supersede a Learning Path Interpretation Version",
+    targetObjectId: "LPATH-OBJ-INTERPRETATION",
+    inputFieldIds: [
+      "LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF",
+      "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
+    ],
+    relatedStateGuards: [{
+      refFieldId: "LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF",
+      versionFieldId: "LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION",
+      targetObjectId: "LPATH-OBJ-INTERPRETATION",
+      requiredState: "STUDENT_VISIBLE",
+    }],
+    outputFieldIds: ["LPATH-INTERPRETATION-F-VERSION"],
+    transition: {
+      from: ["TEACHER_CONFIRMED", "STUDENT_VISIBLE"],
+      to: "SUPERSEDED",
+    },
+    risk: RISK.HIGH,
+    permissions: pathWritePermissions,
+  }),
+  action({
+    id: "LPATH-ACT-MARK-INTERPRETATION-STALE",
+    label: "Mark a Learning Path Interpretation Stale",
+    targetObjectId: "LPATH-OBJ-INTERPRETATION",
+    outputFieldIds: [
+      "LPATH-INTERPRETATION-F-STALE-REASON",
+      "LPATH-INTERPRETATION-F-VERSION",
+    ],
+    transition: {
+      from: ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE"],
+      to: "STALE",
+    },
+    executionMode: "SYSTEM_EVENT",
+    trigger: {
+      kind: "EVENT",
+      eventId: "EVT-LEARNING-PATH-INTERPRETATION-STALE",
+    },
+    permissions: flowWritePermissions,
+    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
   }),
   action({
     id: "LPATH-ACT-PUBLISH-INTERPRETATION",
@@ -1091,6 +1296,10 @@ const learningPathModule = moduleFact({
       {
         readMode: "AUTHORIZED",
         crossTerm: true,
+        exclusiveSourceGroups: timelineSourceBindings.map((binding) => ({
+          id: binding.kind,
+          fieldIds: [binding.refFieldId, binding.versionFieldId],
+        })),
         lineageBindings: timelineSourceBindings.map((binding) => ({
           refFieldId: binding.refFieldId,
           versionFieldId: binding.versionFieldId,
@@ -1107,6 +1316,7 @@ const learningPathModule = moduleFact({
       ["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "SUPERSEDED", "STALE"],
       interpretationFields,
       {
+        stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
         lineageBindings: [
           {
             refFieldId: "LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF",
@@ -1146,6 +1356,10 @@ const notificationFields = [
   }),
   field("NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE", "Summary Template"),
   field("NOTI-NOTIFICATION-F-DEEP-LINK", "Authorized Product Deep Link"),
+  field("NOTI-NOTIFICATION-F-CHANNEL", "Notification Channel", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-ENUM-047" },
+    mutability: "IMMUTABLE",
+  }),
   field("NOTI-NOTIFICATION-F-DELIVERED-AT", "Delivered At", {
     dataType: "DATETIME",
     required: false,
@@ -1188,11 +1402,13 @@ const createReminder = action({
   ],
   outputFieldIds: [
     "NOTI-NOTIFICATION-F-ID",
+    "NOTI-NOTIFICATION-F-CHANNEL",
     "NOTI-NOTIFICATION-F-RETRY-COUNT",
     "NOTI-NOTIFICATION-F-VERSION",
   ],
   successState: "QUEUED",
   permissions: teacherWritePermissions,
+  channel: IN_PRODUCT_CHANNEL,
 });
 const createReportNotification = action({
   id: "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
@@ -1204,6 +1420,7 @@ const createReportNotification = action({
     "NOTI-NOTIFICATION-F-RECIPIENT",
     "NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE",
     "NOTI-NOTIFICATION-F-DEEP-LINK",
+    "NOTI-NOTIFICATION-F-CHANNEL",
     "NOTI-NOTIFICATION-F-RETRY-COUNT",
     "NOTI-NOTIFICATION-F-VERSION",
   ],
@@ -1212,6 +1429,75 @@ const createReportNotification = action({
   trigger: { kind: "FLOW", flowIds: ["DF-013"] },
   permissions: reportFlowPermissions,
   failureResults: ["PERMISSION_DENIED", "DELIVERY_FAILED", "VERSION_CONFLICT"],
+  channel: IN_PRODUCT_CHANNEL,
+});
+const notificationDeliveryPermissions = [
+  permission("ALLOW", "SYSTEM", "the verified delivery event updates only the target notification"),
+  permission("DENY", "CURRENT_ACTOR", "a user cannot invoke notification delivery state changes directly"),
+];
+const notificationRecipientPermissions = [
+  permission(
+    "ALLOW",
+    "ROLE-STUDENT",
+    "the authenticated student is the notification recipient",
+    { kind: "OWN_RECORD", subjectFieldId: "NOTI-NOTIFICATION-F-RECIPIENT" },
+  ),
+  permission(
+    "DENY",
+    "ROLE-STUDENT",
+    "the authenticated student is not the notification recipient",
+    { kind: "OTHER_RECORD", subjectFieldId: "NOTI-NOTIFICATION-F-RECIPIENT" },
+  ),
+  permission(
+    "DENY",
+    "ROLE-PLATFORM-OPS",
+    "platform operations has no default access to student notifications",
+  ),
+];
+const deliverNotification = action({
+  id: "NOTI-ACT-DELIVER",
+  label: "Record an In-product Notification Delivery",
+  targetObjectId: "NOTI-OBJ-NOTIFICATION",
+  outputFieldIds: [
+    "NOTI-NOTIFICATION-F-DELIVERED-AT",
+    "NOTI-NOTIFICATION-F-VERSION",
+  ],
+  transition: { from: "QUEUED", to: "DELIVERED" },
+  executionMode: "SYSTEM_EVENT",
+  trigger: { kind: "EVENT", eventId: "EVT-NOTIFICATION-DELIVERY-SUCCEEDED" },
+  permissions: notificationDeliveryPermissions,
+  failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+  channel: IN_PRODUCT_CHANNEL,
+});
+const failNotificationDelivery = action({
+  id: "NOTI-ACT-FAIL-DELIVERY",
+  label: "Record an In-product Notification Delivery Failure",
+  targetObjectId: "NOTI-OBJ-NOTIFICATION",
+  outputFieldIds: [
+    "NOTI-NOTIFICATION-F-FAILURE-CODE",
+    "NOTI-NOTIFICATION-F-VERSION",
+  ],
+  transition: { from: "QUEUED", to: "FAILED" },
+  executionMode: "SYSTEM_EVENT",
+  trigger: { kind: "EVENT", eventId: "EVT-NOTIFICATION-DELIVERY-FAILED" },
+  permissions: notificationDeliveryPermissions,
+  failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+  channel: IN_PRODUCT_CHANNEL,
+});
+const retryNotificationDelivery = action({
+  id: "NOTI-ACT-RETRY-DELIVERY",
+  label: "Retry an In-product Notification Delivery",
+  targetObjectId: "NOTI-OBJ-NOTIFICATION",
+  outputFieldIds: [
+    "NOTI-NOTIFICATION-F-RETRY-COUNT",
+    "NOTI-NOTIFICATION-F-VERSION",
+  ],
+  transition: { from: "FAILED", to: "QUEUED" },
+  executionMode: "SYSTEM_EVENT",
+  trigger: { kind: "EVENT", eventId: "EVT-NOTIFICATION-DELIVERY-RETRY-DUE" },
+  permissions: notificationDeliveryPermissions,
+  failureResults: ["PERMISSION_DENIED", "VERSION_CONFLICT"],
+  channel: IN_PRODUCT_CHANNEL,
 });
 const markNotificationRead = action({
   id: "NOTI-ACT-MARK-READ",
@@ -1223,8 +1509,9 @@ const markNotificationRead = action({
     "NOTI-NOTIFICATION-F-READ-AT",
     "NOTI-NOTIFICATION-F-VERSION",
   ],
-  transition: { from: "QUEUED", to: "READ" },
-  permissions: teacherWritePermissions,
+  transition: { from: "DELIVERED", to: "READ" },
+  permissions: notificationRecipientPermissions,
+  channel: IN_PRODUCT_CHANNEL,
 });
 const markNotificationHandled = action({
   id: "NOTI-ACT-MARK-HANDLED",
@@ -1236,7 +1523,8 @@ const markNotificationHandled = action({
     "NOTI-NOTIFICATION-F-VERSION",
   ],
   transition: { from: "READ", to: "HANDLED" },
-  permissions: teacherWritePermissions,
+  permissions: notificationRecipientPermissions,
+  channel: IN_PRODUCT_CHANNEL,
 });
 const notificationModule = moduleFact({
   id: "NOTI-001",
@@ -1256,6 +1544,13 @@ const notificationModule = moduleFact({
     ["QUEUED", "DELIVERED", "READ", "HANDLED", "FAILED"],
     notificationFields,
     {
+      stateReachability: { mode: "ACTION_GRAPH", initialStateIds: [] },
+      channelPolicy: {
+        mode: "PHASE_ONE_CLOSED",
+        fieldId: "NOTI-NOTIFICATION-F-CHANNEL",
+        optionSetId: "OPT-ENUM-047",
+        allowedCodes: [IN_PRODUCT_CHANNEL],
+      },
       deliveryFailurePolicy: {
         sourceBusinessFactRollback: false,
         retryScope: "NOTIFICATION_DELIVERY_ONLY",
@@ -1267,6 +1562,9 @@ const notificationModule = moduleFact({
   actions: [
     createReminder,
     createReportNotification,
+    deliverNotification,
+    failNotificationDelivery,
+    retryNotificationDelivery,
     markNotificationRead,
     markNotificationHandled,
   ],
@@ -1339,7 +1637,7 @@ function aiTask({
       ["data", "sourceVersions", "permissionResult"],
       {
         data: { type: "object" },
-        sourceVersions: { type: "array" },
+        sourceVersions: { type: "array", items: { type: "object" } },
         permissionResult: { type: "string" },
       },
     ),
@@ -1478,7 +1776,7 @@ export const aiReportingAiTasks = deepFreeze([
     examples: ["Create a temporary report of this week's submission rate"],
     parameters: {
       reportName: { type: "string" },
-      metricIds: { type: "array" },
+      metricIds: { type: "array", items: { type: "string" } },
       dataScope: { type: "object" },
       timeRange: { type: "object" },
     },
@@ -1578,67 +1876,160 @@ export const aiReportingModules = deepFreeze([
 ]);
 
 function sourceRefs(values) {
-  return values.map(([objectId, fieldId, version]) => ({
+  return values.map(([objectId, fieldId, version, semanticRole]) => ({
     objectId,
     fieldId,
     version,
     cardinality: "ONE",
+    semanticRole,
   }));
 }
+
+const learningPathFlowSources = [
+  {
+    pathId: "PUBLISHED_RESULT",
+    kind: "PUBLISHED-RESULT",
+    moduleId: "PUB-001",
+    participantRole: "PUBLISHED_RESULT_SOURCE",
+    stepRole: "APPEND_PUBLISHED_RESULT",
+    stepOrder: 1,
+    sourceObjectId: "PUB-OBJ-RESULT",
+    sourceIdentityFieldId: "PUB-RESULT-F-ID",
+    sourceVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    fanoutFieldId: "PUB-RESULT-F-STUDENT-REF",
+  },
+  {
+    pathId: "EVIDENCE",
+    kind: "EVIDENCE",
+    moduleId: "INS-001",
+    participantRole: "EVIDENCE_SOURCE",
+    stepRole: "APPEND_EVIDENCE",
+    stepOrder: 2,
+    sourceObjectId: "INS-OBJ-EVIDENCE",
+    sourceIdentityFieldId: "INS-EVIDENCE-F-ID",
+    sourceVersionFieldId: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+    fanoutFieldId: "INS-EVIDENCE-F-STUDENT-REF",
+  },
+  {
+    pathId: "CORRECTION",
+    kind: "CORRECTION",
+    moduleId: "CORR-001",
+    participantRole: "CORRECTION_SOURCE",
+    stepRole: "APPEND_CORRECTION",
+    stepOrder: 3,
+    sourceObjectId: "CORR-OBJ-ATTEMPT",
+    sourceIdentityFieldId: "CORR-ATTEMPT-F-ID",
+    sourceVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    fanoutFieldId: "CORR-ATTEMPT-F-STUDENT-REF",
+  },
+  {
+    pathId: "PLAN_EXECUTION",
+    kind: "PLAN-EXECUTION",
+    moduleId: "APP-001",
+    participantRole: "PLAN_EXECUTION_SOURCE",
+    stepRole: "APPEND_PLAN_EXECUTION",
+    stepOrder: 4,
+    sourceObjectId: "APP-OBJ-TODO",
+    sourceIdentityFieldId: "APP-TODO-F-ID",
+    sourceVersionFieldId: "APP-TODO-F-AGGREGATION-VERSION",
+    fanoutFieldId: "APP-TODO-F-STUDENT-REF",
+  },
+  {
+    pathId: "TEACHER_CONFIRMATION",
+    kind: "TEACHER-CONFIRMATION",
+    moduleId: "GRD-001",
+    participantRole: "TEACHER_CONFIRMATION_SOURCE",
+    stepRole: "APPEND_TEACHER_CONFIRMATION",
+    stepOrder: 5,
+    sourceObjectId: "GRD-OBJ-DECISION",
+    sourceIdentityFieldId: "GRD-DECISION-F-ID",
+    sourceVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    fanoutFieldId: "GRD-DECISION-F-SUBMISSION-REF",
+  },
+];
 
 export const aiReportingFlows = deepFreeze([
   {
     id: "DF-011",
-    label: "Confirmed Evidence to Cross-term Learning Path",
+    label: "Versioned Learning Facts to Cross-term Learning Path",
     phase: PHASE.FIRST,
-    routingPolicy: "NONE",
-    moduleIds: ["INS-001", "LPATH-001"],
+    contractProfile: "LEARNING_PATH_AGGREGATION",
+    routingPolicy: "ACTION_CHOICE_REQUIRED",
+    moduleIds: ["PUB-001", "INS-001", "CORR-001", "APP-001", "GRD-001", "LPATH-001"],
+    sourceOnlyModuleIds: ["PUB-001", "INS-001", "CORR-001", "APP-001", "GRD-001"],
+    participantRoles: [
+      ...learningPathFlowSources.map(({ moduleId, participantRole: role }) => ({ moduleId, role })),
+      { moduleId: "LPATH-001", role: "LEARNING_PATH_DERIVATION" },
+    ],
     steps: [
-      {
-        order: 1,
-        actionId: "INS-ACT-READ-CONFIRMED-EVIDENCE",
-        condition: "the corresponding teacher or homeroom scope reads the current confirmed evidence",
+      ...learningPathFlowSources.map((source) => ({
+        order: source.stepOrder,
+        actionId: `LPATH-ACT-APPEND-${source.kind}-TIMELINE`,
+        semanticRole: source.stepRole,
+        condition: `one current ${source.pathId} source version is appended without copying the source fact`,
         providedInputs: [],
-      },
+      })),
       {
-        order: 2,
-        actionId: "LPATH-ACT-APPEND-EVIDENCE-TIMELINE",
-        condition: "a current teacher-confirmed evidence version becomes eligible for the cross-term path",
-        providedInputs: [],
-      },
-      {
-        order: 3,
+        order: 6,
         actionId: "LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE",
-        condition: "the same evidence version supports an explainable candidate for subject-teacher review",
+        semanticRole: "CREATE_INTERPRETATION_CANDIDATE",
+        condition: "a teacher-confirmed evidence version supports an explainable candidate for subject-teacher review",
         providedInputs: [],
       },
     ],
-    sourceDataRefs: sourceRefs([
-      ["INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-ID", "INS-EVIDENCE-F-EVIDENCE-VERSION"],
-      ["INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-STUDENT-REF", "INS-EVIDENCE-F-EVIDENCE-VERSION"],
-      ["INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-KNOWLEDGE-POINT-REF", "INS-EVIDENCE-F-EVIDENCE-VERSION"],
-      ["INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION", "INS-EVIDENCE-F-EVIDENCE-VERSION"],
-      ["INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-TEACHER-CONFIRMATION", "INS-EVIDENCE-F-EVIDENCE-VERSION"],
-      ["INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-EVIDENCE-VERSION", "INS-EVIDENCE-F-EVIDENCE-VERSION"],
-    ]),
+    executionPaths: learningPathFlowSources.map((source) => ({
+      id: source.pathId,
+      semanticRole: source.participantRole,
+      stepOrders: source.pathId === "EVIDENCE"
+        ? [source.stepOrder, 6]
+        : [source.stepOrder],
+      providedInputs: [],
+      route: { kind: "ACTION_CHOICE", consumerStepOrder: source.stepOrder },
+      sourceBindings: [{
+        sourceObjectId: source.sourceObjectId,
+        sourceIdentityFieldId: source.sourceIdentityFieldId,
+        sourceVersionFieldId: source.sourceVersionFieldId,
+        consumerStepOrder: source.stepOrder,
+        targetRefFieldId: `LPATH-ENTRY-F-${source.kind}-REF`,
+        targetVersionFieldId: `LPATH-ENTRY-F-${source.kind}-VERSION`,
+        cardinality: "ONE",
+      }],
+      idempotencyKeyParts: {
+        identityFieldIds: [source.sourceIdentityFieldId],
+        versionFieldIds: [source.sourceVersionFieldId],
+        fanoutFieldId: source.fanoutFieldId,
+      },
+    })),
+    sourceDataRefs: learningPathFlowSources.flatMap((source) => (
+      [source.sourceIdentityFieldId, source.fanoutFieldId, source.sourceVersionFieldId]
+        .map((fieldId, index) => ({
+          objectId: source.sourceObjectId,
+          fieldId,
+          version: source.sourceVersionFieldId,
+          cardinality: source.pathId === "EVIDENCE" ? "ONE" : "ZERO_MANY",
+          semanticRole: ["SOURCE_IDENTITY", "SOURCE_FANOUT", "SOURCE_VERSION"][index],
+        }))
+    )),
     targetDataRefs: [
-      { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: "LPATH-ENTRY-F-ID", version: "LPATH-ENTRY-F-VERSION" },
-      { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: "LPATH-ENTRY-F-EVIDENCE-REF", version: "LPATH-ENTRY-F-VERSION" },
-      { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: "LPATH-ENTRY-F-EVIDENCE-VERSION", version: "LPATH-ENTRY-F-VERSION" },
-      { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: "LPATH-ENTRY-F-VERSION", version: "LPATH-ENTRY-F-VERSION" },
-      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-ID", version: "LPATH-INTERPRETATION-F-VERSION" },
-      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF", version: "LPATH-INTERPRETATION-F-VERSION" },
-      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-EVIDENCE-REFS", version: "LPATH-INTERPRETATION-F-VERSION" },
-      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-VERSION", version: "LPATH-INTERPRETATION-F-VERSION" },
+      { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: "LPATH-ENTRY-F-ID", version: "LPATH-ENTRY-F-VERSION", semanticRole: "TARGET_IDENTITY" },
+      ...learningPathFlowSources.flatMap((source) => [
+        { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: `LPATH-ENTRY-F-${source.kind}-REF`, version: "LPATH-ENTRY-F-VERSION", semanticRole: "TARGET_LINEAGE" },
+        { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: `LPATH-ENTRY-F-${source.kind}-VERSION`, version: "LPATH-ENTRY-F-VERSION", semanticRole: "TARGET_LINEAGE" },
+      ]),
+      { objectId: "LPATH-OBJ-TIMELINE-ENTRY", fieldId: "LPATH-ENTRY-F-VERSION", version: "LPATH-ENTRY-F-VERSION", semanticRole: "TARGET_VERSION" },
+      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-ID", version: "LPATH-INTERPRETATION-F-VERSION", semanticRole: "TARGET_IDENTITY" },
+      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF", version: "LPATH-INTERPRETATION-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-EVIDENCE-REFS", version: "LPATH-INTERPRETATION-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "LPATH-OBJ-INTERPRETATION", fieldId: "LPATH-INTERPRETATION-F-VERSION", version: "LPATH-INTERPRETATION-F-VERSION", semanticRole: "TARGET_VERSION" },
     ],
     idempotencyKeyParts: {
       identityFieldIds: ["INS-EVIDENCE-F-ID"],
       versionFieldIds: ["INS-EVIDENCE-F-EVIDENCE-VERSION"],
       fanoutFieldId: "INS-EVIDENCE-F-STUDENT-REF",
     },
-    failureGranularity: "STUDENT_SUBJECT_EVIDENCE_VERSION",
+    failureGranularity: "STUDENT_SOURCE_FACT_VERSION",
     retryPolicy: {
-      strategy: "REFRESH_EVIDENCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS",
+      strategy: "REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS",
       maxAttempts: 4,
       retryableFailureResults: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
     },
@@ -1655,53 +2046,159 @@ export const aiReportingFlows = deepFreeze([
     id: "DF-013",
     label: "Student Plan Execution to Report Snapshot and In-product Delivery",
     phase: PHASE.FIRST,
-    routingPolicy: "NONE",
+    contractProfile: "REPORT_MATERIALIZATION",
+    routingPolicy: "ACTION_CHOICE_REQUIRED",
     moduleIds: ["APP-001", "PLN-001", "RPT-001", "NOTI-001"],
+    participantRoles: [
+      { moduleId: "APP-001", role: "STUDENT_EXECUTION_SOURCE" },
+      { moduleId: "PLN-001", role: "PLAN_COORDINATION_SOURCE" },
+      { moduleId: "RPT-001", role: "REPORT_PIPELINE" },
+      { moduleId: "NOTI-001", role: "NOTIFICATION_SINK" },
+    ],
     steps: [
-      { order: 1, actionId: "APP-ACT-VIEW-TODOS", condition: "the student execution source is read inside the student's authorized scope", providedInputs: [] },
-      { order: 2, actionId: "PLN-ACT-VIEW-HOMEROOM-COORDINATION", condition: "the plan coordination source remains read-only", providedInputs: [] },
-      { order: 3, actionId: "RPT-ACT-CREATE-RUN", condition: "the current student execution and plan versions pass run-time permission and cutoff checks", providedInputs: [] },
-      { order: 4, actionId: "RPT-ACT-COMPLETE-RUN", condition: "the source-pinned report query completes", providedInputs: [] },
-      { order: 5, actionId: "RPT-ACT-MATERIALIZE-SNAPSHOT", condition: "the successful run becomes an immutable snapshot", providedInputs: [] },
-      { order: 6, actionId: "RPT-ACT-CREATE-DELIVERY", condition: "the snapshot receives a separate in-product delivery record", providedInputs: [] },
-      { order: 7, actionId: "NOTI-ACT-CREATE-REPORT-NOTIFICATION", condition: "the product notification contains only an authorized summary and deep link", providedInputs: [] },
+      { order: 1, actionId: "APP-ACT-VIEW-TODOS", semanticRole: "READ_STUDENT_EXECUTION", condition: "the student execution source is read inside the student's authorized scope", providedInputs: [] },
+      { order: 2, actionId: "PLN-ACT-VIEW-HOMEROOM-COORDINATION", semanticRole: "READ_PLAN_COORDINATION", condition: "the plan coordination source remains read-only", providedInputs: [] },
+      {
+        order: 3,
+        actionId: "RPT-ACT-CREATE-AD-HOC-RUN",
+        semanticRole: "CREATE_AD_HOC_RUN",
+        condition: "an authorized ad-hoc definition is pinned without a subscription",
+        providedInputs: [
+          { fieldId: "RPT-RUN-F-DEFINITION-REF", provider: { actorRef: "SYSTEM" } },
+          { fieldId: "RPT-RUN-F-DEFINITION-VERSION", provider: { actorRef: "SYSTEM" } },
+        ],
+      },
+      {
+        order: 4,
+        actionId: "RPT-ACT-CREATE-RUN",
+        semanticRole: "CREATE_PERIODIC_RUN",
+        condition: "an active periodic subscription and its definition are pinned",
+        providedInputs: [
+          { fieldId: "RPT-RUN-F-DEFINITION-REF", provider: { actorRef: "SYSTEM" } },
+          { fieldId: "RPT-RUN-F-DEFINITION-VERSION", provider: { actorRef: "SYSTEM" } },
+          { fieldId: "RPT-RUN-F-SUBSCRIPTION-REF", provider: { actorRef: "SYSTEM" } },
+          { fieldId: "RPT-RUN-F-SUBSCRIPTION-VERSION", provider: { actorRef: "SYSTEM" } },
+        ],
+      },
+      { order: 5, actionId: "RPT-ACT-START-RUN", semanticRole: "START_RUN", condition: "the queued run passes permission and source-version checks", providedInputs: [] },
+      { order: 6, actionId: "RPT-ACT-COMPLETE-RUN", semanticRole: "COMPLETE_RUN", condition: "the source-pinned report query completes", providedInputs: [] },
+      { order: 7, actionId: "RPT-ACT-MATERIALIZE-SNAPSHOT", semanticRole: "MATERIALIZE_SNAPSHOT", condition: "the successful run becomes an immutable snapshot", providedInputs: [] },
+      { order: 8, actionId: "RPT-ACT-CREATE-DELIVERY", semanticRole: "CREATE_DELIVERY", condition: "the snapshot receives a separate in-product delivery record", providedInputs: [] },
+      { order: 9, actionId: "NOTI-ACT-CREATE-REPORT-NOTIFICATION", semanticRole: "CREATE_NOTIFICATION", condition: "the product notification contains only an authorized summary and deep link", providedInputs: [] },
+    ],
+    executionPaths: [
+      {
+        id: "AD_HOC",
+        semanticRole: "AD_HOC_RUN",
+        stepOrders: [1, 2, 3, 5, 6, 7, 8, 9],
+        providedInputs: [],
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 },
+        sourceBindings: [{
+          sourceObjectId: "RPT-OBJ-DEFINITION",
+          sourceIdentityFieldId: "RPT-DEFINITION-F-ID",
+          sourceVersionFieldId: "RPT-DEFINITION-F-VERSION",
+          consumerStepOrder: 3,
+          targetRefFieldId: "RPT-RUN-F-DEFINITION-REF",
+          targetVersionFieldId: "RPT-RUN-F-DEFINITION-VERSION",
+          cardinality: "ONE",
+        }],
+        idempotencyKeyParts: {
+          identityFieldIds: ["RPT-DEFINITION-F-ID", "APP-TODO-F-ID", "PLN-PLAN-F-ID"],
+          versionFieldIds: [
+            "RPT-DEFINITION-F-VERSION",
+            "APP-TODO-F-AGGREGATION-VERSION",
+            "PLN-PLAN-F-PLAN-VERSION",
+            "PLN-HOMEROOM-F-OUTPUT-VERSION",
+          ],
+          fanoutFieldId: "APP-TODO-F-STUDENT-REF",
+        },
+      },
+      {
+        id: "PERIODIC",
+        semanticRole: "PERIODIC_RUN",
+        stepOrders: [1, 2, 4, 5, 6, 7, 8, 9],
+        providedInputs: [],
+        route: { kind: "ACTION_CHOICE", consumerStepOrder: 4 },
+        sourceBindings: [
+          {
+            sourceObjectId: "RPT-OBJ-DEFINITION",
+            sourceIdentityFieldId: "RPT-DEFINITION-F-ID",
+            sourceVersionFieldId: "RPT-DEFINITION-F-VERSION",
+            consumerStepOrder: 4,
+            targetRefFieldId: "RPT-RUN-F-DEFINITION-REF",
+            targetVersionFieldId: "RPT-RUN-F-DEFINITION-VERSION",
+            cardinality: "ONE",
+          },
+          {
+            sourceObjectId: "RPT-OBJ-SUBSCRIPTION",
+            sourceIdentityFieldId: "RPT-SUBSCRIPTION-F-ID",
+            sourceVersionFieldId: "RPT-SUBSCRIPTION-F-VERSION",
+            consumerStepOrder: 4,
+            targetRefFieldId: "RPT-RUN-F-SUBSCRIPTION-REF",
+            targetVersionFieldId: "RPT-RUN-F-SUBSCRIPTION-VERSION",
+            cardinality: "ONE",
+          },
+        ],
+        idempotencyKeyParts: {
+          identityFieldIds: [
+            "RPT-DEFINITION-F-ID",
+            "RPT-SUBSCRIPTION-F-ID",
+            "APP-TODO-F-ID",
+            "PLN-PLAN-F-ID",
+          ],
+          versionFieldIds: [
+            "RPT-DEFINITION-F-VERSION",
+            "RPT-SUBSCRIPTION-F-VERSION",
+            "APP-TODO-F-AGGREGATION-VERSION",
+            "PLN-PLAN-F-PLAN-VERSION",
+            "PLN-HOMEROOM-F-OUTPUT-VERSION",
+          ],
+          fanoutFieldId: "APP-TODO-F-STUDENT-REF",
+        },
+      },
     ],
     sourceDataRefs: sourceRefs([
-      ["APP-OBJ-TODO", "APP-TODO-F-ID", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["APP-OBJ-TODO", "APP-TODO-F-STUDENT-REF", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["APP-OBJ-TODO", "APP-TODO-F-SOURCE-PLAN-REF", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["APP-OBJ-TODO", "APP-TODO-F-SOURCE-PLAN-VERSION", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["APP-OBJ-TODO", "APP-TODO-F-LOCAL-PROGRESS", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["APP-OBJ-TODO", "APP-TODO-F-COMPLETION-EVIDENCE", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["APP-OBJ-TODO", "APP-TODO-F-DIFFICULTY-FEEDBACK", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["APP-OBJ-TODO", "APP-TODO-F-AGGREGATION-VERSION", "APP-TODO-F-AGGREGATION-VERSION"],
-      ["PLN-OBJ-PLAN", "PLN-PLAN-F-ID", "PLN-PLAN-F-PLAN-VERSION"],
-      ["PLN-OBJ-PLAN", "PLN-PLAN-F-PLAN-VERSION", "PLN-PLAN-F-PLAN-VERSION"],
-      ["PLN-OBJ-HOMEROOM-COORDINATION", "PLN-HOMEROOM-F-ID", "PLN-HOMEROOM-F-OUTPUT-VERSION"],
-      ["PLN-OBJ-HOMEROOM-COORDINATION", "PLN-HOMEROOM-F-OUTPUT-VERSION", "PLN-HOMEROOM-F-OUTPUT-VERSION"],
+      ["RPT-OBJ-DEFINITION", "RPT-DEFINITION-F-ID", "RPT-DEFINITION-F-VERSION", "SOURCE_IDENTITY"],
+      ["RPT-OBJ-DEFINITION", "RPT-DEFINITION-F-VERSION", "RPT-DEFINITION-F-VERSION", "SOURCE_VERSION"],
+      ["APP-OBJ-TODO", "APP-TODO-F-ID", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_IDENTITY"],
+      ["APP-OBJ-TODO", "APP-TODO-F-STUDENT-REF", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_FANOUT"],
+      ["APP-OBJ-TODO", "APP-TODO-F-SOURCE-PLAN-REF", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_PAYLOAD"],
+      ["APP-OBJ-TODO", "APP-TODO-F-SOURCE-PLAN-VERSION", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_PAYLOAD"],
+      ["APP-OBJ-TODO", "APP-TODO-F-LOCAL-PROGRESS", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_PAYLOAD"],
+      ["APP-OBJ-TODO", "APP-TODO-F-COMPLETION-EVIDENCE", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_PAYLOAD"],
+      ["APP-OBJ-TODO", "APP-TODO-F-DIFFICULTY-FEEDBACK", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_PAYLOAD"],
+      ["APP-OBJ-TODO", "APP-TODO-F-AGGREGATION-VERSION", "APP-TODO-F-AGGREGATION-VERSION", "SOURCE_VERSION"],
+      ["PLN-OBJ-PLAN", "PLN-PLAN-F-ID", "PLN-PLAN-F-PLAN-VERSION", "SOURCE_IDENTITY"],
+      ["PLN-OBJ-PLAN", "PLN-PLAN-F-PLAN-VERSION", "PLN-PLAN-F-PLAN-VERSION", "SOURCE_VERSION"],
+      ["PLN-OBJ-HOMEROOM-COORDINATION", "PLN-HOMEROOM-F-ID", "PLN-HOMEROOM-F-OUTPUT-VERSION", "SOURCE_IDENTITY"],
+      ["PLN-OBJ-HOMEROOM-COORDINATION", "PLN-HOMEROOM-F-OUTPUT-VERSION", "PLN-HOMEROOM-F-OUTPUT-VERSION", "SOURCE_VERSION"],
+    ]).concat([
+      { objectId: "RPT-OBJ-SUBSCRIPTION", fieldId: "RPT-SUBSCRIPTION-F-ID", version: "RPT-SUBSCRIPTION-F-VERSION", cardinality: "ZERO_MANY", semanticRole: "SOURCE_IDENTITY" },
+      { objectId: "RPT-OBJ-SUBSCRIPTION", fieldId: "RPT-SUBSCRIPTION-F-VERSION", version: "RPT-SUBSCRIPTION-F-VERSION", cardinality: "ZERO_MANY", semanticRole: "SOURCE_VERSION" },
     ]),
     targetDataRefs: [
-      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-ID", version: "RPT-RUN-F-VERSION" },
-      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-PERMISSION-RESULT", version: "RPT-RUN-F-VERSION" },
-      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-DATA-CUTOFF", version: "RPT-RUN-F-VERSION" },
-      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-SOURCE-VERSIONS", version: "RPT-RUN-F-VERSION" },
-      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-RESULT", version: "RPT-RUN-F-VERSION" },
-      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-VERSION", version: "RPT-RUN-F-VERSION" },
-      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-ID", version: "RPT-SNAPSHOT-F-VERSION" },
-      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-RUN-REF", version: "RPT-SNAPSHOT-F-VERSION" },
-      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-RUN-VERSION", version: "RPT-SNAPSHOT-F-VERSION" },
-      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-SOURCE-VERSIONS", version: "RPT-SNAPSHOT-F-VERSION" },
-      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-VERSION", version: "RPT-SNAPSHOT-F-VERSION" },
-      { objectId: "RPT-OBJ-DELIVERY", fieldId: "RPT-DELIVERY-F-ID", version: "RPT-DELIVERY-F-VERSION" },
-      { objectId: "RPT-OBJ-DELIVERY", fieldId: "RPT-DELIVERY-F-STATE", version: "RPT-DELIVERY-F-VERSION" },
-      { objectId: "RPT-OBJ-DELIVERY", fieldId: "RPT-DELIVERY-F-VERSION", version: "RPT-DELIVERY-F-VERSION" },
-      { objectId: "NOTI-OBJ-NOTIFICATION", fieldId: "NOTI-NOTIFICATION-F-ID", version: "NOTI-NOTIFICATION-F-VERSION" },
-      { objectId: "NOTI-OBJ-NOTIFICATION", fieldId: "NOTI-NOTIFICATION-F-DEEP-LINK", version: "NOTI-NOTIFICATION-F-VERSION" },
-      { objectId: "NOTI-OBJ-NOTIFICATION", fieldId: "NOTI-NOTIFICATION-F-VERSION", version: "NOTI-NOTIFICATION-F-VERSION" },
+      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-ID", version: "RPT-RUN-F-VERSION", semanticRole: "TARGET_IDENTITY" },
+      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-PERMISSION-RESULT", version: "RPT-RUN-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-DATA-CUTOFF", version: "RPT-RUN-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-SOURCE-VERSIONS", version: "RPT-RUN-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-RESULT", version: "RPT-RUN-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "RPT-OBJ-RUN", fieldId: "RPT-RUN-F-VERSION", version: "RPT-RUN-F-VERSION", semanticRole: "TARGET_VERSION" },
+      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-ID", version: "RPT-SNAPSHOT-F-VERSION", semanticRole: "TARGET_IDENTITY" },
+      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-RUN-REF", version: "RPT-SNAPSHOT-F-VERSION", semanticRole: "TARGET_LINEAGE" },
+      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-RUN-VERSION", version: "RPT-SNAPSHOT-F-VERSION", semanticRole: "TARGET_LINEAGE" },
+      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-SOURCE-VERSIONS", version: "RPT-SNAPSHOT-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "RPT-OBJ-SNAPSHOT", fieldId: "RPT-SNAPSHOT-F-VERSION", version: "RPT-SNAPSHOT-F-VERSION", semanticRole: "TARGET_VERSION" },
+      { objectId: "RPT-OBJ-DELIVERY", fieldId: "RPT-DELIVERY-F-ID", version: "RPT-DELIVERY-F-VERSION", semanticRole: "TARGET_IDENTITY" },
+      { objectId: "RPT-OBJ-DELIVERY", fieldId: "RPT-DELIVERY-F-STATE", version: "RPT-DELIVERY-F-VERSION", semanticRole: "TARGET_STATE" },
+      { objectId: "RPT-OBJ-DELIVERY", fieldId: "RPT-DELIVERY-F-VERSION", version: "RPT-DELIVERY-F-VERSION", semanticRole: "TARGET_VERSION" },
+      { objectId: "NOTI-OBJ-NOTIFICATION", fieldId: "NOTI-NOTIFICATION-F-ID", version: "NOTI-NOTIFICATION-F-VERSION", semanticRole: "TARGET_IDENTITY" },
+      { objectId: "NOTI-OBJ-NOTIFICATION", fieldId: "NOTI-NOTIFICATION-F-DEEP-LINK", version: "NOTI-NOTIFICATION-F-VERSION", semanticRole: "TARGET_PAYLOAD" },
+      { objectId: "NOTI-OBJ-NOTIFICATION", fieldId: "NOTI-NOTIFICATION-F-VERSION", version: "NOTI-NOTIFICATION-F-VERSION", semanticRole: "TARGET_VERSION" },
     ],
     idempotencyKeyParts: {
-      identityFieldIds: ["APP-TODO-F-ID", "PLN-PLAN-F-ID"],
+      identityFieldIds: ["RPT-DEFINITION-F-ID", "APP-TODO-F-ID", "PLN-PLAN-F-ID"],
       versionFieldIds: [
+        "RPT-DEFINITION-F-VERSION",
         "APP-TODO-F-AGGREGATION-VERSION",
         "PLN-PLAN-F-PLAN-VERSION",
         "PLN-HOMEROOM-F-OUTPUT-VERSION",

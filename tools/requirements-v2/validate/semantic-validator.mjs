@@ -218,6 +218,84 @@ function conditionalRequiredErrors(index) {
   return errors;
 }
 
+function stateReachabilityErrors(index) {
+  const errors = [];
+  for (const objectEntry of index.objects) {
+    const object = objectEntry.value;
+    const module = index.moduleById.get(objectEntry.moduleId)?.value;
+    if (module?.phase !== 1) continue;
+
+    const policy = object?.stateReachability;
+    if (!isRecord(policy) || !["NONE", "ACTION_GRAPH"].includes(policy.mode)) {
+      errors.push(
+        `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} must declare NONE or ACTION_GRAPH`,
+      );
+      continue;
+    }
+    if (policy.mode === "NONE") {
+      if (!hasExactKeys(policy, ["mode"])) {
+        errors.push(
+          `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} NONE must use the closed policy shape`,
+        );
+      }
+      continue;
+    }
+    if (!hasExactKeys(policy, ["mode", "initialStateIds"])) {
+      errors.push(
+        `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} ACTION_GRAPH must declare initialStateIds`,
+      );
+      continue;
+    }
+
+    const declaredStates = stateIds(object);
+    const initialStateIds = list(policy.initialStateIds);
+    const validInitialStates = initialStateIds.every(isValidId)
+      && new Set(initialStateIds).size === initialStateIds.length
+      && initialStateIds.every((state) => declaredStates.has(state));
+    const objectActions = index.actions
+      .filter(({ value }) => value?.targetObjectId === object?.id)
+      .map(({ value }) => value);
+    const createEntryStates = objectActions
+      .filter(({ operationKind }) => operationKind === "CREATE")
+      .map((action) => concreteActionState(index, action))
+      .filter((state) => declaredStates.has(state));
+    const reachableStates = new Set([...initialStateIds, ...createEntryStates]);
+    if (!validInitialStates || reachableStates.size === 0) {
+      errors.push(
+        `INVALID_STATE_REACHABILITY_POLICY ${formatValidationValue(object?.id)} ACTION_GRAPH requires a declared initial state or CREATE success state`,
+      );
+      continue;
+    }
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const action of objectActions) {
+        const transition = action?.transition;
+        if (!isRecord(transition) || !declaredStates.has(transition.to)) continue;
+        const fromStates = Array.isArray(transition.from)
+          ? transition.from
+          : [transition.from];
+        if (
+          fromStates.some((state) => reachableStates.has(state))
+          && !reachableStates.has(transition.to)
+        ) {
+          reachableStates.add(transition.to);
+          changed = true;
+        }
+      }
+    }
+    const unreachableStates = [...declaredStates]
+      .filter((state) => !reachableStates.has(state));
+    if (unreachableStates.length > 0) {
+      errors.push(
+        `UNREACHABLE_OBJECT_STATE ${formatValidationValue(object?.id)} -> ${unreachableStates.map(formatValidationValue).join(",")}`,
+      );
+    }
+  }
+  return errors;
+}
+
 function policyRequiresGuard(policy, operationKind) {
   return policy === "ALWAYS_REQUIRED"
     || (policy === "CREATE_REQUIRED" && operationKind === "CREATE")
@@ -610,7 +688,22 @@ function flowErrors(index) {
         stepActions.push(actionEntry.value);
       }
     }
-    if (!setEquals(declaredModuleIds, actionModuleIds)) {
+    const sourceOnlyModuleIds = new Set(list(flow?.sourceOnlyModuleIds));
+    const expectedActionModuleIds = new Set(
+      [...declaredModuleIds].filter((moduleId) => !sourceOnlyModuleIds.has(moduleId)),
+    );
+    const sourceDataModuleIds = new Set(list(flow?.sourceDataRefs)
+      .map((dataRef) => index.objectById.get(dataRef?.objectId)?.moduleId)
+      .filter(isValidId));
+    const participantRolesValid = [...sourceOnlyModuleIds].every((moduleId) => (
+      declaredModuleIds.has(moduleId)
+      && !actionModuleIds.has(moduleId)
+      && sourceDataModuleIds.has(moduleId)
+    ));
+    if (
+      !participantRolesValid
+      || !setEquals(expectedActionModuleIds, actionModuleIds)
+    ) {
       const declared = [...declaredModuleIds]
         .map(formatValidationValue)
         .sort()
@@ -620,7 +713,7 @@ function flowErrors(index) {
         .sort()
         .join(",");
       errors.push(
-        `FLOW_PARTICIPANT_MISMATCH ${formatValidationValue(flow?.id)} declared=${declared} actual=${actual}`,
+        `FLOW_PARTICIPANT_MISMATCH ${formatValidationValue(flow?.id)} declared=${declared} actionModules=${actual}`,
       );
     }
     const dataModuleIds = new Set();
@@ -991,8 +1084,449 @@ function flowErrors(index) {
   return errors;
 }
 
+function flowProfileErrors(index) {
+  const errors = [];
+  const sameOrder = (actual, expected) => actual.length === expected.length
+    && actual.every((value, position) => value === expected[position]);
+  const sameSet = (actual, expected) => setEquals(new Set(actual), new Set(expected));
+  const roleSequence = (values) => records(values).map(({ role }) => role);
+  const participantModuleByRole = (flow) => new Map(
+    records(flow?.participantRoles).map(({ role, moduleId }) => [role, moduleId]),
+  );
+  const actionForStep = (step) => index.actionById.get(step?.actionId);
+  const refsHaveTargetSemantics = (flow, expectedTargetObjectIds) => {
+    const targetRefs = records(flow?.targetDataRefs);
+    if (!sameSet(
+      targetRefs.map(({ objectId }) => objectId),
+      expectedTargetObjectIds,
+    )) return false;
+    const refsByObjectId = new Map();
+    for (const dataRef of targetRefs) {
+      const values = refsByObjectId.get(dataRef.objectId) ?? [];
+      values.push(dataRef);
+      refsByObjectId.set(dataRef.objectId, values);
+      const fieldEntry = index.fieldById.get(dataRef.fieldId);
+      const object = index.objectById.get(dataRef.objectId)?.value;
+      const lineageBindings = records(object?.lineageBindings);
+      const roleValid = (
+        dataRef.semanticRole === "TARGET_IDENTITY"
+        && fieldEntry?.value?.idempotencyRole === "OBJECT_ID"
+      ) || (
+        dataRef.semanticRole === "TARGET_VERSION"
+        && fieldEntry?.value?.idempotencyRole === "OBJECT_VERSION"
+        && dataRef.fieldId === dataRef.version
+      ) || (
+        dataRef.semanticRole === "TARGET_LINEAGE"
+        && lineageBindings.some((binding) => (
+          binding?.refFieldId === dataRef.fieldId
+          || binding?.versionFieldId === dataRef.fieldId
+        ))
+      ) || dataRef.semanticRole === "TARGET_PAYLOAD" || (
+        dataRef.semanticRole === "TARGET_STATE"
+        && fieldEntry?.value?.valueSource?.kind === "SYSTEM"
+        && fieldEntry.value.mutability === "SYSTEM_MANAGED"
+      );
+      if (fieldEntry?.objectId !== dataRef.objectId || !roleValid) return false;
+    }
+    return expectedTargetObjectIds.every((objectId) => {
+      const objectRefs = refsByObjectId.get(objectId) ?? [];
+      return objectRefs.filter(({ semanticRole }) => semanticRole === "TARGET_IDENTITY").length
+          === 1
+        && objectRefs.filter(({ semanticRole }) => semanticRole === "TARGET_VERSION").length
+          === 1;
+    });
+  };
+  const sourceRefRoleValid = (dataRef, requiredFanoutFieldId) => {
+    const fieldEntry = index.fieldById.get(dataRef?.fieldId);
+    if (fieldEntry?.objectId !== dataRef?.objectId) return false;
+    if (dataRef.semanticRole === "SOURCE_IDENTITY") {
+      return fieldEntry.value?.idempotencyRole === "OBJECT_ID";
+    }
+    if (dataRef.semanticRole === "SOURCE_VERSION") {
+      return fieldEntry.value?.idempotencyRole === "OBJECT_VERSION"
+        && dataRef.fieldId === dataRef.version;
+    }
+    if (dataRef.semanticRole === "SOURCE_FANOUT") {
+      return dataRef.fieldId === requiredFanoutFieldId
+        && fieldEntry.value?.dataType === "ID"
+        && fieldEntry.value?.valueSource?.kind === "OBJECT_REF"
+        && fieldEntry.value?.mutability === "IMMUTABLE";
+    }
+    return dataRef.semanticRole === "SOURCE_PAYLOAD";
+  };
+  const policyMatches = (flow, expected) => (
+    flow?.failureGranularity === expected.failureGranularity
+    && hasExactKeys(flow?.retryPolicy, [
+      "strategy",
+      "maxAttempts",
+      "retryableFailureResults",
+    ])
+    && flow.retryPolicy.strategy === expected.retryStrategy
+    && flow.retryPolicy.maxAttempts === 4
+    && sameSet(
+      list(flow.retryPolicy.retryableFailureResults),
+      expected.retryableFailureResults,
+    )
+    && flow?.compensation?.strategy === expected.compensationStrategy
+    && flow?.downstreamInvalidation?.strategy === expected.invalidationStrategy
+  );
+
+  for (const flowEntry of index.flows) {
+    const flow = flowEntry.value;
+    if (flow?.contractProfile === "LEARNING_PATH_AGGREGATION") {
+      const participantRoles = [
+        "PUBLISHED_RESULT_SOURCE",
+        "EVIDENCE_SOURCE",
+        "CORRECTION_SOURCE",
+        "PLAN_EXECUTION_SOURCE",
+        "TEACHER_CONFIRMATION_SOURCE",
+        "LEARNING_PATH_DERIVATION",
+      ];
+      const sourceRoles = participantRoles.slice(0, -1);
+      const stepRoles = [
+        "APPEND_PUBLISHED_RESULT",
+        "APPEND_EVIDENCE",
+        "APPEND_CORRECTION",
+        "APPEND_PLAN_EXECUTION",
+        "APPEND_TEACHER_CONFIRMATION",
+        "CREATE_INTERPRETATION_CANDIDATE",
+      ];
+      const participants = records(flow.participantRoles);
+      const moduleByRole = participantModuleByRole(flow);
+      const steps = records(flow.steps);
+      const paths = records(flow.executionPaths);
+      const sourceRefs = records(flow.sourceDataRefs);
+      const derivationModuleId = moduleByRole.get("LEARNING_PATH_DERIVATION");
+      const sourceModuleIds = sourceRoles.map((role) => moduleByRole.get(role));
+      let valid = sameOrder(roleSequence(participants), participantRoles)
+        && sameOrder(participants.map(({ moduleId }) => moduleId), list(flow.moduleIds))
+        && sameOrder(list(flow.sourceOnlyModuleIds), sourceModuleIds)
+        && sameOrder(steps.map(({ semanticRole }) => semanticRole), stepRoles)
+        && sameOrder(paths.map(({ semanticRole }) => semanticRole), sourceRoles)
+        && steps.length === stepRoles.length
+        && paths.length === sourceRoles.length;
+
+      let timelineObjectId;
+      for (let position = 0; position < sourceRoles.length; position += 1) {
+        const sourceRole = sourceRoles[position];
+        const step = steps[position];
+        const actionEntry = actionForStep(step);
+        const action = actionEntry?.value;
+        const path = paths.find(({ semanticRole }) => semanticRole === sourceRole);
+        const bindings = records(path?.sourceBindings);
+        const binding = bindings[0];
+        const sourceObjectEntry = index.objectById.get(binding?.sourceObjectId);
+        const targetObject = index.objectById.get(action?.targetObjectId)?.value;
+        const targetLineage = records(targetObject?.lineageBindings);
+        const objectSourceRefs = sourceRefs.filter(({ objectId }) => (
+          objectId === binding?.sourceObjectId
+        ));
+        const sourceRefByRole = new Map(objectSourceRefs.map((dataRef) => [
+          dataRef.semanticRole,
+          dataRef,
+        ]));
+        const identityRef = sourceRefByRole.get("SOURCE_IDENTITY");
+        const versionRef = sourceRefByRole.get("SOURCE_VERSION");
+        const fanoutRef = sourceRefByRole.get("SOURCE_FANOUT");
+        if (position === 0) timelineObjectId = action?.targetObjectId;
+        valid = valid
+          && actionEntry?.moduleId === derivationModuleId
+          && action?.operationKind === "CREATE"
+          && action?.writes === true
+          && action?.targetObjectId === timelineObjectId
+          && path?.route?.kind === "ACTION_CHOICE"
+          && path.route.consumerStepOrder === step?.order
+          && list(path?.stepOrders).includes(step?.order)
+          && bindings.length === 1
+          && sourceObjectEntry?.moduleId === moduleByRole.get(sourceRole)
+          && index.fieldById.get(binding?.sourceIdentityFieldId)?.objectId
+            === binding?.sourceObjectId
+          && index.fieldById.get(binding?.sourceVersionFieldId)?.objectId
+            === binding?.sourceObjectId
+          && list(action?.outputFieldIds).includes(binding?.targetRefFieldId)
+          && list(action?.outputFieldIds).includes(binding?.targetVersionFieldId)
+          && targetLineage.some((lineage) => (
+            lineage?.refFieldId === binding?.targetRefFieldId
+            && lineage?.versionFieldId === binding?.targetVersionFieldId
+            && lineage?.targetObjectId === binding?.sourceObjectId
+            && lineage?.targetVersionFieldId === binding?.sourceVersionFieldId
+          ))
+          && objectSourceRefs.length === 3
+          && identityRef?.fieldId === binding?.sourceIdentityFieldId
+          && versionRef?.fieldId === binding?.sourceVersionFieldId
+          && sourceRefRoleValid(fanoutRef, path?.idempotencyKeyParts?.fanoutFieldId)
+          && sourceRefRoleValid(identityRef)
+          && sourceRefRoleValid(versionRef)
+          && sameOrder(
+            list(path?.idempotencyKeyParts?.identityFieldIds),
+            [binding?.sourceIdentityFieldId],
+          )
+          && sameOrder(
+            list(path?.idempotencyKeyParts?.versionFieldIds),
+            [binding?.sourceVersionFieldId],
+          );
+      }
+
+      const interpretationActionEntry = actionForStep(steps.at(-1));
+      const interpretationAction = interpretationActionEntry?.value;
+      const evidencePath = paths.find(({ semanticRole }) => semanticRole === "EVIDENCE_SOURCE");
+      const writeTargetObjectIds = [...new Set(steps.map((step) => (
+        actionForStep(step)?.value?.targetObjectId
+      )).filter(isValidId))];
+      valid = valid
+        && interpretationActionEntry?.moduleId === derivationModuleId
+        && interpretationAction?.operationKind === "CREATE"
+        && interpretationAction?.writes === true
+        && interpretationAction?.targetObjectId !== timelineObjectId
+        && sameOrder(
+          list(flow?.idempotencyKeyParts?.identityFieldIds),
+          list(evidencePath?.idempotencyKeyParts?.identityFieldIds),
+        )
+        && sameOrder(
+          list(flow?.idempotencyKeyParts?.versionFieldIds),
+          list(evidencePath?.idempotencyKeyParts?.versionFieldIds),
+        )
+        && flow?.idempotencyKeyParts?.fanoutFieldId
+          === evidencePath?.idempotencyKeyParts?.fanoutFieldId
+        && refsHaveTargetSemantics(flow, writeTargetObjectIds)
+        && policyMatches(flow, {
+          failureGranularity: "STUDENT_SOURCE_FACT_VERSION",
+          retryStrategy: "REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS",
+          retryableFailureResults: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+          compensationStrategy: "KEEP_ACCEPTED_SOURCE_FACT_AND_RETRY_ONLY_FAILED_DERIVED_OBJECTS",
+          invalidationStrategy: "SUPERSEDE_OR_MARK_STALE_BY_SOURCE_VERSION",
+        });
+      if (!valid) {
+        errors.push(
+          `INVALID_FLOW_PROFILE ${formatValidationValue(flow?.id)} violates the LEARNING_PATH_AGGREGATION semantic role contract`,
+        );
+      }
+    }
+
+    if (flow?.contractProfile === "REPORT_MATERIALIZATION") {
+      const participantRoles = [
+        "STUDENT_EXECUTION_SOURCE",
+        "PLAN_COORDINATION_SOURCE",
+        "REPORT_PIPELINE",
+        "NOTIFICATION_SINK",
+      ];
+      const stepRoles = [
+        "READ_STUDENT_EXECUTION",
+        "READ_PLAN_COORDINATION",
+        "CREATE_AD_HOC_RUN",
+        "CREATE_PERIODIC_RUN",
+        "START_RUN",
+        "COMPLETE_RUN",
+        "MATERIALIZE_SNAPSHOT",
+        "CREATE_DELIVERY",
+        "CREATE_NOTIFICATION",
+      ];
+      const pathRoles = ["AD_HOC_RUN", "PERIODIC_RUN"];
+      const participants = records(flow.participantRoles);
+      const moduleByRole = participantModuleByRole(flow);
+      const steps = records(flow.steps);
+      const stepByRole = new Map(steps.map((step) => [step.semanticRole, step]));
+      const paths = records(flow.executionPaths);
+      const pathByRole = new Map(paths.map((path) => [path.semanticRole, path]));
+      const actionByRole = new Map(steps.map((step) => [
+        step.semanticRole,
+        actionForStep(step),
+      ]));
+      const reportModuleId = moduleByRole.get("REPORT_PIPELINE");
+      const notificationModuleId = moduleByRole.get("NOTIFICATION_SINK");
+      const adHocPath = pathByRole.get("AD_HOC_RUN");
+      const periodicPath = pathByRole.get("PERIODIC_RUN");
+      const adHocRun = actionByRole.get("CREATE_AD_HOC_RUN")?.value;
+      const periodicRun = actionByRole.get("CREATE_PERIODIC_RUN")?.value;
+      const runObjectId = adHocRun?.targetObjectId;
+      let valid = sameOrder(roleSequence(participants), participantRoles)
+        && sameOrder(participants.map(({ moduleId }) => moduleId), list(flow.moduleIds))
+        && sameOrder(steps.map(({ semanticRole }) => semanticRole), stepRoles)
+        && sameOrder(paths.map(({ semanticRole }) => semanticRole), pathRoles)
+        && !Object.hasOwn(flow, "sourceOnlyModuleIds")
+        && actionByRole.get("READ_STUDENT_EXECUTION")?.moduleId
+          === moduleByRole.get("STUDENT_EXECUTION_SOURCE")
+        && actionByRole.get("READ_PLAN_COORDINATION")?.moduleId
+          === moduleByRole.get("PLAN_COORDINATION_SOURCE")
+        && ["READ_STUDENT_EXECUTION", "READ_PLAN_COORDINATION"].every((role) => {
+          const action = actionByRole.get(role)?.value;
+          return action?.operationKind === "READ" && action?.writes === false;
+        })
+        && ["CREATE_AD_HOC_RUN", "CREATE_PERIODIC_RUN"].every((role) => {
+          const actionEntry = actionByRole.get(role);
+          return actionEntry?.moduleId === reportModuleId
+            && actionEntry.value?.operationKind === "CREATE"
+            && actionEntry.value?.writes === true
+            && actionEntry.value?.targetObjectId === runObjectId;
+        });
+
+      const pathValid = (path, runAction, expectedBindingCount) => {
+        const routeStep = steps.find(({ order }) => order === path?.route?.consumerStepOrder);
+        const bindings = records(path?.sourceBindings);
+        const bindingIdentityIds = bindings.map(({ sourceIdentityFieldId }) => (
+          sourceIdentityFieldId
+        ));
+        const bindingVersionIds = bindings.map(({ sourceVersionFieldId }) => (
+          sourceVersionFieldId
+        ));
+        const extraIdentityIds = bindingIdentityIds.filter((fieldId) => (
+          !list(flow?.idempotencyKeyParts?.identityFieldIds).includes(fieldId)
+        ));
+        const extraVersionIds = bindingVersionIds.filter((fieldId) => (
+          !list(flow?.idempotencyKeyParts?.versionFieldIds).includes(fieldId)
+        ));
+        return routeStep?.actionId === runAction?.id
+          && list(path?.stepOrders).map((order) => (
+            steps.find((step) => step.order === order)?.semanticRole
+          )).join("|") === [
+            "READ_STUDENT_EXECUTION",
+            "READ_PLAN_COORDINATION",
+            path?.semanticRole === "AD_HOC_RUN" ? "CREATE_AD_HOC_RUN" : "CREATE_PERIODIC_RUN",
+            "START_RUN",
+            "COMPLETE_RUN",
+            "MATERIALIZE_SNAPSHOT",
+            "CREATE_DELIVERY",
+            "CREATE_NOTIFICATION",
+          ].join("|")
+          && bindings.length === expectedBindingCount
+          && bindings.every((binding) => (
+            index.objectById.get(binding?.sourceObjectId)?.moduleId === reportModuleId
+            && index.fieldById.get(binding?.sourceIdentityFieldId)?.objectId
+              === binding.sourceObjectId
+            && index.fieldById.get(binding?.sourceVersionFieldId)?.objectId
+              === binding.sourceObjectId
+            && index.fieldById.get(binding?.targetRefFieldId)?.objectId === runObjectId
+            && index.fieldById.get(binding?.targetVersionFieldId)?.objectId === runObjectId
+            && list(runAction?.inputFieldIds).includes(binding.targetRefFieldId)
+            && list(runAction?.inputFieldIds).includes(binding.targetVersionFieldId)
+            && !list(runAction?.outputFieldIds).includes(binding.targetRefFieldId)
+            && !list(runAction?.outputFieldIds).includes(binding.targetVersionFieldId)
+          ))
+          && sameSet(
+            list(path?.idempotencyKeyParts?.identityFieldIds),
+            [...list(flow?.idempotencyKeyParts?.identityFieldIds), ...extraIdentityIds],
+          )
+          && sameSet(
+            list(path?.idempotencyKeyParts?.versionFieldIds),
+            [...list(flow?.idempotencyKeyParts?.versionFieldIds), ...extraVersionIds],
+          )
+          && path?.idempotencyKeyParts?.fanoutFieldId
+            === flow?.idempotencyKeyParts?.fanoutFieldId;
+      };
+      valid = valid && pathValid(adHocPath, adHocRun, 1)
+        && pathValid(periodicPath, periodicRun, 2);
+
+      const startRun = actionByRole.get("START_RUN")?.value;
+      const completeRun = actionByRole.get("COMPLETE_RUN")?.value;
+      const snapshotAction = actionByRole.get("MATERIALIZE_SNAPSHOT")?.value;
+      const deliveryAction = actionByRole.get("CREATE_DELIVERY")?.value;
+      const notificationAction = actionByRole.get("CREATE_NOTIFICATION")?.value;
+      const snapshotObject = index.objectById.get(snapshotAction?.targetObjectId)?.value;
+      const deliveryObject = index.objectById.get(deliveryAction?.targetObjectId)?.value;
+      const notificationObject = index.objectById.get(notificationAction?.targetObjectId)?.value;
+      valid = valid
+        && [startRun, completeRun].every((action) => (
+          action?.operationKind === "UPDATE"
+          && action?.writes === true
+          && action?.targetObjectId === runObjectId
+        ))
+        && startRun?.transition?.from === "QUEUED"
+        && startRun?.transition?.to === "RUNNING"
+        && completeRun?.transition?.from === "RUNNING"
+        && completeRun?.transition?.to === "SUCCEEDED"
+        && actionByRole.get("MATERIALIZE_SNAPSHOT")?.moduleId === reportModuleId
+        && snapshotAction?.operationKind === "CREATE"
+        && snapshotAction?.targetObjectId !== runObjectId
+        && records(snapshotObject?.lineageBindings).some(({ targetObjectId }) => (
+          targetObjectId === runObjectId
+        ))
+        && actionByRole.get("CREATE_DELIVERY")?.moduleId === reportModuleId
+        && deliveryAction?.operationKind === "CREATE"
+        && records(deliveryObject?.lineageBindings).some(({ targetObjectId }) => (
+          targetObjectId === snapshotAction?.targetObjectId
+        ))
+        && deliveryObject?.channelPolicy?.mode === "PHASE_ONE_CLOSED"
+        && actionByRole.get("CREATE_NOTIFICATION")?.moduleId === notificationModuleId
+        && notificationAction?.operationKind === "CREATE"
+        && notificationObject?.channelPolicy?.mode === "PHASE_ONE_CLOSED";
+
+      const sourceRefs = records(flow.sourceDataRefs);
+      const sourceRefByFieldId = new Map(sourceRefs.map((dataRef) => [dataRef.fieldId, dataRef]));
+      const fanoutRef = sourceRefs.find(({ semanticRole }) => semanticRole === "SOURCE_FANOUT");
+      const sourceModules = new Set(sourceRefs.map(({ objectId }) => (
+        index.objectById.get(objectId)?.moduleId
+      )));
+      valid = valid
+        && sourceRefs.every((dataRef) => sourceRefRoleValid(
+          dataRef,
+          flow?.idempotencyKeyParts?.fanoutFieldId,
+        ))
+        && sourceRefs.filter(({ semanticRole }) => semanticRole === "SOURCE_FANOUT").length === 1
+        && fanoutRef?.fieldId === flow?.idempotencyKeyParts?.fanoutFieldId
+        && sameSet(
+          [...sourceModules],
+          [
+            moduleByRole.get("STUDENT_EXECUTION_SOURCE"),
+            moduleByRole.get("PLAN_COORDINATION_SOURCE"),
+            reportModuleId,
+          ],
+        )
+        && [adHocPath, periodicPath].every((path) => records(path?.sourceBindings)
+          .every((binding) => (
+            sourceRefByFieldId.get(binding?.sourceIdentityFieldId)?.semanticRole
+              === "SOURCE_IDENTITY"
+            && sourceRefByFieldId.get(binding?.sourceVersionFieldId)?.semanticRole
+              === "SOURCE_VERSION"
+          )))
+        && list(flow?.idempotencyKeyParts?.identityFieldIds).every((fieldId) => (
+          sourceRefByFieldId.get(fieldId)?.semanticRole === "SOURCE_IDENTITY"
+        ))
+        && list(flow?.idempotencyKeyParts?.versionFieldIds).every((fieldId) => (
+          sourceRefByFieldId.get(fieldId)?.semanticRole === "SOURCE_VERSION"
+        ));
+      const writeTargetObjectIds = [...new Set(stepRoles.slice(2).map((role) => (
+        actionByRole.get(role)?.value?.targetObjectId
+      )).filter(isValidId))];
+      valid = valid
+        && refsHaveTargetSemantics(flow, writeTargetObjectIds)
+        && policyMatches(flow, {
+          failureGranularity: "REPORT_RUN_SNAPSHOT_DELIVERY_AND_NOTIFICATION_OBJECT",
+          retryStrategy: "RECHECK_PERMISSION_REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_OUTPUTS",
+          retryableFailureResults: [
+            "SOURCE_VERSION_STALE",
+            "DELIVERY_FAILED",
+            "VERSION_CONFLICT",
+          ],
+          compensationStrategy: "KEEP_SOURCE_EXECUTION_RUN_AND_SNAPSHOT_WHILE_RETRYING_DELIVERY_ONLY",
+          invalidationStrategy: "CREATE_A_NEW_RUN_FOR_NEW_SOURCE_VERSIONS",
+        });
+      if (!valid) {
+        errors.push(
+          `INVALID_FLOW_PROFILE ${formatValidationValue(flow?.id)} violates the REPORT_MATERIALIZATION semantic role contract`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
 function aiTaskErrors(index) {
   const errors = [];
+  const dutyRoleById = new Map(index.duties.map(({ value }) => [value?.id, value?.roleId]));
+  const permissionAllowsUserSubject = (permission, subject) => {
+    if (permission?.effect !== "ALLOW") return false;
+    if (permission.actorRef === "CURRENT_ACTOR") return true;
+    if (permission.actorRef === "SYSTEM" || permission.actorRef === "AI") return false;
+    if (subject.roleRef) {
+      return permission.roleRef === subject.roleRef
+        || dutyRoleById.get(permission.dutyRef) === subject.roleRef;
+    }
+    if (subject.dutyRef) {
+      return permission.dutyRef === subject.dutyRef
+        || permission.roleRef === dutyRoleById.get(subject.dutyRef);
+    }
+    return false;
+  };
   for (const taskEntry of index.aiTasks) {
     const task = taskEntry.value;
     const targetActionEntry = index.actionById.get(task?.actionId);
@@ -1012,6 +1546,36 @@ function aiTaskErrors(index) {
       errors.push(
         `INVALID_AI_TARGET_ACTION ${formatValidationValue(task?.id)} must match the target Action write, risk, and client contract`,
       );
+    }
+
+    if (targetActionEntry) {
+      const allowPermissions = records(targetAction?.permissions)
+        .filter(({ effect }) => effect === "ALLOW");
+      const audiences = [
+        ...list(task?.roleRefs).map((roleRef) => ({ roleRef })),
+        ...list(task?.dutyRefs).map((dutyRef) => ({ dutyRef })),
+      ];
+      if (
+        audiences.length === 0
+        || audiences.some((subject) => (
+          !allowPermissions.some((permission) => permissionAllowsUserSubject(permission, subject))
+        ))
+      ) {
+        errors.push(
+          `INVALID_AI_ACTOR_AUTHORIZATION ${formatValidationValue(task?.id)} audiences must be allowed by the target Action`,
+        );
+      }
+      if (
+        task?.writes === true
+        && !allowPermissions.some((permission) => permissionAllowsUserSubject(
+          permission,
+          { dutyRef: task?.confirmerDutyRef },
+        ))
+      ) {
+        errors.push(
+          `INVALID_AI_CONFIRMER_AUTHORIZATION ${formatValidationValue(task?.id)} confirmer must be allowed by the target Action`,
+        );
+      }
     }
 
     if (
@@ -1118,17 +1682,23 @@ function reportErrors(index) {
 
   const subscription = objectById.get("RPT-OBJ-SUBSCRIPTION");
   const run = objectById.get("RPT-OBJ-RUN");
+  const delivery = objectById.get("RPT-OBJ-DELIVERY");
   const lifecycleValid = setEquals(
     stateIds(subscription),
     new Set(["ACTIVE", "PAUSED", "CANCELLED"]),
   ) && setEquals(
     stateIds(run),
     new Set(["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED_PERMISSION"]),
-  ) && hasExactKeys(reportModule.lifecycleBoundaries, [
-    "subscriptionObjectId",
-    "runObjectId",
-    "sharedStateMachine",
-  ])
+  ) && setEquals(
+    stateIds(delivery),
+    new Set(["PENDING", "DELIVERED", "FAILED"]),
+  ) && run?.stateReachability?.mode === "ACTION_GRAPH"
+    && delivery?.stateReachability?.mode === "ACTION_GRAPH"
+    && hasExactKeys(reportModule.lifecycleBoundaries, [
+      "subscriptionObjectId",
+      "runObjectId",
+      "sharedStateMachine",
+    ])
     && reportModule.lifecycleBoundaries.subscriptionObjectId === "RPT-OBJ-SUBSCRIPTION"
     && reportModule.lifecycleBoundaries.runObjectId === "RPT-OBJ-RUN"
     && reportModule.lifecycleBoundaries.sharedStateMachine === false;
@@ -1138,11 +1708,13 @@ function reportErrors(index) {
     "permissionCheck",
     "dataCutoff",
     "permissionFailureState",
+    "permissionFailureActionId",
     "sourceVersionCapture",
   ])
     && policy.permissionCheck === "RECHECK_EACH_RUN"
     && policy.dataCutoff === "RESOLVE_AT_RUN_START"
     && policy.permissionFailureState === "BLOCKED_PERMISSION"
+    && policy.permissionFailureActionId === "RPT-ACT-BLOCK-RUN-PERMISSION"
     && policy.sourceVersionCapture === "PIN_BEFORE_QUERY";
 
   const snapshot = objectById.get("RPT-OBJ-SNAPSHOT");
@@ -1168,6 +1740,116 @@ function reportErrors(index) {
     && index.moduleById.get("LPATH-001")?.value?.timeHorizon
       === "CROSS_TERM_APPEND_ONLY_LONG_TERM";
 
+  const flow = index.flows.find(({ value }) => value?.id === "DF-013")?.value;
+  const stepByOrder = new Map(records(flow?.steps).map((step) => [step.order, step]));
+  const actionById = new Map(records(reportModule.actions).map((action) => [action.id, action]));
+  const pathById = new Map(records(flow?.executionPaths).map((path) => [path.id, path]));
+  const adHocPath = pathById.get("AD_HOC");
+  const periodicPath = pathById.get("PERIODIC");
+  const bindingSignature = (binding) => [
+    binding?.sourceObjectId,
+    binding?.sourceIdentityFieldId,
+    binding?.sourceVersionFieldId,
+    binding?.consumerStepOrder,
+    binding?.targetRefFieldId,
+    binding?.targetVersionFieldId,
+    binding?.cardinality,
+  ].join("|");
+  const expectedDefinitionBinding = (consumerStepOrder) => [
+    "RPT-OBJ-DEFINITION",
+    "RPT-DEFINITION-F-ID",
+    "RPT-DEFINITION-F-VERSION",
+    consumerStepOrder,
+    "RPT-RUN-F-DEFINITION-REF",
+    "RPT-RUN-F-DEFINITION-VERSION",
+    "ONE",
+  ].join("|");
+  const expectedSubscriptionBinding = [
+    "RPT-OBJ-SUBSCRIPTION",
+    "RPT-SUBSCRIPTION-F-ID",
+    "RPT-SUBSCRIPTION-F-VERSION",
+    4,
+    "RPT-RUN-F-SUBSCRIPTION-REF",
+    "RPT-RUN-F-SUBSCRIPTION-VERSION",
+    "ONE",
+  ].join("|");
+  const pathKeyValid = (path, expectedIdentityIds, expectedVersionIds) => (
+    setEquals(
+      new Set(list(path?.idempotencyKeyParts?.identityFieldIds)),
+      new Set(expectedIdentityIds),
+    )
+    && setEquals(
+      new Set(list(path?.idempotencyKeyParts?.versionFieldIds)),
+      new Set(expectedVersionIds),
+    )
+    && path?.idempotencyKeyParts?.fanoutFieldId === "APP-TODO-F-STUDENT-REF"
+  );
+  const adHocRun = actionById.get("RPT-ACT-CREATE-AD-HOC-RUN");
+  const periodicRun = actionById.get("RPT-ACT-CREATE-RUN");
+  const reportExecutionPathValid = flow?.routingPolicy === "ACTION_CHOICE_REQUIRED"
+    && pathById.size === 2
+    && stepByOrder.get(3)?.actionId === "RPT-ACT-CREATE-AD-HOC-RUN"
+    && stepByOrder.get(4)?.actionId === "RPT-ACT-CREATE-RUN"
+    && adHocPath?.route?.kind === "ACTION_CHOICE"
+    && adHocPath.route.consumerStepOrder === 3
+    && periodicPath?.route?.kind === "ACTION_CHOICE"
+    && periodicPath.route.consumerStepOrder === 4
+    && setEquals(
+      new Set(records(adHocPath?.sourceBindings).map(bindingSignature)),
+      new Set([expectedDefinitionBinding(3)]),
+    )
+    && setEquals(
+      new Set(records(periodicPath?.sourceBindings).map(bindingSignature)),
+      new Set([expectedDefinitionBinding(4), expectedSubscriptionBinding]),
+    )
+    && setEquals(
+      new Set(list(adHocRun?.inputFieldIds)),
+      new Set(["RPT-RUN-F-DEFINITION-REF", "RPT-RUN-F-DEFINITION-VERSION"]),
+    )
+    && setEquals(
+      new Set(list(periodicRun?.inputFieldIds)),
+      new Set([
+        "RPT-RUN-F-DEFINITION-REF",
+        "RPT-RUN-F-DEFINITION-VERSION",
+        "RPT-RUN-F-SUBSCRIPTION-REF",
+        "RPT-RUN-F-SUBSCRIPTION-VERSION",
+      ]),
+    )
+    && [adHocRun, periodicRun].every((action) => (
+      !list(action?.outputFieldIds).some((fieldId) => [
+        "RPT-RUN-F-DEFINITION-REF",
+        "RPT-RUN-F-DEFINITION-VERSION",
+        "RPT-RUN-F-SUBSCRIPTION-REF",
+        "RPT-RUN-F-SUBSCRIPTION-VERSION",
+      ].includes(fieldId))
+    ))
+    && pathKeyValid(
+      adHocPath,
+      ["RPT-DEFINITION-F-ID", "APP-TODO-F-ID", "PLN-PLAN-F-ID"],
+      [
+        "RPT-DEFINITION-F-VERSION",
+        "APP-TODO-F-AGGREGATION-VERSION",
+        "PLN-PLAN-F-PLAN-VERSION",
+        "PLN-HOMEROOM-F-OUTPUT-VERSION",
+      ],
+    )
+    && pathKeyValid(
+      periodicPath,
+      [
+        "RPT-DEFINITION-F-ID",
+        "RPT-SUBSCRIPTION-F-ID",
+        "APP-TODO-F-ID",
+        "PLN-PLAN-F-ID",
+      ],
+      [
+        "RPT-DEFINITION-F-VERSION",
+        "RPT-SUBSCRIPTION-F-VERSION",
+        "APP-TODO-F-AGGREGATION-VERSION",
+        "PLN-PLAN-F-PLAN-VERSION",
+        "PLN-HOMEROOM-F-OUTPUT-VERSION",
+      ],
+    );
+
   if (
     !objectContractValid
     || !lifecycleValid
@@ -1177,6 +1859,11 @@ function reportErrors(index) {
   ) {
     errors.push(
       "INVALID_REPORT_CONTRACT RPT-001 must separate report objects, lifecycles, run authorization, source pins, and time horizons",
+    );
+  }
+  if (!reportExecutionPathValid) {
+    errors.push(
+      "INVALID_REPORT_EXECUTION_PATH DF-013 must separate ad-hoc definition runs from periodic definition-and-subscription runs with source-version idempotency",
     );
   }
   return errors;
@@ -1196,7 +1883,16 @@ function learningPathErrors(index) {
     ["TEACHER-CONFIRMATION", "GRD-OBJ-DECISION", "GRD-DECISION-F-DECISION-VERSION"],
   ];
   const timelineFieldById = new Map(records(timeline?.fields).map((field) => [field.id, field]));
+  const expectedSourceGroupSignatures = expectedSourceBindings.map(([kind]) => (
+    `${kind}:LPATH-ENTRY-F-${kind}-REF,LPATH-ENTRY-F-${kind}-VERSION`
+  ));
+  const actualSourceGroupSignatures = records(timeline?.exclusiveSourceGroups)
+    .map((group) => `${group.id}:${list(group.fieldIds).join(",")}`);
   const timelineValid = timeline?.crossTerm === true
+    && setEquals(
+      new Set(actualSourceGroupSignatures),
+      new Set(expectedSourceGroupSignatures),
+    )
     && expectedSourceBindings.every(([kind, objectId, targetVersionFieldId]) => {
       const refFieldId = `LPATH-ENTRY-F-${kind}-REF`;
       const versionFieldId = `LPATH-ENTRY-F-${kind}-VERSION`;
@@ -1238,7 +1934,45 @@ function learningPathErrors(index) {
   )) && setEquals(
     stateIds(interpretation),
     new Set(["CANDIDATE", "TEACHER_CONFIRMED", "STUDENT_VISIBLE", "SUPERSEDED", "STALE"]),
-  );
+  ) && interpretation?.stateReachability?.mode === "ACTION_GRAPH";
+
+  const flow = index.flows.find(({ value }) => value?.id === "DF-011")?.value;
+  const pathById = new Map(records(flow?.executionPaths).map((path) => [path.id, path]));
+  const expectedPaths = [
+    ["PUBLISHED_RESULT", "PUB-OBJ-RESULT", "PUB-RESULT-F-ID", "PUB-RESULT-F-RESULT-VERSION", 1, "PUBLISHED-RESULT"],
+    ["EVIDENCE", "INS-OBJ-EVIDENCE", "INS-EVIDENCE-F-ID", "INS-EVIDENCE-F-EVIDENCE-VERSION", 2, "EVIDENCE"],
+    ["CORRECTION", "CORR-OBJ-ATTEMPT", "CORR-ATTEMPT-F-ID", "CORR-ATTEMPT-F-CORRECTION-VERSION", 3, "CORRECTION"],
+    ["PLAN_EXECUTION", "APP-OBJ-TODO", "APP-TODO-F-ID", "APP-TODO-F-AGGREGATION-VERSION", 4, "PLAN-EXECUTION"],
+    ["TEACHER_CONFIRMATION", "GRD-OBJ-DECISION", "GRD-DECISION-F-ID", "GRD-DECISION-F-DECISION-VERSION", 5, "TEACHER-CONFIRMATION"],
+  ];
+  const sourcePathsValid = flow?.routingPolicy === "ACTION_CHOICE_REQUIRED"
+    && setEquals(
+      new Set(list(flow?.sourceOnlyModuleIds)),
+      new Set(["PUB-001", "INS-001", "CORR-001", "APP-001", "GRD-001"]),
+    )
+    && pathById.size === expectedPaths.length
+    && expectedPaths.every(([
+      pathId,
+      sourceObjectId,
+      sourceIdentityFieldId,
+      sourceVersionFieldId,
+      consumerStepOrder,
+      kind,
+    ]) => {
+      const path = pathById.get(pathId);
+      const bindings = records(path?.sourceBindings);
+      const binding = bindings[0];
+      return bindings.length === 1
+        && path?.route?.kind === "ACTION_CHOICE"
+        && path.route.consumerStepOrder === consumerStepOrder
+        && binding?.sourceObjectId === sourceObjectId
+        && binding?.sourceIdentityFieldId === sourceIdentityFieldId
+        && binding?.sourceVersionFieldId === sourceVersionFieldId
+        && binding?.consumerStepOrder === consumerStepOrder
+        && binding?.targetRefFieldId === `LPATH-ENTRY-F-${kind}-REF`
+        && binding?.targetVersionFieldId === `LPATH-ENTRY-F-${kind}-VERSION`
+        && binding?.cardinality === "ONE";
+    });
 
   const history = pathModule.historyPolicy;
   const historyValid = hasExactKeys(history, [
@@ -1278,6 +2012,11 @@ function learningPathErrors(index) {
       "INVALID_LEARNING_PATH_CONTRACT LPATH-001 must retain cross-term source versions and subject-owned interpretation history",
     );
   }
+  if (!sourcePathsValid) {
+    errors.push(
+      "INVALID_LEARNING_PATH_SOURCE_PATH DF-011 must bind exactly one published result, evidence, correction, plan execution, or teacher confirmation source per path",
+    );
+  }
   return errors;
 }
 
@@ -1297,7 +2036,27 @@ function notificationErrors(index) {
   ];
   const fieldIds = new Set(records(notification.fields).map(({ id }) => id));
   const policy = notification.deliveryFailurePolicy;
+  const notificationActionById = new Map(index.actions
+    .filter(({ moduleId }) => moduleId === "NOTI-001")
+    .map(({ value }) => [value.id, value]));
+  const recipientActionsValid = ["NOTI-ACT-MARK-READ", "NOTI-ACT-MARK-HANDLED"]
+    .every((actionId) => {
+      const permissions = records(notificationActionById.get(actionId)?.permissions);
+      return permissions.some((permission) => (
+        permission.effect === "ALLOW"
+        && permission.roleRef === "ROLE-STUDENT"
+        && permission.scope?.kind === "OWN_RECORD"
+        && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+      )) && permissions.some((permission) => (
+        permission.effect === "DENY"
+        && permission.roleRef === "ROLE-STUDENT"
+        && permission.scope?.kind === "OTHER_RECORD"
+        && permission.scope.subjectFieldId === "NOTI-NOTIFICATION-F-RECIPIENT"
+      ));
+    });
   const valid = requiredFieldIds.every((fieldId) => fieldIds.has(fieldId))
+    && notification?.stateReachability?.mode === "ACTION_GRAPH"
+    && recipientActionsValid
     && hasExactKeys(policy, [
       "sourceBusinessFactRollback",
       "retryScope",
@@ -1309,6 +2068,45 @@ function notificationErrors(index) {
   return valid ? [] : [
     "INVALID_NOTIFICATION_CONTRACT NOTI-001 must retry delivery independently without rolling back source facts",
   ];
+}
+
+function notificationChannelErrors(index) {
+  const errors = [];
+  for (const objectEntry of index.objects) {
+    const object = objectEntry.value;
+    if (!Object.hasOwn(object ?? {}, "channelPolicy")) continue;
+    const policy = object.channelPolicy;
+    const allowedCodes = list(policy?.allowedCodes);
+    const allowedCodeSet = new Set(allowedCodes);
+    const field = records(object?.fields).find(({ id }) => id === policy?.fieldId);
+    const optionSet = index.optionSetById.get(policy?.optionSetId)?.value;
+    const optionCodes = records(optionSet?.values).map(({ code }) => code);
+    const targetActions = index.actions.filter(({ value }) => (
+      value?.targetObjectId === object?.id
+    ));
+    const valid = hasExactKeys(policy, [
+      "mode",
+      "fieldId",
+      "optionSetId",
+      "allowedCodes",
+    ])
+      && policy.mode === "PHASE_ONE_CLOSED"
+      && allowedCodes.length > 0
+      && allowedCodeSet.size === allowedCodes.length
+      && allowedCodes.every(isValidId)
+      && field?.valueSource?.kind === "OPTION_SET"
+      && field.valueSource.optionSetId === policy.optionSetId
+      && optionSet?.mode === "STATIC"
+      && setEquals(new Set(optionCodes), allowedCodeSet)
+      && targetActions.length > 0
+      && targetActions.every(({ value }) => allowedCodeSet.has(value?.channel));
+    if (!valid) {
+      errors.push(
+        `INVALID_NOTIFICATION_CHANNEL ${formatValidationValue(object?.id)} must remain closed to its declared phase-one delivery channels`,
+      );
+    }
+  }
+  return errors;
 }
 
 function phaseAndTemplateErrors(index) {
@@ -1680,14 +2478,17 @@ export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
     ...flowErrors(index),
+    ...flowProfileErrors(index),
     ...actionErrors(index),
     ...actionApplicabilityErrors(index),
     ...conditionalRequiredErrors(index),
+    ...stateReachabilityErrors(index),
     ...ownerErrors(index),
     ...aiTaskErrors(index),
     ...reportErrors(index),
     ...learningPathErrors(index),
     ...notificationErrors(index),
+    ...notificationChannelErrors(index),
     ...phaseAndTemplateErrors(index),
     ...metricErrors(index),
     ...gradingCapabilityErrors(index),
