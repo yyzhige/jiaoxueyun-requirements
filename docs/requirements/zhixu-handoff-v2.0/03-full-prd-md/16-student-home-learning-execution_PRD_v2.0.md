@@ -1,138 +1,117 @@
-# APP-001 学生首页与学习执行 PRD v2.0
+# APP-001 Student Todo Aggregation and Local Execution PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学生 |
-| 关联线框 | [16-student-home-learning-execution-wireframe.zh-CN.md](../05-wireframe-contracts/16-student-home-learning-execution-wireframe.zh-CN.md) |
+| 目标 | Aggregate deep links and local execution state without becoming a second homework or improvement-plan owner |
+| 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-005`、`NFR-008` |
+| 进入条件 | an authorized source assignment or teacher-confirmed plan version can be resolved |
+| 退出条件 | the student can navigate, record local progress, attach completion evidence, and report difficulty against pinned sources |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-以学生今日行动为中心，承载作业、反馈、订正、提升任务、学习路径和 AI 学习助手入口。
+- 本模块权威拥有 1 个对象、5 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-APP-01 | Student Today Task View | 系统 | 学生今日任务 | 系统 | 系统 | 系统 | S2 教学业务数据 |
-| DAT-APP-02 | Student Learning Session | 学生 | 学生学习会话 | 学生 | 学生 | 系统 | S2 教学业务数据 |
-| DAT-APP-03 | Student Difficulty Feedback | 学生 | 困难反馈 | 学生 | 学生 | 任课教师 | S2 教学业务数据 |
+### APP-OBJ-TODO Student Todo Link and Local Execution State
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_LOCAL_TASK_EXECUTION | SCHOOL | SYSTEM | ROLE-STUDENT | DUTY-SUBJECT-TEACHER | ROLE-STUDENT | LIFE-003 | S3 | STUDENT_TIMED_RELEASE | READY |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| APP-TODO-F-ID | Student Todo Aggregation ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-STUDENT-REF | Todo Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-SOURCE-PLAN-REF | Source Improvement Plan Reference | ID | required when the todo links to an improvement plan；状态=READY；动作=APP-ACT-CREATE-PLAN-TODO | OBJECT_REF: PLN-OBJ-PLAN | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-SOURCE-PLAN-VERSION | Source Improvement Plan Version | INTEGER | required when the todo links to an improvement plan；状态=READY；动作=APP-ACT-CREATE-PLAN-TODO | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-SOURCE-ASSIGNMENT-REF | Source Assignment Reference | ID | required when the todo links to homework；状态=READY；动作=APP-ACT-CREATE-HOMEWORK-TODO | OBJECT_REF: HW-OBJ-ASSIGNMENT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-SOURCE-ASSIGNMENT-VERSION | Source Assignment Version | INTEGER | required when the todo links to homework；状态=READY；动作=APP-ACT-CREATE-HOMEWORK-TODO | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-TASK-DEEP-LINK | Task Deep Link | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-LOCAL-PROGRESS | Student Local Progress | JSON | required when the student records local todo execution state；状态=READY；动作=APP-ACT-UPDATE-LOCAL-PROGRESS | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-COMPLETION-EVIDENCE | Student Completion Evidence | JSON | required when the student records local todo execution state；状态=READY；动作=APP-ACT-UPDATE-LOCAL-PROGRESS | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-DIFFICULTY-FEEDBACK | Student Difficulty Feedback | TEXT | required when the student records local todo execution state；状态=READY；动作=APP-ACT-UPDATE-LOCAL-PROGRESS | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-STUDENT-VISIBLE-AT | Todo Student Visible At | DATETIME | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| APP-TODO-F-AGGREGATION-VERSION | Todo Aggregation Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 学生
-- 解决问题: 以学生今日行动为中心，承载作业、反馈、订正、提升任务、学习路径和 AI 学习助手入口。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+## 3. 对象关系
 
-### 1.2 本模块负责
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
 
-- DAT-APP-01 Student Today Task View
-- DAT-APP-02 Student Learning Session
-- DAT-APP-03 Student Difficulty Feedback
+## 4. 可执行动作合同
 
-### 1.3 本模块不负责
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| APP-ACT-CREATE-PLAN-TODO | Create a Plan-pinned Student Todo Link | APP-OBJ-TODO | CREATE |  | APP-TODO-F-ID<br>APP-TODO-F-STUDENT-REF<br>APP-TODO-F-TASK-DEEP-LINK<br>APP-TODO-F-STUDENT-VISIBLE-AT<br>APP-TODO-F-AGGREGATION-VERSION<br>APP-TODO-F-SOURCE-PLAN-REF<br>APP-TODO-F-SOURCE-PLAN-VERSION | CREATE（成功状态由 APP-ACT-CREATE-PLAN-TODO-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow materializes or refreshes only source-pinned todo links<br>DENY:CURRENT_ACTOR — a user cannot invoke internal todo aggregation directly | FLOW_INTERNAL | LOW | REQUIRED | APP-ACT-CREATE-PLAN-TODO:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| APP-ACT-CREATE-HOMEWORK-TODO | Create a Homework-pinned Student Todo Link | APP-OBJ-TODO | CREATE |  | APP-TODO-F-ID<br>APP-TODO-F-STUDENT-REF<br>APP-TODO-F-TASK-DEEP-LINK<br>APP-TODO-F-STUDENT-VISIBLE-AT<br>APP-TODO-F-AGGREGATION-VERSION<br>APP-TODO-F-SOURCE-ASSIGNMENT-REF<br>APP-TODO-F-SOURCE-ASSIGNMENT-VERSION | CREATE（成功状态由 APP-ACT-CREATE-HOMEWORK-TODO-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow materializes or refreshes only source-pinned todo links<br>DENY:CURRENT_ACTOR — a user cannot invoke internal todo aggregation directly | FLOW_INTERNAL | LOW | REQUIRED | APP-ACT-CREATE-HOMEWORK-TODO:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| APP-ACT-REFRESH-TODOS | Refresh Student Todo Aggregation | APP-OBJ-TODO | UPDATE |  | APP-TODO-F-TASK-DEEP-LINK<br>APP-TODO-F-AGGREGATION-VERSION | READY → READY | ALLOW:SYSTEM — the verified Flow materializes or refreshes only source-pinned todo links<br>DENY:CURRENT_ACTOR — a user cannot invoke internal todo aggregation directly | FLOW_INTERNAL | HIGH | REQUIRED | APP-ACT-REFRESH-TODOS:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT / AUDIT_FAILED |
+| APP-ACT-VIEW-TODOS | View My Student Todo Aggregation | APP-OBJ-TODO | READ | APP-TODO-F-STUDENT-REF | APP-TODO-F-STUDENT-REF<br>APP-TODO-F-TASK-DEEP-LINK<br>APP-TODO-F-LOCAL-PROGRESS<br>APP-TODO-F-COMPLETION-EVIDENCE<br>APP-TODO-F-DIFFICULTY-FEEDBACK<br>APP-TODO-F-STUDENT-VISIBLE-AT | UNCHANGED | ALLOW:ROLE-STUDENT — the student reads only the student's own released todo aggregation<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student todo execution detail | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND / NOT_YET_VISIBLE |
+| APP-ACT-UPDATE-LOCAL-PROGRESS | Update My Local Todo Progress and Evidence | APP-OBJ-TODO | UPDATE | APP-TODO-F-LOCAL-PROGRESS<br>APP-TODO-F-COMPLETION-EVIDENCE<br>APP-TODO-F-DIFFICULTY-FEEDBACK | APP-TODO-F-LOCAL-PROGRESS<br>APP-TODO-F-COMPLETION-EVIDENCE<br>APP-TODO-F-DIFFICULTY-FEEDBACK<br>APP-TODO-F-AGGREGATION-VERSION | READY → READY | ALLOW:ROLE-STUDENT — the student reads or updates only local progress, completion evidence, and difficulty feedback on the student's own todo<br>DENY:DUTY-SUBJECT-TEACHER — a teacher cannot submit or rewrite student-local execution state on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student todo execution detail | WEB / APP | LOW | REQUIRED | APP-ACT-UPDATE-LOCAL-PROGRESS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+## 6. 状态可达性
 
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 学生作业、反馈、订正、提升任务、学习路径、AI 对话 | 首页待办、拍照提交、反馈查看、订正执行、提升任务、通知、AI 学习助手 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| APP-OBJ-TODO | READY | APP-ACT-CREATE-PLAN-TODO<br>APP-ACT-CREATE-HOMEWORK-TODO<br>APP-ACT-REFRESH-TODOS<br>APP-ACT-UPDATE-LOCAL-PROGRESS | APP-ACT-REFRESH-TODOS<br>APP-ACT-UPDATE-LOCAL-PROGRESS |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-004 | Assignment Validation and Publication | 1 | HW-001 / APP-001 | APP-ACT-CREATE-HOMEWORK-TODO | ASSIGNMENT_OBJECT_VERSION_WITH_NO_PARTIAL_ITEM_PUBLICATION；{"strategy":"REVALIDATE_STALE_ASSIGNMENT_THEN_RETRY","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PUBLICATION_VERSION","description":"a failed immediate or scheduled publication leaves the prior published version active"}；{"strategy":"INVALIDATE_NEW_STUDENT_ASSIGNMENT_READS_ONLY","targets":["student assignment list","submission eligibility cache","assignment notification preview"]} |
+| DF-012 | Improvement Candidate to Subject Plan and Cross-subject Coordination | 1 | INS-001 / PLN-001 / APP-001 | APP-ACT-CREATE-PLAN-TODO | STUDENT_SUBJECT_PLAN_AND_SYNC_OUTPUT_OBJECT；{"strategy":"RETRY_FAILED_SYNC_OR_TODO_OUTPUT_AFTER_SOURCE_VERSION_REFRESH","maxAttempts":4,"retryableFailureResults":["SYNC_DELIVERY_FAILED","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_CONFIRMED_PLAN_AND_RETRY_ONLY_FAILED_OUTPUTS","description":"a sync failure never rolls back the teacher-confirmed plan and never grants homeroom plan-content mutation"}；{"strategy":"INVALIDATE_STALE_PLAN_OUTPUTS_BY_OBJECT_VERSION","targets":["subject teacher sync output","homeroom coordination output","student todo deep link"]} |
+| DF-014 | Student Management Profile Aggregation | 1 | SCO-001 / INS-001 / PLN-001 / APP-001 / STU-001 | APP-ACT-REFRESH-TODOS | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PROFILE_AND_TODO_VIEW_VERSIONS","description":"a failed aggregation preserves the prior view definitions and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_AND_TODO_PROJECTIONS","targets":["gradebook view definition","student profile view definition","student todo aggregation"]} |
+| DF-011 | Versioned Learning Facts to Cross-term Learning Path | 1 | PUB-001 / INS-001 / CORR-001 / APP-001 / GRD-001 / LPATH-001 |  | STUDENT_SOURCE_FACT_VERSION；{"strategy":"REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_ACCEPTED_SOURCE_FACT_AND_RETRY_ONLY_FAILED_DERIVED_OBJECTS","description":"a learning-path failure never rewrites evidence and never removes an accepted timeline entry"}；{"strategy":"SUPERSEDE_OR_MARK_STALE_BY_SOURCE_VERSION","targets":["learning path interpretation version","authorized path read model"]} |
+| DF-013 | Student Plan Execution to Report Snapshot and In-product Delivery | 1 | APP-001 / PLN-001 / RPT-001 / NOTI-001 | APP-ACT-VIEW-TODOS | REPORT_RUN_SNAPSHOT_DELIVERY_AND_NOTIFICATION_OBJECT；{"strategy":"RECHECK_PERMISSION_REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_OUTPUTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","DELIVERY_FAILED","VERSION_CONFLICT"]}；{"strategy":"KEEP_SOURCE_EXECUTION_RUN_AND_SNAPSHOT_WHILE_RETRYING_DELIVERY_ONLY","description":"delivery or notification failure never rolls back student execution, plan, successful run, or immutable snapshot"}；{"strategy":"CREATE_A_NEW_RUN_FOR_NEW_SOURCE_VERSIONS","targets":["future report run","future report snapshot","in-product delivery retry"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-F001 | 任务类型 | 分段/多选 | OPT-ENUM-018 | 否 | 源对象派生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F002 | 学科 | 多选下拉 | OPT-COM-007 | 否 | 只展示本人任务关联学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F003 | 时间范围 | 单选 | OPT-COM-014 | 否；今日 | 任务按截止时间排序 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F004 | 困难反馈 | 单选+文本 | OPT-ENUM-010 | 反馈必填 | 进入对应教师处理队列 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F005 | AI 能力等级 | 只读策略 | OPT-ENUM-016 | 系统生成 | 学生 AI 继承作业/反馈开放策略 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| APP-PAGE-TODOS | Student Todo Execution | WEB / APP | APP-OBJ-TODO | APP-TODO-F-STUDENT-REF<br>APP-TODO-F-TASK-DEEP-LINK<br>APP-TODO-F-LOCAL-PROGRESS<br>APP-TODO-F-COMPLETION-EVIDENCE<br>APP-TODO-F-DIFFICULTY-FEEDBACK<br>APP-TODO-F-STUDENT-VISIBLE-AT | APP-ACT-VIEW-TODOS<br>APP-ACT-UPDATE-LOCAL-PROGRESS | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| TO_DO | 待办 |
-| IN_PROGRESS | 进行中 |
-| SUBMITTED | 已提交 |
-| WAITING_TEACHER | 等待教师 |
-| DONE | 已完成 |
-| OVERDUE | 已逾期 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| APP-ACT-CREATE-PLAN-TODO-SCN-SUCCESS | SUCCESS | APP-ACT-CREATE-PLAN-TODO | the actor meets the entry conditions for Create a Plan-pinned Student Todo Link | the actor requests Create a Plan-pinned Student Todo Link | creates only navigation and local execution state while PLN and HW retain task ownership | READY | ALLOW |  |
+| APP-ACT-CREATE-PLAN-TODO-SCN-PERMISSION_DENIED | FAILURE | APP-ACT-CREATE-PLAN-TODO | PERMISSION_DENIED applies to Create a Plan-pinned Student Todo Link | the actor requests Create a Plan-pinned Student Todo Link | Create a Plan-pinned Student Todo Link returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| APP-ACT-CREATE-PLAN-TODO-SCN-SOURCE_VERSION_STALE | FAILURE | APP-ACT-CREATE-PLAN-TODO | SOURCE_VERSION_STALE applies to Create a Plan-pinned Student Todo Link | the actor requests Create a Plan-pinned Student Todo Link | Create a Plan-pinned Student Todo Link returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| APP-ACT-CREATE-PLAN-TODO-SCN-VERSION_CONFLICT | FAILURE | APP-ACT-CREATE-PLAN-TODO | VERSION_CONFLICT applies to Create a Plan-pinned Student Todo Link | the actor requests Create a Plan-pinned Student Todo Link | Create a Plan-pinned Student Todo Link returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| APP-ACT-CREATE-HOMEWORK-TODO-SCN-SUCCESS | SUCCESS | APP-ACT-CREATE-HOMEWORK-TODO | the actor meets the entry conditions for Create a Homework-pinned Student Todo Link | the actor requests Create a Homework-pinned Student Todo Link | creates only a source-pinned homework deep link and student-local execution state | READY | ALLOW |  |
+| APP-ACT-CREATE-HOMEWORK-TODO-SCN-PERMISSION_DENIED | FAILURE | APP-ACT-CREATE-HOMEWORK-TODO | PERMISSION_DENIED applies to Create a Homework-pinned Student Todo Link | the actor requests Create a Homework-pinned Student Todo Link | Create a Homework-pinned Student Todo Link returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| APP-ACT-CREATE-HOMEWORK-TODO-SCN-SOURCE_VERSION_STALE | FAILURE | APP-ACT-CREATE-HOMEWORK-TODO | SOURCE_VERSION_STALE applies to Create a Homework-pinned Student Todo Link | the actor requests Create a Homework-pinned Student Todo Link | Create a Homework-pinned Student Todo Link returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| APP-ACT-CREATE-HOMEWORK-TODO-SCN-VERSION_CONFLICT | FAILURE | APP-ACT-CREATE-HOMEWORK-TODO | VERSION_CONFLICT applies to Create a Homework-pinned Student Todo Link | the actor requests Create a Homework-pinned Student Todo Link | Create a Homework-pinned Student Todo Link returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| APP-ACT-REFRESH-TODOS-SCN-SUCCESS | SUCCESS | APP-ACT-REFRESH-TODOS | the actor meets the entry conditions for Refresh Student Todo Aggregation | the actor requests Refresh Student Todo Aggregation | Refresh Student Todo Aggregation returns the accepted versioned result | READY | ALLOW |  |
+| APP-ACT-REFRESH-TODOS-SCN-PERMISSION_DENIED | FAILURE | APP-ACT-REFRESH-TODOS | PERMISSION_DENIED applies to Refresh Student Todo Aggregation | the actor requests Refresh Student Todo Aggregation | Refresh Student Todo Aggregation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| APP-ACT-REFRESH-TODOS-SCN-SOURCE_VERSION_STALE | FAILURE | APP-ACT-REFRESH-TODOS | SOURCE_VERSION_STALE applies to Refresh Student Todo Aggregation | the actor requests Refresh Student Todo Aggregation | Refresh Student Todo Aggregation returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| APP-ACT-REFRESH-TODOS-SCN-VERSION_CONFLICT | FAILURE | APP-ACT-REFRESH-TODOS | VERSION_CONFLICT applies to Refresh Student Todo Aggregation | the actor requests Refresh Student Todo Aggregation | Refresh Student Todo Aggregation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| APP-ACT-REFRESH-TODOS-SCN-AUDIT_FAILED | FAILURE | APP-ACT-REFRESH-TODOS | AUDIT_FAILED applies to Refresh Student Todo Aggregation | the actor requests Refresh Student Todo Aggregation | Refresh Student Todo Aggregation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| APP-ACT-VIEW-TODOS-SCN-SUCCESS | SUCCESS | APP-ACT-VIEW-TODOS | the actor meets the entry conditions for View My Student Todo Aggregation | the actor requests View My Student Todo Aggregation | View My Student Todo Aggregation returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| APP-ACT-VIEW-TODOS-SCN-PERMISSION_DENIED | FAILURE | APP-ACT-VIEW-TODOS | PERMISSION_DENIED applies to View My Student Todo Aggregation | the actor requests View My Student Todo Aggregation | View My Student Todo Aggregation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| APP-ACT-VIEW-TODOS-SCN-NOT_FOUND | FAILURE | APP-ACT-VIEW-TODOS | NOT_FOUND applies to View My Student Todo Aggregation | the actor requests View My Student Todo Aggregation | View My Student Todo Aggregation returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| APP-ACT-VIEW-TODOS-SCN-NOT_YET_VISIBLE | FAILURE | APP-ACT-VIEW-TODOS | NOT_YET_VISIBLE applies to View My Student Todo Aggregation | the actor requests View My Student Todo Aggregation | View My Student Todo Aggregation returns NOT_YET_VISIBLE without hidden writes | UNCHANGED | DENY | NOT_YET_VISIBLE |
+| APP-ACT-UPDATE-LOCAL-PROGRESS-SCN-SUCCESS | SUCCESS | APP-ACT-UPDATE-LOCAL-PROGRESS | the actor meets the entry conditions for Update My Local Todo Progress and Evidence | the actor requests Update My Local Todo Progress and Evidence | Update My Local Todo Progress and Evidence returns the accepted versioned result | READY | ALLOW |  |
+| APP-ACT-UPDATE-LOCAL-PROGRESS-SCN-PERMISSION_DENIED | FAILURE | APP-ACT-UPDATE-LOCAL-PROGRESS | PERMISSION_DENIED applies to Update My Local Todo Progress and Evidence | the actor requests Update My Local Todo Progress and Evidence | Update My Local Todo Progress and Evidence returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| APP-ACT-UPDATE-LOCAL-PROGRESS-SCN-VALIDATION_FAILED | FAILURE | APP-ACT-UPDATE-LOCAL-PROGRESS | VALIDATION_FAILED applies to Update My Local Todo Progress and Evidence | the actor requests Update My Local Todo Progress and Evidence | Update My Local Todo Progress and Evidence returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| APP-ACT-UPDATE-LOCAL-PROGRESS-SCN-VERSION_CONFLICT | FAILURE | APP-ACT-UPDATE-LOCAL-PROGRESS | VERSION_CONFLICT applies to Update My Local Todo Progress and Evidence | the actor requests Update My Local Todo Progress and Evidence | Update My Local Todo Progress and Evidence returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 学生进入首页查看今日任务和重要提醒。
-2. 按任务类型进入作业、反馈、订正或提升流程。
-3. 学生提交作答、订正或困难反馈。
-4. 系统把执行结果回写源模块，不在首页保存第二套事实。
-
-关联 Flow: `DF-004`、`DF-005`、`DF-010`、`DF-013`、`DF-017`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-FR-01 | 对象查询与范围筛选 | APP-F001、APP-F002、APP-F003、APP-F004、APP-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | APP-AC-01 |
-| APP-FR-02 | 详情查看与版本追踪 | DAT-APP-01、DAT-APP-02、DAT-APP-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | APP-AC-02 |
-| APP-FR-03 | 创建/修改/确认主动作 | APP-F001、APP-F002、APP-F003、APP-F004、APP-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | APP-AC-03 |
-| APP-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | APP-AC-04 |
-| APP-FR-05 | 审计、通知与下游失效 | DF-004、DF-005、DF-010、DF-013、DF-017 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | APP-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| APP-AC-01 | 学生端 App 为主要学习端，但 Web 支持同一学习流程。 |
-| APP-AC-02 | 首页任务必须来自源业务对象。 |
-| APP-AC-03 | 学生只能访问本人已发布内容。 |
-| APP-AC-04 | AI 学习助手不能泄露未开放答案或教师私密备注。 |
-| APP-AC-05 | 任务状态与源模块一致，不能手动标记正式完成。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-004`、`DF-005`、`DF-010`、`DF-013`、`DF-017`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

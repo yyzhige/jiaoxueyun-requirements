@@ -1,139 +1,155 @@
-# SUB-001 学生作答与提交 PRD v2.0
+# SUB-001 Student Answering and Submission PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学生 |
-| 关联线框 | [09-student-answer-submit-wireframe.zh-CN.md](../05-wireframe-contracts/09-student-answer-submit-wireframe.zh-CN.md) |
+| 目标 | Preserve answer drafts and uploaded chunks while requiring a server receipt for final submission |
+| 基线决策 | `BASE-003`、`BASE-004`、`BASE-005` |
+| NFR | `NFR-001`、`NFR-003`、`NFR-004`、`NFR-005`、`NFR-008` |
+| 进入条件 | the student can open a published assignment in the assigned class scope |
+| 退出条件 | the submitted or resubmitted version has an immutable server receipt |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-支持学生在 Web/App 完成在线作答、拍照提交、草稿保存、重提和提交状态追踪。
+- 本模块权威拥有 2 个对象、8 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-SUB-01 | Answer Draft | 学生 | 学生作答草稿 | 学生 | 学生 | 系统 | S2 教学业务数据 |
-| DAT-SUB-02 | Submission Media | 学生 | 图片/附件材料 | 学生 | 学生 | 系统 | S3 未成年人学习材料 |
-| DAT-SUB-03 | Submission Version | 学生 | 正式提交版本 | 学生 | 学生 | 任课教师 | S3 未成年人学习材料 |
+### SUB-OBJ-DRAFT Student Answer Draft
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_WORK | SCHOOL | ROLE-STUDENT | ROLE-STUDENT | SYSTEM | DUTY-SUBJECT-TEACHER | LIFE-003 | S3 | NO_DIRECT_READ | DRAFT / UPLOADING / READY_TO_SUBMIT |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUB-DRAFT-F-ID | Submission Draft ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-ANSWER-PAYLOAD | Answer Payload by Question Type | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must use the payload schema registered for each assignment item question type | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-MEDIA-METADATA | Media Metadata | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-PAGE-ITEM-MAPPING | Page and Item Mapping | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-IMAGE-QUALITY | Image Quality | STRING | 是 | OPTION_SET: OPT-ENUM-027 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-UPLOAD-SESSION-ID | Upload Session | ID | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-PENDING-CHUNK | Pending Upload Chunk | FILE_REFERENCE | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain only until the chunk is accepted or the upload session expires |
+| SUB-DRAFT-F-SUCCESSFUL-CHUNKS | Successful Upload Chunks | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-DRAFT-VERSION | Draft Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT | Weak Network Recovery Checkpoint | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | may contain only the latest draft and chunks already acknowledged by the server | retain accepted values with source and version metadata |
+| SUB-DRAFT-F-ASSIGNMENT-VERSION | Assignment Publication Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 学生
-- 解决问题: 支持学生在 Web/App 完成在线作答、拍照提交、草稿保存、重提和提交状态追踪。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### SUB-OBJ-ATTEMPT Submission Attempt Version
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_WORK | SCHOOL | ROLE-STUDENT | ROLE-STUDENT | SYSTEM | DUTY-SUBJECT-TEACHER | LIFE-003 | S3 | AUTHORIZED | SUBMITTED / RESUBMITTED |
 
-- DAT-SUB-01 Answer Draft
-- DAT-SUB-02 Submission Media
-- DAT-SUB-03 Submission Version
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUB-ATTEMPT-F-ID | Submission Attempt ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-ATTEMPT-F-DRAFT-VERSION | Submitted Draft Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-ATTEMPT-F-SUBMISSION-VERSION | Submission Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-ATTEMPT-F-LATE-FLAG | Late Submission Flag | BOOLEAN | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-ATTEMPT-F-RESUBMISSION-OF | Resubmission Relationship | ID | required for a resubmission and absent for the first accepted submission；状态=RESUBMITTED；动作=SUB-ACT-RESUBMIT | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-ATTEMPT-F-RECEIPT-ID | Submission Receipt | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SUB-ATTEMPT-F-RECEIPT-ISSUED-AT | Receipt Issued Time | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+## 3. 对象关系
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| SUB-REL-ATTEMPT-DRAFT | SUB-OBJ-ATTEMPT | DERIVED_FROM | SUB-OBJ-DRAFT | MANY_TO_ONE | SAME_STUDENT | retain accepted submission versions and receipts; invalidate only unsubmitted draft derivations |
 
-## 2. Web/App Capability Matrix
+## 4. 可执行动作合同
 
-| 能力 | Web | App | 差异原则 |
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUB-ACT-SAVE-DRAFT | Save Answer Draft | SUB-OBJ-DRAFT | UPDATE | SUB-DRAFT-F-ANSWER-PAYLOAD<br>SUB-DRAFT-F-MEDIA-METADATA<br>SUB-DRAFT-F-PAGE-ITEM-MAPPING | SUB-DRAFT-F-DRAFT-VERSION<br>SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT | DRAFT → DRAFT | ALLOW:ROLE-STUDENT — the student owns the draft and belongs to the assignment class scope<br>DENY:ROLE-TEACHER — a teacher attempts to create or submit student work on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student answer content | WEB / APP | LOW | REQUIRED | SUB-ACT-SAVE-DRAFT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SUB-ACT-UPLOAD-CHUNK | Upload Media Chunk | SUB-OBJ-DRAFT | UPDATE | SUB-DRAFT-F-PENDING-CHUNK | SUB-DRAFT-F-UPLOAD-SESSION-ID<br>SUB-DRAFT-F-SUCCESSFUL-CHUNKS<br>SUB-DRAFT-F-IMAGE-QUALITY<br>SUB-DRAFT-F-DRAFT-VERSION | DRAFT → UPLOADING | ALLOW:ROLE-STUDENT — the student owns the draft and belongs to the assignment class scope<br>DENY:ROLE-TEACHER — a teacher attempts to create or submit student work on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student answer content | APP | LOW | REQUIRED | SUB-ACT-UPLOAD-CHUNK:school:object:source-version:request-id | PERMISSION_DENIED / CHUNK_REJECTED / TRANSIENT_FAILURE / VERSION_CONFLICT |
+| SUB-ACT-RETRY-UPLOAD | Retry Failed Media Upload | SUB-OBJ-DRAFT | UPDATE | SUB-DRAFT-F-PENDING-CHUNK | SUB-DRAFT-F-SUCCESSFUL-CHUNKS<br>SUB-DRAFT-F-IMAGE-QUALITY<br>SUB-DRAFT-F-DRAFT-VERSION | UPLOADING → UPLOADING | ALLOW:ROLE-STUDENT — the student owns the draft and belongs to the assignment class scope<br>DENY:ROLE-TEACHER — a teacher attempts to create or submit student work on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student answer content | APP | LOW | REQUIRED | SUB-ACT-RETRY-UPLOAD:school:object:source-version:request-id | PERMISSION_DENIED / CHUNK_REJECTED / TRANSIENT_FAILURE / VERSION_CONFLICT |
+| SUB-ACT-MARK-DRAFT-READY | Mark an Answer Draft Ready to Submit | SUB-OBJ-DRAFT | UPDATE | SUB-DRAFT-F-ANSWER-PAYLOAD | SUB-DRAFT-F-IMAGE-QUALITY<br>SUB-DRAFT-F-DRAFT-VERSION<br>SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT | DRAFT / UPLOADING → READY_TO_SUBMIT | ALLOW:ROLE-STUDENT — the student owns the draft and belongs to the assignment class scope<br>DENY:ROLE-TEACHER — a teacher attempts to create or submit student work on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student answer content | WEB / APP | LOW | REQUIRED | SUB-ACT-MARK-DRAFT-READY:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SUB-ACT-SUBMIT | Submit Assignment Answers | SUB-OBJ-ATTEMPT | CREATE | SUB-ATTEMPT-F-DRAFT-VERSION | SUB-ATTEMPT-F-ID<br>SUB-ATTEMPT-F-SUBMISSION-VERSION<br>SUB-ATTEMPT-F-LATE-FLAG<br>SUB-ATTEMPT-F-RECEIPT-ID<br>SUB-ATTEMPT-F-RECEIPT-ISSUED-AT | CREATE（成功状态由 SUB-ACT-SUBMIT-SCN-SUCCESS 定义） | ALLOW:ROLE-STUDENT — the student owns the draft and belongs to the assignment class scope<br>DENY:ROLE-TEACHER — a teacher attempts to create or submit student work on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student answer content | WEB / APP | HIGH | REQUIRED | SUB-ACT-SUBMIT:school:student:assignment-version:draft-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / OFFLINE_FINAL_SUBMISSION_BLOCKED / SERVER_RECEIPT_NOT_ISSUED / VERSION_CONFLICT / AUDIT_FAILED |
+| SUB-ACT-RESUBMIT | Resubmit Assignment Answers | SUB-OBJ-ATTEMPT | UPDATE | SUB-ATTEMPT-F-DRAFT-VERSION<br>SUB-ATTEMPT-F-RESUBMISSION-OF | SUB-ATTEMPT-F-RESUBMISSION-OF<br>SUB-ATTEMPT-F-SUBMISSION-VERSION<br>SUB-ATTEMPT-F-RECEIPT-ID<br>SUB-ATTEMPT-F-RECEIPT-ISSUED-AT | SUBMITTED → RESUBMITTED | ALLOW:ROLE-STUDENT — the student owns the draft and belongs to the assignment class scope<br>DENY:ROLE-TEACHER — a teacher attempts to create or submit student work on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student answer content | WEB / APP | HIGH | REQUIRED | SUB-ACT-RESUBMIT:school:object:source-version:request-id | PERMISSION_DENIED / RESUBMISSION_POLICY_BLOCKED / OFFLINE_FINAL_SUBMISSION_BLOCKED / SERVER_RECEIPT_NOT_ISSUED / VERSION_CONFLICT / AUDIT_FAILED |
+| SUB-ACT-VIEW-RECEIPT | View Submission Receipt | SUB-OBJ-ATTEMPT | READ |  | SUB-ATTEMPT-F-SUBMISSION-VERSION<br>SUB-ATTEMPT-F-LATE-FLAG<br>SUB-ATTEMPT-F-RESUBMISSION-OF<br>SUB-ATTEMPT-F-RECEIPT-ID<br>SUB-ATTEMPT-F-RECEIPT-ISSUED-AT | UNCHANGED | ALLOW:ROLE-STUDENT — the student owns the draft and belongs to the assignment class scope<br>DENY:ROLE-TEACHER — a teacher attempts to create or submit student work on the student's behalf<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student answer content | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+| SUB-ACT-HANDOFF-ACCEPTED | Handoff Accepted Submission Version | SUB-OBJ-ATTEMPT | READ |  | SUB-ATTEMPT-F-SUBMISSION-VERSION<br>SUB-ATTEMPT-F-RECEIPT-ID | UNCHANGED | ALLOW:SYSTEM — DF-006 reads an accepted submission carrying a server receipt<br>DENY:CURRENT_ACTOR — users cannot invoke the internal accepted-submission handoff | FLOW_INTERNAL | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 在线答题、图片上传、草稿管理、提交摘要、历史版本查看 | 拍照提交、离线草稿、上传状态、重拍、提交确认、作业提醒 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| SUB-OBJ-DRAFT | DRAFT | SUB-ACT-SAVE-DRAFT | SUB-ACT-SAVE-DRAFT<br>SUB-ACT-UPLOAD-CHUNK<br>SUB-ACT-MARK-DRAFT-READY |
+| SUB-OBJ-DRAFT | UPLOADING | SUB-ACT-UPLOAD-CHUNK<br>SUB-ACT-RETRY-UPLOAD | SUB-ACT-RETRY-UPLOAD<br>SUB-ACT-MARK-DRAFT-READY |
+| SUB-OBJ-DRAFT | READY_TO_SUBMIT | SUB-ACT-MARK-DRAFT-READY |  |
+| SUB-OBJ-ATTEMPT | SUBMITTED | SUB-ACT-SUBMIT | SUB-ACT-RESUBMIT |
+| SUB-OBJ-ATTEMPT | RESUBMITTED | SUB-ACT-RESUBMIT |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-005 | Published Assignment Student Submission | 1 | HW-001 / SUB-001 | SUB-ACT-SAVE-DRAFT<br>SUB-ACT-UPLOAD-CHUNK<br>SUB-ACT-RETRY-UPLOAD<br>SUB-ACT-SUBMIT | STUDENT_SUBMISSION_OBJECT_AND_MEDIA_CHUNK；{"strategy":"RETRY_FAILED_CHUNKS_OR_UNRECEIPTED_SUBMISSION","maxAttempts":5,"retryableFailureResults":["TRANSIENT_FAILURE","CHUNK_REJECTED","SERVER_RECEIPT_NOT_ISSUED"]}；{"strategy":"PRESERVE_DRAFT_AND_ACCEPTED_CHUNKS","description":"never roll back accepted chunks and never create a final submission without a server receipt"}；{"strategy":"INVALIDATE_STALE_SUBMISSION_DERIVATIONS","targets":["submission status","grading queue eligibility","late and resubmission projections"]} |
+| DF-006 | Submission Grading Routing | 1 | HW-001 / SUB-001 / GRD-001 | SUB-ACT-HANDOFF-ACCEPTED | SUBMISSION_ITEM_OBJECT_WITH_INDEPENDENT_MANUAL_ROUTE；{"strategy":"RETRY_QUEUE_AND_PROCESSING_WITH_MANUAL_CUTOFF","maxAttempts":3,"retryableFailureResults":["AI_UNAVAILABLE","VERSION_CONFLICT"]}；{"strategy":"ROUTE_MANUAL_WITHOUT_ROLLING_BACK_SUBMISSION","description":"an AI failure preserves the accepted submission and creates or keeps a manual grading route"}；{"strategy":"INVALIDATE_STALE_GRADING_QUEUE_VIEWS","targets":["subject teacher grading queue","AI suggestion preview","batch confirmation eligibility"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUB-F001 | 提交方式 | 分段控件 | OPT-ENUM-002 | 是 | 由作业发布版本决定 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F002 | 当前题目 | 题目列表 | OPT-RUN-002 | 是 | 按发布版本顺序 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F003 | 图片质检结果 | 只读状态 | OPT-ENUM-027 | 图片提交必有 | 失败允许重拍 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F004 | 可提交草稿版本 | 单选卡片 | OPT-RUN-001 | 多版本时必选 | 只返回本人草稿 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F005 | 迟交/重提确认 | 确认对话 | OPT-ENUM-001 | 触发时必填 | 展示规则和影响 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| SUB-PAGE-APP | App Student Submission Workspace | APP | SUB-OBJ-DRAFT<br>SUB-OBJ-ATTEMPT | SUB-DRAFT-F-ID<br>SUB-DRAFT-F-ANSWER-PAYLOAD<br>SUB-DRAFT-F-MEDIA-METADATA<br>SUB-DRAFT-F-PAGE-ITEM-MAPPING<br>SUB-DRAFT-F-IMAGE-QUALITY<br>SUB-DRAFT-F-UPLOAD-SESSION-ID<br>SUB-DRAFT-F-PENDING-CHUNK<br>SUB-DRAFT-F-SUCCESSFUL-CHUNKS<br>SUB-DRAFT-F-DRAFT-VERSION<br>SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT<br>SUB-DRAFT-F-ASSIGNMENT-VERSION<br>SUB-ATTEMPT-F-ID<br>SUB-ATTEMPT-F-DRAFT-VERSION<br>SUB-ATTEMPT-F-SUBMISSION-VERSION<br>SUB-ATTEMPT-F-LATE-FLAG<br>SUB-ATTEMPT-F-RESUBMISSION-OF<br>SUB-ATTEMPT-F-RECEIPT-ID<br>SUB-ATTEMPT-F-RECEIPT-ISSUED-AT | SUB-ACT-SAVE-DRAFT<br>SUB-ACT-UPLOAD-CHUNK<br>SUB-ACT-RETRY-UPLOAD<br>SUB-ACT-MARK-DRAFT-READY<br>SUB-ACT-SUBMIT<br>SUB-ACT-RESUBMIT<br>SUB-ACT-VIEW-RECEIPT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| SUB-PAGE-WEB | Web Student Submission Workspace | WEB | SUB-OBJ-DRAFT<br>SUB-OBJ-ATTEMPT | SUB-DRAFT-F-ID<br>SUB-DRAFT-F-ANSWER-PAYLOAD<br>SUB-DRAFT-F-MEDIA-METADATA<br>SUB-DRAFT-F-PAGE-ITEM-MAPPING<br>SUB-DRAFT-F-IMAGE-QUALITY<br>SUB-DRAFT-F-UPLOAD-SESSION-ID<br>SUB-DRAFT-F-PENDING-CHUNK<br>SUB-DRAFT-F-SUCCESSFUL-CHUNKS<br>SUB-DRAFT-F-DRAFT-VERSION<br>SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT<br>SUB-DRAFT-F-ASSIGNMENT-VERSION<br>SUB-ATTEMPT-F-ID<br>SUB-ATTEMPT-F-DRAFT-VERSION<br>SUB-ATTEMPT-F-SUBMISSION-VERSION<br>SUB-ATTEMPT-F-LATE-FLAG<br>SUB-ATTEMPT-F-RESUBMISSION-OF<br>SUB-ATTEMPT-F-RECEIPT-ID<br>SUB-ATTEMPT-F-RECEIPT-ISSUED-AT | SUB-ACT-SAVE-DRAFT<br>SUB-ACT-MARK-DRAFT-READY<br>SUB-ACT-SUBMIT<br>SUB-ACT-RESUBMIT<br>SUB-ACT-VIEW-RECEIPT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| NOT_STARTED | 未开始 |
-| DRAFT | 草稿 |
-| UPLOADING | 上传中 |
-| READY_TO_SUBMIT | 可提交 |
-| SUBMITTED | 已提交 |
-| REPLACED | 已被重提替代 |
-| BLOCKED | 被规则阻断 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUB-ACT-SAVE-DRAFT-SCN-SUCCESS | SUCCESS | SUB-ACT-SAVE-DRAFT | the actor meets the entry conditions for Save Answer Draft | the actor requests Save Answer Draft | stores the versioned answer draft without claiming final submission | DRAFT | ALLOW |  |
+| SUB-ACT-SAVE-DRAFT-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-SAVE-DRAFT | PERMISSION_DENIED applies to Save Answer Draft | the actor requests Save Answer Draft | Save Answer Draft returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-SAVE-DRAFT-SCN-VALIDATION_FAILED | FAILURE | SUB-ACT-SAVE-DRAFT | VALIDATION_FAILED applies to Save Answer Draft | the actor requests Save Answer Draft | Save Answer Draft returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| SUB-ACT-SAVE-DRAFT-SCN-VERSION_CONFLICT | FAILURE | SUB-ACT-SAVE-DRAFT | VERSION_CONFLICT applies to Save Answer Draft | the actor requests Save Answer Draft | Save Answer Draft returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| SUB-ACT-UPLOAD-CHUNK-SCN-SUCCESS | SUCCESS | SUB-ACT-UPLOAD-CHUNK | the actor meets the entry conditions for Upload Media Chunk | the actor requests Upload Media Chunk | Upload Media Chunk returns the accepted versioned result | UPLOADING | ALLOW |  |
+| SUB-ACT-UPLOAD-CHUNK-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-UPLOAD-CHUNK | PERMISSION_DENIED applies to Upload Media Chunk | the actor requests Upload Media Chunk | Upload Media Chunk returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-UPLOAD-CHUNK-SCN-CHUNK_REJECTED | FAILURE | SUB-ACT-UPLOAD-CHUNK | CHUNK_REJECTED applies to Upload Media Chunk | the actor requests Upload Media Chunk | Upload Media Chunk returns CHUNK_REJECTED without hidden writes | UNCHANGED | DENY | CHUNK_REJECTED |
+| SUB-ACT-UPLOAD-CHUNK-SCN-TRANSIENT_FAILURE | FAILURE | SUB-ACT-UPLOAD-CHUNK | TRANSIENT_FAILURE applies to Upload Media Chunk | the actor requests Upload Media Chunk | Upload Media Chunk returns TRANSIENT_FAILURE without hidden writes | UNCHANGED | DENY | TRANSIENT_FAILURE |
+| SUB-ACT-UPLOAD-CHUNK-SCN-VERSION_CONFLICT | FAILURE | SUB-ACT-UPLOAD-CHUNK | VERSION_CONFLICT applies to Upload Media Chunk | the actor requests Upload Media Chunk | Upload Media Chunk returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| SUB-ACT-RETRY-UPLOAD-SCN-SUCCESS | SUCCESS | SUB-ACT-RETRY-UPLOAD | the actor meets the entry conditions for Retry Failed Media Upload | the actor requests Retry Failed Media Upload | Retry Failed Media Upload returns the accepted versioned result | UPLOADING | ALLOW |  |
+| SUB-ACT-RETRY-UPLOAD-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-RETRY-UPLOAD | PERMISSION_DENIED applies to Retry Failed Media Upload | the actor requests Retry Failed Media Upload | Retry Failed Media Upload returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-RETRY-UPLOAD-SCN-CHUNK_REJECTED | FAILURE | SUB-ACT-RETRY-UPLOAD | CHUNK_REJECTED applies to Retry Failed Media Upload | the actor requests Retry Failed Media Upload | Retry Failed Media Upload returns CHUNK_REJECTED without hidden writes | UNCHANGED | DENY | CHUNK_REJECTED |
+| SUB-ACT-RETRY-UPLOAD-SCN-TRANSIENT_FAILURE | FAILURE | SUB-ACT-RETRY-UPLOAD | TRANSIENT_FAILURE applies to Retry Failed Media Upload | the actor requests Retry Failed Media Upload | Retry Failed Media Upload returns TRANSIENT_FAILURE without hidden writes | UNCHANGED | DENY | TRANSIENT_FAILURE |
+| SUB-ACT-RETRY-UPLOAD-SCN-VERSION_CONFLICT | FAILURE | SUB-ACT-RETRY-UPLOAD | VERSION_CONFLICT applies to Retry Failed Media Upload | the actor requests Retry Failed Media Upload | Retry Failed Media Upload returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| SUB-ACT-MARK-DRAFT-READY-SCN-SUCCESS | SUCCESS | SUB-ACT-MARK-DRAFT-READY | the actor meets the entry conditions for Mark an Answer Draft Ready to Submit | the actor requests Mark an Answer Draft Ready to Submit | records that required answer payload and acknowledged media chunks are ready for final submission | READY_TO_SUBMIT | ALLOW |  |
+| SUB-ACT-MARK-DRAFT-READY-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-MARK-DRAFT-READY | PERMISSION_DENIED applies to Mark an Answer Draft Ready to Submit | the actor requests Mark an Answer Draft Ready to Submit | Mark an Answer Draft Ready to Submit returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-MARK-DRAFT-READY-SCN-VALIDATION_FAILED | FAILURE | SUB-ACT-MARK-DRAFT-READY | VALIDATION_FAILED applies to Mark an Answer Draft Ready to Submit | the actor requests Mark an Answer Draft Ready to Submit | Mark an Answer Draft Ready to Submit returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| SUB-ACT-MARK-DRAFT-READY-SCN-VERSION_CONFLICT | FAILURE | SUB-ACT-MARK-DRAFT-READY | VERSION_CONFLICT applies to Mark an Answer Draft Ready to Submit | the actor requests Mark an Answer Draft Ready to Submit | Mark an Answer Draft Ready to Submit returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| SUB-ACT-SUBMIT-SCN-SUCCESS | SUCCESS | SUB-ACT-SUBMIT | the actor meets the entry conditions for Submit Assignment Answers | the actor requests Submit Assignment Answers | accepts the immutable submission version only after issuing a server receipt | SUBMITTED | ALLOW |  |
+| SUB-ACT-SUBMIT-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-SUBMIT | PERMISSION_DENIED applies to Submit Assignment Answers | the actor requests Submit Assignment Answers | Submit Assignment Answers returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-SUBMIT-SCN-VALIDATION_FAILED | FAILURE | SUB-ACT-SUBMIT | VALIDATION_FAILED applies to Submit Assignment Answers | the actor requests Submit Assignment Answers | Submit Assignment Answers returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| SUB-ACT-SUBMIT-SCN-OFFLINE_FINAL_SUBMISSION_BLOCKED | BOUNDARY | SUB-ACT-SUBMIT | OFFLINE_FINAL_SUBMISSION_BLOCKED applies to Submit Assignment Answers | the actor requests Submit Assignment Answers | retains the latest draft and successful chunks but never claims final submission without a server receipt | UNCHANGED | DENY | OFFLINE_FINAL_SUBMISSION_BLOCKED |
+| SUB-ACT-SUBMIT-SCN-SERVER_RECEIPT_NOT_ISSUED | FAILURE | SUB-ACT-SUBMIT | SERVER_RECEIPT_NOT_ISSUED applies to Submit Assignment Answers | the actor requests Submit Assignment Answers | Submit Assignment Answers returns SERVER_RECEIPT_NOT_ISSUED without hidden writes | UNCHANGED | DENY | SERVER_RECEIPT_NOT_ISSUED |
+| SUB-ACT-SUBMIT-SCN-VERSION_CONFLICT | FAILURE | SUB-ACT-SUBMIT | VERSION_CONFLICT applies to Submit Assignment Answers | the actor requests Submit Assignment Answers | Submit Assignment Answers returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| SUB-ACT-SUBMIT-SCN-AUDIT_FAILED | FAILURE | SUB-ACT-SUBMIT | AUDIT_FAILED applies to Submit Assignment Answers | the actor requests Submit Assignment Answers | Submit Assignment Answers returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| SUB-ACT-RESUBMIT-SCN-SUCCESS | SUCCESS | SUB-ACT-RESUBMIT | the actor meets the entry conditions for Resubmit Assignment Answers | the actor requests Resubmit Assignment Answers | creates a new immutable submission linked to the prior submission and issues a new server receipt | RESUBMITTED | ALLOW |  |
+| SUB-ACT-RESUBMIT-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-RESUBMIT | PERMISSION_DENIED applies to Resubmit Assignment Answers | the actor requests Resubmit Assignment Answers | Resubmit Assignment Answers returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-RESUBMIT-SCN-RESUBMISSION_POLICY_BLOCKED | FAILURE | SUB-ACT-RESUBMIT | RESUBMISSION_POLICY_BLOCKED applies to Resubmit Assignment Answers | the actor requests Resubmit Assignment Answers | Resubmit Assignment Answers returns RESUBMISSION_POLICY_BLOCKED without hidden writes | UNCHANGED | DENY | RESUBMISSION_POLICY_BLOCKED |
+| SUB-ACT-RESUBMIT-SCN-OFFLINE_FINAL_SUBMISSION_BLOCKED | BOUNDARY | SUB-ACT-RESUBMIT | OFFLINE_FINAL_SUBMISSION_BLOCKED applies to Resubmit Assignment Answers | the actor requests Resubmit Assignment Answers | retains the latest draft and successful chunks but never creates a resubmission without a server receipt | UNCHANGED | DENY | OFFLINE_FINAL_SUBMISSION_BLOCKED |
+| SUB-ACT-RESUBMIT-SCN-SERVER_RECEIPT_NOT_ISSUED | FAILURE | SUB-ACT-RESUBMIT | SERVER_RECEIPT_NOT_ISSUED applies to Resubmit Assignment Answers | the actor requests Resubmit Assignment Answers | Resubmit Assignment Answers returns SERVER_RECEIPT_NOT_ISSUED without hidden writes | UNCHANGED | DENY | SERVER_RECEIPT_NOT_ISSUED |
+| SUB-ACT-RESUBMIT-SCN-VERSION_CONFLICT | FAILURE | SUB-ACT-RESUBMIT | VERSION_CONFLICT applies to Resubmit Assignment Answers | the actor requests Resubmit Assignment Answers | Resubmit Assignment Answers returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| SUB-ACT-RESUBMIT-SCN-AUDIT_FAILED | FAILURE | SUB-ACT-RESUBMIT | AUDIT_FAILED applies to Resubmit Assignment Answers | the actor requests Resubmit Assignment Answers | Resubmit Assignment Answers returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| SUB-ACT-VIEW-RECEIPT-SCN-SUCCESS | SUCCESS | SUB-ACT-VIEW-RECEIPT | the actor meets the entry conditions for View Submission Receipt | the actor requests View Submission Receipt | returns the server-issued receipt for the student's accepted submission version | UNCHANGED | ALLOW |  |
+| SUB-ACT-VIEW-RECEIPT-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-VIEW-RECEIPT | PERMISSION_DENIED applies to View Submission Receipt | the actor requests View Submission Receipt | View Submission Receipt returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-VIEW-RECEIPT-SCN-NOT_FOUND | FAILURE | SUB-ACT-VIEW-RECEIPT | NOT_FOUND applies to View Submission Receipt | the actor requests View Submission Receipt | View Submission Receipt returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| SUB-ACT-HANDOFF-ACCEPTED-SCN-SUCCESS | SUCCESS | SUB-ACT-HANDOFF-ACCEPTED | the actor meets the entry conditions for Handoff Accepted Submission Version | the actor requests Handoff Accepted Submission Version | returns only the immutable accepted submission version and server receipt | UNCHANGED | ALLOW |  |
+| SUB-ACT-HANDOFF-ACCEPTED-SCN-PERMISSION_DENIED | FAILURE | SUB-ACT-HANDOFF-ACCEPTED | PERMISSION_DENIED applies to Handoff Accepted Submission Version | the actor requests Handoff Accepted Submission Version | Handoff Accepted Submission Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| SUB-ACT-HANDOFF-ACCEPTED-SCN-NOT_FOUND | FAILURE | SUB-ACT-HANDOFF-ACCEPTED | NOT_FOUND applies to Handoff Accepted Submission Version | the actor requests Handoff Accepted Submission Version | Handoff Accepted Submission Version returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 学生打开本人作业并按开放方式作答。
-2. 系统持续保存草稿和媒体上传状态。
-3. 提交前展示漏答、迟交、重提和图片质检结果。
-4. 确认后生成不可变 Submission Version，并触发 AI 初评。
-
-关联 Flow: `DF-005`、`DF-006`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUB-FR-01 | 对象查询与范围筛选 | SUB-F001、SUB-F002、SUB-F003、SUB-F004、SUB-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | SUB-AC-01 |
-| SUB-FR-02 | 详情查看与版本追踪 | DAT-SUB-01、DAT-SUB-02、DAT-SUB-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | SUB-AC-02 |
-| SUB-FR-03 | 创建/修改/确认主动作 | SUB-F001、SUB-F002、SUB-F003、SUB-F004、SUB-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | SUB-AC-03 |
-| SUB-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | SUB-AC-04 |
-| SUB-FR-05 | 审计、通知与下游失效 | DF-005、DF-006 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | SUB-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| SUB-AC-01 | 上传未完成不能显示提交成功。 |
-| SUB-AC-02 | 重复点击提交只产生一个提交版本。 |
-| SUB-AC-03 | 重提不会删除旧版本，旧批改显示版本过期。 |
-| SUB-AC-04 | 学生不能提交未发布、过期且不允许补交的作业。 |
-| SUB-AC-05 | App 为主要学习端，Web 也支持完整提交。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-005`、`DF-006`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

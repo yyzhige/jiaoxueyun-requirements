@@ -1,140 +1,244 @@
-# PUB-001 成绩与反馈发布、修正 PRD v2.0
+# PUB-001 Result Publication and Correction PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师 |
-| 关联线框 | [11-result-publish-correction-wireframe.zh-CN.md](../05-wireframe-contracts/11-result-publish-correction-wireframe.zh-CN.md) |
+| 目标 | Publish only eligible confirmed results and preserve visible correction and downstream invalidation history |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-006`、`NFR-008` |
+| 进入条件 | the result references a corresponding subject-teacher-confirmed grading decision version |
+| 退出条件 | each selected student has a published result or an object-level failure eligible for retry |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-把教师确认评分转化为学生可见成绩和反馈版本，并在修正时维护下游失效和重新确认。
+- 本模块权威拥有 4 个对象、12 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-PUB-01 | Publish Preview | 任课教师 | 发布预览 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PUB-02 | Published Result Version | 任课教师 | 已发布成绩反馈 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PUB-03 | Result Correction Version | 任课教师 | 成绩修正版本 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PUB-04 | Student Feedback View | 任课教师 | 学生反馈视图 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
+### PUB-OBJ-BATCH Result Publication Batch
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SELECTED_STUDENT_RESULTS | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S3 | NO_DIRECT_READ | DRAFT / READY / PUBLISHING / PARTIAL_FAILED / PUBLISHED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PUB-BATCH-F-ID | Publication Batch ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-SELECTED-STUDENT-IDS | Selected Student Scope | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-010 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-VISIBILITY-POLICY | Result Visibility Policy | STRING | 是 | OPTION_SET: OPT-ENUM-040 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-ANSWER-VISIBLE-AT | Configured Answer Visible Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-FEEDBACK-VISIBLE-AT | Configured Feedback Visible Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-NOTIFICATION-POLICY | Result Notification Policy | STRING | 是 | OPTION_SET: OPT-TL-012 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-BATCH-VERSION | Publication Batch Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT | Immutable Selected Student Scope | STRING_ARRAY | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | FANOUT_SET | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-BATCH-F-OBJECT-RESULTS | Student-level Publication Results | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must record an independent success or failure result for every selected student | retain accepted values with source and version metadata |
+| PUB-BATCH-F-STATUS | Publication Batch Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 任课教师
-- 解决问题: 把教师确认评分转化为学生可见成绩和反馈版本，并在修正时维护下游失效和重新确认。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### PUB-OBJ-PREVIEW Transient Student Publication Preview
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_RESULT_PUBLICATION_PREVIEW | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-005 | S3 | NO_DIRECT_READ | GENERATED |
 
-- DAT-PUB-01 Publish Preview
-- DAT-PUB-02 Published Result Version
-- DAT-PUB-03 Result Correction Version
-- DAT-PUB-04 Student Feedback View
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PUB-PREVIEW-F-ID | Publication Preview ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-BATCH-REF | Publication Batch Reference | ID | 是 | OBJECT_REF: PUB-OBJ-BATCH | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-STUDENT-REF | Selected Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-DECISION-REF | Confirmed Decision Reference | ID | 是 | OBJECT_REF: GRD-OBJ-DECISION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-ELIGIBILITY | Preview Publication Eligibility | STRING | 是 | OPTION_SET: OPT-TL-009 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-BLOCKING-CODES | Preview Publication Blocking Codes | STRING_ARRAY | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-ANSWER-VISIBLE-AT | Resolved Answer Visible Time | DATETIME | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT | Resolved Feedback Visible Time | DATETIME | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-PREVIEW-F-NOTIFICATION-PREVIEW | Resolved Notification Preview | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### PUB-OBJ-RESULT Published Student Result Version
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_SCORE_AND_FEEDBACK | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S3 | STUDENT_TIMED_RELEASE | READY / PUBLISHED / PUBLISH_FAILED / INVALIDATED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PUB-RESULT-F-ID | Published Result ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-STUDENT-REF | Selected Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-SOURCE-DECISION-REF | Source Decision Reference | ID | 是 | OBJECT_REF: GRD-OBJ-DECISION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-DECISION-VERSION | Confirmed Decision Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-CORRECTION-DECISION-REF | Correction Decision Reference | ID | required when correcting a published result；状态=INVALIDATED | OBJECT_REF: GRD-OBJ-DECISION | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-NEW-DECISION-VERSION | New Confirmed Decision Version | INTEGER | required when correcting a published result；状态=INVALIDATED | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-ANSWER | Published Answer | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-SCORE | Published Score | DECIMAL | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-FEEDBACK | Published Feedback | TEXT | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-ELIGIBILITY | Publication Eligibility | STRING | 是 | OPTION_SET: OPT-TL-009 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-BLOCKING-CODES | Publication Blocking Codes | STRING_ARRAY | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-ANSWER-VISIBLE-AT | Answer Visible Time | DATETIME | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-SCORE-VISIBLE-AT | Score Visible Time | DATETIME | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-FEEDBACK-VISIBLE-AT | Feedback Visible Time | DATETIME | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-RESULT-VERSION | Result Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-CORRECTION-VERSION | Correction Version | INTEGER | required when a published result is corrected；状态=INVALIDATED | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-INVALIDATION-VERSION | Dependent Invalidation Version | INTEGER | required when a published result correction invalidates dependent interpretations；状态=INVALIDATED | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-PUBLIC-CORRECTION-NOTE | Public Correction Note | TEXT | required when a published result is corrected；状态=INVALIDATED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-NOTIFICATION-STATUS | Notification Status | STRING | 是 | OPTION_SET: OPT-TL-010 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS | Downstream Invalidation Records | JSON | required when a published result correction invalidates dependent interpretations；状态=INVALIDATED | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+### PUB-OBJ-DEPENDENCY-SNAPSHOT Published Result Dependency Snapshot
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DERIVED_LEARNING_DEPENDENCY_SNAPSHOT | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S3 | NO_DIRECT_READ | RESOLVED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PUB-DEPENDENCY-SNAPSHOT-F-ID | Dependency Snapshot ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF | Dependency Snapshot Source Result | ID | 是 | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION | Dependency Snapshot Source Result Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET | Resolved Dependency Set | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | FANOUT_SET | zero or more structured records with targetKind, targetRef, and targetVersion; targetKind is EVIDENCE, MASTERY_INTERPRETATION, IMPROVEMENT_CANDIDATE, PLAN_EVALUATION, REPORT_INTERPRETATION, or LEARNING_PATH_EXPLANATION | retain accepted values with source and version metadata |
+| PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION | Dependency Snapshot Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| PUB-REL-BATCH-RESULT | PUB-OBJ-BATCH | CONTAINS | PUB-OBJ-RESULT | ONE_TO_MANY | SAME_SUBJECT | retain published student results and invalidate only failed or stale unpublished derivations |
+| PUB-REL-PREVIEW-BATCH | PUB-OBJ-PREVIEW | DERIVED_FROM | PUB-OBJ-BATCH | MANY_TO_ONE | SAME_SUBJECT | expire the transient preview when its referenced batch configuration or selected scope changes |
+| PUB-REL-DEPENDENCY-SNAPSHOT-RESULT | PUB-OBJ-DEPENDENCY-SNAPSHOT | DERIVED_FROM | PUB-OBJ-RESULT | MANY_TO_ONE | SAME_SUBJECT | retain the immutable snapshot against its exact prior result version and resolve a new snapshot for a later correction |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PUB-ACT-PREVIEW | Preview Result Publication | PUB-OBJ-PREVIEW | CREATE | PUB-PREVIEW-F-BATCH-REF<br>PUB-PREVIEW-F-STUDENT-REF<br>PUB-PREVIEW-F-DECISION-REF | PUB-PREVIEW-F-ID<br>PUB-PREVIEW-F-ELIGIBILITY<br>PUB-PREVIEW-F-BLOCKING-CODES<br>PUB-PREVIEW-F-ANSWER-VISIBLE-AT<br>PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT<br>PUB-PREVIEW-F-NOTIFICATION-PREVIEW | CREATE（成功状态由 PUB-ACT-PREVIEW-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher publishes confirmed decisions inside assigned student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to publish another subject or any unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to publish or correct student results | WEB / APP | LOW | REQUIRED | PUB-ACT-PREVIEW:school:object:source-version:request-id | PERMISSION_DENIED / NOT_FOUND / VISIBILITY_POLICY_BLOCKED |
+| PUB-ACT-PREPARE-BATCH | Prepare Result Publication Batch | PUB-OBJ-BATCH | UPDATE | PUB-BATCH-F-SELECTED-STUDENT-IDS<br>PUB-BATCH-F-VISIBILITY-POLICY<br>PUB-BATCH-F-ANSWER-VISIBLE-AT<br>PUB-BATCH-F-FEEDBACK-VISIBLE-AT<br>PUB-BATCH-F-NOTIFICATION-POLICY | PUB-BATCH-F-BATCH-VERSION<br>PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT<br>PUB-BATCH-F-OBJECT-RESULTS<br>PUB-BATCH-F-STATUS | DRAFT → READY | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher publishes confirmed decisions inside assigned student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to publish another subject or any unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to publish or correct student results | WEB / APP | HIGH | REQUIRED | PUB-ACT-PREPARE-BATCH:school:object:source-version:request-id | PERMISSION_DENIED / UNCONFIRMED_SUBJECTIVE_SCORE / VISIBILITY_POLICY_BLOCKED / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-PUBLISH-SELECTED | Publish Results to Selected Students | PUB-OBJ-BATCH | UPDATE | PUB-BATCH-F-SELECTED-STUDENT-IDS | PUB-BATCH-F-BATCH-VERSION<br>PUB-BATCH-F-OBJECT-RESULTS<br>PUB-BATCH-F-STATUS | READY → PUBLISHING | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher publishes confirmed decisions inside assigned student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to publish another subject or any unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to publish or correct student results | WEB / APP | HIGH | REQUIRED | PUB-ACT-PUBLISH-SELECTED:school:assignment:decision-versions:selected-student-set:request-id | PERMISSION_DENIED / UNCONFIRMED_SUBJECTIVE_SCORE / VISIBILITY_POLICY_BLOCKED / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-MATERIALIZE-RESULT | Materialize Student Result Version | PUB-OBJ-RESULT | CREATE |  | PUB-RESULT-F-ID<br>PUB-RESULT-F-STUDENT-REF<br>PUB-RESULT-F-SOURCE-DECISION-REF<br>PUB-RESULT-F-DECISION-VERSION<br>PUB-RESULT-F-ANSWER<br>PUB-RESULT-F-SCORE<br>PUB-RESULT-F-FEEDBACK<br>PUB-RESULT-F-ELIGIBILITY<br>PUB-RESULT-F-BLOCKING-CODES<br>PUB-RESULT-F-ANSWER-VISIBLE-AT<br>PUB-RESULT-F-SCORE-VISIBLE-AT<br>PUB-RESULT-F-FEEDBACK-VISIBLE-AT<br>PUB-RESULT-F-NOTIFICATION-STATUS<br>PUB-RESULT-F-RESULT-VERSION | CREATE（成功状态由 PUB-ACT-MATERIALIZE-RESULT-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | HIGH | REQUIRED | PUB-ACT-MATERIALIZE-RESULT:school:object:source-version:request-id | PERMISSION_DENIED / UNCONFIRMED_SUBJECTIVE_SCORE / VISIBILITY_POLICY_BLOCKED / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-PUBLISH-RESULT | Publish Student Result Version | PUB-OBJ-RESULT | UPDATE | PUB-RESULT-F-ELIGIBILITY<br>PUB-RESULT-F-BLOCKING-CODES<br>PUB-RESULT-F-ANSWER-VISIBLE-AT<br>PUB-RESULT-F-SCORE-VISIBLE-AT<br>PUB-RESULT-F-FEEDBACK-VISIBLE-AT<br>PUB-RESULT-F-NOTIFICATION-STATUS | PUB-RESULT-F-RESULT-VERSION<br>PUB-RESULT-F-NOTIFICATION-STATUS | READY → PUBLISHED | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | HIGH | REQUIRED | PUB-ACT-PUBLISH-RESULT:school:object:source-version:request-id | PERMISSION_DENIED / OBJECT_PUBLICATION_FAILED / VISIBILITY_POLICY_BLOCKED / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-FINALIZE-BATCH | Finalize Result Publication Batch | PUB-OBJ-BATCH | UPDATE |  | PUB-BATCH-F-BATCH-VERSION<br>PUB-BATCH-F-OBJECT-RESULTS<br>PUB-BATCH-F-STATUS | PUBLISHING → PUBLISHED | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | HIGH | REQUIRED | PUB-ACT-FINALIZE-BATCH:school:object:source-version:request-id | PERMISSION_DENIED / OBJECT_PUBLICATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-RETRY-FAILED | Retry Failed Result Publication | PUB-OBJ-RESULT | UPDATE |  | PUB-RESULT-F-RESULT-VERSION<br>PUB-RESULT-F-NOTIFICATION-STATUS | PUBLISH_FAILED → PUBLISHED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher publishes confirmed decisions inside assigned student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to publish another subject or any unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to publish or correct student results | WEB / APP | HIGH | REQUIRED | PUB-ACT-RETRY-FAILED:school:object:source-version:request-id | PERMISSION_DENIED / UNCONFIRMED_SUBJECTIVE_SCORE / VISIBILITY_POLICY_BLOCKED / OBJECT_PUBLICATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-RECONCILE-BATCH | Reconcile Retried Result Publication Batch | PUB-OBJ-BATCH | UPDATE |  | PUB-BATCH-F-BATCH-VERSION<br>PUB-BATCH-F-OBJECT-RESULTS<br>PUB-BATCH-F-STATUS | PARTIAL_FAILED → PUBLISHED | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | HIGH | REQUIRED | PUB-ACT-RECONCILE-BATCH:school:object:source-version:request-id | PERMISSION_DENIED / OBJECT_PUBLICATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-VIEW-RESULT | View My Published Result | PUB-OBJ-RESULT | READ | PUB-RESULT-F-STUDENT-REF | PUB-RESULT-F-STUDENT-REF<br>PUB-RESULT-F-ANSWER<br>PUB-RESULT-F-SCORE<br>PUB-RESULT-F-FEEDBACK<br>PUB-RESULT-F-ANSWER-VISIBLE-AT<br>PUB-RESULT-F-SCORE-VISIBLE-AT<br>PUB-RESULT-F-FEEDBACK-VISIBLE-AT<br>PUB-RESULT-F-RESULT-VERSION | UNCHANGED | ALLOW:ROLE-STUDENT — the student reads only the student's own published result after each configured visibility time<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to a student's answer, score, or feedback | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND / RESULT_NOT_PUBLISHED / ANSWER_NOT_VISIBLE / SCORE_NOT_VISIBLE / FEEDBACK_NOT_VISIBLE |
+| PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT | Resolve Current Result Dependencies | PUB-OBJ-DEPENDENCY-SNAPSHOT | CREATE |  | PUB-DEPENDENCY-SNAPSHOT-F-ID<br>PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF<br>PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION<br>PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET<br>PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION | CREATE（成功状态由 PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | LOW | REQUIRED | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| PUB-ACT-CORRECT-RESULT | Correct Published Result | PUB-OBJ-RESULT | UPDATE | PUB-RESULT-F-CORRECTION-DECISION-REF<br>PUB-RESULT-F-NEW-DECISION-VERSION<br>PUB-RESULT-F-PUBLIC-CORRECTION-NOTE | PUB-RESULT-F-CORRECTION-DECISION-REF<br>PUB-RESULT-F-NEW-DECISION-VERSION<br>PUB-RESULT-F-RESULT-VERSION<br>PUB-RESULT-F-CORRECTION-VERSION<br>PUB-RESULT-F-INVALIDATION-VERSION<br>PUB-RESULT-F-NOTIFICATION-STATUS<br>PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS | PUBLISHED → INVALIDATED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher publishes confirmed decisions inside assigned student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to publish another subject or any unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to publish or correct student results | WEB / APP | HIGH | REQUIRED | PUB-ACT-CORRECT-RESULT:school:object:source-version:request-id | PERMISSION_DENIED / CORRECTION_NOTE_REQUIRED / STALE_DECISION_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | Reconfirm Invalidated Explanation | PUB-OBJ-RESULT | UPDATE | PUB-RESULT-F-PUBLIC-CORRECTION-NOTE | PUB-RESULT-F-RESULT-VERSION<br>PUB-RESULT-F-INVALIDATION-VERSION<br>PUB-RESULT-F-NOTIFICATION-STATUS<br>PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS | INVALIDATED → PUBLISHED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher publishes confirmed decisions inside assigned student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to publish another subject or any unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to publish or correct student results | WEB / APP | HIGH | REQUIRED | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION:school:object:source-version:request-id | PERMISSION_DENIED / INVALIDATION_UNRESOLVED / STALE_DECISION_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 发布预览、逐学生阻断原因、正式发布、成绩修正、发布历史 | 学生查看成绩反馈、教师移动提醒、修正通知 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| PUB-OBJ-BATCH | DRAFT |  | PUB-ACT-PREPARE-BATCH |
+| PUB-OBJ-BATCH | READY | PUB-ACT-PREPARE-BATCH | PUB-ACT-PUBLISH-SELECTED |
+| PUB-OBJ-BATCH | PUBLISHING | PUB-ACT-PUBLISH-SELECTED | PUB-ACT-FINALIZE-BATCH |
+| PUB-OBJ-BATCH | PARTIAL_FAILED | PUB-ACT-FINALIZE-BATCH<br>PUB-ACT-RECONCILE-BATCH | PUB-ACT-RECONCILE-BATCH |
+| PUB-OBJ-BATCH | PUBLISHED | PUB-ACT-FINALIZE-BATCH<br>PUB-ACT-RECONCILE-BATCH |  |
+| PUB-OBJ-PREVIEW | GENERATED | PUB-ACT-PREVIEW |  |
+| PUB-OBJ-RESULT | READY | PUB-ACT-MATERIALIZE-RESULT | PUB-ACT-PUBLISH-RESULT |
+| PUB-OBJ-RESULT | PUBLISHED | PUB-ACT-PUBLISH-RESULT<br>PUB-ACT-RETRY-FAILED<br>PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | PUB-ACT-CORRECT-RESULT |
+| PUB-OBJ-RESULT | PUBLISH_FAILED | PUB-ACT-PUBLISH-RESULT | PUB-ACT-RETRY-FAILED |
+| PUB-OBJ-RESULT | INVALIDATED | PUB-ACT-CORRECT-RESULT | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION |
+| PUB-OBJ-DEPENDENCY-SNAPSHOT | RESOLVED | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-008 | Confirmed Result Publication | 1 | GRD-001 / PUB-001 / CORR-001 | PUB-ACT-PREVIEW<br>PUB-ACT-PREPARE-BATCH<br>PUB-ACT-PUBLISH-SELECTED<br>PUB-ACT-MATERIALIZE-RESULT<br>PUB-ACT-PUBLISH-RESULT<br>PUB-ACT-FINALIZE-BATCH<br>PUB-ACT-RETRY-FAILED<br>PUB-ACT-RECONCILE-BATCH | SELECTED_STUDENT_RESULT_OR_CORRECTION_TASK_OBJECT_WITH_PARTIAL_SUCCESS；{"strategy":"RETRY_FAILED_STUDENT_RESULTS_OR_CORRECTION_TASKS_ONLY","maxAttempts":5,"retryableFailureResults":["OBJECT_PUBLICATION_FAILED","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"DO_NOT_UNPUBLISH_SUCCESSFUL_RESULTS","description":"retain successful student results and correction tasks, then retry only failed result or correction task objects after eligibility and source versions are rechecked"}；{"strategy":"INVALIDATE_STALE_STUDENT_RESULT_READS","targets":["student score view","student feedback view","notification delivery state"]} |
+| DF-009 | Published Result Correction | 1 | GRD-001 / PUB-001 / INS-001 / PLN-001 / CORR-001 | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT<br>PUB-ACT-CORRECT-RESULT<br>PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | PUBLISHED_STUDENT_RESULT_AND_DEPENDENT_INTERPRETATION_OBJECT；{"strategy":"REFRESH_RESULT_DECISION_EVIDENCE_AND_PLAN_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["STALE_DECISION_VERSION","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_RESULT_AND_DEPENDENT_VERSIONS_UNTIL_OBJECT_OUTCOMES_COMMIT","description":"a failed correction leaves prior result, evidence, mastery, plan evaluation, report, and learning-path history intact and retries only failed objects"}；{"strategy":"VERSION_AND_REQUIRE_RECONFIRMATION_FOR_EVERY_DEPENDENT_TARGET_KIND","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-010 | Correction Submission Judgment and New Evidence | 1 | PUB-001 / INS-001 / PLN-001 / CORR-001 | PUB-ACT-VIEW-RESULT | CORRECTION_AND_DEPENDENT_EVIDENCE_OBJECT；{"strategy":"REFRESH_RESULT_EVIDENCE_AND_CORRECTION_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_VISIBLE_RESULT_AND_EVIDENCE_HISTORY","description":"a failed correction or invalidation leaves prior visible versions intact and retries only failed dependent objects"}；{"strategy":"VERSION_AND_RECONFIRM_EVERY_DEPENDENT_INTERPRETATION","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-011 | Versioned Learning Facts to Cross-term Learning Path | 1 | PUB-001 / INS-001 / CORR-001 / APP-001 / GRD-001 / LPATH-001 |  | STUDENT_SOURCE_FACT_VERSION；{"strategy":"REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_ACCEPTED_SOURCE_FACT_AND_RETRY_ONLY_FAILED_DERIVED_OBJECTS","description":"a learning-path failure never rewrites evidence and never removes an accepted timeline entry"}；{"strategy":"SUPERSEDE_OR_MARK_STALE_BY_SOURCE_VERSION","targets":["learning path interpretation version","authorized path read model"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PUB-F001 | 可发布学生 | 多选列表 | OPT-RUN-004 | 发布必选 | 确认前重新计算 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F002 | 成绩状态 | 多选下拉 | OPT-ENUM-007 | 查询必填 | 按学生对象级展示 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F003 | 反馈开放策略 | 单选下拉 | OPT-ENUM-004 | 发布必填 | 继承作业策略，可缩小不可扩大 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F004 | 修正原因 | 单选下拉 | OPT-ENUM-006 | 修正必填 | 展示公开说明策略 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F005 | 通知 | 开关 | OPT-ENUM-001 | 默认 YES | 通知不承载敏感明细 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| PUB-PAGE-RELEASE | Result Release Workspace | WEB / APP | PUB-OBJ-BATCH<br>PUB-OBJ-PREVIEW<br>PUB-OBJ-RESULT | PUB-BATCH-F-ID<br>PUB-BATCH-F-SELECTED-STUDENT-IDS<br>PUB-BATCH-F-VISIBILITY-POLICY<br>PUB-BATCH-F-ANSWER-VISIBLE-AT<br>PUB-BATCH-F-FEEDBACK-VISIBLE-AT<br>PUB-BATCH-F-NOTIFICATION-POLICY<br>PUB-BATCH-F-BATCH-VERSION<br>PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT<br>PUB-BATCH-F-OBJECT-RESULTS<br>PUB-BATCH-F-STATUS<br>PUB-PREVIEW-F-ID<br>PUB-PREVIEW-F-BATCH-REF<br>PUB-PREVIEW-F-STUDENT-REF<br>PUB-PREVIEW-F-DECISION-REF<br>PUB-PREVIEW-F-ELIGIBILITY<br>PUB-PREVIEW-F-BLOCKING-CODES<br>PUB-PREVIEW-F-ANSWER-VISIBLE-AT<br>PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT<br>PUB-PREVIEW-F-NOTIFICATION-PREVIEW<br>PUB-RESULT-F-ID<br>PUB-RESULT-F-STUDENT-REF<br>PUB-RESULT-F-SOURCE-DECISION-REF<br>PUB-RESULT-F-DECISION-VERSION<br>PUB-RESULT-F-CORRECTION-DECISION-REF<br>PUB-RESULT-F-NEW-DECISION-VERSION<br>PUB-RESULT-F-ANSWER<br>PUB-RESULT-F-SCORE<br>PUB-RESULT-F-FEEDBACK<br>PUB-RESULT-F-ELIGIBILITY<br>PUB-RESULT-F-BLOCKING-CODES<br>PUB-RESULT-F-ANSWER-VISIBLE-AT<br>PUB-RESULT-F-SCORE-VISIBLE-AT<br>PUB-RESULT-F-FEEDBACK-VISIBLE-AT<br>PUB-RESULT-F-RESULT-VERSION<br>PUB-RESULT-F-CORRECTION-VERSION<br>PUB-RESULT-F-INVALIDATION-VERSION<br>PUB-RESULT-F-PUBLIC-CORRECTION-NOTE<br>PUB-RESULT-F-NOTIFICATION-STATUS<br>PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS | PUB-ACT-PREVIEW<br>PUB-ACT-PREPARE-BATCH<br>PUB-ACT-PUBLISH-SELECTED<br>PUB-ACT-RETRY-FAILED | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| PUB-PAGE-CORRECTION | Published Result Correction Workspace | WEB / APP | PUB-OBJ-RESULT | PUB-RESULT-F-ID<br>PUB-RESULT-F-STUDENT-REF<br>PUB-RESULT-F-SOURCE-DECISION-REF<br>PUB-RESULT-F-DECISION-VERSION<br>PUB-RESULT-F-CORRECTION-DECISION-REF<br>PUB-RESULT-F-NEW-DECISION-VERSION<br>PUB-RESULT-F-ANSWER<br>PUB-RESULT-F-SCORE<br>PUB-RESULT-F-FEEDBACK<br>PUB-RESULT-F-ELIGIBILITY<br>PUB-RESULT-F-BLOCKING-CODES<br>PUB-RESULT-F-ANSWER-VISIBLE-AT<br>PUB-RESULT-F-SCORE-VISIBLE-AT<br>PUB-RESULT-F-FEEDBACK-VISIBLE-AT<br>PUB-RESULT-F-RESULT-VERSION<br>PUB-RESULT-F-CORRECTION-VERSION<br>PUB-RESULT-F-INVALIDATION-VERSION<br>PUB-RESULT-F-PUBLIC-CORRECTION-NOTE<br>PUB-RESULT-F-NOTIFICATION-STATUS<br>PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS | PUB-ACT-CORRECT-RESULT<br>PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| PUB-PAGE-STUDENT-RESULT | Student Published Result | WEB / APP | PUB-OBJ-RESULT | PUB-RESULT-F-STUDENT-REF<br>PUB-RESULT-F-ANSWER<br>PUB-RESULT-F-SCORE<br>PUB-RESULT-F-FEEDBACK<br>PUB-RESULT-F-ANSWER-VISIBLE-AT<br>PUB-RESULT-F-SCORE-VISIBLE-AT<br>PUB-RESULT-F-FEEDBACK-VISIBLE-AT<br>PUB-RESULT-F-RESULT-VERSION | PUB-ACT-VIEW-RESULT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| WAITING_CONFIRMATION | 待确认评分 |
-| READY_TO_PUBLISH | 可发布 |
-| PUBLISHING | 发布中 |
-| PUBLISHED | 已发布 |
-| CORRECTED | 已修正 |
-| PARTIAL_FAILED | 部分失败 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PUB-ACT-PREVIEW-SCN-SUCCESS | SUCCESS | PUB-ACT-PREVIEW | the actor meets the entry conditions for Preview Result Publication | the actor requests Preview Result Publication | returns student-level eligibility, blocking codes, visibility times, and notification preview without publication | GENERATED | ALLOW |  |
+| PUB-ACT-PREVIEW-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-PREVIEW | PERMISSION_DENIED applies to Preview Result Publication | the actor requests Preview Result Publication | Preview Result Publication returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-PREVIEW-SCN-NOT_FOUND | FAILURE | PUB-ACT-PREVIEW | NOT_FOUND applies to Preview Result Publication | the actor requests Preview Result Publication | Preview Result Publication returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| PUB-ACT-PREVIEW-SCN-VISIBILITY_POLICY_BLOCKED | BOUNDARY | PUB-ACT-PREVIEW | VISIBILITY_POLICY_BLOCKED applies to Preview Result Publication | the actor requests Preview Result Publication | returns the resolved visibility conflict and blocking codes without creating a publishable result | UNCHANGED | ALLOW | VISIBILITY_POLICY_BLOCKED |
+| PUB-ACT-PREPARE-BATCH-SCN-SUCCESS | SUCCESS | PUB-ACT-PREPARE-BATCH | the actor meets the entry conditions for Prepare Result Publication Batch | the actor requests Prepare Result Publication Batch | records object-level eligibility and blocking codes for every selected student before publication starts | READY | ALLOW |  |
+| PUB-ACT-PREPARE-BATCH-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-PREPARE-BATCH | PERMISSION_DENIED applies to Prepare Result Publication Batch | the actor requests Prepare Result Publication Batch | Prepare Result Publication Batch returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-PREPARE-BATCH-SCN-UNCONFIRMED_SUBJECTIVE_SCORE | FAILURE | PUB-ACT-PREPARE-BATCH | UNCONFIRMED_SUBJECTIVE_SCORE applies to Prepare Result Publication Batch | the actor requests Prepare Result Publication Batch | Prepare Result Publication Batch returns UNCONFIRMED_SUBJECTIVE_SCORE without hidden writes | UNCHANGED | DENY | UNCONFIRMED_SUBJECTIVE_SCORE |
+| PUB-ACT-PREPARE-BATCH-SCN-VISIBILITY_POLICY_BLOCKED | FAILURE | PUB-ACT-PREPARE-BATCH | VISIBILITY_POLICY_BLOCKED applies to Prepare Result Publication Batch | the actor requests Prepare Result Publication Batch | Prepare Result Publication Batch returns VISIBILITY_POLICY_BLOCKED without hidden writes | UNCHANGED | DENY | VISIBILITY_POLICY_BLOCKED |
+| PUB-ACT-PREPARE-BATCH-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-PREPARE-BATCH | VERSION_CONFLICT applies to Prepare Result Publication Batch | the actor requests Prepare Result Publication Batch | Prepare Result Publication Batch returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-PREPARE-BATCH-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-PREPARE-BATCH | AUDIT_FAILED applies to Prepare Result Publication Batch | the actor requests Prepare Result Publication Batch | Prepare Result Publication Batch returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-PUBLISH-SELECTED-SCN-SUCCESS | SUCCESS | PUB-ACT-PUBLISH-SELECTED | the actor meets the entry conditions for Publish Results to Selected Students | the actor requests Publish Results to Selected Students | Publish Results to Selected Students returns the accepted versioned result | PUBLISHING | ALLOW |  |
+| PUB-ACT-PUBLISH-SELECTED-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-PUBLISH-SELECTED | PERMISSION_DENIED applies to Publish Results to Selected Students | the actor requests Publish Results to Selected Students | Publish Results to Selected Students returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-PUBLISH-SELECTED-SCN-UNCONFIRMED_SUBJECTIVE_SCORE | FAILURE | PUB-ACT-PUBLISH-SELECTED | UNCONFIRMED_SUBJECTIVE_SCORE applies to Publish Results to Selected Students | the actor requests Publish Results to Selected Students | Publish Results to Selected Students returns UNCONFIRMED_SUBJECTIVE_SCORE without hidden writes | UNCHANGED | DENY | UNCONFIRMED_SUBJECTIVE_SCORE |
+| PUB-ACT-PUBLISH-SELECTED-SCN-VISIBILITY_POLICY_BLOCKED | FAILURE | PUB-ACT-PUBLISH-SELECTED | VISIBILITY_POLICY_BLOCKED applies to Publish Results to Selected Students | the actor requests Publish Results to Selected Students | Publish Results to Selected Students returns VISIBILITY_POLICY_BLOCKED without hidden writes | UNCHANGED | DENY | VISIBILITY_POLICY_BLOCKED |
+| PUB-ACT-PUBLISH-SELECTED-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-PUBLISH-SELECTED | VERSION_CONFLICT applies to Publish Results to Selected Students | the actor requests Publish Results to Selected Students | Publish Results to Selected Students returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-PUBLISH-SELECTED-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-PUBLISH-SELECTED | AUDIT_FAILED applies to Publish Results to Selected Students | the actor requests Publish Results to Selected Students | Publish Results to Selected Students returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-MATERIALIZE-RESULT-SCN-SUCCESS | SUCCESS | PUB-ACT-MATERIALIZE-RESULT | the actor meets the entry conditions for Materialize Student Result Version | the actor requests Materialize Student Result Version | creates the first ready per-student result from the immutable confirmed decision and resolved batch publication configuration | READY | ALLOW |  |
+| PUB-ACT-MATERIALIZE-RESULT-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-MATERIALIZE-RESULT | PERMISSION_DENIED applies to Materialize Student Result Version | the actor requests Materialize Student Result Version | Materialize Student Result Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-MATERIALIZE-RESULT-SCN-UNCONFIRMED_SUBJECTIVE_SCORE | FAILURE | PUB-ACT-MATERIALIZE-RESULT | UNCONFIRMED_SUBJECTIVE_SCORE applies to Materialize Student Result Version | the actor requests Materialize Student Result Version | Materialize Student Result Version returns UNCONFIRMED_SUBJECTIVE_SCORE without hidden writes | UNCHANGED | DENY | UNCONFIRMED_SUBJECTIVE_SCORE |
+| PUB-ACT-MATERIALIZE-RESULT-SCN-VISIBILITY_POLICY_BLOCKED | FAILURE | PUB-ACT-MATERIALIZE-RESULT | VISIBILITY_POLICY_BLOCKED applies to Materialize Student Result Version | the actor requests Materialize Student Result Version | Materialize Student Result Version returns VISIBILITY_POLICY_BLOCKED without hidden writes | UNCHANGED | DENY | VISIBILITY_POLICY_BLOCKED |
+| PUB-ACT-MATERIALIZE-RESULT-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-MATERIALIZE-RESULT | VERSION_CONFLICT applies to Materialize Student Result Version | the actor requests Materialize Student Result Version | Materialize Student Result Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-MATERIALIZE-RESULT-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-MATERIALIZE-RESULT | AUDIT_FAILED applies to Materialize Student Result Version | the actor requests Materialize Student Result Version | Materialize Student Result Version returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-PUBLISH-RESULT-SCN-SUCCESS | SUCCESS | PUB-ACT-PUBLISH-RESULT | the actor meets the entry conditions for Publish Student Result Version | the actor requests Publish Student Result Version | Publish Student Result Version returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| PUB-ACT-PUBLISH-RESULT-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-PUBLISH-RESULT | PERMISSION_DENIED applies to Publish Student Result Version | the actor requests Publish Student Result Version | Publish Student Result Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-PUBLISH-RESULT-SCN-OBJECT_PUBLICATION_FAILED | BOUNDARY | PUB-ACT-PUBLISH-RESULT | OBJECT_PUBLICATION_FAILED applies to Publish Student Result Version | the actor requests Publish Student Result Version | records the failed student result independently without changing successful student results | PUBLISH_FAILED | ALLOW | OBJECT_PUBLICATION_FAILED |
+| PUB-ACT-PUBLISH-RESULT-SCN-VISIBILITY_POLICY_BLOCKED | FAILURE | PUB-ACT-PUBLISH-RESULT | VISIBILITY_POLICY_BLOCKED applies to Publish Student Result Version | the actor requests Publish Student Result Version | Publish Student Result Version returns VISIBILITY_POLICY_BLOCKED without hidden writes | UNCHANGED | DENY | VISIBILITY_POLICY_BLOCKED |
+| PUB-ACT-PUBLISH-RESULT-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-PUBLISH-RESULT | VERSION_CONFLICT applies to Publish Student Result Version | the actor requests Publish Student Result Version | Publish Student Result Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-PUBLISH-RESULT-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-PUBLISH-RESULT | AUDIT_FAILED applies to Publish Student Result Version | the actor requests Publish Student Result Version | Publish Student Result Version returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-FINALIZE-BATCH-SCN-SUCCESS | SUCCESS | PUB-ACT-FINALIZE-BATCH | the actor meets the entry conditions for Finalize Result Publication Batch | the actor requests Finalize Result Publication Batch | Finalize Result Publication Batch returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| PUB-ACT-FINALIZE-BATCH-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-FINALIZE-BATCH | PERMISSION_DENIED applies to Finalize Result Publication Batch | the actor requests Finalize Result Publication Batch | Finalize Result Publication Batch returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-FINALIZE-BATCH-SCN-OBJECT_PUBLICATION_FAILED | BOUNDARY | PUB-ACT-FINALIZE-BATCH | OBJECT_PUBLICATION_FAILED applies to Finalize Result Publication Batch | the actor requests Finalize Result Publication Batch | finalizes successful results while retaining object-level failed results for retry | PARTIAL_FAILED | ALLOW | OBJECT_PUBLICATION_FAILED |
+| PUB-ACT-FINALIZE-BATCH-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-FINALIZE-BATCH | VERSION_CONFLICT applies to Finalize Result Publication Batch | the actor requests Finalize Result Publication Batch | Finalize Result Publication Batch returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-FINALIZE-BATCH-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-FINALIZE-BATCH | AUDIT_FAILED applies to Finalize Result Publication Batch | the actor requests Finalize Result Publication Batch | Finalize Result Publication Batch returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-RETRY-FAILED-SCN-SUCCESS | SUCCESS | PUB-ACT-RETRY-FAILED | the actor meets the entry conditions for Retry Failed Result Publication | the actor requests Retry Failed Result Publication | Retry Failed Result Publication returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| PUB-ACT-RETRY-FAILED-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-RETRY-FAILED | PERMISSION_DENIED applies to Retry Failed Result Publication | the actor requests Retry Failed Result Publication | Retry Failed Result Publication returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-RETRY-FAILED-SCN-UNCONFIRMED_SUBJECTIVE_SCORE | FAILURE | PUB-ACT-RETRY-FAILED | UNCONFIRMED_SUBJECTIVE_SCORE applies to Retry Failed Result Publication | the actor requests Retry Failed Result Publication | Retry Failed Result Publication returns UNCONFIRMED_SUBJECTIVE_SCORE without hidden writes | UNCHANGED | DENY | UNCONFIRMED_SUBJECTIVE_SCORE |
+| PUB-ACT-RETRY-FAILED-SCN-VISIBILITY_POLICY_BLOCKED | FAILURE | PUB-ACT-RETRY-FAILED | VISIBILITY_POLICY_BLOCKED applies to Retry Failed Result Publication | the actor requests Retry Failed Result Publication | Retry Failed Result Publication returns VISIBILITY_POLICY_BLOCKED without hidden writes | UNCHANGED | DENY | VISIBILITY_POLICY_BLOCKED |
+| PUB-ACT-RETRY-FAILED-SCN-OBJECT_PUBLICATION_FAILED | FAILURE | PUB-ACT-RETRY-FAILED | OBJECT_PUBLICATION_FAILED applies to Retry Failed Result Publication | the actor requests Retry Failed Result Publication | Retry Failed Result Publication returns OBJECT_PUBLICATION_FAILED without hidden writes | UNCHANGED | DENY | OBJECT_PUBLICATION_FAILED |
+| PUB-ACT-RETRY-FAILED-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-RETRY-FAILED | VERSION_CONFLICT applies to Retry Failed Result Publication | the actor requests Retry Failed Result Publication | Retry Failed Result Publication returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-RETRY-FAILED-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-RETRY-FAILED | AUDIT_FAILED applies to Retry Failed Result Publication | the actor requests Retry Failed Result Publication | Retry Failed Result Publication returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-RECONCILE-BATCH-SCN-SUCCESS | SUCCESS | PUB-ACT-RECONCILE-BATCH | the actor meets the entry conditions for Reconcile Retried Result Publication Batch | the actor requests Reconcile Retried Result Publication Batch | Reconcile Retried Result Publication Batch returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| PUB-ACT-RECONCILE-BATCH-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-RECONCILE-BATCH | PERMISSION_DENIED applies to Reconcile Retried Result Publication Batch | the actor requests Reconcile Retried Result Publication Batch | Reconcile Retried Result Publication Batch returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-RECONCILE-BATCH-SCN-OBJECT_PUBLICATION_FAILED | BOUNDARY | PUB-ACT-RECONCILE-BATCH | OBJECT_PUBLICATION_FAILED applies to Reconcile Retried Result Publication Batch | the actor requests Reconcile Retried Result Publication Batch | keeps the batch partial while any selected student result still has an object-level publication failure | PARTIAL_FAILED | ALLOW | OBJECT_PUBLICATION_FAILED |
+| PUB-ACT-RECONCILE-BATCH-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-RECONCILE-BATCH | VERSION_CONFLICT applies to Reconcile Retried Result Publication Batch | the actor requests Reconcile Retried Result Publication Batch | Reconcile Retried Result Publication Batch returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-RECONCILE-BATCH-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-RECONCILE-BATCH | AUDIT_FAILED applies to Reconcile Retried Result Publication Batch | the actor requests Reconcile Retried Result Publication Batch | Reconcile Retried Result Publication Batch returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-VIEW-RESULT-SCN-SUCCESS | SUCCESS | PUB-ACT-VIEW-RESULT | the actor meets the entry conditions for View My Published Result | the actor requests View My Published Result | returns only the student's own published answer, score, and feedback fields whose time gates have opened | UNCHANGED | ALLOW |  |
+| PUB-ACT-VIEW-RESULT-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-VIEW-RESULT | PERMISSION_DENIED applies to View My Published Result | the actor requests View My Published Result | View My Published Result returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-VIEW-RESULT-SCN-NOT_FOUND | FAILURE | PUB-ACT-VIEW-RESULT | NOT_FOUND applies to View My Published Result | the actor requests View My Published Result | View My Published Result returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| PUB-ACT-VIEW-RESULT-SCN-RESULT_NOT_PUBLISHED | FAILURE | PUB-ACT-VIEW-RESULT | RESULT_NOT_PUBLISHED applies to View My Published Result | the actor requests View My Published Result | returns no result until the owned result version reaches PUBLISHED | UNCHANGED | DENY | RESULT_NOT_PUBLISHED |
+| PUB-ACT-VIEW-RESULT-SCN-ANSWER_NOT_VISIBLE | BOUNDARY | PUB-ACT-VIEW-RESULT | ANSWER_NOT_VISIBLE applies to View My Published Result | the actor requests View My Published Result | returns the visible score fields but withholds the answer until answerVisibleAt | UNCHANGED | ALLOW | ANSWER_NOT_VISIBLE |
+| PUB-ACT-VIEW-RESULT-SCN-SCORE_NOT_VISIBLE | BOUNDARY | PUB-ACT-VIEW-RESULT | SCORE_NOT_VISIBLE applies to View My Published Result | the actor requests View My Published Result | withholds the score until scoreVisibleAt while preserving the owned published result | UNCHANGED | ALLOW | SCORE_NOT_VISIBLE |
+| PUB-ACT-VIEW-RESULT-SCN-FEEDBACK_NOT_VISIBLE | BOUNDARY | PUB-ACT-VIEW-RESULT | FEEDBACK_NOT_VISIBLE applies to View My Published Result | the actor requests View My Published Result | returns the visible score fields but withholds feedback until feedbackVisibleAt | UNCHANGED | ALLOW | FEEDBACK_NOT_VISIBLE |
+| PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT-SCN-SUCCESS | SUCCESS | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT | the actor meets the entry conditions for Resolve Current Result Dependencies | the actor requests Resolve Current Result Dependencies | resolves zero or more current dependency records against the exact prior published result ID and version into one immutable versioned snapshot | RESOLVED | ALLOW |  |
+| PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT | PERMISSION_DENIED applies to Resolve Current Result Dependencies | the actor requests Resolve Current Result Dependencies | Resolve Current Result Dependencies returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT-SCN-SOURCE_VERSION_STALE | FAILURE | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT | SOURCE_VERSION_STALE applies to Resolve Current Result Dependencies | the actor requests Resolve Current Result Dependencies | Resolve Current Result Dependencies returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT | VERSION_CONFLICT applies to Resolve Current Result Dependencies | the actor requests Resolve Current Result Dependencies | Resolve Current Result Dependencies returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-CORRECT-RESULT-SCN-SUCCESS | SUCCESS | PUB-ACT-CORRECT-RESULT | the actor meets the entry conditions for Correct Published Result | the actor requests Correct Published Result | references the new confirmed decision version, creates new result and correction versions, and records a dependent invalidation version without rewriting the old result | INVALIDATED | ALLOW |  |
+| PUB-ACT-CORRECT-RESULT-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-CORRECT-RESULT | PERMISSION_DENIED applies to Correct Published Result | the actor requests Correct Published Result | Correct Published Result returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-CORRECT-RESULT-SCN-CORRECTION_NOTE_REQUIRED | FAILURE | PUB-ACT-CORRECT-RESULT | CORRECTION_NOTE_REQUIRED applies to Correct Published Result | the actor requests Correct Published Result | Correct Published Result returns CORRECTION_NOTE_REQUIRED without hidden writes | UNCHANGED | DENY | CORRECTION_NOTE_REQUIRED |
+| PUB-ACT-CORRECT-RESULT-SCN-STALE_DECISION_VERSION | FAILURE | PUB-ACT-CORRECT-RESULT | STALE_DECISION_VERSION applies to Correct Published Result | the actor requests Correct Published Result | Correct Published Result returns STALE_DECISION_VERSION without hidden writes | UNCHANGED | DENY | STALE_DECISION_VERSION |
+| PUB-ACT-CORRECT-RESULT-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-CORRECT-RESULT | VERSION_CONFLICT applies to Correct Published Result | the actor requests Correct Published Result | Correct Published Result returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-CORRECT-RESULT-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-CORRECT-RESULT | AUDIT_FAILED applies to Correct Published Result | the actor requests Correct Published Result | Correct Published Result returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION-SCN-SUCCESS | SUCCESS | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | the actor meets the entry conditions for Reconfirm Invalidated Explanation | the actor requests Reconfirm Invalidated Explanation | Reconfirm Invalidated Explanation returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION-SCN-PERMISSION_DENIED | FAILURE | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | PERMISSION_DENIED applies to Reconfirm Invalidated Explanation | the actor requests Reconfirm Invalidated Explanation | Reconfirm Invalidated Explanation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION-SCN-INVALIDATION_UNRESOLVED | FAILURE | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | INVALIDATION_UNRESOLVED applies to Reconfirm Invalidated Explanation | the actor requests Reconfirm Invalidated Explanation | Reconfirm Invalidated Explanation returns INVALIDATION_UNRESOLVED without hidden writes | UNCHANGED | DENY | INVALIDATION_UNRESOLVED |
+| PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION-SCN-STALE_DECISION_VERSION | FAILURE | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | STALE_DECISION_VERSION applies to Reconfirm Invalidated Explanation | the actor requests Reconfirm Invalidated Explanation | Reconfirm Invalidated Explanation returns STALE_DECISION_VERSION without hidden writes | UNCHANGED | DENY | STALE_DECISION_VERSION |
+| PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION-SCN-VERSION_CONFLICT | FAILURE | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | VERSION_CONFLICT applies to Reconfirm Invalidated Explanation | the actor requests Reconfirm Invalidated Explanation | Reconfirm Invalidated Explanation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION-SCN-AUDIT_FAILED | FAILURE | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | AUDIT_FAILED applies to Reconfirm Invalidated Explanation | the actor requests Reconfirm Invalidated Explanation | Reconfirm Invalidated Explanation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 教师打开发布预览并重新校验评分版本。
-2. 系统展示可发布学生、阻断学生、反馈字段和答案开放时间。
-3. 教师确认后逐学生生成 Published Result Version。
-4. 修正时形成新版本并触发成绩册、证据、计划的失效/重算。
-
-关联 Flow: `DF-008`、`DF-009`、`DF-018`、`DF-019`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PUB-FR-01 | 对象查询与范围筛选 | PUB-F001、PUB-F002、PUB-F003、PUB-F004、PUB-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | PUB-AC-01 |
-| PUB-FR-02 | 详情查看与版本追踪 | DAT-PUB-01、DAT-PUB-02、DAT-PUB-03、DAT-PUB-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | PUB-AC-02 |
-| PUB-FR-03 | 创建/修改/确认主动作 | PUB-F001、PUB-F002、PUB-F003、PUB-F004、PUB-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | PUB-AC-03 |
-| PUB-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | PUB-AC-04 |
-| PUB-FR-05 | 审计、通知与下游失效 | DF-008、DF-009、DF-018、DF-019 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | PUB-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| PUB-AC-01 | 未完成教师确认评分的学生不能发布。 |
-| PUB-AC-02 | 发布失败必须返回学生级原因。 |
-| PUB-AC-03 | 学生只能看到已发布且属于本人的反馈。 |
-| PUB-AC-04 | 修正不能覆盖旧版本，必须保留原因和确认人。 |
-| PUB-AC-05 | 修正后受影响的掌握结论和计划候选必须标记待重新确认。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-008`、`DF-009`、`DF-018`、`DF-019`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

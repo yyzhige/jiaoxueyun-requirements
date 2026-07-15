@@ -1,142 +1,275 @@
-# RPT-001 临时分析、定期报告与订阅 PRD v2.0
+# RPT-001 Ad-hoc Analysis and Scheduled Reports PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师、班主任、教务、学生 |
-| 关联线框 | [19-reports-subscriptions-wireframe.zh-CN.md](../05-wireframe-contracts/19-reports-subscriptions-wireframe.zh-CN.md) |
+| 目标 | Keep report definitions, subscriptions, runs, snapshots, and deliveries as separate authoritative objects |
+| 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-002`、`NFR-008` |
+| 进入条件 | an authorized teacher selects a data scope and product report task |
+| 退出条件 | the accepted definition or subscription remains independently versioned |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-支持 AI 对话和报告中心生成临时、定期和可追踪报告，让教师和班主任按时间段掌握学习画像。
+- 本模块权威拥有 5 个对象、20 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-RPT-01 | Ad-hoc Report View | 查询创建者 | 临时报表 | 查询创建者 | 查询创建者 | 查询创建者 | S2 教学业务数据 |
-| DAT-RPT-02 | Report Subscription | 订阅创建者 | 定期报告订阅 | 订阅创建者 | 订阅创建者 | 订阅创建者 | S2 教学业务数据 |
-| DAT-RPT-03 | Report Snapshot | 系统 | 报告快照 | 系统 | 系统 | 订阅创建者 | S2 教学业务数据 |
-| DAT-RPT-04 | Report Delivery Record | 系统 | 报告投递记录 | 系统 | 系统 | 系统 | S2 教学业务数据 |
+### RPT-OBJ-DEFINITION Report Definition
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | ACTIVE |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-DEFINITION-F-ID | Report Definition ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DEFINITION-F-NAME | Report Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DEFINITION-F-METRIC-IDS | Report Metric IDs | STRING_ARRAY | 是 | OPTION_SET: OPT-ENUM-037 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DEFINITION-F-DATA-SCOPE | Authorized Data Scope | STRING | 是 | OPTION_SET: OPT-ENUM-048 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DEFINITION-F-TIME-RANGE | Report Time Range | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DEFINITION-F-VERSION | Report Definition Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 任课教师、班主任、教务、学生
-- 解决问题: 支持 AI 对话和报告中心生成临时、定期和可追踪报告，让教师和班主任按时间段掌握学习画像。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### RPT-OBJ-SUBSCRIPTION Report Subscription
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | ACTIVE / PAUSED / CANCELLED |
 
-- DAT-RPT-01 Ad-hoc Report View
-- DAT-RPT-02 Report Subscription
-- DAT-RPT-03 Report Snapshot
-- DAT-RPT-04 Report Delivery Record
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-SUBSCRIPTION-F-ID | Report Subscription ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-CREATOR-REF | Report Subscription Creator | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-DEFINITION-REF | Subscribed Report Definition | ID | 是 | OBJECT_REF: RPT-OBJ-DEFINITION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-DEFINITION-VERSION | Subscribed Report Definition Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY | Schedule Frequency | STRING | 是 | OPTION_SET: OPT-ENUM-014 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-EXECUTION-TIME | Scheduled Execution Time | STRING | 是 | OPTION_SET: OPT-ENUM-036 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-TIMEZONE | Schedule Timezone | STRING | 是 | OPTION_SET: OPT-ENUM-035 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-RECIPIENTS | Authorized Report Recipients | STRING_ARRAY | 是 | OPTION_SET: OPT-ENUM-015 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-DATA-SCOPE | Subscription Data Scope | STRING | 是 | OPTION_SET: OPT-ENUM-048 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SUBSCRIPTION-F-VERSION | Report Subscription Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### RPT-OBJ-RUN Report Run
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | QUEUED / RUNNING / SUCCEEDED / FAILED / BLOCKED_PERMISSION |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-RUN-F-ID | Report Run ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-DEFINITION-REF | Run Report Definition | ID | 是 | OBJECT_REF: RPT-OBJ-DEFINITION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-DEFINITION-VERSION | Run Report Definition Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-SUBSCRIPTION-REF | Run Report Subscription | ID | required only for a periodic report run；状态=QUEUED；动作=RPT-ACT-CREATE-RUN | OBJECT_REF: RPT-OBJ-SUBSCRIPTION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-SUBSCRIPTION-VERSION | Run Report Subscription Version | INTEGER | required only for a periodic report run；状态=QUEUED；动作=RPT-ACT-CREATE-RUN | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-DATA-CUTOFF | Run Data Cutoff | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-PERMISSION-RESULT | Run Permission Result | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-SOURCE-VERSIONS | Pinned Run Source Versions | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-RESULT | Report Run Result | JSON | required when a report run succeeds；状态=SUCCEEDED；动作=RPT-ACT-COMPLETE-RUN | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-RUN-F-VERSION | Report Run Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+### RPT-OBJ-SNAPSHOT Immutable Report Snapshot
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | AVAILABLE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-SNAPSHOT-F-ID | Report Snapshot ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SNAPSHOT-F-RUN-REF | Source Report Run | ID | 是 | OBJECT_REF: RPT-OBJ-RUN | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SNAPSHOT-F-RUN-VERSION | Source Report Run Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SNAPSHOT-F-SOURCE-VERSIONS | Snapshot Source Versions | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SNAPSHOT-F-DATA-CUTOFF | Snapshot Data Cutoff | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SNAPSHOT-F-PERMISSION-RESULT | Snapshot Permission Result | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SNAPSHOT-F-RUN-RESULT | Snapshot Run Result | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-SNAPSHOT-F-VERSION | Report Snapshot Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### RPT-OBJ-DELIVERY In-product Report Delivery
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | PENDING / DELIVERED / FAILED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-DELIVERY-F-ID | Report Delivery ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DELIVERY-F-SNAPSHOT-REF | Delivered Report Snapshot | ID | 是 | OBJECT_REF: RPT-OBJ-SNAPSHOT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DELIVERY-F-SNAPSHOT-VERSION | Delivered Report Snapshot Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DELIVERY-F-RECIPIENTS | Delivery Recipients | STRING_ARRAY | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DELIVERY-F-CHANNEL | Delivery Channel | STRING | 是 | OPTION_SET: OPT-ENUM-047 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DELIVERY-F-STATE | Report Delivery State | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| RPT-DELIVERY-F-VERSION | Report Delivery Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| RPT-REL-SUBSCRIPTION-DEFINITION | RPT-OBJ-SUBSCRIPTION | REFERENCES | RPT-OBJ-DEFINITION | MANY_TO_ONE | SAME_SCHOOL | retain subscription history and require a new definition version before the next run |
+| RPT-REL-RUN-SUBSCRIPTION | RPT-OBJ-RUN | DERIVED_FROM | RPT-OBJ-SUBSCRIPTION | MANY_TO_ONE | SAME_SCHOOL | retain the run and create a new run from the updated subscription version |
+| RPT-REL-SNAPSHOT-RUN | RPT-OBJ-SNAPSHOT | DERIVED_FROM | RPT-OBJ-RUN | MANY_TO_ONE | SAME_SCHOOL | retain the immutable snapshot and mark new runs to use refreshed sources |
+| RPT-REL-DELIVERY-SNAPSHOT | RPT-OBJ-DELIVERY | REFERENCES | RPT-OBJ-SNAPSHOT | MANY_TO_ONE | SAME_SCHOOL | delivery failure never rewrites or deletes the report snapshot |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-ACT-CREATE-AD-HOC-DEFINITION | Create an Ad-hoc Report Definition | RPT-OBJ-DEFINITION | CREATE | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-AD-HOC-DEFINITION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts only inside assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment<br>DENY:ROLE-ACADEMIC — academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail or aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-AD-HOC-DEFINITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-HOMEROOM-DEFINITION | Create an Assigned-class Homeroom Aggregate Report Definition | RPT-OBJ-DEFINITION | CREATE | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-HOMEROOM-DEFINITION-SCN-SUCCESS 定义） | ALLOW:DUTY-HOMEROOM — homeroom duty acts only on aggregate data for the assigned homeroom class across subjects<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default homeroom aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-HOMEROOM-DEFINITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-ACADEMIC-DEFINITION | Create an Authorized Academic Aggregate Report Definition | RPT-OBJ-DEFINITION | CREATE | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-ACADEMIC-DEFINITION-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts only on aggregate data covered by an active authorized scope grant<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default academic aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-ACADEMIC-DEFINITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-SUBSCRIPTION | Create an Assigned-subject Report Subscription | RPT-OBJ-SUBSCRIPTION | CREATE | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-SUBSCRIPTION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts only inside assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment<br>DENY:ROLE-ACADEMIC — academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail or aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | Create an Assigned-class Homeroom Aggregate Report Subscription | RPT-OBJ-SUBSCRIPTION | CREATE | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION-SCN-SUCCESS 定义） | ALLOW:DUTY-HOMEROOM — homeroom duty acts only on aggregate data for the assigned homeroom class across subjects<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default homeroom aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | Create an Authorized Academic Aggregate Report Subscription | RPT-OBJ-SUBSCRIPTION | CREATE | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts only on aggregate data covered by an active authorized scope grant<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default academic aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-UPDATE-SUBSCRIPTION | Update a Report Subscription Schedule | RPT-OBJ-SUBSCRIPTION | UPDATE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS | RPT-SUBSCRIPTION-F-VERSION | ACTIVE / PAUSED → ACTIVE | ALLOW:CURRENT_ACTOR — the authenticated actor manages only the subscription created by that actor<br>DENY:CURRENT_ACTOR — the authenticated actor cannot manage a subscription created by another actor or role<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default report subscription access | WEB / APP | LOW | REQUIRED | RPT-ACT-UPDATE-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-PAUSE-SUBSCRIPTION | Pause a Report Subscription | RPT-OBJ-SUBSCRIPTION | UPDATE | RPT-SUBSCRIPTION-F-ID | RPT-SUBSCRIPTION-F-VERSION | ACTIVE → PAUSED | ALLOW:CURRENT_ACTOR — the authenticated actor manages only the subscription created by that actor<br>DENY:CURRENT_ACTOR — the authenticated actor cannot manage a subscription created by another actor or role<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default report subscription access | WEB / APP | LOW | REQUIRED | RPT-ACT-PAUSE-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CANCEL-SUBSCRIPTION | Cancel a Report Subscription | RPT-OBJ-SUBSCRIPTION | UPDATE | RPT-SUBSCRIPTION-F-ID | RPT-SUBSCRIPTION-F-VERSION | ACTIVE / PAUSED → CANCELLED | ALLOW:CURRENT_ACTOR — the authenticated actor manages only the subscription created by that actor<br>DENY:CURRENT_ACTOR — the authenticated actor cannot manage a subscription created by another actor or role<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default report subscription access | WEB / APP | HIGH | REQUIRED | RPT-ACT-CANCEL-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| RPT-ACT-CREATE-AD-HOC-RUN | Create an Ad-hoc Permission-rechecked Report Run | RPT-OBJ-RUN | CREATE | RPT-RUN-F-DEFINITION-REF<br>RPT-RUN-F-DEFINITION-VERSION | RPT-RUN-F-ID<br>RPT-RUN-F-DATA-CUTOFF<br>RPT-RUN-F-PERMISSION-RESULT<br>RPT-RUN-F-SOURCE-VERSIONS<br>RPT-RUN-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-AD-HOC-RUN-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified report Flow writes only authorized source-pinned report records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal report materialization action directly | FLOW_INTERNAL | LOW | REQUIRED | RPT-ACT-CREATE-AD-HOC-RUN:school:object:source-version:request-id | SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| RPT-ACT-CREATE-RUN | Create a Periodic Permission-rechecked Report Run | RPT-OBJ-RUN | CREATE | RPT-RUN-F-DEFINITION-REF<br>RPT-RUN-F-DEFINITION-VERSION<br>RPT-RUN-F-SUBSCRIPTION-REF<br>RPT-RUN-F-SUBSCRIPTION-VERSION | RPT-RUN-F-ID<br>RPT-RUN-F-SUBSCRIPTION-REF<br>RPT-RUN-F-SUBSCRIPTION-VERSION<br>RPT-RUN-F-DATA-CUTOFF<br>RPT-RUN-F-PERMISSION-RESULT<br>RPT-RUN-F-SOURCE-VERSIONS<br>RPT-RUN-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-RUN-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified report Flow writes only authorized source-pinned report records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal report materialization action directly | FLOW_INTERNAL | LOW | REQUIRED | RPT-ACT-CREATE-RUN:school:object:source-version:request-id | SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| RPT-ACT-START-RUN | Start a Permission-cleared Report Run | RPT-OBJ-RUN | UPDATE |  | RPT-RUN-F-VERSION | QUEUED → RUNNING | ALLOW:SYSTEM — the verified report Flow writes only authorized source-pinned report records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal report materialization action directly | FLOW_INTERNAL | LOW | REQUIRED | RPT-ACT-START-RUN:school:object:source-version:request-id | SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| RPT-ACT-COMPLETE-RUN | Complete a Report Run | RPT-OBJ-RUN | UPDATE |  | RPT-RUN-F-RESULT<br>RPT-RUN-F-VERSION | RUNNING → SUCCEEDED | ALLOW:SYSTEM — the verified report Flow writes only authorized source-pinned report records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal report materialization action directly | FLOW_INTERNAL | LOW | REQUIRED | RPT-ACT-COMPLETE-RUN:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| RPT-ACT-FAIL-RUN | Record a Failed Report Run | RPT-OBJ-RUN | UPDATE |  | RPT-RUN-F-VERSION | RUNNING → FAILED | ALLOW:SYSTEM — the verified report event updates only the target run or delivery<br>DENY:CURRENT_ACTOR — a user cannot invoke report state events directly | SYSTEM_EVENT | LOW | REQUIRED | RPT-ACT-FAIL-RUN:school:object:source-version:request-id | PERMISSION_DENIED / VERSION_CONFLICT |
+| RPT-ACT-BLOCK-RUN-PERMISSION | Block a Report Run after Permission Recheck Failure | RPT-OBJ-RUN | UPDATE |  | RPT-RUN-F-PERMISSION-RESULT<br>RPT-RUN-F-VERSION | QUEUED → BLOCKED_PERMISSION | ALLOW:SYSTEM — the verified report event updates only the target run or delivery<br>DENY:CURRENT_ACTOR — a user cannot invoke report state events directly | SYSTEM_EVENT | LOW | REQUIRED | RPT-ACT-BLOCK-RUN-PERMISSION:school:object:source-version:request-id | VERSION_CONFLICT |
+| RPT-ACT-MATERIALIZE-SNAPSHOT | Materialize an Immutable Report Snapshot | RPT-OBJ-SNAPSHOT | CREATE |  | RPT-SNAPSHOT-F-ID<br>RPT-SNAPSHOT-F-RUN-REF<br>RPT-SNAPSHOT-F-RUN-VERSION<br>RPT-SNAPSHOT-F-SOURCE-VERSIONS<br>RPT-SNAPSHOT-F-DATA-CUTOFF<br>RPT-SNAPSHOT-F-PERMISSION-RESULT<br>RPT-SNAPSHOT-F-RUN-RESULT<br>RPT-SNAPSHOT-F-VERSION | CREATE（成功状态由 RPT-ACT-MATERIALIZE-SNAPSHOT-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified report Flow writes only authorized source-pinned report records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal report materialization action directly | FLOW_INTERNAL | LOW | REQUIRED | RPT-ACT-MATERIALIZE-SNAPSHOT:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| RPT-ACT-CREATE-DELIVERY | Create an In-product Report Delivery | RPT-OBJ-DELIVERY | CREATE |  | RPT-DELIVERY-F-ID<br>RPT-DELIVERY-F-SNAPSHOT-REF<br>RPT-DELIVERY-F-SNAPSHOT-VERSION<br>RPT-DELIVERY-F-RECIPIENTS<br>RPT-DELIVERY-F-CHANNEL<br>RPT-DELIVERY-F-STATE<br>RPT-DELIVERY-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-DELIVERY-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified report Flow writes only authorized source-pinned report records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal report materialization action directly | FLOW_INTERNAL | LOW | REQUIRED | RPT-ACT-CREATE-DELIVERY:school:object:source-version:request-id | PERMISSION_DENIED / DELIVERY_FAILED / VERSION_CONFLICT |
+| RPT-ACT-MARK-DELIVERED | Record a Delivered In-product Report | RPT-OBJ-DELIVERY | UPDATE |  | RPT-DELIVERY-F-STATE<br>RPT-DELIVERY-F-VERSION | PENDING → DELIVERED | ALLOW:SYSTEM — the verified report event updates only the target run or delivery<br>DENY:CURRENT_ACTOR — a user cannot invoke report state events directly | SYSTEM_EVENT | LOW | REQUIRED | RPT-ACT-MARK-DELIVERED:school:object:source-version:request-id | PERMISSION_DENIED / VERSION_CONFLICT |
+| RPT-ACT-FAIL-DELIVERY | Record a Failed In-product Report Delivery | RPT-OBJ-DELIVERY | UPDATE |  | RPT-DELIVERY-F-STATE<br>RPT-DELIVERY-F-VERSION | PENDING → FAILED | ALLOW:SYSTEM — the verified report event updates only the target run or delivery<br>DENY:CURRENT_ACTOR — a user cannot invoke report state events directly | SYSTEM_EVENT | LOW | REQUIRED | RPT-ACT-FAIL-DELIVERY:school:object:source-version:request-id | PERMISSION_DENIED / VERSION_CONFLICT |
+| RPT-ACT-RETRY-DELIVERY | Retry a Failed In-product Report Delivery | RPT-OBJ-DELIVERY | UPDATE |  | RPT-DELIVERY-F-STATE<br>RPT-DELIVERY-F-VERSION | FAILED → PENDING | ALLOW:SYSTEM — the verified report event updates only the target run or delivery<br>DENY:CURRENT_ACTOR — a user cannot invoke report state events directly | SYSTEM_EVENT | LOW | REQUIRED | RPT-ACT-RETRY-DELIVERY:school:object:source-version:request-id | PERMISSION_DENIED / VERSION_CONFLICT |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 报告中心、临时报表、订阅配置、快照历史、下钻分析、AI 生成报告 | 报告摘要、定期提醒、学生个人报告、班主任移动查看 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| RPT-OBJ-DEFINITION | ACTIVE | RPT-ACT-CREATE-AD-HOC-DEFINITION<br>RPT-ACT-CREATE-HOMEROOM-DEFINITION<br>RPT-ACT-CREATE-ACADEMIC-DEFINITION |  |
+| RPT-OBJ-SUBSCRIPTION | ACTIVE | RPT-ACT-CREATE-SUBSCRIPTION<br>RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION<br>RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION<br>RPT-ACT-UPDATE-SUBSCRIPTION | RPT-ACT-UPDATE-SUBSCRIPTION<br>RPT-ACT-PAUSE-SUBSCRIPTION<br>RPT-ACT-CANCEL-SUBSCRIPTION |
+| RPT-OBJ-SUBSCRIPTION | PAUSED | RPT-ACT-PAUSE-SUBSCRIPTION | RPT-ACT-UPDATE-SUBSCRIPTION<br>RPT-ACT-CANCEL-SUBSCRIPTION |
+| RPT-OBJ-SUBSCRIPTION | CANCELLED | RPT-ACT-CANCEL-SUBSCRIPTION |  |
+| RPT-OBJ-RUN | QUEUED | RPT-ACT-CREATE-AD-HOC-RUN<br>RPT-ACT-CREATE-RUN | RPT-ACT-START-RUN<br>RPT-ACT-BLOCK-RUN-PERMISSION |
+| RPT-OBJ-RUN | RUNNING | RPT-ACT-START-RUN | RPT-ACT-COMPLETE-RUN<br>RPT-ACT-FAIL-RUN |
+| RPT-OBJ-RUN | SUCCEEDED | RPT-ACT-COMPLETE-RUN |  |
+| RPT-OBJ-RUN | FAILED | RPT-ACT-FAIL-RUN |  |
+| RPT-OBJ-RUN | BLOCKED_PERMISSION | RPT-ACT-BLOCK-RUN-PERMISSION |  |
+| RPT-OBJ-SNAPSHOT | AVAILABLE | RPT-ACT-MATERIALIZE-SNAPSHOT |  |
+| RPT-OBJ-DELIVERY | PENDING | RPT-ACT-CREATE-DELIVERY<br>RPT-ACT-RETRY-DELIVERY | RPT-ACT-MARK-DELIVERED<br>RPT-ACT-FAIL-DELIVERY |
+| RPT-OBJ-DELIVERY | DELIVERED | RPT-ACT-MARK-DELIVERED |  |
+| RPT-OBJ-DELIVERY | FAILED | RPT-ACT-FAIL-DELIVERY | RPT-ACT-RETRY-DELIVERY |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-013 | Student Plan Execution to Report Snapshot and In-product Delivery | 1 | APP-001 / PLN-001 / RPT-001 / NOTI-001 | RPT-ACT-CREATE-AD-HOC-RUN<br>RPT-ACT-CREATE-RUN<br>RPT-ACT-START-RUN<br>RPT-ACT-COMPLETE-RUN<br>RPT-ACT-MATERIALIZE-SNAPSHOT<br>RPT-ACT-CREATE-DELIVERY | REPORT_RUN_SNAPSHOT_DELIVERY_AND_NOTIFICATION_OBJECT；{"strategy":"RECHECK_PERMISSION_REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_OUTPUTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","DELIVERY_FAILED","VERSION_CONFLICT"]}；{"strategy":"KEEP_SOURCE_EXECUTION_RUN_AND_SNAPSHOT_WHILE_RETRYING_DELIVERY_ONLY","description":"delivery or notification failure never rolls back student execution, plan, successful run, or immutable snapshot"}；{"strategy":"CREATE_A_NEW_RUN_FOR_NEW_SOURCE_VERSIONS","targets":["future report run","future report snapshot","in-product delivery retry"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RPT-F001 | 报告周期 | 单选下拉 | OPT-ENUM-014 | 是 | 临时/每日/每周/每月/自定义 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F002 | 时间范围 | 时间范围选择 | OPT-COM-014 | 是 | 不可越过授权和保留边界 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F003 | 班级 | 多选下拉 | OPT-COM-006 | 按角色 | 班主任本班，任课本学科班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F004 | 学科 | 多选下拉 | OPT-COM-007 | 按角色 | 班主任可全科，任课本学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F005 | 接收范围 | 多选下拉 | OPT-ENUM-015 | 定期报告必填 | 不得超过创建者授权 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F006 | 报告数据范围 | 范围预览 | OPT-RUN-008 | 确认前必看 | 运行时再次校验权限 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| RPT-PAGE-CENTER | Report Center and Subscription Management | WEB / APP | RPT-OBJ-DEFINITION<br>RPT-OBJ-SUBSCRIPTION | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE<br>RPT-DEFINITION-F-VERSION<br>RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE<br>RPT-SUBSCRIPTION-F-VERSION | RPT-ACT-CREATE-AD-HOC-DEFINITION<br>RPT-ACT-CREATE-HOMEROOM-DEFINITION<br>RPT-ACT-CREATE-ACADEMIC-DEFINITION<br>RPT-ACT-CREATE-SUBSCRIPTION<br>RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION<br>RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION<br>RPT-ACT-UPDATE-SUBSCRIPTION<br>RPT-ACT-PAUSE-SUBSCRIPTION<br>RPT-ACT-CANCEL-SUBSCRIPTION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| DRAFT | 定义中 |
-| ACTIVE | 生效 |
-| PAUSED | 暂停 |
-| RUNNING | 运行中 |
-| DELIVERED | 已生成 |
-| FAILED | 失败 |
-| CANCELLED | 已取消 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-ACT-CREATE-AD-HOC-DEFINITION-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-AD-HOC-DEFINITION | the actor meets the entry conditions for Create an Ad-hoc Report Definition | the actor requests Create an Ad-hoc Report Definition | Create an Ad-hoc Report Definition returns the accepted versioned result | ACTIVE | ALLOW |  |
+| RPT-ACT-CREATE-AD-HOC-DEFINITION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CREATE-AD-HOC-DEFINITION | PERMISSION_DENIED applies to Create an Ad-hoc Report Definition | the actor requests Create an Ad-hoc Report Definition | Create an Ad-hoc Report Definition returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CREATE-AD-HOC-DEFINITION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-CREATE-AD-HOC-DEFINITION | VALIDATION_FAILED applies to Create an Ad-hoc Report Definition | the actor requests Create an Ad-hoc Report Definition | Create an Ad-hoc Report Definition returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-CREATE-AD-HOC-DEFINITION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-AD-HOC-DEFINITION | VERSION_CONFLICT applies to Create an Ad-hoc Report Definition | the actor requests Create an Ad-hoc Report Definition | Create an Ad-hoc Report Definition returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CREATE-HOMEROOM-DEFINITION-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-HOMEROOM-DEFINITION | the actor meets the entry conditions for Create an Assigned-class Homeroom Aggregate Report Definition | the actor requests Create an Assigned-class Homeroom Aggregate Report Definition | Create an Assigned-class Homeroom Aggregate Report Definition returns the accepted versioned result | ACTIVE | ALLOW |  |
+| RPT-ACT-CREATE-HOMEROOM-DEFINITION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CREATE-HOMEROOM-DEFINITION | PERMISSION_DENIED applies to Create an Assigned-class Homeroom Aggregate Report Definition | the actor requests Create an Assigned-class Homeroom Aggregate Report Definition | Create an Assigned-class Homeroom Aggregate Report Definition returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CREATE-HOMEROOM-DEFINITION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-CREATE-HOMEROOM-DEFINITION | VALIDATION_FAILED applies to Create an Assigned-class Homeroom Aggregate Report Definition | the actor requests Create an Assigned-class Homeroom Aggregate Report Definition | Create an Assigned-class Homeroom Aggregate Report Definition returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-CREATE-HOMEROOM-DEFINITION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-HOMEROOM-DEFINITION | VERSION_CONFLICT applies to Create an Assigned-class Homeroom Aggregate Report Definition | the actor requests Create an Assigned-class Homeroom Aggregate Report Definition | Create an Assigned-class Homeroom Aggregate Report Definition returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CREATE-ACADEMIC-DEFINITION-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-ACADEMIC-DEFINITION | the actor meets the entry conditions for Create an Authorized Academic Aggregate Report Definition | the actor requests Create an Authorized Academic Aggregate Report Definition | Create an Authorized Academic Aggregate Report Definition returns the accepted versioned result | ACTIVE | ALLOW |  |
+| RPT-ACT-CREATE-ACADEMIC-DEFINITION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CREATE-ACADEMIC-DEFINITION | PERMISSION_DENIED applies to Create an Authorized Academic Aggregate Report Definition | the actor requests Create an Authorized Academic Aggregate Report Definition | Create an Authorized Academic Aggregate Report Definition returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CREATE-ACADEMIC-DEFINITION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-CREATE-ACADEMIC-DEFINITION | VALIDATION_FAILED applies to Create an Authorized Academic Aggregate Report Definition | the actor requests Create an Authorized Academic Aggregate Report Definition | Create an Authorized Academic Aggregate Report Definition returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-CREATE-ACADEMIC-DEFINITION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-ACADEMIC-DEFINITION | VERSION_CONFLICT applies to Create an Authorized Academic Aggregate Report Definition | the actor requests Create an Authorized Academic Aggregate Report Definition | Create an Authorized Academic Aggregate Report Definition returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CREATE-SUBSCRIPTION-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-SUBSCRIPTION | the actor meets the entry conditions for Create an Assigned-subject Report Subscription | the actor requests Create an Assigned-subject Report Subscription | Create an Assigned-subject Report Subscription returns the accepted versioned result | ACTIVE | ALLOW |  |
+| RPT-ACT-CREATE-SUBSCRIPTION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CREATE-SUBSCRIPTION | PERMISSION_DENIED applies to Create an Assigned-subject Report Subscription | the actor requests Create an Assigned-subject Report Subscription | Create an Assigned-subject Report Subscription returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CREATE-SUBSCRIPTION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-CREATE-SUBSCRIPTION | VALIDATION_FAILED applies to Create an Assigned-subject Report Subscription | the actor requests Create an Assigned-subject Report Subscription | Create an Assigned-subject Report Subscription returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-CREATE-SUBSCRIPTION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-SUBSCRIPTION | VERSION_CONFLICT applies to Create an Assigned-subject Report Subscription | the actor requests Create an Assigned-subject Report Subscription | Create an Assigned-subject Report Subscription returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | the actor meets the entry conditions for Create an Assigned-class Homeroom Aggregate Report Subscription | the actor requests Create an Assigned-class Homeroom Aggregate Report Subscription | Create an Assigned-class Homeroom Aggregate Report Subscription returns the accepted versioned result | ACTIVE | ALLOW |  |
+| RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | PERMISSION_DENIED applies to Create an Assigned-class Homeroom Aggregate Report Subscription | the actor requests Create an Assigned-class Homeroom Aggregate Report Subscription | Create an Assigned-class Homeroom Aggregate Report Subscription returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | VALIDATION_FAILED applies to Create an Assigned-class Homeroom Aggregate Report Subscription | the actor requests Create an Assigned-class Homeroom Aggregate Report Subscription | Create an Assigned-class Homeroom Aggregate Report Subscription returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | VERSION_CONFLICT applies to Create an Assigned-class Homeroom Aggregate Report Subscription | the actor requests Create an Assigned-class Homeroom Aggregate Report Subscription | Create an Assigned-class Homeroom Aggregate Report Subscription returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | the actor meets the entry conditions for Create an Authorized Academic Aggregate Report Subscription | the actor requests Create an Authorized Academic Aggregate Report Subscription | Create an Authorized Academic Aggregate Report Subscription returns the accepted versioned result | ACTIVE | ALLOW |  |
+| RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | PERMISSION_DENIED applies to Create an Authorized Academic Aggregate Report Subscription | the actor requests Create an Authorized Academic Aggregate Report Subscription | Create an Authorized Academic Aggregate Report Subscription returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | VALIDATION_FAILED applies to Create an Authorized Academic Aggregate Report Subscription | the actor requests Create an Authorized Academic Aggregate Report Subscription | Create an Authorized Academic Aggregate Report Subscription returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | VERSION_CONFLICT applies to Create an Authorized Academic Aggregate Report Subscription | the actor requests Create an Authorized Academic Aggregate Report Subscription | Create an Authorized Academic Aggregate Report Subscription returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-UPDATE-SUBSCRIPTION-SCN-SUCCESS | SUCCESS | RPT-ACT-UPDATE-SUBSCRIPTION | the actor meets the entry conditions for Update a Report Subscription Schedule | the actor requests Update a Report Subscription Schedule | Update a Report Subscription Schedule returns the accepted versioned result | ACTIVE | ALLOW |  |
+| RPT-ACT-UPDATE-SUBSCRIPTION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-UPDATE-SUBSCRIPTION | PERMISSION_DENIED applies to Update a Report Subscription Schedule | the actor requests Update a Report Subscription Schedule | Update a Report Subscription Schedule returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-UPDATE-SUBSCRIPTION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-UPDATE-SUBSCRIPTION | VALIDATION_FAILED applies to Update a Report Subscription Schedule | the actor requests Update a Report Subscription Schedule | Update a Report Subscription Schedule returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-UPDATE-SUBSCRIPTION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-UPDATE-SUBSCRIPTION | VERSION_CONFLICT applies to Update a Report Subscription Schedule | the actor requests Update a Report Subscription Schedule | Update a Report Subscription Schedule returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-PAUSE-SUBSCRIPTION-SCN-SUCCESS | SUCCESS | RPT-ACT-PAUSE-SUBSCRIPTION | the actor meets the entry conditions for Pause a Report Subscription | the actor requests Pause a Report Subscription | Pause a Report Subscription returns the accepted versioned result | PAUSED | ALLOW |  |
+| RPT-ACT-PAUSE-SUBSCRIPTION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-PAUSE-SUBSCRIPTION | PERMISSION_DENIED applies to Pause a Report Subscription | the actor requests Pause a Report Subscription | Pause a Report Subscription returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-PAUSE-SUBSCRIPTION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-PAUSE-SUBSCRIPTION | VALIDATION_FAILED applies to Pause a Report Subscription | the actor requests Pause a Report Subscription | Pause a Report Subscription returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-PAUSE-SUBSCRIPTION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-PAUSE-SUBSCRIPTION | VERSION_CONFLICT applies to Pause a Report Subscription | the actor requests Pause a Report Subscription | Pause a Report Subscription returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CANCEL-SUBSCRIPTION-SCN-SUCCESS | SUCCESS | RPT-ACT-CANCEL-SUBSCRIPTION | the actor meets the entry conditions for Cancel a Report Subscription | the actor requests Cancel a Report Subscription | Cancel a Report Subscription returns the accepted versioned result | CANCELLED | ALLOW |  |
+| RPT-ACT-CANCEL-SUBSCRIPTION-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CANCEL-SUBSCRIPTION | PERMISSION_DENIED applies to Cancel a Report Subscription | the actor requests Cancel a Report Subscription | Cancel a Report Subscription returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CANCEL-SUBSCRIPTION-SCN-VALIDATION_FAILED | FAILURE | RPT-ACT-CANCEL-SUBSCRIPTION | VALIDATION_FAILED applies to Cancel a Report Subscription | the actor requests Cancel a Report Subscription | Cancel a Report Subscription returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| RPT-ACT-CANCEL-SUBSCRIPTION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CANCEL-SUBSCRIPTION | VERSION_CONFLICT applies to Cancel a Report Subscription | the actor requests Cancel a Report Subscription | Cancel a Report Subscription returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CANCEL-SUBSCRIPTION-SCN-AUDIT_FAILED | FAILURE | RPT-ACT-CANCEL-SUBSCRIPTION | AUDIT_FAILED applies to Cancel a Report Subscription | the actor requests Cancel a Report Subscription | Cancel a Report Subscription returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| RPT-ACT-CREATE-AD-HOC-RUN-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-AD-HOC-RUN | the actor meets the entry conditions for Create an Ad-hoc Permission-rechecked Report Run | the actor requests Create an Ad-hoc Permission-rechecked Report Run | Create an Ad-hoc Permission-rechecked Report Run returns the accepted versioned result | QUEUED | ALLOW |  |
+| RPT-ACT-CREATE-AD-HOC-RUN-SCN-SOURCE_VERSION_STALE | FAILURE | RPT-ACT-CREATE-AD-HOC-RUN | SOURCE_VERSION_STALE applies to Create an Ad-hoc Permission-rechecked Report Run | the actor requests Create an Ad-hoc Permission-rechecked Report Run | Create an Ad-hoc Permission-rechecked Report Run returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| RPT-ACT-CREATE-AD-HOC-RUN-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-AD-HOC-RUN | VERSION_CONFLICT applies to Create an Ad-hoc Permission-rechecked Report Run | the actor requests Create an Ad-hoc Permission-rechecked Report Run | Create an Ad-hoc Permission-rechecked Report Run returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CREATE-RUN-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-RUN | the actor meets the entry conditions for Create a Periodic Permission-rechecked Report Run | the actor requests Create a Periodic Permission-rechecked Report Run | Create a Periodic Permission-rechecked Report Run returns the accepted versioned result | QUEUED | ALLOW |  |
+| RPT-ACT-CREATE-RUN-SCN-SOURCE_VERSION_STALE | FAILURE | RPT-ACT-CREATE-RUN | SOURCE_VERSION_STALE applies to Create a Periodic Permission-rechecked Report Run | the actor requests Create a Periodic Permission-rechecked Report Run | Create a Periodic Permission-rechecked Report Run returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| RPT-ACT-CREATE-RUN-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-RUN | VERSION_CONFLICT applies to Create a Periodic Permission-rechecked Report Run | the actor requests Create a Periodic Permission-rechecked Report Run | Create a Periodic Permission-rechecked Report Run returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-START-RUN-SCN-SUCCESS | SUCCESS | RPT-ACT-START-RUN | the actor meets the entry conditions for Start a Permission-cleared Report Run | the actor requests Start a Permission-cleared Report Run | Start a Permission-cleared Report Run returns the accepted versioned result | RUNNING | ALLOW |  |
+| RPT-ACT-START-RUN-SCN-SOURCE_VERSION_STALE | FAILURE | RPT-ACT-START-RUN | SOURCE_VERSION_STALE applies to Start a Permission-cleared Report Run | the actor requests Start a Permission-cleared Report Run | Start a Permission-cleared Report Run returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| RPT-ACT-START-RUN-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-START-RUN | VERSION_CONFLICT applies to Start a Permission-cleared Report Run | the actor requests Start a Permission-cleared Report Run | Start a Permission-cleared Report Run returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-COMPLETE-RUN-SCN-SUCCESS | SUCCESS | RPT-ACT-COMPLETE-RUN | the actor meets the entry conditions for Complete a Report Run | the actor requests Complete a Report Run | Complete a Report Run returns the accepted versioned result | SUCCEEDED | ALLOW |  |
+| RPT-ACT-COMPLETE-RUN-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-COMPLETE-RUN | PERMISSION_DENIED applies to Complete a Report Run | the actor requests Complete a Report Run | Complete a Report Run returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-COMPLETE-RUN-SCN-SOURCE_VERSION_STALE | FAILURE | RPT-ACT-COMPLETE-RUN | SOURCE_VERSION_STALE applies to Complete a Report Run | the actor requests Complete a Report Run | Complete a Report Run returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| RPT-ACT-COMPLETE-RUN-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-COMPLETE-RUN | VERSION_CONFLICT applies to Complete a Report Run | the actor requests Complete a Report Run | Complete a Report Run returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-FAIL-RUN-SCN-SUCCESS | SUCCESS | RPT-ACT-FAIL-RUN | the actor meets the entry conditions for Record a Failed Report Run | the actor requests Record a Failed Report Run | Record a Failed Report Run returns the accepted versioned result | FAILED | ALLOW |  |
+| RPT-ACT-FAIL-RUN-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-FAIL-RUN | PERMISSION_DENIED applies to Record a Failed Report Run | the actor requests Record a Failed Report Run | Record a Failed Report Run returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-FAIL-RUN-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-FAIL-RUN | VERSION_CONFLICT applies to Record a Failed Report Run | the actor requests Record a Failed Report Run | Record a Failed Report Run returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-BLOCK-RUN-PERMISSION-SCN-SUCCESS | SUCCESS | RPT-ACT-BLOCK-RUN-PERMISSION | the actor meets the entry conditions for Block a Report Run after Permission Recheck Failure | the actor requests Block a Report Run after Permission Recheck Failure | Block a Report Run after Permission Recheck Failure returns the accepted versioned result | BLOCKED_PERMISSION | ALLOW |  |
+| RPT-ACT-BLOCK-RUN-PERMISSION-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-BLOCK-RUN-PERMISSION | VERSION_CONFLICT applies to Block a Report Run after Permission Recheck Failure | the actor requests Block a Report Run after Permission Recheck Failure | Block a Report Run after Permission Recheck Failure returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-MATERIALIZE-SNAPSHOT-SCN-SUCCESS | SUCCESS | RPT-ACT-MATERIALIZE-SNAPSHOT | the actor meets the entry conditions for Materialize an Immutable Report Snapshot | the actor requests Materialize an Immutable Report Snapshot | Materialize an Immutable Report Snapshot returns the accepted versioned result | AVAILABLE | ALLOW |  |
+| RPT-ACT-MATERIALIZE-SNAPSHOT-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-MATERIALIZE-SNAPSHOT | PERMISSION_DENIED applies to Materialize an Immutable Report Snapshot | the actor requests Materialize an Immutable Report Snapshot | Materialize an Immutable Report Snapshot returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-MATERIALIZE-SNAPSHOT-SCN-SOURCE_VERSION_STALE | FAILURE | RPT-ACT-MATERIALIZE-SNAPSHOT | SOURCE_VERSION_STALE applies to Materialize an Immutable Report Snapshot | the actor requests Materialize an Immutable Report Snapshot | Materialize an Immutable Report Snapshot returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| RPT-ACT-MATERIALIZE-SNAPSHOT-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-MATERIALIZE-SNAPSHOT | VERSION_CONFLICT applies to Materialize an Immutable Report Snapshot | the actor requests Materialize an Immutable Report Snapshot | Materialize an Immutable Report Snapshot returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-CREATE-DELIVERY-SCN-SUCCESS | SUCCESS | RPT-ACT-CREATE-DELIVERY | the actor meets the entry conditions for Create an In-product Report Delivery | the actor requests Create an In-product Report Delivery | Create an In-product Report Delivery returns the accepted versioned result | PENDING | ALLOW |  |
+| RPT-ACT-CREATE-DELIVERY-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-CREATE-DELIVERY | PERMISSION_DENIED applies to Create an In-product Report Delivery | the actor requests Create an In-product Report Delivery | Create an In-product Report Delivery returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-CREATE-DELIVERY-SCN-DELIVERY_FAILED | FAILURE | RPT-ACT-CREATE-DELIVERY | DELIVERY_FAILED applies to Create an In-product Report Delivery | the actor requests Create an In-product Report Delivery | Create an In-product Report Delivery returns DELIVERY_FAILED without hidden writes | UNCHANGED | DENY | DELIVERY_FAILED |
+| RPT-ACT-CREATE-DELIVERY-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-CREATE-DELIVERY | VERSION_CONFLICT applies to Create an In-product Report Delivery | the actor requests Create an In-product Report Delivery | Create an In-product Report Delivery returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-MARK-DELIVERED-SCN-SUCCESS | SUCCESS | RPT-ACT-MARK-DELIVERED | the actor meets the entry conditions for Record a Delivered In-product Report | the actor requests Record a Delivered In-product Report | Record a Delivered In-product Report returns the accepted versioned result | DELIVERED | ALLOW |  |
+| RPT-ACT-MARK-DELIVERED-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-MARK-DELIVERED | PERMISSION_DENIED applies to Record a Delivered In-product Report | the actor requests Record a Delivered In-product Report | Record a Delivered In-product Report returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-MARK-DELIVERED-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-MARK-DELIVERED | VERSION_CONFLICT applies to Record a Delivered In-product Report | the actor requests Record a Delivered In-product Report | Record a Delivered In-product Report returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-FAIL-DELIVERY-SCN-SUCCESS | SUCCESS | RPT-ACT-FAIL-DELIVERY | the actor meets the entry conditions for Record a Failed In-product Report Delivery | the actor requests Record a Failed In-product Report Delivery | Record a Failed In-product Report Delivery returns the accepted versioned result | FAILED | ALLOW |  |
+| RPT-ACT-FAIL-DELIVERY-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-FAIL-DELIVERY | PERMISSION_DENIED applies to Record a Failed In-product Report Delivery | the actor requests Record a Failed In-product Report Delivery | Record a Failed In-product Report Delivery returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-FAIL-DELIVERY-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-FAIL-DELIVERY | VERSION_CONFLICT applies to Record a Failed In-product Report Delivery | the actor requests Record a Failed In-product Report Delivery | Record a Failed In-product Report Delivery returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| RPT-ACT-RETRY-DELIVERY-SCN-SUCCESS | SUCCESS | RPT-ACT-RETRY-DELIVERY | the actor meets the entry conditions for Retry a Failed In-product Report Delivery | the actor requests Retry a Failed In-product Report Delivery | Retry a Failed In-product Report Delivery returns the accepted versioned result | PENDING | ALLOW |  |
+| RPT-ACT-RETRY-DELIVERY-SCN-PERMISSION_DENIED | FAILURE | RPT-ACT-RETRY-DELIVERY | PERMISSION_DENIED applies to Retry a Failed In-product Report Delivery | the actor requests Retry a Failed In-product Report Delivery | Retry a Failed In-product Report Delivery returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| RPT-ACT-RETRY-DELIVERY-SCN-VERSION_CONFLICT | FAILURE | RPT-ACT-RETRY-DELIVERY | VERSION_CONFLICT applies to Retry a Failed In-product Report Delivery | the actor requests Retry a Failed In-product Report Delivery | Retry a Failed In-product Report Delivery returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 用户通过报告中心或 AI 对话定义报告目标。
-2. 系统展示周期、时间范围、学生范围、学科范围、指标和接收角色。
-3. 定期报告按计划生成快照并站内通知。
-4. 报告结果可下钻源事实，不能作为新成绩事实。
-
-关联 Flow: `DF-016`、`DF-018`、`DF-015`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RPT-FR-01 | 对象查询与范围筛选 | RPT-F001、RPT-F002、RPT-F003、RPT-F004、RPT-F005、RPT-F006 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | RPT-AC-01 |
-| RPT-FR-02 | 详情查看与版本追踪 | DAT-RPT-01、DAT-RPT-02、DAT-RPT-03、DAT-RPT-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | RPT-AC-02 |
-| RPT-FR-03 | 创建/修改/确认主动作 | RPT-F001、RPT-F002、RPT-F003、RPT-F004、RPT-F005、RPT-F006 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | RPT-AC-03 |
-| RPT-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | RPT-AC-04 |
-| RPT-FR-05 | 审计、通知与下游失效 | DF-016、DF-018、DF-015 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | RPT-AC-05 |
+| AI-TASK-AD-HOC-REPORT | Create a temporary report of this week's submission rate | AD_HOC_REPORT | RPT-ACT-CREATE-AD-HOC-DEFINITION | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-HOMEROOM-AD-HOC-REPORT | Create a temporary all-subject aggregate report for my homeroom class | AD_HOC_REPORT | RPT-ACT-CREATE-HOMEROOM-DEFINITION | DUTY-HOMEROOM | {"mode":"DUTY","dutyRef":"DUTY-HOMEROOM"} | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-ACADEMIC-AD-HOC-REPORT | Create an aggregate report for my currently authorized academic scope | AD_HOC_REPORT | RPT-ACT-CREATE-ACADEMIC-DEFINITION | ROLE-ACADEMIC | {"mode":"ROLE","roleRef":"ROLE-ACADEMIC"} | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-CREATE-REPORT-SUBSCRIPTION | Create my assigned-subject weekly report subscription | PERIODIC | RPT-ACT-CREATE-SUBSCRIPTION | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-UPDATE-REPORT-SUBSCRIPTION | Update my assigned-subject weekly report subscription | PERIODIC | RPT-ACT-UPDATE-SUBSCRIPTION | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-PAUSE-REPORT-SUBSCRIPTION | Pause my assigned-subject weekly report subscription | PERIODIC | RPT-ACT-PAUSE-SUBSCRIPTION | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | RPT-SUBSCRIPTION-F-ID | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-CANCEL-REPORT-SUBSCRIPTION | Cancel my assigned-subject weekly report subscription | PERIODIC | RPT-ACT-CANCEL-SUBSCRIPTION | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | RPT-SUBSCRIPTION-F-ID | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-CREATE-HOMEROOM-REPORT-SUBSCRIPTION | Create my assigned-class homeroom aggregate weekly report subscription | PERIODIC | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | DUTY-HOMEROOM | {"mode":"DUTY","dutyRef":"DUTY-HOMEROOM"} | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-UPDATE-HOMEROOM-REPORT-SUBSCRIPTION | Update my assigned-class homeroom aggregate weekly report subscription | PERIODIC | RPT-ACT-UPDATE-SUBSCRIPTION | DUTY-HOMEROOM | {"mode":"DUTY","dutyRef":"DUTY-HOMEROOM"} | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-PAUSE-HOMEROOM-REPORT-SUBSCRIPTION | Pause my assigned-class homeroom aggregate weekly report subscription | PERIODIC | RPT-ACT-PAUSE-SUBSCRIPTION | DUTY-HOMEROOM | {"mode":"DUTY","dutyRef":"DUTY-HOMEROOM"} | RPT-SUBSCRIPTION-F-ID | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-CANCEL-HOMEROOM-REPORT-SUBSCRIPTION | Cancel my assigned-class homeroom aggregate weekly report subscription | PERIODIC | RPT-ACT-CANCEL-SUBSCRIPTION | DUTY-HOMEROOM | {"mode":"DUTY","dutyRef":"DUTY-HOMEROOM"} | RPT-SUBSCRIPTION-F-ID | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-CREATE-ACADEMIC-REPORT-SUBSCRIPTION | Create my authorized academic aggregate weekly report subscription | PERIODIC | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | ROLE-ACADEMIC | {"mode":"ROLE","roleRef":"ROLE-ACADEMIC"} | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-UPDATE-ACADEMIC-REPORT-SUBSCRIPTION | Update my authorized academic aggregate weekly report subscription | PERIODIC | RPT-ACT-UPDATE-SUBSCRIPTION | ROLE-ACADEMIC | {"mode":"ROLE","roleRef":"ROLE-ACADEMIC"} | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-PAUSE-ACADEMIC-REPORT-SUBSCRIPTION | Pause my authorized academic aggregate weekly report subscription | PERIODIC | RPT-ACT-PAUSE-SUBSCRIPTION | ROLE-ACADEMIC | {"mode":"ROLE","roleRef":"ROLE-ACADEMIC"} | RPT-SUBSCRIPTION-F-ID | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-CANCEL-ACADEMIC-REPORT-SUBSCRIPTION | Cancel my authorized academic aggregate weekly report subscription | PERIODIC | RPT-ACT-CANCEL-SUBSCRIPTION | ROLE-ACADEMIC | {"mode":"ROLE","roleRef":"ROLE-ACADEMIC"} | RPT-SUBSCRIPTION-F-ID | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| RPT-AC-01 | 临时报表可另存为报告订阅。 |
-| RPT-AC-02 | 每日学生学习画像可按班级、学科、时间段生成。 |
-| RPT-AC-03 | 订阅运行时权限失效则该对象跳过并记录原因。 |
-| RPT-AC-04 | 第一阶段只做站内报告与通知。 |
-| RPT-AC-05 | 报告快照必须保存数据时间和源版本。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-016`、`DF-018`、`DF-015`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

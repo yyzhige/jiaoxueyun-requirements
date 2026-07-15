@@ -1,138 +1,235 @@
-# DGV-001 数据治理、生命周期与 AI 数据使用 PRD v2.0
+# DGV-001 Governance, lifecycle, and AI data use PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学校管理员、教务、技术支持 |
-| 关联线框 | [04-data-governance-ai-usage-wireframe.zh-CN.md](../05-wireframe-contracts/04-data-governance-ai-usage-wireframe.zh-CN.md) |
+| 目标 | Make school-owned retention, sensitive export, and AI data-use decisions explicit and auditable. |
+| 基线决策 | `BASE-001`、`BASE-006` |
+| NFR | `NFR-008`、`NFR-009` |
+| 进入条件 | the school administrator controls activation governance；data categories and sensitivities are registered |
+| 退出条件 | retention periods have explicit school-owned values；sensitive export and AI use remain blocked while retention is unset |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-明确学校为数据控制与治理主体，限制学生数据保留、导出、删除、AI 传输和第三方使用边界。
+- 本模块权威拥有 4 个对象、14 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-DGV-01 | Data Governance Policy | 学校管理员 | 学校治理策略 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-| DAT-DGV-02 | Data Retention Rule | 学校管理员 | 数据保留规则 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-| DAT-DGV-03 | AI Data Use Rule | 学校管理员 | AI 数据使用规则 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-| DAT-DGV-04 | Export Request | 申请人 | 导出请求 | 申请人 | 学校管理员 | 学校管理员 | S4 敏感导出数据 |
+### DGV-OBJ-POLICY Data Governance Policy
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_DATA_GOVERNANCE | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-001 | S4 | AUTHORIZED | DRAFT / ACTIVE / SUPERSEDED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DGV-POLICY-F-ID | Governance Policy ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-POLICY-F-SOURCE-REF | Governance Policy Source Reference | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-POLICY-F-SOURCE-VERSION | Governance Policy Source Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-POLICY-F-SCHOOL-ID | Governed School ID | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-POLICY-F-VERSION | Governance Policy Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-POLICY-F-EXPLANATION | Data Use Explanation | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 学校管理员、教务、技术支持
-- 解决问题: 明确学校为数据控制与治理主体，限制学生数据保留、导出、删除、AI 传输和第三方使用边界。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### DGV-OBJ-RETENTION Data Retention Rule
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_RETENTION_CONFIGURATION | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-001 | S4 | NO_DIRECT_READ | UNSET / ACTIVE / SUPERSEDED |
 
-- DAT-DGV-01 Data Governance Policy
-- DAT-DGV-02 Data Retention Rule
-- DAT-DGV-03 AI Data Use Rule
-- DAT-DGV-04 Export Request
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DGV-RETENTION-F-ID | Retention Rule ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-RETENTION-F-CATEGORY | Data Category | STRING | 是 | OPTION_SET: OPT-ENUM-044 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-RETENTION-F-PERIOD | School-owned Retention Period | DURATION | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-RETENTION-F-ACTIVATED-BY | Activated By School Administrator | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-RETENTION-F-STATUS | Retention Configuration Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### DGV-OBJ-AI-RULE AI Data Use Rule
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_AI_DATA_USE | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-001 | S4 | NO_DIRECT_READ | BLOCKED_UNSET_RETENTION / ACTIVE / DISABLED / SUPERSEDED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DGV-AI-F-ID | AI Data Use Rule ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-AI-F-DATA-SCOPE | Allowed AI Data Scope | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-AI-F-PURPOSE | Allowed AI Purpose | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-AI-F-MODEL-USE | Model Training Use | STRING | 是 | OPTION_SET: OPT-ENUM-045 | EDITABLE | AUTHORIZED_SCOPE | — | must explicitly deny model training unless separately approved | retain accepted values with source and version metadata |
+| DGV-AI-F-STATUS | AI Data Use Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+### DGV-OBJ-EXPORT Export Request
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EXPORT_REQUESTER_AND_SCOPED_DATA | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-008 | S4 | NO_DIRECT_READ | REQUESTED / APPROVED / DENIED / GENERATING / AVAILABLE / EXPIRED / FAILED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DGV-EXPORT-F-ID | Export Request ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-EXPORT-F-SCOPE | Export Object Scope | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-EXPORT-F-PURPOSE | Export Purpose | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-EXPORT-F-APPROVER | Export Approver ID | STRING | required before APPROVED；状态=APPROVED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-EXPORT-F-DECISION-REASON | Export Decision Reason | TEXT | required for APPROVED or DENIED；状态=APPROVED/DENIED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-EXPORT-F-EXPIRY | Export File Expiry | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-EXPORT-F-RESULT | Export Result | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| DGV-EXPORT-F-AUDIT-REF | Export Audit Reference | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| DGV-REL-RETENTION-POLICY | DGV-OBJ-RETENTION | IMPLEMENTS | DGV-OBJ-POLICY | MANY_TO_ONE | SAME_SCHOOL | block sensitive use until the new governance version is activated |
+| DGV-REL-AI-RETENTION | DGV-OBJ-AI-RULE | REQUIRES | DGV-OBJ-RETENTION | MANY_TO_ONE | SAME_SCHOOL | disable AI data use immediately |
+| DGV-REL-EXPORT-POLICY | DGV-OBJ-EXPORT | AUTHORIZED_BY | DGV-OBJ-POLICY | MANY_TO_ONE | SAME_SCHOOL | deny ungenerated requests and preserve completed request audit facts |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DGV-ACT-SYNC-POLICY | Sync a Versioned Data Governance Policy Snapshot | DGV-OBJ-POLICY | CREATE | DGV-POLICY-F-SOURCE-REF<br>DGV-POLICY-F-SOURCE-VERSION<br>DGV-POLICY-F-SCHOOL-ID<br>DGV-POLICY-F-EXPLANATION | DGV-POLICY-F-ID<br>DGV-POLICY-F-SOURCE-REF<br>DGV-POLICY-F-SOURCE-VERSION<br>DGV-POLICY-F-VERSION | CREATE（成功状态由  定义） | ALLOW:SYSTEM — the system accepts only a registered versioned school-governance snapshot<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot synthesize or replace a school-governance snapshot | SYSTEM_EVENT | HIGH | REQUIRED | DGV-ACT-SYNC-POLICY:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-VIEW-EXPLANATION | View School Data Use Explanation | DGV-OBJ-POLICY | READ | DGV-POLICY-F-SCHOOL-ID | DGV-POLICY-F-EXPLANATION<br>DGV-POLICY-F-VERSION | UNCHANGED | ALLOW:CURRENT_ACTOR — school members may view the active school explanation<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot view student-detail governance data without school authorization | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| DGV-ACT-CONFIGURE-RETENTION | Configure School Activation Retention Periods | DGV-OBJ-RETENTION | UPDATE | DGV-RETENTION-F-CATEGORY<br>DGV-RETENTION-F-PERIOD | DGV-RETENTION-F-ACTIVATED-BY<br>DGV-RETENTION-F-STATUS | UNSET → ACTIVE | ALLOW:ROLE-SCHOOL-ADMIN — school administrator owns activation governance and explicit export authorization<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail export or AI use access without school authorization | WEB | HIGH | REQUIRED | DGV-ACT-CONFIGURE-RETENTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-SUPERSEDE-RETENTION | Supersede an Active Retention Configuration | DGV-OBJ-RETENTION | UPDATE | DGV-RETENTION-F-CATEGORY | DGV-RETENTION-F-STATUS | ACTIVE → SUPERSEDED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator owns activation governance and explicit export authorization<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail export or AI use access without school authorization | WEB | HIGH | REQUIRED | DGV-ACT-SUPERSEDE-RETENTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-CONFIGURE-AI-USE | Configure AI Data Use Boundary | DGV-OBJ-AI-RULE | UPDATE | DGV-AI-F-DATA-SCOPE<br>DGV-AI-F-PURPOSE<br>DGV-AI-F-MODEL-USE | DGV-AI-F-STATUS | BLOCKED_UNSET_RETENTION → ACTIVE | ALLOW:ROLE-SCHOOL-ADMIN — school administrator owns activation governance and explicit export authorization<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail export or AI use access without school authorization | WEB | HIGH | REQUIRED | DGV-ACT-CONFIGURE-AI-USE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-DISABLE-AI-USE | Disable an Active AI Data Use Rule | DGV-OBJ-AI-RULE | UPDATE | DGV-AI-F-ID | DGV-AI-F-STATUS | ACTIVE → DISABLED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator owns activation governance and explicit export authorization<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail export or AI use access without school authorization | WEB | HIGH | REQUIRED | DGV-ACT-DISABLE-AI-USE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-SUPERSEDE-AI-RULE | Supersede an AI Data Use Rule | DGV-OBJ-AI-RULE | UPDATE | DGV-AI-F-ID | DGV-AI-F-STATUS | ACTIVE / DISABLED → SUPERSEDED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator owns activation governance and explicit export authorization<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail export or AI use access without school authorization | WEB | HIGH | REQUIRED | DGV-ACT-SUPERSEDE-AI-RULE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-REQUEST-EXPORT | Request a Purpose-bound Data Export | DGV-OBJ-EXPORT | CREATE | DGV-EXPORT-F-SCOPE<br>DGV-EXPORT-F-PURPOSE<br>DGV-EXPORT-F-EXPIRY | DGV-EXPORT-F-ID<br>DGV-EXPORT-F-RESULT<br>DGV-EXPORT-F-AUDIT-REF | CREATE（成功状态由 DGV-ACT-REQUEST-EXPORT-SCN-SUCCESS 定义） | ALLOW:CURRENT_ACTOR — requester may request only an authorized school object scope and purpose<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot request student-detail export by default | WEB | HIGH | REQUIRED | DGV-ACT-REQUEST-EXPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-APPROVE-EXPORT | Approve a Sensitive Export Request | DGV-OBJ-EXPORT | UPDATE | DGV-EXPORT-F-ID<br>DGV-EXPORT-F-APPROVER<br>DGV-EXPORT-F-DECISION-REASON | DGV-EXPORT-F-RESULT<br>DGV-EXPORT-F-AUDIT-REF | REQUESTED → APPROVED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator owns activation governance and explicit export authorization<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail export or AI use access without school authorization | WEB | HIGH | REQUIRED | DGV-ACT-APPROVE-EXPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-DENY-EXPORT | Deny a Sensitive Export Request | DGV-OBJ-EXPORT | UPDATE | DGV-EXPORT-F-ID<br>DGV-EXPORT-F-APPROVER<br>DGV-EXPORT-F-DECISION-REASON | DGV-EXPORT-F-RESULT<br>DGV-EXPORT-F-AUDIT-REF | REQUESTED → DENIED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator owns activation governance and explicit export authorization<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail export or AI use access without school authorization | WEB | HIGH | REQUIRED | DGV-ACT-DENY-EXPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-GENERATE-EXPORT | Start an Approved Expiring Export | DGV-OBJ-EXPORT | UPDATE | DGV-EXPORT-F-ID<br>DGV-EXPORT-F-SCOPE<br>DGV-EXPORT-F-EXPIRY | DGV-EXPORT-F-RESULT<br>DGV-EXPORT-F-AUDIT-REF | APPROVED → GENERATING | ALLOW:SYSTEM — system generates only the approved immutable scope and expiry<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot expand or regenerate student detail outside approval | SYSTEM_EVENT | HIGH | REQUIRED | DGV-ACT-GENERATE-EXPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-COMPLETE-EXPORT | Complete an Expiring Export | DGV-OBJ-EXPORT | UPDATE | DGV-EXPORT-F-ID | DGV-EXPORT-F-RESULT<br>DGV-EXPORT-F-AUDIT-REF | GENERATING → AVAILABLE | ALLOW:SYSTEM — the system exposes only the completed approved export<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot mark an incomplete export available | SYSTEM_EVENT | HIGH | REQUIRED | DGV-ACT-COMPLETE-EXPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-FAIL-EXPORT | Record a Failed Export Generation | DGV-OBJ-EXPORT | UPDATE | DGV-EXPORT-F-ID | DGV-EXPORT-F-RESULT<br>DGV-EXPORT-F-AUDIT-REF | GENERATING → FAILED | ALLOW:SYSTEM — the system records a failed generation without widening the approved scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot replace a failed export with unapproved data | SYSTEM_EVENT | HIGH | REQUIRED | DGV-ACT-FAIL-EXPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| DGV-ACT-EXPIRE-EXPORT | Expire and Remove an Export File | DGV-OBJ-EXPORT | UPDATE | DGV-EXPORT-F-EXPIRY | DGV-EXPORT-F-RESULT | AVAILABLE → EXPIRED | ALLOW:SYSTEM — system expires the file at its explicit deadline<br>DENY:CURRENT_ACTOR — a user cannot extend an export file without a new request | SYSTEM_EVENT | HIGH | REQUIRED | DGV-ACT-EXPIRE-EXPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 治理策略配置、保留规则、AI 数据使用边界、导出审批、归档查询 | 查看与本人相关的数据说明、授权提示、导出结果通知 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| DGV-OBJ-POLICY | DRAFT | DGV-ACT-SYNC-POLICY |  |
+| DGV-OBJ-POLICY | ACTIVE | DGV-ACT-SYNC-POLICY |  |
+| DGV-OBJ-POLICY | SUPERSEDED | DGV-ACT-SYNC-POLICY |  |
+| DGV-OBJ-RETENTION | UNSET |  | DGV-ACT-CONFIGURE-RETENTION |
+| DGV-OBJ-RETENTION | ACTIVE | DGV-ACT-CONFIGURE-RETENTION | DGV-ACT-SUPERSEDE-RETENTION |
+| DGV-OBJ-RETENTION | SUPERSEDED | DGV-ACT-SUPERSEDE-RETENTION |  |
+| DGV-OBJ-AI-RULE | BLOCKED_UNSET_RETENTION | DGV-ACT-CONFIGURE-AI-USE | DGV-ACT-CONFIGURE-AI-USE |
+| DGV-OBJ-AI-RULE | ACTIVE | DGV-ACT-CONFIGURE-AI-USE | DGV-ACT-DISABLE-AI-USE<br>DGV-ACT-SUPERSEDE-AI-RULE |
+| DGV-OBJ-AI-RULE | DISABLED | DGV-ACT-DISABLE-AI-USE | DGV-ACT-SUPERSEDE-AI-RULE |
+| DGV-OBJ-AI-RULE | SUPERSEDED | DGV-ACT-SUPERSEDE-AI-RULE |  |
+| DGV-OBJ-EXPORT | REQUESTED | DGV-ACT-REQUEST-EXPORT | DGV-ACT-APPROVE-EXPORT<br>DGV-ACT-DENY-EXPORT |
+| DGV-OBJ-EXPORT | APPROVED | DGV-ACT-APPROVE-EXPORT | DGV-ACT-GENERATE-EXPORT |
+| DGV-OBJ-EXPORT | DENIED | DGV-ACT-DENY-EXPORT |  |
+| DGV-OBJ-EXPORT | GENERATING | DGV-ACT-GENERATE-EXPORT | DGV-ACT-COMPLETE-EXPORT<br>DGV-ACT-FAIL-EXPORT |
+| DGV-OBJ-EXPORT | AVAILABLE | DGV-ACT-COMPLETE-EXPORT | DGV-ACT-EXPIRE-EXPORT |
+| DGV-OBJ-EXPORT | EXPIRED | DGV-ACT-EXPIRE-EXPORT |  |
+| DGV-OBJ-EXPORT | FAILED | DGV-ACT-FAIL-EXPORT |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DGV-F001 | 数据域 | 单选下拉 | OPT-COM-015 | 是 | 选择成绩、作业、证据、计划等域 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F002 | 保留期限 | 数值+单位 | OPT-COM-014 | 是 | 不得短于学校合规最低要求 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F003 | AI 使用等级 | 多选下拉 | OPT-ENUM-016 | 是 | 决定查询/分析/草稿/执行边界 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F004 | 导出范围 | 级联选择 | OPT-COM-015 | 导出必填 | 导出前展示字段和人数 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F005 | 脱敏策略 | 单选下拉 | OPT-ENUM-001 | 导出必填 | 默认脱敏，明细导出需审批 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| DGV-PAGE-POLICY | School Data Governance Policy | WEB / APP | DGV-OBJ-POLICY | DGV-POLICY-F-VERSION<br>DGV-POLICY-F-EXPLANATION | DGV-ACT-VIEW-EXPLANATION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| DGV-PAGE-RETENTION | School Activation Retention Configuration | WEB | DGV-OBJ-RETENTION | DGV-RETENTION-F-CATEGORY<br>DGV-RETENTION-F-PERIOD<br>DGV-RETENTION-F-ACTIVATED-BY<br>DGV-RETENTION-F-STATUS | DGV-ACT-CONFIGURE-RETENTION<br>DGV-ACT-SUPERSEDE-RETENTION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| DGV-PAGE-AI-BOUNDARY | AI Data Scope and Purpose Boundary | WEB | DGV-OBJ-AI-RULE | DGV-AI-F-DATA-SCOPE<br>DGV-AI-F-PURPOSE<br>DGV-AI-F-MODEL-USE<br>DGV-AI-F-STATUS | DGV-ACT-CONFIGURE-AI-USE<br>DGV-ACT-DISABLE-AI-USE<br>DGV-ACT-SUPERSEDE-AI-RULE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| DGV-PAGE-EXPORT-REQUEST | Purpose-bound Export Request | WEB | DGV-OBJ-EXPORT | DGV-EXPORT-F-SCOPE<br>DGV-EXPORT-F-PURPOSE<br>DGV-EXPORT-F-EXPIRY<br>DGV-EXPORT-F-RESULT | DGV-ACT-REQUEST-EXPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| DGV-PAGE-EXPORT-DECISION | Sensitive Export Approval | WEB | DGV-OBJ-EXPORT | DGV-EXPORT-F-SCOPE<br>DGV-EXPORT-F-PURPOSE<br>DGV-EXPORT-F-APPROVER<br>DGV-EXPORT-F-DECISION-REASON<br>DGV-EXPORT-F-AUDIT-REF | DGV-ACT-APPROVE-EXPORT<br>DGV-ACT-DENY-EXPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| DGV-PAGE-EXPORT-RESULT | Expiring Export Result | WEB | DGV-OBJ-EXPORT | DGV-EXPORT-F-SCOPE<br>DGV-EXPORT-F-EXPIRY<br>DGV-EXPORT-F-RESULT<br>DGV-EXPORT-F-AUDIT-REF |  | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| DGV-PAGE-EXPORT-NOTIFICATION | Export Result Notification | WEB / APP | DGV-OBJ-EXPORT | DGV-EXPORT-F-EXPIRY<br>DGV-EXPORT-F-RESULT |  | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| DRAFT | 草稿 |
-| ACTIVE | 生效 |
-| SUPERSEDED | 被新版本替代 |
-| ARCHIVED | 已归档 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DGV-ACT-SYNC-POLICY-SCN-SUCCESS-DRAFT | SUCCESS | DGV-ACT-SYNC-POLICY | the actor meets the entry conditions for Sync a Versioned Data Governance Policy Snapshot | the actor requests Sync a Versioned Data Governance Policy Snapshot | Sync a Versioned Data Governance Policy Snapshot returns the accepted task-specific result | DRAFT | ALLOW |  |
+| DGV-ACT-SYNC-POLICY-SCN-SUCCESS-ACTIVE | SUCCESS | DGV-ACT-SYNC-POLICY | the actor meets the entry conditions for Sync a Versioned Data Governance Policy Snapshot | the actor requests Sync a Versioned Data Governance Policy Snapshot | Sync a Versioned Data Governance Policy Snapshot returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| DGV-ACT-SYNC-POLICY-SCN-SUCCESS-SUPERSEDED | SUCCESS | DGV-ACT-SYNC-POLICY | the actor meets the entry conditions for Sync a Versioned Data Governance Policy Snapshot | the actor requests Sync a Versioned Data Governance Policy Snapshot | Sync a Versioned Data Governance Policy Snapshot returns the accepted task-specific result | SUPERSEDED | ALLOW |  |
+| DGV-ACT-SYNC-POLICY-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-SYNC-POLICY | PERMISSION_DENIED applies to Sync a Versioned Data Governance Policy Snapshot | the actor requests Sync a Versioned Data Governance Policy Snapshot | Sync a Versioned Data Governance Policy Snapshot returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-SYNC-POLICY-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-SYNC-POLICY | VALIDATION_FAILED applies to Sync a Versioned Data Governance Policy Snapshot | the actor requests Sync a Versioned Data Governance Policy Snapshot | Sync a Versioned Data Governance Policy Snapshot returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-SYNC-POLICY-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-SYNC-POLICY | VERSION_CONFLICT applies to Sync a Versioned Data Governance Policy Snapshot | the actor requests Sync a Versioned Data Governance Policy Snapshot | Sync a Versioned Data Governance Policy Snapshot returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-SYNC-POLICY-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-SYNC-POLICY | AUDIT_FAILED applies to Sync a Versioned Data Governance Policy Snapshot | the actor requests Sync a Versioned Data Governance Policy Snapshot | Sync a Versioned Data Governance Policy Snapshot returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-VIEW-EXPLANATION-SCN-SUCCESS | SUCCESS | DGV-ACT-VIEW-EXPLANATION | the actor meets the entry conditions for View School Data Use Explanation | the actor requests View School Data Use Explanation | View School Data Use Explanation returns the accepted task-specific result | UNCHANGED | ALLOW |  |
+| DGV-ACT-VIEW-EXPLANATION-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-VIEW-EXPLANATION | PERMISSION_DENIED applies to View School Data Use Explanation | the actor requests View School Data Use Explanation | View School Data Use Explanation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-VIEW-EXPLANATION-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-VIEW-EXPLANATION | VALIDATION_FAILED applies to View School Data Use Explanation | the actor requests View School Data Use Explanation | View School Data Use Explanation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-VIEW-EXPLANATION-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-VIEW-EXPLANATION | VERSION_CONFLICT applies to View School Data Use Explanation | the actor requests View School Data Use Explanation | View School Data Use Explanation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-CONFIGURE-RETENTION-SCN-SUCCESS | SUCCESS | DGV-ACT-CONFIGURE-RETENTION | the actor meets the entry conditions for Configure School Activation Retention Periods | the actor requests Configure School Activation Retention Periods | school-owned retention periods become an explicit activation configuration with no implicit defaults | ACTIVE | ALLOW |  |
+| DGV-ACT-CONFIGURE-RETENTION-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-CONFIGURE-RETENTION | PERMISSION_DENIED applies to Configure School Activation Retention Periods | the actor requests Configure School Activation Retention Periods | Configure School Activation Retention Periods returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-CONFIGURE-RETENTION-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-CONFIGURE-RETENTION | VALIDATION_FAILED applies to Configure School Activation Retention Periods | the actor requests Configure School Activation Retention Periods | Configure School Activation Retention Periods returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-CONFIGURE-RETENTION-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-CONFIGURE-RETENTION | VERSION_CONFLICT applies to Configure School Activation Retention Periods | the actor requests Configure School Activation Retention Periods | Configure School Activation Retention Periods returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-CONFIGURE-RETENTION-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-CONFIGURE-RETENTION | AUDIT_FAILED applies to Configure School Activation Retention Periods | the actor requests Configure School Activation Retention Periods | Configure School Activation Retention Periods returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-SUPERSEDE-RETENTION-SCN-SUCCESS | SUCCESS | DGV-ACT-SUPERSEDE-RETENTION | the actor meets the entry conditions for Supersede an Active Retention Configuration | the actor requests Supersede an Active Retention Configuration | Supersede an Active Retention Configuration returns the accepted task-specific result | SUPERSEDED | ALLOW |  |
+| DGV-ACT-SUPERSEDE-RETENTION-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-SUPERSEDE-RETENTION | PERMISSION_DENIED applies to Supersede an Active Retention Configuration | the actor requests Supersede an Active Retention Configuration | Supersede an Active Retention Configuration returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-SUPERSEDE-RETENTION-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-SUPERSEDE-RETENTION | VALIDATION_FAILED applies to Supersede an Active Retention Configuration | the actor requests Supersede an Active Retention Configuration | Supersede an Active Retention Configuration returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-SUPERSEDE-RETENTION-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-SUPERSEDE-RETENTION | VERSION_CONFLICT applies to Supersede an Active Retention Configuration | the actor requests Supersede an Active Retention Configuration | Supersede an Active Retention Configuration returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-SUPERSEDE-RETENTION-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-SUPERSEDE-RETENTION | AUDIT_FAILED applies to Supersede an Active Retention Configuration | the actor requests Supersede an Active Retention Configuration | Supersede an Active Retention Configuration returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-CONFIGURE-AI-USE-SCN-SUCCESS | SUCCESS | DGV-ACT-CONFIGURE-AI-USE | the actor meets the entry conditions for Configure AI Data Use Boundary | the actor requests Configure AI Data Use Boundary | AI use is enabled only for the declared scope and purpose after retention is configured | ACTIVE | ALLOW |  |
+| DGV-ACT-CONFIGURE-AI-USE-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-CONFIGURE-AI-USE | PERMISSION_DENIED applies to Configure AI Data Use Boundary | the actor requests Configure AI Data Use Boundary | Configure AI Data Use Boundary returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-CONFIGURE-AI-USE-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-CONFIGURE-AI-USE | VALIDATION_FAILED applies to Configure AI Data Use Boundary | the actor requests Configure AI Data Use Boundary | unset retention blocks sensitive AI use and returns BLOCKED_UNSET_RETENTION | BLOCKED_UNSET_RETENTION | DENY | VALIDATION_FAILED |
+| DGV-ACT-CONFIGURE-AI-USE-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-CONFIGURE-AI-USE | VERSION_CONFLICT applies to Configure AI Data Use Boundary | the actor requests Configure AI Data Use Boundary | Configure AI Data Use Boundary returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-CONFIGURE-AI-USE-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-CONFIGURE-AI-USE | AUDIT_FAILED applies to Configure AI Data Use Boundary | the actor requests Configure AI Data Use Boundary | Configure AI Data Use Boundary returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-DISABLE-AI-USE-SCN-SUCCESS | SUCCESS | DGV-ACT-DISABLE-AI-USE | the actor meets the entry conditions for Disable an Active AI Data Use Rule | the actor requests Disable an Active AI Data Use Rule | Disable an Active AI Data Use Rule returns the accepted task-specific result | DISABLED | ALLOW |  |
+| DGV-ACT-DISABLE-AI-USE-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-DISABLE-AI-USE | PERMISSION_DENIED applies to Disable an Active AI Data Use Rule | the actor requests Disable an Active AI Data Use Rule | Disable an Active AI Data Use Rule returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-DISABLE-AI-USE-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-DISABLE-AI-USE | VALIDATION_FAILED applies to Disable an Active AI Data Use Rule | the actor requests Disable an Active AI Data Use Rule | Disable an Active AI Data Use Rule returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-DISABLE-AI-USE-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-DISABLE-AI-USE | VERSION_CONFLICT applies to Disable an Active AI Data Use Rule | the actor requests Disable an Active AI Data Use Rule | Disable an Active AI Data Use Rule returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-DISABLE-AI-USE-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-DISABLE-AI-USE | AUDIT_FAILED applies to Disable an Active AI Data Use Rule | the actor requests Disable an Active AI Data Use Rule | Disable an Active AI Data Use Rule returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-SUPERSEDE-AI-RULE-SCN-SUCCESS | SUCCESS | DGV-ACT-SUPERSEDE-AI-RULE | the actor meets the entry conditions for Supersede an AI Data Use Rule | the actor requests Supersede an AI Data Use Rule | Supersede an AI Data Use Rule returns the accepted task-specific result | SUPERSEDED | ALLOW |  |
+| DGV-ACT-SUPERSEDE-AI-RULE-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-SUPERSEDE-AI-RULE | PERMISSION_DENIED applies to Supersede an AI Data Use Rule | the actor requests Supersede an AI Data Use Rule | Supersede an AI Data Use Rule returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-SUPERSEDE-AI-RULE-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-SUPERSEDE-AI-RULE | VALIDATION_FAILED applies to Supersede an AI Data Use Rule | the actor requests Supersede an AI Data Use Rule | Supersede an AI Data Use Rule returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-SUPERSEDE-AI-RULE-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-SUPERSEDE-AI-RULE | VERSION_CONFLICT applies to Supersede an AI Data Use Rule | the actor requests Supersede an AI Data Use Rule | Supersede an AI Data Use Rule returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-SUPERSEDE-AI-RULE-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-SUPERSEDE-AI-RULE | AUDIT_FAILED applies to Supersede an AI Data Use Rule | the actor requests Supersede an AI Data Use Rule | Supersede an AI Data Use Rule returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-REQUEST-EXPORT-SCN-SUCCESS | SUCCESS | DGV-ACT-REQUEST-EXPORT | the actor meets the entry conditions for Request a Purpose-bound Data Export | the actor requests Request a Purpose-bound Data Export | Request a Purpose-bound Data Export returns the accepted task-specific result | REQUESTED | ALLOW |  |
+| DGV-ACT-REQUEST-EXPORT-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-REQUEST-EXPORT | PERMISSION_DENIED applies to Request a Purpose-bound Data Export | the actor requests Request a Purpose-bound Data Export | unauthorized sensitive scope blocks the export request | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-REQUEST-EXPORT-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-REQUEST-EXPORT | VALIDATION_FAILED applies to Request a Purpose-bound Data Export | the actor requests Request a Purpose-bound Data Export | unset retention blocks the export request | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-REQUEST-EXPORT-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-REQUEST-EXPORT | VERSION_CONFLICT applies to Request a Purpose-bound Data Export | the actor requests Request a Purpose-bound Data Export | Request a Purpose-bound Data Export returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-REQUEST-EXPORT-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-REQUEST-EXPORT | AUDIT_FAILED applies to Request a Purpose-bound Data Export | the actor requests Request a Purpose-bound Data Export | Request a Purpose-bound Data Export returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-APPROVE-EXPORT-SCN-SUCCESS | SUCCESS | DGV-ACT-APPROVE-EXPORT | the actor meets the entry conditions for Approve a Sensitive Export Request | the actor requests Approve a Sensitive Export Request | Approve a Sensitive Export Request returns the accepted task-specific result | APPROVED | ALLOW |  |
+| DGV-ACT-APPROVE-EXPORT-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-APPROVE-EXPORT | PERMISSION_DENIED applies to Approve a Sensitive Export Request | the actor requests Approve a Sensitive Export Request | Approve a Sensitive Export Request returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-APPROVE-EXPORT-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-APPROVE-EXPORT | VALIDATION_FAILED applies to Approve a Sensitive Export Request | the actor requests Approve a Sensitive Export Request | Approve a Sensitive Export Request returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-APPROVE-EXPORT-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-APPROVE-EXPORT | VERSION_CONFLICT applies to Approve a Sensitive Export Request | the actor requests Approve a Sensitive Export Request | Approve a Sensitive Export Request returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-APPROVE-EXPORT-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-APPROVE-EXPORT | AUDIT_FAILED applies to Approve a Sensitive Export Request | the actor requests Approve a Sensitive Export Request | Approve a Sensitive Export Request returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-DENY-EXPORT-SCN-SUCCESS | SUCCESS | DGV-ACT-DENY-EXPORT | the actor meets the entry conditions for Deny a Sensitive Export Request | the actor requests Deny a Sensitive Export Request | Deny a Sensitive Export Request returns the accepted task-specific result | DENIED | ALLOW |  |
+| DGV-ACT-DENY-EXPORT-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-DENY-EXPORT | PERMISSION_DENIED applies to Deny a Sensitive Export Request | the actor requests Deny a Sensitive Export Request | Deny a Sensitive Export Request returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-DENY-EXPORT-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-DENY-EXPORT | VALIDATION_FAILED applies to Deny a Sensitive Export Request | the actor requests Deny a Sensitive Export Request | Deny a Sensitive Export Request returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-DENY-EXPORT-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-DENY-EXPORT | VERSION_CONFLICT applies to Deny a Sensitive Export Request | the actor requests Deny a Sensitive Export Request | Deny a Sensitive Export Request returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-DENY-EXPORT-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-DENY-EXPORT | AUDIT_FAILED applies to Deny a Sensitive Export Request | the actor requests Deny a Sensitive Export Request | Deny a Sensitive Export Request returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-GENERATE-EXPORT-SCN-SUCCESS | SUCCESS | DGV-ACT-GENERATE-EXPORT | the actor meets the entry conditions for Start an Approved Expiring Export | the actor requests Start an Approved Expiring Export | Start an Approved Expiring Export returns the accepted task-specific result | GENERATING | ALLOW |  |
+| DGV-ACT-GENERATE-EXPORT-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-GENERATE-EXPORT | PERMISSION_DENIED applies to Start an Approved Expiring Export | the actor requests Start an Approved Expiring Export | Start an Approved Expiring Export returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-GENERATE-EXPORT-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-GENERATE-EXPORT | VALIDATION_FAILED applies to Start an Approved Expiring Export | the actor requests Start an Approved Expiring Export | Start an Approved Expiring Export returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-GENERATE-EXPORT-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-GENERATE-EXPORT | VERSION_CONFLICT applies to Start an Approved Expiring Export | the actor requests Start an Approved Expiring Export | Start an Approved Expiring Export returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-GENERATE-EXPORT-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-GENERATE-EXPORT | AUDIT_FAILED applies to Start an Approved Expiring Export | the actor requests Start an Approved Expiring Export | Start an Approved Expiring Export returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-COMPLETE-EXPORT-SCN-SUCCESS | SUCCESS | DGV-ACT-COMPLETE-EXPORT | the actor meets the entry conditions for Complete an Expiring Export | the actor requests Complete an Expiring Export | Complete an Expiring Export returns the accepted task-specific result | AVAILABLE | ALLOW |  |
+| DGV-ACT-COMPLETE-EXPORT-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-COMPLETE-EXPORT | PERMISSION_DENIED applies to Complete an Expiring Export | the actor requests Complete an Expiring Export | Complete an Expiring Export returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-COMPLETE-EXPORT-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-COMPLETE-EXPORT | VALIDATION_FAILED applies to Complete an Expiring Export | the actor requests Complete an Expiring Export | Complete an Expiring Export returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-COMPLETE-EXPORT-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-COMPLETE-EXPORT | VERSION_CONFLICT applies to Complete an Expiring Export | the actor requests Complete an Expiring Export | Complete an Expiring Export returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-COMPLETE-EXPORT-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-COMPLETE-EXPORT | AUDIT_FAILED applies to Complete an Expiring Export | the actor requests Complete an Expiring Export | Complete an Expiring Export returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-FAIL-EXPORT-SCN-SUCCESS | SUCCESS | DGV-ACT-FAIL-EXPORT | the actor meets the entry conditions for Record a Failed Export Generation | the actor requests Record a Failed Export Generation | Record a Failed Export Generation returns the accepted task-specific result | FAILED | ALLOW |  |
+| DGV-ACT-FAIL-EXPORT-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-FAIL-EXPORT | PERMISSION_DENIED applies to Record a Failed Export Generation | the actor requests Record a Failed Export Generation | Record a Failed Export Generation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-FAIL-EXPORT-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-FAIL-EXPORT | VALIDATION_FAILED applies to Record a Failed Export Generation | the actor requests Record a Failed Export Generation | Record a Failed Export Generation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-FAIL-EXPORT-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-FAIL-EXPORT | VERSION_CONFLICT applies to Record a Failed Export Generation | the actor requests Record a Failed Export Generation | Record a Failed Export Generation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-FAIL-EXPORT-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-FAIL-EXPORT | AUDIT_FAILED applies to Record a Failed Export Generation | the actor requests Record a Failed Export Generation | Record a Failed Export Generation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| DGV-ACT-EXPIRE-EXPORT-SCN-SUCCESS | SUCCESS | DGV-ACT-EXPIRE-EXPORT | the actor meets the entry conditions for Expire and Remove an Export File | the actor requests Expire and Remove an Export File | Expire and Remove an Export File returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| DGV-ACT-EXPIRE-EXPORT-SCN-PERMISSION_DENIED | FAILURE | DGV-ACT-EXPIRE-EXPORT | PERMISSION_DENIED applies to Expire and Remove an Export File | the actor requests Expire and Remove an Export File | Expire and Remove an Export File returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| DGV-ACT-EXPIRE-EXPORT-SCN-VALIDATION_FAILED | FAILURE | DGV-ACT-EXPIRE-EXPORT | VALIDATION_FAILED applies to Expire and Remove an Export File | the actor requests Expire and Remove an Export File | Expire and Remove an Export File returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| DGV-ACT-EXPIRE-EXPORT-SCN-VERSION_CONFLICT | FAILURE | DGV-ACT-EXPIRE-EXPORT | VERSION_CONFLICT applies to Expire and Remove an Export File | the actor requests Expire and Remove an Export File | Expire and Remove an Export File returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| DGV-ACT-EXPIRE-EXPORT-SCN-AUDIT_FAILED | FAILURE | DGV-ACT-EXPIRE-EXPORT | AUDIT_FAILED applies to Expire and Remove an Export File | the actor requests Expire and Remove an Export File | Expire and Remove an Export File returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 学校管理员配置数据域、保留期限和 AI 使用边界。
-2. 业务模块写入时标记数据域、敏感级别和生命周期。
-3. AI 查询和报告调用前读取治理策略。
-4. 导出、删除、归档等高风险动作走审批和审计。
-
-关联 Flow: `DF-015`、`DF-019`、`DF-301`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DGV-FR-01 | 对象查询与范围筛选 | DGV-F001、DGV-F002、DGV-F003、DGV-F004、DGV-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | DGV-AC-01 |
-| DGV-FR-02 | 详情查看与版本追踪 | DAT-DGV-01、DAT-DGV-02、DAT-DGV-03、DAT-DGV-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | DGV-AC-02 |
-| DGV-FR-03 | 创建/修改/确认主动作 | DGV-F001、DGV-F002、DGV-F003、DGV-F004、DGV-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | DGV-AC-03 |
-| DGV-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | DGV-AC-04 |
-| DGV-FR-05 | 审计、通知与下游失效 | DF-015、DF-019、DF-301 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | DGV-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| DGV-AC-01 | AI 不能成为正式成绩、计划、权限的业务 Owner。 |
-| DGV-AC-02 | 第一阶段不向第三方渠道发送学生明细。 |
-| DGV-AC-03 | 导出前必须展示字段、人数、范围和脱敏策略。 |
-| DGV-AC-04 | 历史业务事实不能被物理删除来掩盖已发布结果。 |
-| DGV-AC-05 | 治理策略变更不追溯改写既有审计。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-015`、`DF-019`、`DF-301`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

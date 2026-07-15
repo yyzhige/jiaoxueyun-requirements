@@ -1,137 +1,132 @@
-# STU-001 教师学生管理与学生详情 PRD v2.0
+# STU-001 Source-pinned Student Management Profile PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师、班主任 |
-| 关联线框 | [13-teacher-student-management-wireframe.zh-CN.md](../05-wireframe-contracts/13-teacher-student-management-wireframe.zh-CN.md) |
+| 目标 | Aggregate authorized profile view definitions and attention records without owning a second score, evidence, or plan fact |
+| 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-008` |
+| 进入条件 | the authorized teacher scope resolves source result, evidence, plan, and todo versions |
+| 退出条件 | the profile and attention records retain exact source lineage and read-only homeroom coordination |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-为教师和班主任提供学生列表、详情、关注事件、跟进记录和跨学科摘要，支撑日常管理和学习干预。
+- 本模块权威拥有 2 个对象、5 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-STU-01 | Student Detail View | 系统 | 学生详情视图 | 系统 | 系统 | 系统 | S2 教学业务数据 |
-| DAT-STU-02 | Student Follow-up Note | 记录创建者 | 学生跟进记录 | 记录创建者 | 记录创建者 | 记录创建者 | S2 教学业务数据 |
-| DAT-STU-03 | Student Attention Event | 系统/教师 | 学生关注事件 | 系统/教师 | 系统/教师 | 系统/教师 | S2 教学业务数据 |
+### STU-OBJ-PROFILE Student Profile Query Column and Saved View Definition
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_MANAGEMENT_VIEW_DEFINITION | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | READY |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STU-PROFILE-F-ID | Student Management Profile View ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-STUDENT-REF | Managed Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-RESULT-DATA-ID | Source Result Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-RESULT-REF | Source Result Reference | ID | 是 | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-RESULT-VERSION | Source Result Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-EVIDENCE-DATA-ID | Source Evidence Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-EVIDENCE-REF | Source Evidence Reference | ID | 是 | OBJECT_REF: INS-OBJ-EVIDENCE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-EVIDENCE-VERSION | Source Evidence Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-PLAN-DATA-ID | Source Plan Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-PLAN-REF | Source Plan Reference | ID | 是 | OBJECT_REF: PLN-OBJ-PLAN | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-PLAN-VERSION | Source Plan Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-QUERY-DEFINITION | Student Profile Query Definition | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-COLUMN-DEFINITION | Student Profile Column Definition | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-SAVED-VIEW-DEFINITION | Saved Student Profile View Definition | JSON | required when a teacher saves a custom profile view；状态=READY；动作=STU-ACT-SAVE-VIEW | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-PROFILE-F-PROFILE-VERSION | Student Profile View Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 任课教师、班主任
-- 解决问题: 为教师和班主任提供学生列表、详情、关注事件、跟进记录和跨学科摘要，支撑日常管理和学习干预。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### STU-OBJ-ATTENTION Student Attention and Follow-up Record
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_ATTENTION_COORDINATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | OPEN |
 
-- DAT-STU-01 Student Detail View
-- DAT-STU-02 Student Follow-up Note
-- DAT-STU-03 Student Attention Event
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STU-ATTENTION-F-ID | Student Attention Record ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-ATTENTION-F-PROFILE-REF | Student Profile View Reference | ID | 是 | OBJECT_REF: STU-OBJ-PROFILE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-ATTENTION-F-PROFILE-VERSION | Student Profile View Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-ATTENTION-F-KIND | Student Attention Event Kind | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-ATTENTION-F-FOLLOW-UP-NOTE | Student Attention Follow-up Note | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-ATTENTION-F-VERSION | Student Attention Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+## 3. 对象关系
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| STU-REL-ATTENTION-PROFILE | STU-OBJ-ATTENTION | REFERENCES | STU-OBJ-PROFILE | MANY_TO_ONE | SAME_STUDENT | retain attention history and mark the source profile view version stale |
 
-## 2. Web/App Capability Matrix
+## 4. 可执行动作合同
 
-| 能力 | Web | App | 差异原则 |
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STU-ACT-BUILD-PROFILE | Build a Source-pinned Student Management Profile | STU-OBJ-PROFILE | CREATE |  | STU-PROFILE-F-ID<br>STU-PROFILE-F-STUDENT-REF<br>STU-PROFILE-F-RESULT-DATA-ID<br>STU-PROFILE-F-RESULT-REF<br>STU-PROFILE-F-RESULT-VERSION<br>STU-PROFILE-F-EVIDENCE-DATA-ID<br>STU-PROFILE-F-EVIDENCE-REF<br>STU-PROFILE-F-EVIDENCE-VERSION<br>STU-PROFILE-F-PLAN-DATA-ID<br>STU-PROFILE-F-PLAN-REF<br>STU-PROFILE-F-PLAN-VERSION<br>STU-PROFILE-F-QUERY-DEFINITION<br>STU-PROFILE-F-COLUMN-DEFINITION<br>STU-PROFILE-F-PROFILE-VERSION | CREATE（成功状态由 STU-ACT-BUILD-PROFILE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified aggregation Flow builds only source-pinned profile view definitions<br>DENY:CURRENT_ACTOR — a user cannot invoke internal student profile materialization directly | FLOW_INTERNAL | LOW | REQUIRED | STU-ACT-BUILD-PROFILE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| STU-ACT-OPEN-PROFILE | Open the Authorized Student Management Profile | STU-OBJ-PROFILE | READ | STU-PROFILE-F-ID | STU-PROFILE-F-ID<br>STU-PROFILE-F-STUDENT-REF<br>STU-PROFILE-F-RESULT-DATA-ID<br>STU-PROFILE-F-RESULT-REF<br>STU-PROFILE-F-RESULT-VERSION<br>STU-PROFILE-F-EVIDENCE-DATA-ID<br>STU-PROFILE-F-EVIDENCE-REF<br>STU-PROFILE-F-EVIDENCE-VERSION<br>STU-PROFILE-F-PLAN-DATA-ID<br>STU-PROFILE-F-PLAN-REF<br>STU-PROFILE-F-PLAN-VERSION<br>STU-PROFILE-F-QUERY-DEFINITION<br>STU-PROFILE-F-COLUMN-DEFINITION<br>STU-PROFILE-F-SAVED-VIEW-DEFINITION<br>STU-PROFILE-F-PROFILE-VERSION | UNCHANGED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher reads only the assigned subject, class, and student scope<br>ALLOW:DUTY-HOMEROOM — the homeroom teacher reads the assigned class across subjects for read-only coordination<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator has no default permission to read student learning detail<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default permission to read student learning detail | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+| STU-ACT-SAVE-VIEW | Save a Student Profile View Definition | STU-OBJ-PROFILE | UPDATE | STU-PROFILE-F-SAVED-VIEW-DEFINITION | STU-PROFILE-F-SAVED-VIEW-DEFINITION<br>STU-PROFILE-F-PROFILE-VERSION | READY → READY | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | LOW | REQUIRED | STU-ACT-SAVE-VIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| STU-ACT-CREATE-ATTENTION | Create a Student Attention Record | STU-OBJ-ATTENTION | CREATE | STU-ATTENTION-F-PROFILE-REF<br>STU-ATTENTION-F-PROFILE-VERSION<br>STU-ATTENTION-F-KIND<br>STU-ATTENTION-F-FOLLOW-UP-NOTE | STU-ATTENTION-F-ID<br>STU-ATTENTION-F-VERSION | CREATE（成功状态由 STU-ACT-CREATE-ATTENTION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | LOW | REQUIRED | STU-ACT-CREATE-ATTENTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| STU-ACT-VIEW-ATTENTION | View Student Attention Records | STU-OBJ-ATTENTION | READ | STU-ATTENTION-F-ID | STU-ATTENTION-F-ID<br>STU-ATTENTION-F-PROFILE-REF<br>STU-ATTENTION-F-PROFILE-VERSION<br>STU-ATTENTION-F-KIND<br>STU-ATTENTION-F-FOLLOW-UP-NOTE<br>STU-ATTENTION-F-VERSION | UNCHANGED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher reads only the assigned subject, class, and student scope<br>ALLOW:DUTY-HOMEROOM — the homeroom teacher reads the assigned class across subjects for read-only coordination<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator has no default permission to read student learning detail<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default permission to read student learning detail | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 学生列表、学生详情、跟进记录、跨学科摘要、班主任协调 | 学生本人画像、教师移动查看摘要、跟进提醒 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| STU-OBJ-PROFILE | READY | STU-ACT-BUILD-PROFILE<br>STU-ACT-SAVE-VIEW | STU-ACT-SAVE-VIEW |
+| STU-OBJ-ATTENTION | OPEN | STU-ACT-CREATE-ATTENTION |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-014 | Student Management Profile Aggregation | 1 | SCO-001 / INS-001 / PLN-001 / APP-001 / STU-001 | STU-ACT-BUILD-PROFILE | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PROFILE_AND_TODO_VIEW_VERSIONS","description":"a failed aggregation preserves the prior view definitions and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_AND_TODO_PROJECTIONS","targets":["gradebook view definition","student profile view definition","student todo aggregation"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| STU-F001 | 班级 | 单选/多选下拉 | OPT-COM-006 | 是 | 任课/班主任范围过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F002 | 学生 | 自动完成 | OPT-COM-010 | 详情必填 | 只返回授权学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F003 | 学科 | 多选下拉 | OPT-COM-007 | 任课默认本人学科 | 班主任可查看全科摘要 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F004 | 关注事件 | 多选下拉 | OPT-ENUM-018 | 否 | 由源事实生成 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F005 | 跟进可见范围 | 单选下拉 | OPT-COM-015 | 记录必填 | 不得超过创建者授权 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| STU-PAGE-PROFILE | Authorized Student Management Profile | WEB / APP | STU-OBJ-PROFILE | STU-PROFILE-F-ID<br>STU-PROFILE-F-STUDENT-REF<br>STU-PROFILE-F-RESULT-DATA-ID<br>STU-PROFILE-F-RESULT-REF<br>STU-PROFILE-F-RESULT-VERSION<br>STU-PROFILE-F-EVIDENCE-DATA-ID<br>STU-PROFILE-F-EVIDENCE-REF<br>STU-PROFILE-F-EVIDENCE-VERSION<br>STU-PROFILE-F-PLAN-DATA-ID<br>STU-PROFILE-F-PLAN-REF<br>STU-PROFILE-F-PLAN-VERSION<br>STU-PROFILE-F-QUERY-DEFINITION<br>STU-PROFILE-F-COLUMN-DEFINITION<br>STU-PROFILE-F-SAVED-VIEW-DEFINITION<br>STU-PROFILE-F-PROFILE-VERSION | STU-ACT-OPEN-PROFILE<br>STU-ACT-SAVE-VIEW | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| STU-PAGE-ATTENTION | Student Attention Follow-up Workspace | WEB / APP | STU-OBJ-ATTENTION | STU-ATTENTION-F-ID<br>STU-ATTENTION-F-PROFILE-REF<br>STU-ATTENTION-F-PROFILE-VERSION<br>STU-ATTENTION-F-KIND<br>STU-ATTENTION-F-FOLLOW-UP-NOTE<br>STU-ATTENTION-F-VERSION | STU-ACT-CREATE-ATTENTION<br>STU-ACT-VIEW-ATTENTION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| NORMAL | 正常 |
-| ATTENTION | 需关注 |
-| FOLLOWING | 跟进中 |
-| RESOLVED | 已处理 |
-| ARCHIVED | 归档 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STU-ACT-BUILD-PROFILE-SCN-SUCCESS | SUCCESS | STU-ACT-BUILD-PROFILE | the actor meets the entry conditions for Build a Source-pinned Student Management Profile | the actor requests Build a Source-pinned Student Management Profile | builds only query, column, view, and pinned lineage definitions without copying source score, evidence, or plan content | READY | ALLOW |  |
+| STU-ACT-BUILD-PROFILE-SCN-PERMISSION_DENIED | FAILURE | STU-ACT-BUILD-PROFILE | PERMISSION_DENIED applies to Build a Source-pinned Student Management Profile | the actor requests Build a Source-pinned Student Management Profile | Build a Source-pinned Student Management Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| STU-ACT-BUILD-PROFILE-SCN-SOURCE_VERSION_STALE | FAILURE | STU-ACT-BUILD-PROFILE | SOURCE_VERSION_STALE applies to Build a Source-pinned Student Management Profile | the actor requests Build a Source-pinned Student Management Profile | Build a Source-pinned Student Management Profile returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| STU-ACT-BUILD-PROFILE-SCN-VERSION_CONFLICT | FAILURE | STU-ACT-BUILD-PROFILE | VERSION_CONFLICT applies to Build a Source-pinned Student Management Profile | the actor requests Build a Source-pinned Student Management Profile | Build a Source-pinned Student Management Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| STU-ACT-OPEN-PROFILE-SCN-SUCCESS | SUCCESS | STU-ACT-OPEN-PROFILE | the actor meets the entry conditions for Open the Authorized Student Management Profile | the actor requests Open the Authorized Student Management Profile | Open the Authorized Student Management Profile returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| STU-ACT-OPEN-PROFILE-SCN-PERMISSION_DENIED | FAILURE | STU-ACT-OPEN-PROFILE | PERMISSION_DENIED applies to Open the Authorized Student Management Profile | the actor requests Open the Authorized Student Management Profile | Open the Authorized Student Management Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| STU-ACT-OPEN-PROFILE-SCN-NOT_FOUND | FAILURE | STU-ACT-OPEN-PROFILE | NOT_FOUND applies to Open the Authorized Student Management Profile | the actor requests Open the Authorized Student Management Profile | Open the Authorized Student Management Profile returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| STU-ACT-SAVE-VIEW-SCN-SUCCESS | SUCCESS | STU-ACT-SAVE-VIEW | the actor meets the entry conditions for Save a Student Profile View Definition | the actor requests Save a Student Profile View Definition | Save a Student Profile View Definition returns the accepted versioned result | READY | ALLOW |  |
+| STU-ACT-SAVE-VIEW-SCN-PERMISSION_DENIED | FAILURE | STU-ACT-SAVE-VIEW | PERMISSION_DENIED applies to Save a Student Profile View Definition | the actor requests Save a Student Profile View Definition | Save a Student Profile View Definition returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| STU-ACT-SAVE-VIEW-SCN-VALIDATION_FAILED | FAILURE | STU-ACT-SAVE-VIEW | VALIDATION_FAILED applies to Save a Student Profile View Definition | the actor requests Save a Student Profile View Definition | Save a Student Profile View Definition returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| STU-ACT-SAVE-VIEW-SCN-VERSION_CONFLICT | FAILURE | STU-ACT-SAVE-VIEW | VERSION_CONFLICT applies to Save a Student Profile View Definition | the actor requests Save a Student Profile View Definition | Save a Student Profile View Definition returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| STU-ACT-CREATE-ATTENTION-SCN-SUCCESS | SUCCESS | STU-ACT-CREATE-ATTENTION | the actor meets the entry conditions for Create a Student Attention Record | the actor requests Create a Student Attention Record | Create a Student Attention Record returns the accepted versioned result | OPEN | ALLOW |  |
+| STU-ACT-CREATE-ATTENTION-SCN-PERMISSION_DENIED | FAILURE | STU-ACT-CREATE-ATTENTION | PERMISSION_DENIED applies to Create a Student Attention Record | the actor requests Create a Student Attention Record | Create a Student Attention Record returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| STU-ACT-CREATE-ATTENTION-SCN-VALIDATION_FAILED | FAILURE | STU-ACT-CREATE-ATTENTION | VALIDATION_FAILED applies to Create a Student Attention Record | the actor requests Create a Student Attention Record | Create a Student Attention Record returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| STU-ACT-CREATE-ATTENTION-SCN-VERSION_CONFLICT | FAILURE | STU-ACT-CREATE-ATTENTION | VERSION_CONFLICT applies to Create a Student Attention Record | the actor requests Create a Student Attention Record | Create a Student Attention Record returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| STU-ACT-VIEW-ATTENTION-SCN-SUCCESS | SUCCESS | STU-ACT-VIEW-ATTENTION | the actor meets the entry conditions for View Student Attention Records | the actor requests View Student Attention Records | View Student Attention Records returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| STU-ACT-VIEW-ATTENTION-SCN-PERMISSION_DENIED | FAILURE | STU-ACT-VIEW-ATTENTION | PERMISSION_DENIED applies to View Student Attention Records | the actor requests View Student Attention Records | View Student Attention Records returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| STU-ACT-VIEW-ATTENTION-SCN-NOT_FOUND | FAILURE | STU-ACT-VIEW-ATTENTION | NOT_FOUND applies to View Student Attention Records | the actor requests View Student Attention Records | View Student Attention Records returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 教师按班级、学科、学生筛选列表。
-2. 系统汇总源成绩、证据、计划和报告为详情视图。
-3. 教师记录跟进事项并选择可见范围。
-4. 班主任查看本班跨学科摘要并协调任务负担。
-
-关联 Flow: `DF-014`、`DF-011`、`DF-012`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| STU-FR-01 | 对象查询与范围筛选 | STU-F001、STU-F002、STU-F003、STU-F004、STU-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | STU-AC-01 |
-| STU-FR-02 | 详情查看与版本追踪 | DAT-STU-01、DAT-STU-02、DAT-STU-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | STU-AC-02 |
-| STU-FR-03 | 创建/修改/确认主动作 | STU-F001、STU-F002、STU-F003、STU-F004、STU-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | STU-AC-03 |
-| STU-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | STU-AC-04 |
-| STU-FR-05 | 审计、通知与下游失效 | DF-014、DF-011、DF-012 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | STU-AC-05 |
+| AI-TASK-AUTHORIZED-DATA-QUERY | Show the authorized learning profile for this student | QUERY | STU-ACT-OPEN-PROFILE | DUTY-SUBJECT-TEACHER / DUTY-HOMEROOM | {"mode":"NOT_REQUIRED"} | STU-PROFILE-F-ID<br>STU-PROFILE-F-PROFILE-VERSION | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| STU-AC-01 | 学生详情不保存第二套成绩、证据、计划事实。 |
-| STU-AC-02 | 任课教师只能查看本人学科及授权学生。 |
-| STU-AC-03 | 班主任可查看本班全科摘要。 |
-| STU-AC-04 | 跟进记录可见范围不能超过创建者权限。 |
-| STU-AC-05 | 关注事件必须引用源证据或教师标记原因。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-014`、`DF-011`、`DF-012`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

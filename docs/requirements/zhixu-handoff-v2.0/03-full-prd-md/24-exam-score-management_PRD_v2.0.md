@@ -1,141 +1,254 @@
-# EXM-001 考试与综合成绩管理 PRD v2.0
+# EXM-001 Exam Event Score Import and Publication PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 优先级 | P1 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 教务、任课教师、班主任、学生 |
-| 关联线框 | [24-exam-score-management-wireframe.zh-CN.md](../05-wireframe-contracts/24-exam-score-management-wireframe.zh-CN.md) |
-
-## 0. 产品评审摘要
-
-管理考试、科目、成绩录入/导入、发布和综合成绩规则，并把考试结果纳入学情证据。
-
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
-
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-EXM-01 | Exam Event | 教务 | 考试 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-EXM-02 | Exam Subject Score | 任课教师 | 考试科目成绩 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-EXM-03 | Aggregate Score Rule | 教务 | 综合成绩规则 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-EXM-04 | Exam Publish Version | 教务/任课教师 | 考试发布版本 | 教务/任课教师 | 教务/任课教师 | 教务/任课教师 | S2 教学业务数据 |
-
-## 1. 范围
-
-### 1.1 目标用户与价值
-
-- 目标用户: 教务、任课教师、班主任、学生
-- 解决问题: 管理考试、科目、成绩录入/导入、发布和综合成绩规则，并把考试结果纳入学情证据。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
-
-### 1.2 本模块负责
-
-- DAT-EXM-01 Exam Event
-- DAT-EXM-02 Exam Subject Score
-- DAT-EXM-03 Aggregate Score Rule
-- DAT-EXM-04 Exam Publish Version
-
-### 1.3 本模块不负责
-
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
-
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
-| --- | --- | --- | --- |
-| 完整业务处理 | 考试配置、成绩录入、导入校验、综合规则、发布、分析 | 学生查看已发布考试成绩、教师移动查看摘要、班主任全科摘要 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
-
-## 3. 字段与选项合同
-
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EXM-F001 | 考试 | 自动完成 | OPT-COM-013 | 是 | 当前学期授权考试 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F002 | 班级 | 多选下拉 | OPT-COM-006 | 是 | 按教务或任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F003 | 学科 | 多选下拉 | OPT-COM-007 | 是 | 科目成绩 Owner 为对应任课教师 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F004 | 学生 | 自动完成 | OPT-COM-010 | 录入/查询按需 | 只含考试范围学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F005 | 成绩状态 | 单选下拉 | OPT-ENUM-007 | 是 | 缺考/免计/无效单独记录 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-
-## 4. 状态机
-
-| 状态 | 含义/要求 |
 | --- | --- |
-| DRAFT | 草稿 |
-| READY_TO_INPUT | 待录入 |
-| INPUTTING | 录入中 |
-| READY_TO_PUBLISH | 可发布 |
-| PUBLISHED | 已发布 |
-| CORRECTED | 已修正 |
-| ARCHIVED | 归档 |
+| 阶段 | 1 |
+| 优先级 | P0 |
+| 目标 | Govern exam events validation aggregate rules subject confirmation publication correction and evidence |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-010` |
+| NFR | `NFR-003`、`NFR-006`、`NFR-008` |
+| 进入条件 | academic administration has an authorized school term and exam context |
+| 退出条件 | students can read only published scores backed by import and teacher-confirmation evidence |
 
-状态通用规则：
+## 1. 范围与事实边界
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
+- 本模块权威拥有 4 个对象、18 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-## 5. 权限与责任
+## 2. 权威对象与字段合同
 
-| 角色/职责 | 读权限 | 写权限 | 限制 |
+### EXM-OBJ-EXAM-EVENT Exam Event
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACADEMIC_OPERATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | DRAFT / PUBLISHED / CORRECTION_OPEN |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EXM-EVENT-F-ID | Exam Event ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-EVENT-F-NAME | Exam Event Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-EVENT-F-TERM | Exam Term | STRING | 是 | OPTION_SET: OPT-COM-004 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-EVENT-F-STATUS | Exam Event Status | STRING | 是 | OPTION_SET: OPT-EXT-004 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-EVENT-F-PUBLICATION-AT | Exam Publication Time | DATETIME | required only when the exam event is published；状态=PUBLISHED；动作=EXM-ACT-PUBLISH-EVENT | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### EXM-OBJ-SCORE-IMPORT Subject Score Import Batch
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACADEMIC_OPERATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | LIFE-003 | S3 | AUTHORIZED | PENDING / PASSED / REJECTED / ACCEPTED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EXM-IMPORT-F-ID | Subject Score Import Batch ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-IMPORT-F-FILE | Subject Score Import File | FILE_REFERENCE | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-IMPORT-F-SUBJECT | Imported Subject | STRING | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-IMPORT-F-VALIDATION | Import Validation Result | STRING | 是 | OPTION_SET: OPT-EXT-005 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-IMPORT-F-EVIDENCE | Import Validation Evidence | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-IMPORT-F-VERSION | Score Import Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-IMPORT-F-REJECTION-REASON | Score Import Rejection Reason | TEXT | required when score import validation is REJECTED；状态=REJECTED；动作=EXM-ACT-REJECT-SCORE-IMPORT | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### EXM-OBJ-AGGREGATE-RULE Aggregate Score Rule Version
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACADEMIC_OPERATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | DRAFT / ACTIVE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EXM-RULE-F-ID | Aggregate Score Rule Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-RULE-F-DEFINITION | Aggregate Score Rule Definition | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-RULE-F-VERSION | Aggregate Score Rule Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### EXM-OBJ-SUBJECT-SCORE Published Subject Score Version
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_SUBJECT_SCORE | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | DUTY-SUBJECT-TEACHER | ROLE-SCHOOL-ADMIN | LIFE-003 | S3 | STUDENT_TIMED_RELEASE | IMPORTED / REJECTED / TEACHER_CONFIRMED / PUBLISHED / CORRECTED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EXM-SCORE-F-ID | Published Subject Score Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-STUDENT-ID | Student | ID | 是 | OPTION_SET: OPT-COM-010 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-SUBJECT | Subject | ID | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-SCORE | Published Subject Score | DECIMAL | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-EVIDENCE | Subject Score Evidence | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-IMPORT-REF | Pinned Passed Score Import | ID | 是 | OBJECT_REF: EXM-OBJ-SCORE-IMPORT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-IMPORT-VERSION | Pinned Score Import Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-TEACHER-CONFIRMED-AT | Subject Teacher Confirmation Time | DATETIME | required only after subject-teacher confirmation；状态=TEACHER_CONFIRMED；动作=EXM-ACT-CONFIRM-SUBJECT-SCORE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-VISIBLE-AT | Student Score Visible Time | DATETIME | required when the subject score is first published；状态=PUBLISHED；动作=EXM-ACT-PUBLISH-SUBJECT-SCORE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-CONFIRMATION-DECISION | Subject Score Confirmation Decision | STRING | required for subject-teacher confirmation or rejection；状态=TEACHER_CONFIRMED/REJECTED；动作=EXM-ACT-CONFIRM-SUBJECT-SCORE/EXM-ACT-REJECT-SUBJECT-SCORE | OPTION_SET: OPT-EXT-018 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-CONFIRMATION-REASON | Subject Score Confirmation Reason | TEXT | required for subject-teacher confirmation or rejection；状态=TEACHER_CONFIRMED/REJECTED；动作=EXM-ACT-CONFIRM-SUBJECT-SCORE/EXM-ACT-REJECT-SUBJECT-SCORE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| EXM-SCORE-F-VERSION | Subject Score Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| EXM-REL-SCORE-IMPORT | EXM-OBJ-SUBJECT-SCORE | DERIVED_FROM | EXM-OBJ-SCORE-IMPORT | MANY_TO_ONE | SAME_SCHOOL | block score creation and mark unconfirmed derived score versions stale |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EXM-ACT-CREATE-EVENT | Create Exam Event | EXM-OBJ-EXAM-EVENT | CREATE | EXM-EVENT-F-NAME<br>EXM-EVENT-F-TERM | EXM-EVENT-F-ID<br>EXM-EVENT-F-STATUS | CREATE（成功状态由 EXM-ACT-CREATE-EVENT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-CREATE-EVENT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-PUBLISH-EVENT | Publish Exam Event | EXM-OBJ-EXAM-EVENT | UPDATE |  | EXM-EVENT-F-STATUS<br>EXM-EVENT-F-PUBLICATION-AT | DRAFT → PUBLISHED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-PUBLISH-EVENT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-OPEN-CORRECTION | Open Exam Correction Window | EXM-OBJ-EXAM-EVENT | UPDATE |  | EXM-EVENT-F-STATUS | PUBLISHED → CORRECTION_OPEN | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-OPEN-CORRECTION:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-IMPORT-SCORES | Import Subject Scores | EXM-OBJ-SCORE-IMPORT | CREATE | EXM-IMPORT-F-FILE<br>EXM-IMPORT-F-SUBJECT | EXM-IMPORT-F-ID<br>EXM-IMPORT-F-VALIDATION<br>EXM-IMPORT-F-EVIDENCE<br>EXM-IMPORT-F-VERSION | CREATE（成功状态由 EXM-ACT-IMPORT-SCORES-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | EXM-ACT-IMPORT-SCORES:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-VALIDATE-SCORE-IMPORT | Validate Subject Score Import | EXM-OBJ-SCORE-IMPORT | UPDATE |  | EXM-IMPORT-F-VALIDATION<br>EXM-IMPORT-F-EVIDENCE<br>EXM-IMPORT-F-VERSION | PENDING → PASSED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | EXM-ACT-VALIDATE-SCORE-IMPORT:school:object-version:request-id | PERMISSION_DENIED / IMPORT_REJECTED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-REJECT-SCORE-IMPORT | Reject Invalid Subject Score Import | EXM-OBJ-SCORE-IMPORT | UPDATE | EXM-IMPORT-F-REJECTION-REASON | EXM-IMPORT-F-VALIDATION<br>EXM-IMPORT-F-EVIDENCE<br>EXM-IMPORT-F-VERSION<br>EXM-IMPORT-F-REJECTION-REASON | PENDING → REJECTED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | EXM-ACT-REJECT-SCORE-IMPORT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-REVISE-REJECTED-IMPORT | Revise Rejected Subject Score Import | EXM-OBJ-SCORE-IMPORT | UPDATE | EXM-IMPORT-F-FILE | EXM-IMPORT-F-VALIDATION<br>EXM-IMPORT-F-EVIDENCE<br>EXM-IMPORT-F-VERSION | REJECTED → PENDING | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | EXM-ACT-REVISE-REJECTED-IMPORT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-ACCEPT-SCORE-IMPORT | Accept Validated Subject Score Import | EXM-OBJ-SCORE-IMPORT | UPDATE |  | EXM-IMPORT-F-VALIDATION<br>EXM-IMPORT-F-EVIDENCE<br>EXM-IMPORT-F-VERSION | PASSED → ACCEPTED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | EXM-ACT-ACCEPT-SCORE-IMPORT:school:object-version:request-id | PERMISSION_DENIED / IMPORT_REJECTED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| EXM-ACT-CREATE-AGGREGATE-RULE | Create Aggregate Score Rule Version | EXM-OBJ-AGGREGATE-RULE | CREATE | EXM-RULE-F-DEFINITION | EXM-RULE-F-ID<br>EXM-RULE-F-VERSION | CREATE（成功状态由 EXM-ACT-CREATE-AGGREGATE-RULE-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-CREATE-AGGREGATE-RULE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-ACTIVATE-AGGREGATE-RULE | Activate Aggregate Score Rule Version | EXM-OBJ-AGGREGATE-RULE | UPDATE |  | EXM-RULE-F-VERSION | DRAFT → ACTIVE | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-ACTIVATE-AGGREGATE-RULE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-CREATE-SUBJECT-SCORE | Create Imported Subject Score Version | EXM-OBJ-SUBJECT-SCORE | CREATE | EXM-SCORE-F-STUDENT-ID<br>EXM-SCORE-F-SUBJECT<br>EXM-SCORE-F-SCORE<br>EXM-SCORE-F-IMPORT-REF<br>EXM-SCORE-F-IMPORT-VERSION | EXM-SCORE-F-ID<br>EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-VERSION | CREATE（成功状态由 EXM-ACT-CREATE-SUBJECT-SCORE-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-CREATE-SUBJECT-SCORE:school:object-version:request-id | PERMISSION_DENIED / IMPORT_REJECTED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| EXM-ACT-CONFIRM-SUBJECT-SCORE | Confirm Subject Score Professionally | EXM-OBJ-SUBJECT-SCORE | UPDATE | EXM-SCORE-F-CONFIRMATION-DECISION<br>EXM-SCORE-F-CONFIRMATION-REASON | EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-TEACHER-CONFIRMED-AT<br>EXM-SCORE-F-VERSION<br>EXM-SCORE-F-CONFIRMATION-DECISION<br>EXM-SCORE-F-CONFIRMATION-REASON | IMPORTED → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-CONFIRM-SUBJECT-SCORE:school:object-version:request-id | PERMISSION_DENIED / SCORE_REJECTED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-REJECT-SUBJECT-SCORE | Reject Imported Subject Score for Revision | EXM-OBJ-SUBJECT-SCORE | UPDATE | EXM-SCORE-F-CONFIRMATION-DECISION<br>EXM-SCORE-F-CONFIRMATION-REASON | EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-VERSION<br>EXM-SCORE-F-CONFIRMATION-DECISION<br>EXM-SCORE-F-CONFIRMATION-REASON | IMPORTED → REJECTED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-REJECT-SUBJECT-SCORE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | Revise Rejected Subject Score | EXM-OBJ-SUBJECT-SCORE | UPDATE | EXM-SCORE-F-SCORE | EXM-SCORE-F-SCORE<br>EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-VERSION | REJECTED → IMPORTED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE | Publish Teacher Confirmed Subject Score | EXM-OBJ-SUBJECT-SCORE | UPDATE |  | EXM-SCORE-F-VISIBLE-AT<br>EXM-SCORE-F-VERSION | TEACHER_CONFIRMED → PUBLISHED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-PUBLISH-SUBJECT-SCORE:school:object-version:request-id | PERMISSION_DENIED / SCORE_REJECTED / TEACHER_CONFIRMATION_REQUIRED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-CORRECT-SUBJECT-SCORE | Correct Published Subject Score | EXM-OBJ-SUBJECT-SCORE | UPDATE | EXM-SCORE-F-SCORE | EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-VERSION | PUBLISHED → CORRECTED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-CORRECT-SUBJECT-SCORE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-REPUBLISH-CORRECTED-SCORE | Republish Corrected Subject Score | EXM-OBJ-SUBJECT-SCORE | UPDATE |  | EXM-SCORE-F-VERSION | CORRECTED → PUBLISHED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | EXM-ACT-REPUBLISH-CORRECTED-SCORE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| EXM-ACT-VIEW-PUBLISHED-SCORE | View My Published Subject Score | EXM-OBJ-SUBJECT-SCORE | READ | EXM-SCORE-F-STUDENT-ID | EXM-SCORE-F-STUDENT-ID<br>EXM-SCORE-F-SCORE<br>EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-VERSION<br>EXM-SCORE-F-VISIBLE-AT | UNCHANGED | ALLOW:ROLE-STUDENT — the student reads only the student's own score after the score reaches PUBLISHED and visibleAt opens<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND / RESULT_NOT_PUBLISHED / RESULT_NOT_VISIBLE |
+
+## 5. 业务失败因果语义
+
+| Action ID | 失败码 | 因果谓词 | Given | When | Expected Data |
+| --- | --- | --- | --- | --- | --- |
+| EXM-ACT-VALIDATE-SCORE-IMPORT | IMPORT_REJECTED | blockingImportValidationErrors.length > 0 | the imported score rows contain at least one blocking schema, identity, subject, or score-range error | academic affairs validates the pending subject-score import | IMPORT_REJECTED returns row-level blocking evidence and preserves the import in PENDING |
+| EXM-ACT-ACCEPT-SCORE-IMPORT | IMPORT_REJECTED | scoreImport.state !== PASSED \|\| blockingImportValidationErrors.length > 0 | the score import has not reached PASSED or still contains blocking validation evidence | academic affairs accepts the validated subject-score import | IMPORT_REJECTED returns the unresolved validation evidence and does not create an ACCEPTED import version |
+| EXM-ACT-CREATE-SUBJECT-SCORE | IMPORT_REJECTED | scoreImport.state !== ACCEPTED | the pinned source import is not in the ACCEPTED state | academic affairs creates an imported subject-score version from the pinned import | IMPORT_REJECTED identifies the ineligible import and creates no subject-score version |
+| EXM-ACT-CONFIRM-SUBJECT-SCORE | SCORE_REJECTED | confirmationDecision !== CONFIRM \|\| subjectScore.state === REJECTED | the decision is not CONFIRM or the subject-score version has already been rejected | the assigned subject teacher confirms the imported subject-score version | SCORE_REJECTED preserves the score outside TEACHER_CONFIRMED and returns the rejection evidence |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE | SCORE_REJECTED | subjectScore.state === REJECTED | the subject-score version is in REJECTED | academic affairs publishes the subject-score version | SCORE_REJECTED preserves the rejected score and exposes no student-visible result |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE | TEACHER_CONFIRMATION_REQUIRED | subjectScore.state !== TEACHER_CONFIRMED \|\| teacherConfirmedAt == null | the subject-score version lacks the assigned subject teacher's confirmation state or confirmation timestamp | academic affairs publishes the subject-score version | TEACHER_CONFIRMATION_REQUIRED preserves the score as unpublished and exposes no student-visible result |
+| EXM-ACT-VIEW-PUBLISHED-SCORE | RESULT_NOT_PUBLISHED | subjectScore.state !== PUBLISHED | the student's own subject-score version has not reached PUBLISHED | the student requests the subject-score result | RESULT_NOT_PUBLISHED returns no protected score, evidence, or visibility timestamp |
+| EXM-ACT-VIEW-PUBLISHED-SCORE | RESULT_NOT_VISIBLE | subjectScore.state === PUBLISHED && currentTime < visibleAt | the student's own subject-score version is PUBLISHED but its visibility time has not opened | the student requests the subject-score result | RESULT_NOT_VISIBLE returns only the denial result and no protected score or evidence |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
+| EXM-OBJ-EXAM-EVENT | DRAFT | EXM-ACT-CREATE-EVENT | EXM-ACT-PUBLISH-EVENT |
+| EXM-OBJ-EXAM-EVENT | PUBLISHED | EXM-ACT-PUBLISH-EVENT | EXM-ACT-OPEN-CORRECTION |
+| EXM-OBJ-EXAM-EVENT | CORRECTION_OPEN | EXM-ACT-OPEN-CORRECTION |  |
+| EXM-OBJ-SCORE-IMPORT | PENDING | EXM-ACT-IMPORT-SCORES<br>EXM-ACT-REVISE-REJECTED-IMPORT | EXM-ACT-VALIDATE-SCORE-IMPORT<br>EXM-ACT-REJECT-SCORE-IMPORT |
+| EXM-OBJ-SCORE-IMPORT | PASSED | EXM-ACT-VALIDATE-SCORE-IMPORT | EXM-ACT-ACCEPT-SCORE-IMPORT |
+| EXM-OBJ-SCORE-IMPORT | REJECTED | EXM-ACT-REJECT-SCORE-IMPORT | EXM-ACT-REVISE-REJECTED-IMPORT |
+| EXM-OBJ-SCORE-IMPORT | ACCEPTED | EXM-ACT-ACCEPT-SCORE-IMPORT |  |
+| EXM-OBJ-AGGREGATE-RULE | DRAFT | EXM-ACT-CREATE-AGGREGATE-RULE | EXM-ACT-ACTIVATE-AGGREGATE-RULE |
+| EXM-OBJ-AGGREGATE-RULE | ACTIVE | EXM-ACT-ACTIVATE-AGGREGATE-RULE |  |
+| EXM-OBJ-SUBJECT-SCORE | IMPORTED | EXM-ACT-CREATE-SUBJECT-SCORE<br>EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | EXM-ACT-CONFIRM-SUBJECT-SCORE<br>EXM-ACT-REJECT-SUBJECT-SCORE |
+| EXM-OBJ-SUBJECT-SCORE | REJECTED | EXM-ACT-REJECT-SUBJECT-SCORE | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE |
+| EXM-OBJ-SUBJECT-SCORE | TEACHER_CONFIRMED | EXM-ACT-CONFIRM-SUBJECT-SCORE | EXM-ACT-PUBLISH-SUBJECT-SCORE |
+| EXM-OBJ-SUBJECT-SCORE | PUBLISHED | EXM-ACT-PUBLISH-SUBJECT-SCORE<br>EXM-ACT-REPUBLISH-CORRECTED-SCORE | EXM-ACT-CORRECT-SUBJECT-SCORE |
+| EXM-OBJ-SUBJECT-SCORE | CORRECTED | EXM-ACT-CORRECT-SUBJECT-SCORE | EXM-ACT-REPUBLISH-CORRECTED-SCORE |
 
-## 6. 主流程
+## 7. 参与数据流
 
-1. 教务创建考试和科目范围。
-2. 任课教师录入或导入本科成绩。
-3. 发布前校验异常状态和综合规则。
-4. 已发布成绩进入成绩册和学习证据。
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
 
-关联 Flow: `DF-103`、`DF-008`、`DF-011`。
+## 8. 页面任务合同
 
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| EXM-FR-01 | 对象查询与范围筛选 | EXM-F001、EXM-F002、EXM-F003、EXM-F004、EXM-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P1 | EXM-AC-01 |
-| EXM-FR-02 | 详情查看与版本追踪 | DAT-EXM-01、DAT-EXM-02、DAT-EXM-03、DAT-EXM-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P1 | EXM-AC-02 |
-| EXM-FR-03 | 创建/修改/确认主动作 | EXM-F001、EXM-F002、EXM-F003、EXM-F004、EXM-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P1 | EXM-AC-03 |
-| EXM-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P1 | EXM-AC-04 |
-| EXM-FR-05 | 审计、通知与下游失效 | DF-103、DF-008、DF-011 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P1 | EXM-AC-05 |
+| EXM-PAGE-ACADEMIC-OPERATIONS | Exam Academic Operations Workspace | WEB | EXM-OBJ-EXAM-EVENT<br>EXM-OBJ-SCORE-IMPORT<br>EXM-OBJ-AGGREGATE-RULE<br>EXM-OBJ-SUBJECT-SCORE | EXM-EVENT-F-ID<br>EXM-EVENT-F-NAME<br>EXM-EVENT-F-TERM<br>EXM-EVENT-F-STATUS<br>EXM-EVENT-F-PUBLICATION-AT<br>EXM-IMPORT-F-ID<br>EXM-IMPORT-F-FILE<br>EXM-IMPORT-F-SUBJECT<br>EXM-IMPORT-F-VALIDATION<br>EXM-IMPORT-F-EVIDENCE<br>EXM-IMPORT-F-VERSION<br>EXM-IMPORT-F-REJECTION-REASON<br>EXM-RULE-F-ID<br>EXM-RULE-F-DEFINITION<br>EXM-RULE-F-VERSION<br>EXM-SCORE-F-ID<br>EXM-SCORE-F-STUDENT-ID<br>EXM-SCORE-F-SUBJECT<br>EXM-SCORE-F-SCORE<br>EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-IMPORT-REF<br>EXM-SCORE-F-IMPORT-VERSION<br>EXM-SCORE-F-TEACHER-CONFIRMED-AT<br>EXM-SCORE-F-VISIBLE-AT<br>EXM-SCORE-F-CONFIRMATION-DECISION<br>EXM-SCORE-F-CONFIRMATION-REASON<br>EXM-SCORE-F-VERSION | EXM-ACT-CREATE-EVENT<br>EXM-ACT-PUBLISH-EVENT<br>EXM-ACT-OPEN-CORRECTION<br>EXM-ACT-IMPORT-SCORES<br>EXM-ACT-VALIDATE-SCORE-IMPORT<br>EXM-ACT-REJECT-SCORE-IMPORT<br>EXM-ACT-REVISE-REJECTED-IMPORT<br>EXM-ACT-ACCEPT-SCORE-IMPORT<br>EXM-ACT-CREATE-AGGREGATE-RULE<br>EXM-ACT-ACTIVATE-AGGREGATE-RULE<br>EXM-ACT-CREATE-SUBJECT-SCORE<br>EXM-ACT-CONFIRM-SUBJECT-SCORE<br>EXM-ACT-REJECT-SUBJECT-SCORE<br>EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE<br>EXM-ACT-PUBLISH-SUBJECT-SCORE<br>EXM-ACT-CORRECT-SUBJECT-SCORE<br>EXM-ACT-REPUBLISH-CORRECTED-SCORE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| EXM-PAGE-MOBILE-ACADEMIC-REVIEW | Mobile Exam Academic Review | APP | EXM-OBJ-EXAM-EVENT<br>EXM-OBJ-SCORE-IMPORT<br>EXM-OBJ-AGGREGATE-RULE<br>EXM-OBJ-SUBJECT-SCORE | EXM-EVENT-F-ID<br>EXM-EVENT-F-NAME<br>EXM-EVENT-F-TERM<br>EXM-EVENT-F-STATUS<br>EXM-EVENT-F-PUBLICATION-AT<br>EXM-IMPORT-F-ID<br>EXM-IMPORT-F-FILE<br>EXM-IMPORT-F-SUBJECT<br>EXM-IMPORT-F-VALIDATION<br>EXM-IMPORT-F-EVIDENCE<br>EXM-IMPORT-F-VERSION<br>EXM-IMPORT-F-REJECTION-REASON<br>EXM-RULE-F-ID<br>EXM-RULE-F-DEFINITION<br>EXM-RULE-F-VERSION<br>EXM-SCORE-F-ID<br>EXM-SCORE-F-STUDENT-ID<br>EXM-SCORE-F-SUBJECT<br>EXM-SCORE-F-SCORE<br>EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-IMPORT-REF<br>EXM-SCORE-F-IMPORT-VERSION<br>EXM-SCORE-F-TEACHER-CONFIRMED-AT<br>EXM-SCORE-F-VISIBLE-AT<br>EXM-SCORE-F-CONFIRMATION-DECISION<br>EXM-SCORE-F-CONFIRMATION-REASON<br>EXM-SCORE-F-VERSION | EXM-ACT-CREATE-EVENT<br>EXM-ACT-PUBLISH-EVENT<br>EXM-ACT-OPEN-CORRECTION<br>EXM-ACT-CREATE-AGGREGATE-RULE<br>EXM-ACT-ACTIVATE-AGGREGATE-RULE<br>EXM-ACT-CREATE-SUBJECT-SCORE<br>EXM-ACT-CONFIRM-SUBJECT-SCORE<br>EXM-ACT-REJECT-SUBJECT-SCORE<br>EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE<br>EXM-ACT-PUBLISH-SUBJECT-SCORE<br>EXM-ACT-CORRECT-SUBJECT-SCORE<br>EXM-ACT-REPUBLISH-CORRECTED-SCORE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| EXM-PAGE-STUDENT-PUBLISHED-SCORE | Student Published Subject Score | WEB / APP | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-STUDENT-ID<br>EXM-SCORE-F-SCORE<br>EXM-SCORE-F-EVIDENCE<br>EXM-SCORE-F-VERSION<br>EXM-SCORE-F-VISIBLE-AT | EXM-ACT-VIEW-PUBLISHED-SCORE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 7. 异常、幂等与补偿
+## 9. 验收场景
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EXM-ACT-CREATE-EVENT-SCN-SUCCESS | SUCCESS | EXM-ACT-CREATE-EVENT | the authorized actor satisfies the task-specific entry conditions for Create Exam Event | the actor requests Create Exam Event | Create Exam Event returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| EXM-ACT-CREATE-EVENT-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-CREATE-EVENT | PERMISSION_DENIED blocks Create Exam Event | the actor requests Create Exam Event | Create Exam Event returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-CREATE-EVENT-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-CREATE-EVENT | VALIDATION_FAILED blocks Create Exam Event | the actor requests Create Exam Event | Create Exam Event returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-CREATE-EVENT-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-CREATE-EVENT | VERSION_CONFLICT blocks Create Exam Event | the actor requests Create Exam Event | Create Exam Event returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-PUBLISH-EVENT-SCN-SUCCESS | SUCCESS | EXM-ACT-PUBLISH-EVENT | the authorized actor satisfies the task-specific entry conditions for Publish Exam Event | the actor requests Publish Exam Event | Publish Exam Event returns the accepted versioned task result without widening scope | PUBLISHED | ALLOW |  |
+| EXM-ACT-PUBLISH-EVENT-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-PUBLISH-EVENT | PERMISSION_DENIED blocks Publish Exam Event | the actor requests Publish Exam Event | Publish Exam Event returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-PUBLISH-EVENT-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-PUBLISH-EVENT | VALIDATION_FAILED blocks Publish Exam Event | the actor requests Publish Exam Event | Publish Exam Event returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-PUBLISH-EVENT-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-PUBLISH-EVENT | VERSION_CONFLICT blocks Publish Exam Event | the actor requests Publish Exam Event | Publish Exam Event returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-OPEN-CORRECTION-SCN-SUCCESS | SUCCESS | EXM-ACT-OPEN-CORRECTION | the authorized actor satisfies the task-specific entry conditions for Open Exam Correction Window | the actor requests Open Exam Correction Window | Open Exam Correction Window returns the accepted versioned task result without widening scope | CORRECTION_OPEN | ALLOW |  |
+| EXM-ACT-OPEN-CORRECTION-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-OPEN-CORRECTION | PERMISSION_DENIED blocks Open Exam Correction Window | the actor requests Open Exam Correction Window | Open Exam Correction Window returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-OPEN-CORRECTION-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-OPEN-CORRECTION | VALIDATION_FAILED blocks Open Exam Correction Window | the actor requests Open Exam Correction Window | Open Exam Correction Window returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-OPEN-CORRECTION-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-OPEN-CORRECTION | VERSION_CONFLICT blocks Open Exam Correction Window | the actor requests Open Exam Correction Window | Open Exam Correction Window returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-IMPORT-SCORES-SCN-SUCCESS | SUCCESS | EXM-ACT-IMPORT-SCORES | the authorized actor satisfies the task-specific entry conditions for Import Subject Scores | the actor requests Import Subject Scores | Import Subject Scores returns the accepted versioned task result without widening scope | PENDING | ALLOW |  |
+| EXM-ACT-IMPORT-SCORES-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-IMPORT-SCORES | PERMISSION_DENIED blocks Import Subject Scores | the actor requests Import Subject Scores | Import Subject Scores returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-IMPORT-SCORES-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-IMPORT-SCORES | VALIDATION_FAILED blocks Import Subject Scores | the actor requests Import Subject Scores | Import Subject Scores returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-IMPORT-SCORES-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-IMPORT-SCORES | VERSION_CONFLICT blocks Import Subject Scores | the actor requests Import Subject Scores | Import Subject Scores returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-VALIDATE-SCORE-IMPORT-SCN-SUCCESS | SUCCESS | EXM-ACT-VALIDATE-SCORE-IMPORT | the authorized actor satisfies the task-specific entry conditions for Validate Subject Score Import | the actor requests Validate Subject Score Import | Validate Subject Score Import returns the accepted versioned task result without widening scope | PASSED | ALLOW |  |
+| EXM-ACT-VALIDATE-SCORE-IMPORT-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-VALIDATE-SCORE-IMPORT | PERMISSION_DENIED blocks Validate Subject Score Import | the actor requests Validate Subject Score Import | Validate Subject Score Import returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-VALIDATE-SCORE-IMPORT-SCN-IMPORT_REJECTED | FAILURE | EXM-ACT-VALIDATE-SCORE-IMPORT | the imported score rows contain at least one blocking schema, identity, subject, or score-range error | academic affairs validates the pending subject-score import | IMPORT_REJECTED returns row-level blocking evidence and preserves the import in PENDING | UNCHANGED | DENY | IMPORT_REJECTED — blockingImportValidationErrors.length > 0 |
+| EXM-ACT-VALIDATE-SCORE-IMPORT-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-VALIDATE-SCORE-IMPORT | VALIDATION_FAILED blocks Validate Subject Score Import | the actor requests Validate Subject Score Import | Validate Subject Score Import returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-VALIDATE-SCORE-IMPORT-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-VALIDATE-SCORE-IMPORT | VERSION_CONFLICT blocks Validate Subject Score Import | the actor requests Validate Subject Score Import | Validate Subject Score Import returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-REJECT-SCORE-IMPORT-SCN-SUCCESS | SUCCESS | EXM-ACT-REJECT-SCORE-IMPORT | the authorized actor satisfies the task-specific entry conditions for Reject Invalid Subject Score Import | the actor requests Reject Invalid Subject Score Import | Reject Invalid Subject Score Import returns the accepted versioned task result without widening scope | REJECTED | ALLOW |  |
+| EXM-ACT-REJECT-SCORE-IMPORT-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-REJECT-SCORE-IMPORT | PERMISSION_DENIED blocks Reject Invalid Subject Score Import | the actor requests Reject Invalid Subject Score Import | Reject Invalid Subject Score Import returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-REJECT-SCORE-IMPORT-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-REJECT-SCORE-IMPORT | VALIDATION_FAILED blocks Reject Invalid Subject Score Import | the actor requests Reject Invalid Subject Score Import | Reject Invalid Subject Score Import returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-REJECT-SCORE-IMPORT-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-REJECT-SCORE-IMPORT | VERSION_CONFLICT blocks Reject Invalid Subject Score Import | the actor requests Reject Invalid Subject Score Import | Reject Invalid Subject Score Import returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-REVISE-REJECTED-IMPORT-SCN-SUCCESS | SUCCESS | EXM-ACT-REVISE-REJECTED-IMPORT | the authorized actor satisfies the task-specific entry conditions for Revise Rejected Subject Score Import | the actor requests Revise Rejected Subject Score Import | Revise Rejected Subject Score Import returns the accepted versioned task result without widening scope | PENDING | ALLOW |  |
+| EXM-ACT-REVISE-REJECTED-IMPORT-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-REVISE-REJECTED-IMPORT | PERMISSION_DENIED blocks Revise Rejected Subject Score Import | the actor requests Revise Rejected Subject Score Import | Revise Rejected Subject Score Import returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-REVISE-REJECTED-IMPORT-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-REVISE-REJECTED-IMPORT | VALIDATION_FAILED blocks Revise Rejected Subject Score Import | the actor requests Revise Rejected Subject Score Import | Revise Rejected Subject Score Import returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-REVISE-REJECTED-IMPORT-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-REVISE-REJECTED-IMPORT | VERSION_CONFLICT blocks Revise Rejected Subject Score Import | the actor requests Revise Rejected Subject Score Import | Revise Rejected Subject Score Import returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-ACCEPT-SCORE-IMPORT-SCN-SUCCESS | SUCCESS | EXM-ACT-ACCEPT-SCORE-IMPORT | the authorized actor satisfies the task-specific entry conditions for Accept Validated Subject Score Import | the actor requests Accept Validated Subject Score Import | Accept Validated Subject Score Import returns the accepted versioned task result without widening scope | ACCEPTED | ALLOW |  |
+| EXM-ACT-ACCEPT-SCORE-IMPORT-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-ACCEPT-SCORE-IMPORT | PERMISSION_DENIED blocks Accept Validated Subject Score Import | the actor requests Accept Validated Subject Score Import | Accept Validated Subject Score Import returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-ACCEPT-SCORE-IMPORT-SCN-IMPORT_REJECTED | FAILURE | EXM-ACT-ACCEPT-SCORE-IMPORT | the score import has not reached PASSED or still contains blocking validation evidence | academic affairs accepts the validated subject-score import | IMPORT_REJECTED returns the unresolved validation evidence and does not create an ACCEPTED import version | UNCHANGED | DENY | IMPORT_REJECTED — scoreImport.state !== PASSED \|\| blockingImportValidationErrors.length > 0 |
+| EXM-ACT-ACCEPT-SCORE-IMPORT-SCN-SOURCE_VERSION_STALE | FAILURE | EXM-ACT-ACCEPT-SCORE-IMPORT | SOURCE_VERSION_STALE blocks Accept Validated Subject Score Import | the actor requests Accept Validated Subject Score Import | Accept Validated Subject Score Import returns SOURCE_VERSION_STALE and performs no hidden write | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| EXM-ACT-ACCEPT-SCORE-IMPORT-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-ACCEPT-SCORE-IMPORT | VERSION_CONFLICT blocks Accept Validated Subject Score Import | the actor requests Accept Validated Subject Score Import | Accept Validated Subject Score Import returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-CREATE-AGGREGATE-RULE-SCN-SUCCESS | SUCCESS | EXM-ACT-CREATE-AGGREGATE-RULE | the authorized actor satisfies the task-specific entry conditions for Create Aggregate Score Rule Version | the actor requests Create Aggregate Score Rule Version | Create Aggregate Score Rule Version returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| EXM-ACT-CREATE-AGGREGATE-RULE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-CREATE-AGGREGATE-RULE | PERMISSION_DENIED blocks Create Aggregate Score Rule Version | the actor requests Create Aggregate Score Rule Version | Create Aggregate Score Rule Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-CREATE-AGGREGATE-RULE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-CREATE-AGGREGATE-RULE | VALIDATION_FAILED blocks Create Aggregate Score Rule Version | the actor requests Create Aggregate Score Rule Version | Create Aggregate Score Rule Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-CREATE-AGGREGATE-RULE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-CREATE-AGGREGATE-RULE | VERSION_CONFLICT blocks Create Aggregate Score Rule Version | the actor requests Create Aggregate Score Rule Version | Create Aggregate Score Rule Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-ACTIVATE-AGGREGATE-RULE-SCN-SUCCESS | SUCCESS | EXM-ACT-ACTIVATE-AGGREGATE-RULE | the authorized actor satisfies the task-specific entry conditions for Activate Aggregate Score Rule Version | the actor requests Activate Aggregate Score Rule Version | Activate Aggregate Score Rule Version returns the accepted versioned task result without widening scope | ACTIVE | ALLOW |  |
+| EXM-ACT-ACTIVATE-AGGREGATE-RULE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-ACTIVATE-AGGREGATE-RULE | PERMISSION_DENIED blocks Activate Aggregate Score Rule Version | the actor requests Activate Aggregate Score Rule Version | Activate Aggregate Score Rule Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-ACTIVATE-AGGREGATE-RULE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-ACTIVATE-AGGREGATE-RULE | VALIDATION_FAILED blocks Activate Aggregate Score Rule Version | the actor requests Activate Aggregate Score Rule Version | Activate Aggregate Score Rule Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-ACTIVATE-AGGREGATE-RULE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-ACTIVATE-AGGREGATE-RULE | VERSION_CONFLICT blocks Activate Aggregate Score Rule Version | the actor requests Activate Aggregate Score Rule Version | Activate Aggregate Score Rule Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-CREATE-SUBJECT-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-CREATE-SUBJECT-SCORE | the authorized actor satisfies the task-specific entry conditions for Create Imported Subject Score Version | the actor requests Create Imported Subject Score Version | Create Imported Subject Score Version returns the accepted versioned task result without widening scope | IMPORTED | ALLOW |  |
+| EXM-ACT-CREATE-SUBJECT-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-CREATE-SUBJECT-SCORE | PERMISSION_DENIED blocks Create Imported Subject Score Version | the actor requests Create Imported Subject Score Version | Create Imported Subject Score Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-CREATE-SUBJECT-SCORE-SCN-IMPORT_REJECTED | FAILURE | EXM-ACT-CREATE-SUBJECT-SCORE | the pinned source import is not in the ACCEPTED state | academic affairs creates an imported subject-score version from the pinned import | IMPORT_REJECTED identifies the ineligible import and creates no subject-score version | UNCHANGED | DENY | IMPORT_REJECTED — scoreImport.state !== ACCEPTED |
+| EXM-ACT-CREATE-SUBJECT-SCORE-SCN-SOURCE_VERSION_STALE | FAILURE | EXM-ACT-CREATE-SUBJECT-SCORE | SOURCE_VERSION_STALE blocks Create Imported Subject Score Version | the actor requests Create Imported Subject Score Version | Create Imported Subject Score Version returns SOURCE_VERSION_STALE and performs no hidden write | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| EXM-ACT-CREATE-SUBJECT-SCORE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-CREATE-SUBJECT-SCORE | VERSION_CONFLICT blocks Create Imported Subject Score Version | the actor requests Create Imported Subject Score Version | Create Imported Subject Score Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-CONFIRM-SUBJECT-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-CONFIRM-SUBJECT-SCORE | the authorized actor satisfies the task-specific entry conditions for Confirm Subject Score Professionally | the actor requests Confirm Subject Score Professionally | Confirm Subject Score Professionally returns the accepted versioned task result without widening scope | TEACHER_CONFIRMED | ALLOW |  |
+| EXM-ACT-CONFIRM-SUBJECT-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-CONFIRM-SUBJECT-SCORE | PERMISSION_DENIED blocks Confirm Subject Score Professionally | the actor requests Confirm Subject Score Professionally | Confirm Subject Score Professionally returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-CONFIRM-SUBJECT-SCORE-SCN-SCORE_REJECTED | FAILURE | EXM-ACT-CONFIRM-SUBJECT-SCORE | the decision is not CONFIRM or the subject-score version has already been rejected | the assigned subject teacher confirms the imported subject-score version | SCORE_REJECTED preserves the score outside TEACHER_CONFIRMED and returns the rejection evidence | UNCHANGED | DENY | SCORE_REJECTED — confirmationDecision !== CONFIRM \|\| subjectScore.state === REJECTED |
+| EXM-ACT-CONFIRM-SUBJECT-SCORE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-CONFIRM-SUBJECT-SCORE | VALIDATION_FAILED blocks Confirm Subject Score Professionally | the actor requests Confirm Subject Score Professionally | Confirm Subject Score Professionally returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-CONFIRM-SUBJECT-SCORE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-CONFIRM-SUBJECT-SCORE | VERSION_CONFLICT blocks Confirm Subject Score Professionally | the actor requests Confirm Subject Score Professionally | Confirm Subject Score Professionally returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-REJECT-SUBJECT-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-REJECT-SUBJECT-SCORE | the authorized actor satisfies the task-specific entry conditions for Reject Imported Subject Score for Revision | the actor requests Reject Imported Subject Score for Revision | Reject Imported Subject Score for Revision returns the accepted versioned task result without widening scope | REJECTED | ALLOW |  |
+| EXM-ACT-REJECT-SUBJECT-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-REJECT-SUBJECT-SCORE | PERMISSION_DENIED blocks Reject Imported Subject Score for Revision | the actor requests Reject Imported Subject Score for Revision | Reject Imported Subject Score for Revision returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-REJECT-SUBJECT-SCORE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-REJECT-SUBJECT-SCORE | VALIDATION_FAILED blocks Reject Imported Subject Score for Revision | the actor requests Reject Imported Subject Score for Revision | Reject Imported Subject Score for Revision returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-REJECT-SUBJECT-SCORE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-REJECT-SUBJECT-SCORE | VERSION_CONFLICT blocks Reject Imported Subject Score for Revision | the actor requests Reject Imported Subject Score for Revision | Reject Imported Subject Score for Revision returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | the authorized actor satisfies the task-specific entry conditions for Revise Rejected Subject Score | the actor requests Revise Rejected Subject Score | Revise Rejected Subject Score returns the accepted versioned task result without widening scope | IMPORTED | ALLOW |  |
+| EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | PERMISSION_DENIED blocks Revise Rejected Subject Score | the actor requests Revise Rejected Subject Score | Revise Rejected Subject Score returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | VALIDATION_FAILED blocks Revise Rejected Subject Score | the actor requests Revise Rejected Subject Score | Revise Rejected Subject Score returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | VERSION_CONFLICT blocks Revise Rejected Subject Score | the actor requests Revise Rejected Subject Score | Revise Rejected Subject Score returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-PUBLISH-SUBJECT-SCORE | the authorized actor satisfies the task-specific entry conditions for Publish Teacher Confirmed Subject Score | the actor requests Publish Teacher Confirmed Subject Score | Publish Teacher Confirmed Subject Score returns the accepted versioned task result without widening scope | PUBLISHED | ALLOW |  |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-PUBLISH-SUBJECT-SCORE | PERMISSION_DENIED blocks Publish Teacher Confirmed Subject Score | the actor requests Publish Teacher Confirmed Subject Score | Publish Teacher Confirmed Subject Score returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE-SCN-SCORE_REJECTED | FAILURE | EXM-ACT-PUBLISH-SUBJECT-SCORE | the subject-score version is in REJECTED | academic affairs publishes the subject-score version | SCORE_REJECTED preserves the rejected score and exposes no student-visible result | UNCHANGED | DENY | SCORE_REJECTED — subjectScore.state === REJECTED |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE-SCN-TEACHER_CONFIRMATION_REQUIRED | FAILURE | EXM-ACT-PUBLISH-SUBJECT-SCORE | the subject-score version lacks the assigned subject teacher's confirmation state or confirmation timestamp | academic affairs publishes the subject-score version | TEACHER_CONFIRMATION_REQUIRED preserves the score as unpublished and exposes no student-visible result | UNCHANGED | DENY | TEACHER_CONFIRMATION_REQUIRED — subjectScore.state !== TEACHER_CONFIRMED \|\| teacherConfirmedAt == null |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-PUBLISH-SUBJECT-SCORE | VALIDATION_FAILED blocks Publish Teacher Confirmed Subject Score | the actor requests Publish Teacher Confirmed Subject Score | Publish Teacher Confirmed Subject Score returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-PUBLISH-SUBJECT-SCORE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-PUBLISH-SUBJECT-SCORE | VERSION_CONFLICT blocks Publish Teacher Confirmed Subject Score | the actor requests Publish Teacher Confirmed Subject Score | Publish Teacher Confirmed Subject Score returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-CORRECT-SUBJECT-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-CORRECT-SUBJECT-SCORE | the authorized actor satisfies the task-specific entry conditions for Correct Published Subject Score | the actor requests Correct Published Subject Score | Correct Published Subject Score returns the accepted versioned task result without widening scope | CORRECTED | ALLOW |  |
+| EXM-ACT-CORRECT-SUBJECT-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-CORRECT-SUBJECT-SCORE | PERMISSION_DENIED blocks Correct Published Subject Score | the actor requests Correct Published Subject Score | Correct Published Subject Score returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-CORRECT-SUBJECT-SCORE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-CORRECT-SUBJECT-SCORE | VALIDATION_FAILED blocks Correct Published Subject Score | the actor requests Correct Published Subject Score | Correct Published Subject Score returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-CORRECT-SUBJECT-SCORE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-CORRECT-SUBJECT-SCORE | VERSION_CONFLICT blocks Correct Published Subject Score | the actor requests Correct Published Subject Score | Correct Published Subject Score returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-REPUBLISH-CORRECTED-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-REPUBLISH-CORRECTED-SCORE | the authorized actor satisfies the task-specific entry conditions for Republish Corrected Subject Score | the actor requests Republish Corrected Subject Score | Republish Corrected Subject Score returns the accepted versioned task result without widening scope | PUBLISHED | ALLOW |  |
+| EXM-ACT-REPUBLISH-CORRECTED-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-REPUBLISH-CORRECTED-SCORE | PERMISSION_DENIED blocks Republish Corrected Subject Score | the actor requests Republish Corrected Subject Score | Republish Corrected Subject Score returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-REPUBLISH-CORRECTED-SCORE-SCN-VALIDATION_FAILED | FAILURE | EXM-ACT-REPUBLISH-CORRECTED-SCORE | VALIDATION_FAILED blocks Republish Corrected Subject Score | the actor requests Republish Corrected Subject Score | Republish Corrected Subject Score returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| EXM-ACT-REPUBLISH-CORRECTED-SCORE-SCN-VERSION_CONFLICT | FAILURE | EXM-ACT-REPUBLISH-CORRECTED-SCORE | VERSION_CONFLICT blocks Republish Corrected Subject Score | the actor requests Republish Corrected Subject Score | Republish Corrected Subject Score returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| EXM-ACT-VIEW-PUBLISHED-SCORE-SCN-SUCCESS | SUCCESS | EXM-ACT-VIEW-PUBLISHED-SCORE | the authorized actor satisfies the task-specific entry conditions for View My Published Subject Score | the actor requests View My Published Subject Score | View My Published Subject Score returns the accepted versioned task result without widening scope | UNCHANGED | ALLOW |  |
+| EXM-ACT-VIEW-PUBLISHED-SCORE-SCN-PERMISSION_DENIED | FAILURE | EXM-ACT-VIEW-PUBLISHED-SCORE | PERMISSION_DENIED blocks View My Published Subject Score | the actor requests View My Published Subject Score | View My Published Subject Score returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| EXM-ACT-VIEW-PUBLISHED-SCORE-SCN-NOT_FOUND | FAILURE | EXM-ACT-VIEW-PUBLISHED-SCORE | NOT_FOUND blocks View My Published Subject Score | the actor requests View My Published Subject Score | View My Published Subject Score returns NOT_FOUND and performs no hidden write | UNCHANGED | DENY | NOT_FOUND |
+| EXM-ACT-VIEW-PUBLISHED-SCORE-SCN-RESULT_NOT_PUBLISHED | FAILURE | EXM-ACT-VIEW-PUBLISHED-SCORE | the student's own subject-score version has not reached PUBLISHED | the student requests the subject-score result | RESULT_NOT_PUBLISHED returns no protected score, evidence, or visibility timestamp | UNCHANGED | DENY | RESULT_NOT_PUBLISHED — subjectScore.state !== PUBLISHED |
+| EXM-ACT-VIEW-PUBLISHED-SCORE-SCN-RESULT_NOT_VISIBLE | FAILURE | EXM-ACT-VIEW-PUBLISHED-SCORE | the student's own subject-score version is PUBLISHED but its visibility time has not opened | the student requests the subject-score result | RESULT_NOT_VISIBLE returns only the denial result and no protected score or evidence | UNCHANGED | DENY | RESULT_NOT_VISIBLE — subjectScore.state === PUBLISHED && currentTime < visibleAt |
 
-## 8. AI 对话与任务执行
+## 10. AI 任务映射
 
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-## 9. 验收标准
+## 11. 研发与测试就绪门禁
 
-| ID | 验收标准 |
-| --- | --- |
-| EXM-AC-01 | 科目成绩 Owner 是对应任课教师。 |
-| EXM-AC-02 | 缺考、免计、无效不能用空分数表示。 |
-| EXM-AC-03 | 综合成绩规则发布后变更形成新版本。 |
-| EXM-AC-04 | 考试成绩发布前学生不可见。 |
-| EXM-AC-05 | P1 完整定义但第一阶段主闭环不依赖考试上线。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-103`、`DF-008`、`DF-011`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

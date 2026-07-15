@@ -1,44 +1,100 @@
-# INS-001 学习证据、知识点归因与掌握判断 Web/App 线框合同 v2.0
+# INS-001 Evidence and Mastery Interpretation Web/App 页面合同 v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 关联 PRD | [14-mastery-evidence-insight_PRD_v2.0.md](../03-full-prd-md/14-mastery-evidence-insight_PRD_v2.0.md) |
-| 适用端 | Web、App |
-| 设计原则 | 端不是权限边界；Web 完整，App 高频；所有字段引用 PRD Field ID。 |
-
-## 1. Web 页面合同
-
-| Page ID | 页面 | 核心区域 | 主要动作 | 引用字段 |
-| --- | --- | --- | --- | --- |
-| INS-W01 | 列表/工作台 | 筛选区、指标区、对象列表、状态标签、批量动作栏 | 查询、筛选、进入详情、打开 AI 一句话入口 | INS-F001、INS-F002、INS-F003、INS-F004 |
-| INS-W02 | 详情/处理页 | 源对象摘要、版本信息、处理表单、历史记录、权限提示 | 保存草稿、确认、退回、查看审计 | INS-F003、INS-F004、INS-F005、INS-F006、INS-F007 |
-| INS-W03 | 预览/确认页 | 影响范围、字段变化、源版本、目标版本、风险提示、审计摘要 | 确认执行、取消、返回修改 | INS-F001、INS-F002、INS-F003、INS-F004、INS-F005、INS-F006 |
-| INS-W04 | 历史/审计页 | 版本列表、状态变化、操作者、时间、失败补偿记录 | 查看差异、筛选审计、导出摘要 | AUD-F001、AUD-F002、AUD-F003 |
-
-## 2. App 能力合同
-
-| View ID | 移动视图 | 保留能力 | 不要求移动端承载 | 状态 |
-| --- | --- | --- | --- | --- |
-| INS-A01 | 摘要/待办 | 学生查看已确认解释、教师移动查看薄弱点、订正后变化提醒 | 复杂批量表格、长表单配置、跨对象高级筛选 | 必须可用 |
-| INS-A02 | 详情/查看 | 查看本人或授权范围内对象、状态、来源、下一步动作 | 复杂策略编辑 | 必须可用 |
-| INS-A03 | 必要确认 | 低风险确认、移动审批、困难反馈或处理提醒 | 高风险批量写入默认回 Web | 按模块启用 |
-| INS-A04 | AI 对话入口 | 一句话查询、摘要、草稿建议、任务提醒 | 未经预览直接执行写入 | 必须继承 AIX-001 |
-
-## 3. 组件与状态要求
-
-- 筛选控件必须使用字段字典中指定的控件类型和 Option Set。
-- 所有列表展示空状态、无权限状态、加载失败状态、部分成功状态和版本过期状态。
-- 高风险动作固定展示影响对象数量、源版本、目标版本、确认人和审计摘要。
-- AI 结果必须展示数据范围、来源模块、源版本和限制说明。
-- App 中被省略的 Web 能力必须显示合理入口或说明，不能让用户以为权限消失。
-
-## 4. 页面级验收
-
-| ID | 验收标准 |
 | --- | --- |
-| INS-WF-01 | 页面中出现的选择型字段都能回溯到 Field ID 和 Option Set。 |
-| INS-WF-02 | Web 与 App 的能力差异与 Capability Matrix 一致。 |
-| INS-WF-03 | 无权限、空数据、加载失败、上下文失效、部分成功都有明确状态。 |
-| INS-WF-04 | 高风险确认页在执行前展示影响范围、权限结果和审计摘要。 |
-| INS-WF-05 | AI 对话入口不绕过模块 PRD 的权限、状态和确认门禁。 |
+| 模块 | INS-001 |
+| 阶段 | 1 |
+| 页面数量 | 2 |
+| 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
+
+## INS-PAGE-EVIDENCE-REVIEW Evidence and Mastery Review
+
+| 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- |
+| WEB / APP | INS-OBJ-EVIDENCE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+
+### 页面任务
+
+- 进入页面时先校验学校、身份、学期、职责和对象范围；失败进入 FORBIDDEN 或 CONTEXT_EXPIRED。
+- 页面只编排本合同列出的 Action；控件隐藏不能替代服务端 DENY。
+- 提交前展示输入字段、目标对象、当前版本、状态效果、失败码和审计级别。
+- 版本冲突、源版本过期、部分成功和 AI 不可用必须使用不同结果态。
+
+### 字段与控件语义
+
+| Object ID | Field ID | 字段 | 类型 | 必填 | 值来源 / Option Set | 可变性 | 可见性 | 校验 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-ID | Evidence Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STUDENT-REF | Evidence Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-DATA-ID | Evidence Source Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-RESULT-REF | Source Published Result Reference | ID | required for evidence derived from a published result；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-RESULT-VERSION | Source Published Result Version | INTEGER | required for evidence derived from a published result；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-CORRECTION-REF | Source Correction Attempt Reference | ID | required for correction-stage evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | OBJECT_REF: CORR-OBJ-ATTEMPT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION | Source Correction Version | INTEGER | required for correction-stage evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-EVIDENCE-SOURCE | Evidence Source | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STAGE | Evidence Stage | STRING | 是 | OPTION_SET: OPT-ENUM-008 | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-KNOWLEDGE-POINT-REF | Knowledge Point Reference | ID | 是 | OBJECT_REF: CURR-OBJ-KNOWLEDGE-POINT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION | Knowledge Point Version | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-RESULT | Answer Result | STRING | 是 | OPTION_SET: OPT-ENUM-009 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-ERROR-TYPE | Error Type | STRING | 是 | OPTION_SET: OPT-ENUM-010 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-WEIGHT | Evidence Weight | DECIMAL | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-VALIDITY | Evidence Validity | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-MASTERY-CANDIDATE | Mastery Interpretation Candidate | TEXT | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-MASTERY-INTERPRETATION | Teacher-confirmed Mastery Interpretation | TEXT | required when evidence reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-TEACHER-CONFIRMATION | Teacher Confirmation | STRING | required when evidence reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STUDENT-VISIBLE-AT | Student Visible At | DATETIME | required when evidence reaches STUDENT_VISIBLE；状态=STUDENT_VISIBLE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-INVALIDATION-REASON | Evidence Invalidation Reason | TEXT | required when evidence becomes stale；状态=STALE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-PRIOR-EVIDENCE-REF | Prior Evidence Reference | ID | required when a new evidence version supersedes prior evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | OBJECT_REF: INS-OBJ-EVIDENCE | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION | Prior Evidence Version | INTEGER | required when a new evidence version supersedes prior evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION | Mastery Interpretation Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-EVIDENCE-VERSION | Evidence Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+
+### 动作与反馈
+
+| Action ID | 动作 | 操作 | 输入 | 输出 | 状态效果 | ALLOW | DENY | 风险 / 审计 | 失败反馈 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| INS-ACT-CONFIRM-MASTERY | Confirm the Evidence and Mastery Interpretation | UPDATE | INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-TEACHER-CONFIRMATION | INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-TEACHER-CONFIRMATION<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | CANDIDATE → TEACHER_CONFIRMED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-SCHOOL-ADMIN / ROLE-PLATFORM-OPS / AI | HIGH / REQUIRED | PERMISSION_DENIED / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| INS-ACT-PUBLISH-INTERPRETATION | Publish the Teacher-confirmed Mastery Interpretation | UPDATE |  | INS-EVIDENCE-F-STUDENT-VISIBLE-AT<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | TEACHER_CONFIRMED → STUDENT_VISIBLE | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-SCHOOL-ADMIN / ROLE-PLATFORM-OPS / AI | HIGH / REQUIRED | PERMISSION_DENIED / TEACHER_CONFIRMATION_REQUIRED / VERSION_CONFLICT / AUDIT_FAILED |
+| INS-ACT-READ-CONFIRMED-EVIDENCE | Read Confirmed Evidence for Authorized Coordination | READ | INS-EVIDENCE-F-ID | INS-EVIDENCE-F-ID<br>INS-EVIDENCE-F-STUDENT-REF<br>INS-EVIDENCE-F-STAGE<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-REF<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION<br>INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-ERROR-TYPE<br>INS-EVIDENCE-F-WEIGHT<br>INS-EVIDENCE-F-VALIDITY<br>INS-EVIDENCE-F-TEACHER-CONFIRMATION<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | UNCHANGED | DUTY-SUBJECT-TEACHER / DUTY-HOMEROOM | ROLE-SCHOOL-ADMIN / ROLE-PLATFORM-OPS | READ / NOT_REQUIRED | PERMISSION_DENIED / NOT_FOUND |
+
+### Web / App 差异
+
+| 端 | 本页要求 |
+| --- | --- |
+| WEB | 支持本页登记的完整任务；批量、复杂表格和治理配置优先在 Web 呈现。 |
+| APP | 支持本页登记的高频移动任务、摘要、提醒或必要确认；不要求复制未登记的 Web 复杂能力。 |
+
+## INS-PAGE-STUDENT-MASTERY Student Mastery Interpretation
+
+| 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- |
+| WEB / APP | INS-OBJ-EVIDENCE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+
+### 页面任务
+
+- 进入页面时先校验学校、身份、学期、职责和对象范围；失败进入 FORBIDDEN 或 CONTEXT_EXPIRED。
+- 页面只编排本合同列出的 Action；控件隐藏不能替代服务端 DENY。
+- 提交前展示输入字段、目标对象、当前版本、状态效果、失败码和审计级别。
+- 版本冲突、源版本过期、部分成功和 AI 不可用必须使用不同结果态。
+
+### 字段与控件语义
+
+| Object ID | Field ID | 字段 | 类型 | 必填 | 值来源 / Option Set | 可变性 | 可见性 | 校验 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STUDENT-REF | Evidence Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-RESULT | Answer Result | STRING | 是 | OPTION_SET: OPT-ENUM-009 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-MASTERY-INTERPRETATION | Teacher-confirmed Mastery Interpretation | TEXT | required when evidence reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STUDENT-VISIBLE-AT | Student Visible At | DATETIME | required when evidence reaches STUDENT_VISIBLE；状态=STUDENT_VISIBLE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+
+### 动作与反馈
+
+| Action ID | 动作 | 操作 | 输入 | 输出 | 状态效果 | ALLOW | DENY | 风险 / 审计 | 失败反馈 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| INS-ACT-VIEW-MASTERY | View My Teacher-confirmed Mastery Interpretation | READ | INS-EVIDENCE-F-STUDENT-REF | INS-EVIDENCE-F-STUDENT-REF<br>INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-STUDENT-VISIBLE-AT | UNCHANGED | ROLE-STUDENT | ROLE-PLATFORM-OPS | READ / NOT_REQUIRED | PERMISSION_DENIED / NOT_FOUND / NOT_TEACHER_CONFIRMED / NOT_YET_VISIBLE |
+
+### Web / App 差异
+
+| 端 | 本页要求 |
+| --- | --- |
+| WEB | 支持本页登记的完整任务；批量、复杂表格和治理配置优先在 Web 呈现。 |
+| APP | 支持本页登记的高频移动任务、摘要、提醒或必要确认；不要求复制未登记的 Web 复杂能力。 |

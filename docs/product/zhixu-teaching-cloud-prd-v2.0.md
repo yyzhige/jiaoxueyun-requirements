@@ -3,8 +3,8 @@
 | 属性 | 值 |
 |---|---|
 | 版本 | v2.0 |
-| 日期 | 2026-07-14 |
-| 状态 | v2.0 需求包事实源 |
+| 日期 | 2026-07-15 |
+| 状态 | v2.0 语义重构中（待人工晋级） |
 | 目标市场 | 河北省石家庄市公办初中 |
 | 试点范围 | 一所学校、七年级、三个班、全学科 |
 | 产品端 | Web、App |
@@ -17,16 +17,16 @@
 
 ## 2. 不可变产品决策
 
-- 学校是采购、数据控制和治理主体。
-- 试点先固定河北省石家庄市公办初中，一所学校、七年级、三个班。
-- 全科表示所有学科进入统一作业、提交、反馈、成绩、证据和提升闭环，不承诺所有题型自动判分。
-- 产品只有 Web 和 App 两端，所有角色均可登录两端。
-- Web 是完整业务工作台；App 是高频移动协作与学习端，不要求一比一复制 Web。
-- 不做面向目标用户的终端命令行。原“一句话操作”统一定义为 Web/App 内 AI 对话、快捷指令和可视化任务执行。
-- 教师使用统一工作身份，同时挂载任课教师、班主任等职责；读权限可按职责汇总，写权限按动作和对象逐项校验。
-- 班主任拥有本班全学科查看与协调权限，不拥有他科学科评分、掌握判断和计划内容修改权。
-- 学生每个学科的提升点必须同步给对应任课教师，班主任拥有本班全学科查看权限。
-- 第一阶段只做站内报告与通知；第三方渠道、AI 讲题视频、AI 教学视频作为第二阶段扩展登记。
+- `BASE-001` 学校是采购、数据控制和治理主体。
+- `BASE-002` 试点先固定河北省石家庄市公办初中，一所学校、七年级、三个班。
+- `BASE-003` 全科表示所有学科进入统一作业、提交、反馈、成绩、证据和提升闭环，不承诺所有题型自动判分。
+- `BASE-004` 产品只有 Web 和 App 两端，所有角色均可登录两端。
+- `BASE-005` Web 是完整业务工作台；App 是高频移动协作与学习端，不要求一比一复制 Web。
+- `BASE-006` 不做面向目标用户的终端命令行。“一句话操作”统一定义为 Web/App 内 AI 对话、快捷指令和可视化任务执行。
+- `BASE-007` 教师使用统一工作身份，同时挂载任课教师、班主任等职责；读权限可按职责汇总，写权限按动作和对象逐项校验。
+- `BASE-008` 班主任拥有本班全学科查看与协调权限，不拥有他科学科评分、掌握判断和计划内容修改权。
+- `BASE-009` 学生每个学科的提升点必须同步给对应任课教师，班主任拥有本班全学科查看权限。
+- `BASE-010` 第一阶段只做站内报告与通知；第三方渠道、AI 讲题视频、AI 教学视频作为第二阶段扩展登记。
 
 ## 3. 第一阶段主闭环
 
@@ -43,13 +43,13 @@
 
 ## 4. 成功指标
 
-| 目标 | 指标 | 试点目标 |
-| --- | --- | --- |
-| 降低重复劳动 | 一轮作业反馈闭环的教师中位有效操作时长 | 相比试点前下降至少 30% |
-| 建立行动闭环 | 查看反馈后进入订正或提升任务的学生比例 | 至少 60% |
-| 保持教师控制 | 未经教师确认发布的主观题成绩数量 | 0 |
-| 保持数据安全 | 跨学校、跨班级、跨学生越权事件 | 0 |
-| 保持人工兜底 | AI 不可用时完成提交、批改和发布 | 主流程可完成 |
+| Metric ID | 目标 | 指标 | 试点目标 |
+| --- | --- | --- | --- |
+| `MET-001` | 降低重复劳动 | 一轮作业反馈闭环的教师中位有效操作时长 | 相比试点前下降至少 30% |
+| `MET-002` | 建立行动闭环 | 查看反馈后进入订正或提升任务的学生比例 | 至少 60% |
+| `MET-003` | 保持教师控制 | 未经教师确认发布的主观题成绩数量 | 0 |
+| `MET-004` | 保持数据安全 | 跨学校、跨班级、跨学生越权事件 | 0 |
+| `MET-005` | 保持人工兜底 | AI 不可用时提交、批改和发布三条人工路径完成率 | 100% |
 
 ## 5. 模块基线
 
@@ -76,12 +76,12 @@
 | P0 | RPT-001 | 临时分析、定期报告与订阅 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/19-reports-subscriptions_PRD_v2.0.md) |
 | P0 | LPATH-001 | 长期学习画像与学习路径 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/20-long-term-learning-path_PRD_v2.0.md) |
 | P0 | NOTI-001 | 站内通知、投递与阅读状态 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/21-in-app-notification_PRD_v2.0.md) |
-| P1 | PREP-001 | 教师备课与课堂授课 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/22-lesson-prep-delivery_PRD_v2.0.md) |
-| P1 | CONTENT-001 | 题库与教学内容管理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/23-question-content-management_PRD_v2.0.md) |
-| P1 | EXM-001 | 考试与综合成绩管理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/24-exam-score-management_PRD_v2.0.md) |
-| P2 | SCH-001 | 教务辅助排课 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/25-academic-scheduling_PRD_v2.0.md) |
-| P2 | REPORT-001 | 家长报告受控分享 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/26-guardian-report-sharing_PRD_v2.0.md) |
-| P3 | PLAT-001 | 平台学校入驻与运营治理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/27-platform-onboarding-governance_PRD_v2.0.md) |
+| P0 | PREP-001 | 教师备课与课堂授课 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/22-lesson-prep-delivery_PRD_v2.0.md) |
+| P0 | CONTENT-001 | 题库与教学内容管理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/23-question-content-management_PRD_v2.0.md) |
+| P0 | EXM-001 | 考试与综合成绩管理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/24-exam-score-management_PRD_v2.0.md) |
+| P0 | SCH-001 | 教务辅助排课 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/25-academic-scheduling_PRD_v2.0.md) |
+| P1 | REPORT-001 | 扩展报告合同（第二阶段元数据） | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/26-guardian-report-sharing_PRD_v2.0.md) |
+| P0 | PLAT-001 | 平台学校入驻与运营治理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/27-platform-onboarding-governance_PRD_v2.0.md) |
 
 ## 6. AI 报表与长期学习路径
 

@@ -1,44 +1,63 @@
-# RPT-001 临时分析、定期报告与订阅 Web/App 线框合同 v2.0
+# RPT-001 Ad-hoc Analysis and Scheduled Reports Web/App 页面合同 v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 关联 PRD | [19-reports-subscriptions_PRD_v2.0.md](../03-full-prd-md/19-reports-subscriptions_PRD_v2.0.md) |
-| 适用端 | Web、App |
-| 设计原则 | 端不是权限边界；Web 完整，App 高频；所有字段引用 PRD Field ID。 |
-
-## 1. Web 页面合同
-
-| Page ID | 页面 | 核心区域 | 主要动作 | 引用字段 |
-| --- | --- | --- | --- | --- |
-| RPT-W01 | 列表/工作台 | 筛选区、指标区、对象列表、状态标签、批量动作栏 | 查询、筛选、进入详情、打开 AI 一句话入口 | RPT-F001、RPT-F002、RPT-F003、RPT-F004 |
-| RPT-W02 | 详情/处理页 | 源对象摘要、版本信息、处理表单、历史记录、权限提示 | 保存草稿、确认、退回、查看审计 | RPT-F003、RPT-F004、RPT-F005、RPT-F006 |
-| RPT-W03 | 预览/确认页 | 影响范围、字段变化、源版本、目标版本、风险提示、审计摘要 | 确认执行、取消、返回修改 | RPT-F001、RPT-F002、RPT-F003、RPT-F004、RPT-F005、RPT-F006 |
-| RPT-W04 | 历史/审计页 | 版本列表、状态变化、操作者、时间、失败补偿记录 | 查看差异、筛选审计、导出摘要 | AUD-F001、AUD-F002、AUD-F003 |
-
-## 2. App 能力合同
-
-| View ID | 移动视图 | 保留能力 | 不要求移动端承载 | 状态 |
-| --- | --- | --- | --- | --- |
-| RPT-A01 | 摘要/待办 | 报告摘要、定期提醒、学生个人报告、班主任移动查看 | 复杂批量表格、长表单配置、跨对象高级筛选 | 必须可用 |
-| RPT-A02 | 详情/查看 | 查看本人或授权范围内对象、状态、来源、下一步动作 | 复杂策略编辑 | 必须可用 |
-| RPT-A03 | 必要确认 | 低风险确认、移动审批、困难反馈或处理提醒 | 高风险批量写入默认回 Web | 按模块启用 |
-| RPT-A04 | AI 对话入口 | 一句话查询、摘要、草稿建议、任务提醒 | 未经预览直接执行写入 | 必须继承 AIX-001 |
-
-## 3. 组件与状态要求
-
-- 筛选控件必须使用字段字典中指定的控件类型和 Option Set。
-- 所有列表展示空状态、无权限状态、加载失败状态、部分成功状态和版本过期状态。
-- 高风险动作固定展示影响对象数量、源版本、目标版本、确认人和审计摘要。
-- AI 结果必须展示数据范围、来源模块、源版本和限制说明。
-- App 中被省略的 Web 能力必须显示合理入口或说明，不能让用户以为权限消失。
-
-## 4. 页面级验收
-
-| ID | 验收标准 |
 | --- | --- |
-| RPT-WF-01 | 页面中出现的选择型字段都能回溯到 Field ID 和 Option Set。 |
-| RPT-WF-02 | Web 与 App 的能力差异与 Capability Matrix 一致。 |
-| RPT-WF-03 | 无权限、空数据、加载失败、上下文失效、部分成功都有明确状态。 |
-| RPT-WF-04 | 高风险确认页在执行前展示影响范围、权限结果和审计摘要。 |
-| RPT-WF-05 | AI 对话入口不绕过模块 PRD 的权限、状态和确认门禁。 |
+| 模块 | RPT-001 |
+| 阶段 | 1 |
+| 页面数量 | 1 |
+| 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
+
+## RPT-PAGE-CENTER Report Center and Subscription Management
+
+| 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- |
+| WEB / APP | RPT-OBJ-DEFINITION / RPT-OBJ-SUBSCRIPTION | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+
+### 页面任务
+
+- 进入页面时先校验学校、身份、学期、职责和对象范围；失败进入 FORBIDDEN 或 CONTEXT_EXPIRED。
+- 页面只编排本合同列出的 Action；控件隐藏不能替代服务端 DENY。
+- 提交前展示输入字段、目标对象、当前版本、状态效果、失败码和审计级别。
+- 版本冲突、源版本过期、部分成功和 AI 不可用必须使用不同结果态。
+
+### 字段与控件语义
+
+| Object ID | Field ID | 字段 | 类型 | 必填 | 值来源 / Option Set | 可变性 | 可见性 | 校验 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-OBJ-DEFINITION | RPT-DEFINITION-F-ID | Report Definition ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-DEFINITION | RPT-DEFINITION-F-NAME | Report Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-DEFINITION | RPT-DEFINITION-F-METRIC-IDS | Report Metric IDs | STRING_ARRAY | 是 | OPTION_SET: OPT-ENUM-037 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-DEFINITION | RPT-DEFINITION-F-DATA-SCOPE | Authorized Data Scope | STRING | 是 | OPTION_SET: OPT-ENUM-048 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-DEFINITION | RPT-DEFINITION-F-TIME-RANGE | Report Time Range | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-DEFINITION | RPT-DEFINITION-F-VERSION | Report Definition Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-ID | Report Subscription ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-CREATOR-REF | Report Subscription Creator | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-DEFINITION-REF | Subscribed Report Definition | ID | 是 | OBJECT_REF: RPT-OBJ-DEFINITION | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-DEFINITION-VERSION | Subscribed Report Definition Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY | Schedule Frequency | STRING | 是 | OPTION_SET: OPT-ENUM-014 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-EXECUTION-TIME | Scheduled Execution Time | STRING | 是 | OPTION_SET: OPT-ENUM-036 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-TIMEZONE | Schedule Timezone | STRING | 是 | OPTION_SET: OPT-ENUM-035 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-RECIPIENTS | Authorized Report Recipients | STRING_ARRAY | 是 | OPTION_SET: OPT-ENUM-015 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-DATA-SCOPE | Subscription Data Scope | STRING | 是 | OPTION_SET: OPT-ENUM-048 | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-VERSION | Report Subscription Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+
+### 动作与反馈
+
+| Action ID | 动作 | 操作 | 输入 | 输出 | 状态效果 | ALLOW | DENY | 风险 / 审计 | 失败反馈 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-ACT-CREATE-AD-HOC-DEFINITION | Create an Ad-hoc Report Definition | CREATE | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-ACADEMIC / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-HOMEROOM-DEFINITION | Create an Assigned-class Homeroom Aggregate Report Definition | CREATE | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE | DUTY-HOMEROOM | ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-ACADEMIC-DEFINITION | Create an Authorized Academic Aggregate Report Definition | CREATE | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE | ROLE-ACADEMIC | ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-SUBSCRIPTION | Create an Assigned-subject Report Subscription | CREATE | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-ACADEMIC / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | Create an Assigned-class Homeroom Aggregate Report Subscription | CREATE | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE | DUTY-HOMEROOM | ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | Create an Authorized Academic Aggregate Report Subscription | CREATE | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE | ROLE-ACADEMIC | ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-UPDATE-SUBSCRIPTION | Update a Report Subscription Schedule | UPDATE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS | RPT-SUBSCRIPTION-F-VERSION | ACTIVE / PAUSED → ACTIVE | CURRENT_ACTOR | CURRENT_ACTOR / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-PAUSE-SUBSCRIPTION | Pause a Report Subscription | UPDATE | RPT-SUBSCRIPTION-F-ID | RPT-SUBSCRIPTION-F-VERSION | ACTIVE → PAUSED | CURRENT_ACTOR | CURRENT_ACTOR / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CANCEL-SUBSCRIPTION | Cancel a Report Subscription | UPDATE | RPT-SUBSCRIPTION-F-ID | RPT-SUBSCRIPTION-F-VERSION | ACTIVE / PAUSED → CANCELLED | CURRENT_ACTOR | CURRENT_ACTOR / ROLE-PLATFORM-OPS | HIGH / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+
+### Web / App 差异
+
+| 端 | 本页要求 |
+| --- | --- |
+| WEB | 支持本页登记的完整任务；批量、复杂表格和治理配置优先在 Web 呈现。 |
+| APP | 支持本页登记的高频移动任务、摘要、提醒或必要确认；不要求复制未登记的 Web 复杂能力。 |

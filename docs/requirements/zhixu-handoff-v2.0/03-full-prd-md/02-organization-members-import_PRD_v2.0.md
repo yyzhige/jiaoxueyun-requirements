@@ -1,156 +1,522 @@
-# ORG-001 学校组织、成员与导入 PRD v2.0
+# ORG-001 Organization, members, and import PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 教务、学校管理员 |
-| 关联线框 | [02-organization-members-import-wireframe.zh-CN.md](../05-wireframe-contracts/02-organization-members-import-wireframe.zh-CN.md) |
+| 目标 | Maintain versioned school organization and execute observable object-level imports. |
+| 基线决策 | `BASE-001`、`BASE-002`、`BASE-007` |
+| NFR | `NFR-002`、`NFR-008` |
+| 进入条件 | an academic user has an active school and term context；organization templates have explicit versions |
+| 退出条件 | organization facts have effective versions；every imported object has a create, update, no-change, reject, or deactivate result |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-建立学期、年级、班级、教师、学生、任课关系和班主任关系的权威主数据，支撑所有权限和教学流程。
+- 本模块权威拥有 11 个对象、49 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-ORG-01 | Term | 教务 | 学校学期 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-02 | Grade | 教务 | 年级 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-03 | Class | 教务 | 班级 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-04 | Subject Catalog | 教务 | 学科目录 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-05 | Course | 教务 | 课程 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-06 | Teacher Profile | 学校管理员 | 教师 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-| DAT-ORG-07 | Student Profile | 教务 | 学生 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-08 | Teaching Assignment | 教务 | 任课关系 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-09 | Homeroom Assignment | 教务 | 班主任关系 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-ORG-10 | Import Batch | 导入操作者 | 导入批次 | 导入操作者 | 导入操作者 | 导入操作者 | S2 教学业务数据 |
+### ORG-OBJ-TERM Term
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_TERM | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | AUTHORIZED | DRAFT / CURRENT / HISTORICAL / ARCHIVED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-TERM-F-ID | Term ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TERM-F-NAME | Term Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TERM-F-START | Start Date | DATE | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TERM-F-END | End Date | DATE | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TERM-F-TERM-VERSION | Term Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TERM-F-STATUS | Term Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 教务、学校管理员
-- 解决问题: 建立学期、年级、班级、教师、学生、任课关系和班主任关系的权威主数据，支撑所有权限和教学流程。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### ORG-OBJ-GRADE Grade
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_GRADE | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | ACTIVE / HISTORICAL |
 
-- DAT-ORG-01 Term
-- DAT-ORG-02 Grade
-- DAT-ORG-03 Class
-- DAT-ORG-04 Subject Catalog
-- DAT-ORG-05 Course
-- DAT-ORG-06 Teacher Profile
-- DAT-ORG-07 Student Profile
-- DAT-ORG-08 Teaching Assignment
-- DAT-ORG-09 Homeroom Assignment
-- DAT-ORG-10 Import Batch
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-GRADE-F-ID | Grade ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-GRADE-F-NAME | Grade Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-GRADE-F-TERM-ID | Term ID | STRING | 是 | OPTION_SET: OPT-COM-004 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-GRADE-F-STATUS | Grade Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### ORG-OBJ-CLASS Class
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_CLASS | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | ACTIVE / HISTORICAL / DEACTIVATED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-CLASS-F-ID | Class ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-CLASS-F-NAME | Class Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-CLASS-F-GRADE-ID | Grade ID | STRING | 是 | OPTION_SET: OPT-COM-005 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-CLASS-F-STATUS | Class Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+### ORG-OBJ-SUBJECT Subject Catalog
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_SUBJECT_CATALOG | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | ACTIVE / DEPRECATED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-SUBJECT-F-ID | Subject ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBJECT-F-NAME | Subject Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBJECT-F-STATUS | Subject Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### ORG-OBJ-COURSE Course
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_COURSE | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / ENDED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-COURSE-F-ID | Course ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-COURSE-F-NAME | Course Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-COURSE-F-SUBJECT-ID | Subject ID | STRING | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-COURSE-F-TERM-ID | Term ID | STRING | 是 | OPTION_SET: OPT-COM-004 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-COURSE-F-STATUS | Course Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### ORG-OBJ-TEACHER Teacher Profile
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TEACHER | SCHOOL | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-002 | S3 | NO_DIRECT_READ | ACTIVE / SUSPENDED / DEACTIVATED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-TEACHER-F-ID | Teacher ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TEACHER-F-NAME | Teacher Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TEACHER-F-MEMBER-STATE | Member State | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### ORG-OBJ-STUDENT Student Profile
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S3 | NO_DIRECT_READ | ACTIVE / TRANSFERRED / DEACTIVATED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-STUDENT-F-ID | Student ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-STUDENT-F-NAME | Student Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-STUDENT-F-CLASS-ID | Class ID | STRING | 是 | OPTION_SET: OPT-COM-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-STUDENT-F-MEMBER-STATE | Member State | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### ORG-OBJ-TEACHING-ASSIGNMENT Teaching Assignment
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TEACHER_COURSE_ASSIGNMENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | AUTHORIZED | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-TEACHING-F-ID | Teaching Assignment ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TEACHING-F-TEACHER-ID | Teacher ID | STRING | 是 | OPTION_SET: OPT-COM-009 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TEACHING-F-COURSE-ID | Course ID | STRING | 是 | OPTION_SET: OPT-COM-008 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TEACHING-F-CLASS-ID | Class ID | STRING | 是 | OPTION_SET: OPT-COM-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-TEACHING-F-EFFECTIVE | Effective Range | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### ORG-OBJ-HOMEROOM-ASSIGNMENT Homeroom Assignment
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HOMEROOM_TEACHER_ASSIGNMENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-HOMEROOM-F-ID | Homeroom Assignment ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-HOMEROOM-F-TEACHER-ID | Homeroom Teacher ID | STRING | 是 | OPTION_SET: OPT-COM-009 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-HOMEROOM-F-CLASS-ID | Homeroom Class ID | STRING | 是 | OPTION_SET: OPT-COM-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-HOMEROOM-F-EFFECTIVE | Effective Range | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### ORG-OBJ-IMPORT-BATCH Import Batch
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORGANIZATION_IMPORT | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | LIFE-002 | S3 | AUTHORIZED | UPLOADED / MAPPED / VALIDATED / PENDING_OUTCOME_AUDIT / PENDING_PARTIAL_OUTCOME_AUDIT / PARTIAL_SUCCESS / COMPLETED / REJECTED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-IMPORT-F-ID | Import Batch ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-F-OBJECT-TYPE | Import Object Type | STRING | 是 | OPTION_SET: OPT-ENUM-020 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-F-TEMPLATE-VERSION | Template Version | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-F-MAPPING | Field Mapping | JSON | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-F-BATCH-VERSION | Import Batch Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-F-STATUS | Import Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### ORG-OBJ-IMPORT-ROW Import Row Result
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORGANIZATION_IMPORT_OBJECT | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | LIFE-002 | S3 | NO_DIRECT_READ | PENDING / VALIDATED / RETRYABLE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-IMPORT-ROW-F-ID | Import Row ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-BATCH-ID | Import Batch ID | STRING | 是 | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-ROW-VERSION | Import Row Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-RESULT-TYPE | Object Result Type | STRING | 是 | OPTION_SET: OPT-ENUM-021 | READ_ONLY | AUTHORIZED_SCOPE | — | must be CREATE, UPDATE, NO_CHANGE, REJECT, or DEACTIVATE | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-VALIDATION-RESULT | Row Validation Result | STRING | 是 | OPTION_SET: OPT-ENUM-022 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-ERRORS | Row Errors | STRING_ARRAY | 否 | SYSTEM | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-CONFLICTS | Row Conflicts | STRING_ARRAY | 否 | SYSTEM | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-OBJECT-ID | Affected Object ID | STRING | 否 | SYSTEM | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION | Anomaly Confirmation | STRING | 是 | OPTION_SET: OPT-ENUM-001 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-IMPORT-ROW-F-CONFIRMATION-NOTE | Anomaly Confirmation Note | TEXT | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| ORG-REL-CLASS-GRADE | ORG-OBJ-CLASS | BELONGS_TO | ORG-OBJ-GRADE | MANY_TO_ONE | SAME_TERM | invalidate class scope after the effective grade version changes |
+| ORG-REL-COURSE-SUBJECT | ORG-OBJ-COURSE | USES_SUBJECT | ORG-OBJ-SUBJECT | MANY_TO_ONE | SAME_TERM | prevent new assignments while preserving historical course references |
+| ORG-REL-IMPORT-ROW-BATCH | ORG-OBJ-IMPORT-ROW | RESULT_OF | ORG-OBJ-IMPORT-BATCH | MANY_TO_ONE | SAME_CONTEXT | retain accepted row results and mark pending rows not executable |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-ACT-CREATE-TERM-VERSION | Create a School Term Version | ORG-OBJ-TERM | CREATE | ORG-TERM-F-NAME<br>ORG-TERM-F-START<br>ORG-TERM-F-END | ORG-TERM-F-ID<br>ORG-TERM-F-TERM-VERSION<br>ORG-TERM-F-STATUS | CREATE（成功状态由 ORG-ACT-CREATE-TERM-VERSION-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-TERM-VERSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-TERM | Activate a Draft School Term | ORG-OBJ-TERM | UPDATE | ORG-TERM-F-ID | ORG-TERM-F-TERM-VERSION<br>ORG-TERM-F-STATUS | DRAFT → CURRENT | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ACTIVATE-TERM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CLOSE-TERM | Close a Current School Term | ORG-OBJ-TERM | UPDATE | ORG-TERM-F-ID | ORG-TERM-F-TERM-VERSION<br>ORG-TERM-F-STATUS | CURRENT → HISTORICAL | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CLOSE-TERM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-ARCHIVE-TERM | Archive a Historical School Term | ORG-OBJ-TERM | UPDATE | ORG-TERM-F-ID | ORG-TERM-F-TERM-VERSION<br>ORG-TERM-F-STATUS | HISTORICAL → ARCHIVED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ARCHIVE-TERM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CREATE-GRADE | Create a Term Grade | ORG-OBJ-GRADE | CREATE | ORG-GRADE-F-NAME<br>ORG-GRADE-F-TERM-ID | ORG-GRADE-F-ID<br>ORG-GRADE-F-STATUS | CREATE（成功状态由 ORG-ACT-CREATE-GRADE-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-GRADE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPDATE-GRADE | Update an Active Term Grade | ORG-OBJ-GRADE | UPDATE | ORG-GRADE-F-ID<br>ORG-GRADE-F-NAME<br>ORG-GRADE-F-TERM-ID | ORG-GRADE-F-STATUS | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-GRADE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-MARK-GRADE-HISTORICAL | Mark a Grade Historical after Term Close | ORG-OBJ-GRADE | UPDATE | ORG-GRADE-F-ID | ORG-GRADE-F-STATUS | ACTIVE → HISTORICAL | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-MARK-GRADE-HISTORICAL:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CREATE-CLASS | Create a Term Class | ORG-OBJ-CLASS | CREATE | ORG-CLASS-F-NAME<br>ORG-CLASS-F-GRADE-ID | ORG-CLASS-F-ID<br>ORG-CLASS-F-STATUS | CREATE（成功状态由 ORG-ACT-CREATE-CLASS-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-CLASS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPDATE-CLASS | Update an Active Term Class | ORG-OBJ-CLASS | UPDATE | ORG-CLASS-F-ID<br>ORG-CLASS-F-NAME<br>ORG-CLASS-F-GRADE-ID | ORG-CLASS-F-STATUS | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-CLASS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-MARK-CLASS-HISTORICAL | Mark a Class Historical after Term Close | ORG-OBJ-CLASS | UPDATE | ORG-CLASS-F-ID | ORG-CLASS-F-STATUS | ACTIVE → HISTORICAL | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-MARK-CLASS-HISTORICAL:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-DEACTIVATE-CLASS | Deactivate a Class | ORG-OBJ-CLASS | UPDATE | ORG-CLASS-F-ID | ORG-CLASS-F-STATUS | ACTIVE / HISTORICAL → DEACTIVATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-DEACTIVATE-CLASS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CREATE-SUBJECT | Create a School Subject | ORG-OBJ-SUBJECT | CREATE | ORG-SUBJECT-F-NAME | ORG-SUBJECT-F-ID<br>ORG-SUBJECT-F-STATUS | CREATE（成功状态由 ORG-ACT-CREATE-SUBJECT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-SUBJECT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPDATE-SUBJECT | Update an Active School Subject | ORG-OBJ-SUBJECT | UPDATE | ORG-SUBJECT-F-ID<br>ORG-SUBJECT-F-NAME | ORG-SUBJECT-F-STATUS | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-SUBJECT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-DEPRECATE-SUBJECT | Deprecate a School Subject | ORG-OBJ-SUBJECT | UPDATE | ORG-SUBJECT-F-ID | ORG-SUBJECT-F-STATUS | ACTIVE → DEPRECATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-DEPRECATE-SUBJECT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CREATE-COURSE | Create a Term Course | ORG-OBJ-COURSE | CREATE | ORG-COURSE-F-NAME<br>ORG-COURSE-F-SUBJECT-ID<br>ORG-COURSE-F-TERM-ID | ORG-COURSE-F-ID<br>ORG-COURSE-F-STATUS | CREATE（成功状态由 ORG-ACT-CREATE-COURSE-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-COURSE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPDATE-COURSE | Update a Draft Term Course | ORG-OBJ-COURSE | UPDATE | ORG-COURSE-F-ID<br>ORG-COURSE-F-NAME<br>ORG-COURSE-F-SUBJECT-ID<br>ORG-COURSE-F-TERM-ID | ORG-COURSE-F-STATUS | DRAFT → DRAFT | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-COURSE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-COURSE | Activate a Draft Term Course | ORG-OBJ-COURSE | UPDATE | ORG-COURSE-F-ID | ORG-COURSE-F-STATUS | DRAFT → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ACTIVATE-COURSE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-END-COURSE | End an Active Term Course | ORG-OBJ-COURSE | UPDATE | ORG-COURSE-F-ID | ORG-COURSE-F-STATUS | ACTIVE → ENDED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-END-COURSE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CREATE-TEACHER | Create a Teacher Profile | ORG-OBJ-TEACHER | CREATE | ORG-TEACHER-F-NAME | ORG-TEACHER-F-ID<br>ORG-TEACHER-F-MEMBER-STATE | CREATE（成功状态由 ORG-ACT-CREATE-TEACHER-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPDATE-TEACHER | Update an Active Teacher Profile | ORG-OBJ-TEACHER | UPDATE | ORG-TEACHER-F-ID<br>ORG-TEACHER-F-NAME | ORG-TEACHER-F-MEMBER-STATE | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-SUSPEND-TEACHER | Suspend a Teacher Profile | ORG-OBJ-TEACHER | UPDATE | ORG-TEACHER-F-ID | ORG-TEACHER-F-MEMBER-STATE | ACTIVE → SUSPENDED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-SUSPEND-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-DEACTIVATE-TEACHER | Deactivate a Teacher Profile | ORG-OBJ-TEACHER | UPDATE | ORG-TEACHER-F-ID | ORG-TEACHER-F-MEMBER-STATE | ACTIVE / SUSPENDED → DEACTIVATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-DEACTIVATE-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-CREATE-STUDENT | Create a Student Profile | ORG-OBJ-STUDENT | CREATE | ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-MEMBER-STATE | CREATE（成功状态由 ORG-ACT-CREATE-STUDENT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPDATE-STUDENT | Update an Active Student Profile | ORG-OBJ-STUDENT | UPDATE | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-MEMBER-STATE | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-TRANSFER-STUDENT | Transfer a Student Profile | ORG-OBJ-STUDENT | UPDATE | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-MEMBER-STATE | ACTIVE → TRANSFERRED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-TRANSFER-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-ASSIGN-SUBJECT-TEACHER | Assign a Subject Teacher to Course and Class | ORG-OBJ-TEACHING-ASSIGNMENT | CREATE | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE | ORG-TEACHING-F-ID | CREATE（成功状态由 ORG-ACT-ASSIGN-SUBJECT-TEACHER-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff owns assignment changes<br>DENY:DUTY-SUBJECT-LEAD — subject lead may review subject scope but cannot grant organization duties | WEB | LOW | REQUIRED | ORG-ACT-ASSIGN-SUBJECT-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | Activate a Planned Teaching Assignment | ORG-OBJ-TEACHING-ASSIGNMENT | UPDATE | ORG-TEACHING-F-ID<br>ORG-TEACHING-F-EFFECTIVE | ORG-TEACHING-F-EFFECTIVE | PLANNED → EFFECTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | Expire an Effective Teaching Assignment | ORG-OBJ-TEACHING-ASSIGNMENT | UPDATE | ORG-TEACHING-F-ID | ORG-TEACHING-F-EFFECTIVE | EFFECTIVE → EXPIRED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-REVOKE-TEACHING-ASSIGNMENT | Revoke a Teaching Assignment | ORG-OBJ-TEACHING-ASSIGNMENT | UPDATE | ORG-TEACHING-F-ID | ORG-TEACHING-F-EFFECTIVE | PLANNED / EFFECTIVE → REVOKED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-ASSIGN-HOMEROOM | Assign a Homeroom Teacher to a Class | ORG-OBJ-HOMEROOM-ASSIGNMENT | CREATE | ORG-HOMEROOM-F-TEACHER-ID<br>ORG-HOMEROOM-F-CLASS-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-HOMEROOM-F-ID | CREATE（成功状态由 ORG-ACT-ASSIGN-HOMEROOM-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ASSIGN-HOMEROOM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | Activate a Planned Homeroom Assignment | ORG-OBJ-HOMEROOM-ASSIGNMENT | UPDATE | ORG-HOMEROOM-F-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-HOMEROOM-F-EFFECTIVE | PLANNED → EFFECTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | Expire an Effective Homeroom Assignment | ORG-OBJ-HOMEROOM-ASSIGNMENT | UPDATE | ORG-HOMEROOM-F-ID | ORG-HOMEROOM-F-EFFECTIVE | EFFECTIVE → EXPIRED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | Revoke a Homeroom Assignment | ORG-OBJ-HOMEROOM-ASSIGNMENT | UPDATE | ORG-HOMEROOM-F-ID | ORG-HOMEROOM-F-EFFECTIVE | PLANNED / EFFECTIVE → REVOKED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | Download Object-specific Import Template | ORG-OBJ-IMPORT-BATCH | READ | ORG-IMPORT-F-OBJECT-TYPE | ORG-IMPORT-F-TEMPLATE-VERSION | UNCHANGED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPLOAD-IMPORT | Upload Organization Import Workbook | ORG-OBJ-IMPORT-BATCH | CREATE | ORG-IMPORT-F-OBJECT-TYPE<br>ORG-IMPORT-F-TEMPLATE-VERSION | ORG-IMPORT-F-ID<br>ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | CREATE（成功状态由 ORG-ACT-UPLOAD-IMPORT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPLOAD-IMPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-MAP-IMPORT-FIELDS | Map Workbook Columns to Organization Fields | ORG-OBJ-IMPORT-BATCH | UPDATE | ORG-IMPORT-F-MAPPING | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | UPLOADED → MAPPED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-MAP-IMPORT-FIELDS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-VALIDATE-IMPORT-BATCH | Validate a Mapped Organization Import Batch | ORG-OBJ-IMPORT-BATCH | UPDATE | ORG-IMPORT-F-ID | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | MAPPED → VALIDATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-VALIDATE-IMPORT-BATCH:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-REJECT-IMPORT-BATCH | Reject an Invalid Organization Import Batch | ORG-OBJ-IMPORT-BATCH | UPDATE | ORG-IMPORT-F-ID | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | MAPPED / VALIDATED → REJECTED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-REJECT-IMPORT-BATCH:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-VALIDATE-IMPORT | Validate Object-level Import Rows | ORG-OBJ-IMPORT-ROW | UPDATE | ORG-IMPORT-ROW-F-BATCH-ID | ORG-IMPORT-ROW-F-ROW-VERSION<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | PENDING → VALIDATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-VALIDATE-IMPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CONFIRM-IMPORT | Confirm Object-level Import | ORG-OBJ-IMPORT-BATCH | UPDATE | ORG-IMPORT-F-ID | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | MAPPED / VALIDATED → PENDING_OUTCOME_AUDIT | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-CONFIRM-IMPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / PARTIAL_SUCCESS / AUDIT_FAILED |
+| ORG-ACT-FINALIZE-AUDITED-IMPORT | Finalize an Audited Organization Import | ORG-OBJ-IMPORT-BATCH | UPDATE | ORG-IMPORT-F-ID | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | PENDING_OUTCOME_AUDIT → COMPLETED | ALLOW:SYSTEM — the system finalizes only rows covered by the successful outcome audit<br>DENY:CURRENT_ACTOR — a user cannot finalize provisional rows without the outcome audit | FLOW_INTERNAL | HIGH | REQUIRED | ORG-ACT-FINALIZE-AUDITED-IMPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | Finalize an Audited Partial Organization Import | ORG-OBJ-IMPORT-BATCH | UPDATE | ORG-IMPORT-F-ID | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | PENDING_PARTIAL_OUTCOME_AUDIT → PARTIAL_SUCCESS | ALLOW:SYSTEM — the system finalizes only partial-success rows covered by the successful outcome audit<br>DENY:CURRENT_ACTOR — a user cannot finalize provisional partial rows without the outcome audit | FLOW_INTERNAL | HIGH | REQUIRED | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-RETRY-FAILED-ROWS | Retry Corrected Failed Import Rows | ORG-OBJ-IMPORT-ROW | UPDATE | ORG-IMPORT-ROW-F-ID | ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | RETRYABLE → VALIDATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-RETRY-FAILED-ROWS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | Mark a Failed Import Row Retryable | ORG-OBJ-IMPORT-ROW | UPDATE | ORG-IMPORT-ROW-F-ID | ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | VALIDATED → RETRYABLE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-DEACTIVATE-MEMBER | Deactivate a School Member Profile | ORG-OBJ-STUDENT | UPDATE | ORG-STUDENT-F-ID | ORG-STUDENT-F-MEMBER-STATE | ACTIVE → DEACTIVATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-DEACTIVATE-MEMBER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-RESOLVE-CONTEXT-SCOPE | Resolve Current Term and Organization Scope | ORG-OBJ-TERM | READ | ORG-TERM-F-ID | ORG-TERM-F-TERM-VERSION<br>ORG-TERM-F-STATUS | UNCHANGED | ALLOW:CURRENT_ACTOR — resolve only organization facts inside the active school identity<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot resolve school scope without authorization | WEB | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-VIEW-MY-TEACHING-SCOPE | View My Class and Teaching Scope on App | ORG-OBJ-TEACHING-ASSIGNMENT | READ | ORG-TEACHING-F-TEACHER-ID | ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE | UNCHANGED | ALLOW:CURRENT_ACTOR — the current teacher may view only effective class and teaching relationships<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot view teacher scope without school authorization | APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-VIEW-IMPORT-NOTIFICATION | View Import Result Notification on App | ORG-OBJ-IMPORT-BATCH | READ | ORG-IMPORT-F-ID | ORG-IMPORT-F-STATUS | UNCHANGED | ALLOW:CURRENT_ACTOR — the import operator may view the operator's own batch outcome notification<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot view school import results without authorization | APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CONFIRM-IMPORT-ANOMALY | Confirm an Import Anomaly on App | ORG-OBJ-IMPORT-ROW | UPDATE | ORG-IMPORT-ROW-F-ID<br>ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION<br>ORG-IMPORT-ROW-F-CONFIRMATION-NOTE | ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | VALIDATED → VALIDATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | APP | HIGH | REQUIRED | ORG-ACT-CONFIRM-IMPORT-ANOMALY:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 组织树维护、批量导入、字段映射、冲突预览、对象级结果、权限刷新 | 查看本人班级/任课关系、导入结果通知、异常确认入口 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| ORG-OBJ-TERM | DRAFT | ORG-ACT-CREATE-TERM-VERSION | ORG-ACT-ACTIVATE-TERM |
+| ORG-OBJ-TERM | CURRENT | ORG-ACT-ACTIVATE-TERM | ORG-ACT-CLOSE-TERM |
+| ORG-OBJ-TERM | HISTORICAL | ORG-ACT-CLOSE-TERM | ORG-ACT-ARCHIVE-TERM |
+| ORG-OBJ-TERM | ARCHIVED | ORG-ACT-ARCHIVE-TERM |  |
+| ORG-OBJ-GRADE | ACTIVE | ORG-ACT-CREATE-GRADE<br>ORG-ACT-UPDATE-GRADE | ORG-ACT-UPDATE-GRADE<br>ORG-ACT-MARK-GRADE-HISTORICAL |
+| ORG-OBJ-GRADE | HISTORICAL | ORG-ACT-MARK-GRADE-HISTORICAL |  |
+| ORG-OBJ-CLASS | ACTIVE | ORG-ACT-CREATE-CLASS<br>ORG-ACT-UPDATE-CLASS | ORG-ACT-UPDATE-CLASS<br>ORG-ACT-MARK-CLASS-HISTORICAL<br>ORG-ACT-DEACTIVATE-CLASS |
+| ORG-OBJ-CLASS | HISTORICAL | ORG-ACT-MARK-CLASS-HISTORICAL | ORG-ACT-DEACTIVATE-CLASS |
+| ORG-OBJ-CLASS | DEACTIVATED | ORG-ACT-DEACTIVATE-CLASS |  |
+| ORG-OBJ-SUBJECT | ACTIVE | ORG-ACT-CREATE-SUBJECT<br>ORG-ACT-UPDATE-SUBJECT | ORG-ACT-UPDATE-SUBJECT<br>ORG-ACT-DEPRECATE-SUBJECT |
+| ORG-OBJ-SUBJECT | DEPRECATED | ORG-ACT-DEPRECATE-SUBJECT |  |
+| ORG-OBJ-COURSE | DRAFT | ORG-ACT-CREATE-COURSE<br>ORG-ACT-UPDATE-COURSE | ORG-ACT-UPDATE-COURSE<br>ORG-ACT-ACTIVATE-COURSE |
+| ORG-OBJ-COURSE | ACTIVE | ORG-ACT-ACTIVATE-COURSE | ORG-ACT-END-COURSE |
+| ORG-OBJ-COURSE | ENDED | ORG-ACT-END-COURSE |  |
+| ORG-OBJ-TEACHER | ACTIVE | ORG-ACT-CREATE-TEACHER<br>ORG-ACT-UPDATE-TEACHER | ORG-ACT-UPDATE-TEACHER<br>ORG-ACT-SUSPEND-TEACHER<br>ORG-ACT-DEACTIVATE-TEACHER |
+| ORG-OBJ-TEACHER | SUSPENDED | ORG-ACT-SUSPEND-TEACHER | ORG-ACT-DEACTIVATE-TEACHER |
+| ORG-OBJ-TEACHER | DEACTIVATED | ORG-ACT-DEACTIVATE-TEACHER |  |
+| ORG-OBJ-STUDENT | ACTIVE | ORG-ACT-CREATE-STUDENT<br>ORG-ACT-UPDATE-STUDENT | ORG-ACT-UPDATE-STUDENT<br>ORG-ACT-TRANSFER-STUDENT<br>ORG-ACT-DEACTIVATE-MEMBER |
+| ORG-OBJ-STUDENT | TRANSFERRED | ORG-ACT-TRANSFER-STUDENT |  |
+| ORG-OBJ-STUDENT | DEACTIVATED | ORG-ACT-DEACTIVATE-MEMBER |  |
+| ORG-OBJ-TEACHING-ASSIGNMENT | PLANNED | ORG-ACT-ASSIGN-SUBJECT-TEACHER | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT<br>ORG-ACT-REVOKE-TEACHING-ASSIGNMENT |
+| ORG-OBJ-TEACHING-ASSIGNMENT | EFFECTIVE | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT<br>ORG-ACT-REVOKE-TEACHING-ASSIGNMENT |
+| ORG-OBJ-TEACHING-ASSIGNMENT | EXPIRED | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT |  |
+| ORG-OBJ-TEACHING-ASSIGNMENT | REVOKED | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT |  |
+| ORG-OBJ-HOMEROOM-ASSIGNMENT | PLANNED | ORG-ACT-ASSIGN-HOMEROOM | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT |
+| ORG-OBJ-HOMEROOM-ASSIGNMENT | EFFECTIVE | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT |
+| ORG-OBJ-HOMEROOM-ASSIGNMENT | EXPIRED | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT |  |
+| ORG-OBJ-HOMEROOM-ASSIGNMENT | REVOKED | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT |  |
+| ORG-OBJ-IMPORT-BATCH | UPLOADED | ORG-ACT-UPLOAD-IMPORT | ORG-ACT-MAP-IMPORT-FIELDS |
+| ORG-OBJ-IMPORT-BATCH | MAPPED | ORG-ACT-MAP-IMPORT-FIELDS | ORG-ACT-VALIDATE-IMPORT-BATCH<br>ORG-ACT-REJECT-IMPORT-BATCH<br>ORG-ACT-CONFIRM-IMPORT |
+| ORG-OBJ-IMPORT-BATCH | VALIDATED | ORG-ACT-VALIDATE-IMPORT-BATCH | ORG-ACT-REJECT-IMPORT-BATCH<br>ORG-ACT-CONFIRM-IMPORT |
+| ORG-OBJ-IMPORT-BATCH | PENDING_OUTCOME_AUDIT | ORG-ACT-CONFIRM-IMPORT | ORG-ACT-FINALIZE-AUDITED-IMPORT |
+| ORG-OBJ-IMPORT-BATCH | PENDING_PARTIAL_OUTCOME_AUDIT | ORG-ACT-CONFIRM-IMPORT | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT |
+| ORG-OBJ-IMPORT-BATCH | PARTIAL_SUCCESS | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT |  |
+| ORG-OBJ-IMPORT-BATCH | COMPLETED | ORG-ACT-FINALIZE-AUDITED-IMPORT |  |
+| ORG-OBJ-IMPORT-BATCH | REJECTED | ORG-ACT-REJECT-IMPORT-BATCH |  |
+| ORG-OBJ-IMPORT-ROW | PENDING |  | ORG-ACT-VALIDATE-IMPORT |
+| ORG-OBJ-IMPORT-ROW | VALIDATED | ORG-ACT-VALIDATE-IMPORT<br>ORG-ACT-RETRY-FAILED-ROWS<br>ORG-ACT-CONFIRM-IMPORT-ANOMALY | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE<br>ORG-ACT-CONFIRM-IMPORT-ANOMALY |
+| ORG-OBJ-IMPORT-ROW | RETRYABLE | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | ORG-ACT-RETRY-FAILED-ROWS |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-001 | School Context Establishment | 1 | ACC-001 / ORG-001 / IAM-001 | ORG-ACT-RESOLVE-CONTEXT-SCOPE | STEP_WITH_NO_CONTEXT_ACTIVATION_BEFORE_ALL_CHECKS_PASS；{"strategy":"RETRY_READS_AND_IDEMPOTENT_CONTEXT_WRITE","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT"]}；{"strategy":"EXPIRE_PARTIAL_CONTEXT","description":"if a context write exists before final acceptance, expire it and require full re-establishment"}；{"strategy":"INVALIDATE_PREVIOUS_CONTEXT_DERIVATIONS","targets":["permission cache","term-scoped navigation","write authorization tokens"]} |
+| DF-002 | Organization Import and Permission Refresh | 1 | ORG-001 / IAM-001 / AUD-001 | ORG-ACT-UPLOAD-IMPORT<br>ORG-ACT-MAP-IMPORT-FIELDS<br>ORG-ACT-VALIDATE-IMPORT<br>ORG-ACT-CONFIRM-IMPORT<br>ORG-ACT-FINALIZE-AUDITED-IMPORT<br>ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | OBJECT_ROW_WITH_PARTIAL_SUCCESS_AND_FAILED_ROW_RETRY；{"strategy":"RETRY_FAILED_ROWS_OR_AUDIT_APPEND","maxAttempts":5,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"ROLLBACK_UNAUDITED_PROVISIONAL_ROWS","description":"rollback provisional accepted rows to the pre-import version when outcome audit fails; do not recalculate permissions until the outcome audit succeeds"}；{"strategy":"INVALIDATE_AFFECTED_ORGANIZATION_SCOPES","targets":["permission decisions","active contexts","teacher work views"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ORG-F001 | 导入对象类型 | 单选下拉 | OPT-ENUM-020 | 是 | 决定模板、字段映射与校验规则 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F002 | 学期 | 单选下拉 | OPT-COM-004 | 是 | 所有组织对象必须归属学期或全局学校 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F003 | 年级 | 单选下拉 | OPT-COM-005 | 班级/学生导入必填 | 试点默认七年级但仍保存 code | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F004 | 班级 | 自动完成 | OPT-COM-006 | 按对象类型 | 任课、学生、班主任关系依赖班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F005 | 教师 | 自动完成 | OPT-COM-009 | 任课/班主任关系必填 | 离职教师不可新建关系 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F006 | 学生 | 自动完成 | OPT-COM-010 | 学生关系必填 | 学生停用不删除历史成绩 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F007 | 处理动作 | 单选下拉 | OPT-ENUM-021 | 逐行必填 | 停用需要二次确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F008 | 校验结果 | 只读状态 | OPT-ENUM-022 | 系统生成 | 错误和未处理冲突阻断导入 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| ORG-PAGE-TREE | Term Grade Class Subject and Course Organization Tree | WEB | ORG-OBJ-TERM<br>ORG-OBJ-GRADE<br>ORG-OBJ-CLASS<br>ORG-OBJ-SUBJECT<br>ORG-OBJ-COURSE | ORG-TERM-F-ID<br>ORG-TERM-F-NAME<br>ORG-TERM-F-START<br>ORG-TERM-F-END<br>ORG-GRADE-F-ID<br>ORG-GRADE-F-NAME<br>ORG-GRADE-F-TERM-ID<br>ORG-GRADE-F-STATUS<br>ORG-CLASS-F-ID<br>ORG-CLASS-F-NAME<br>ORG-CLASS-F-GRADE-ID<br>ORG-SUBJECT-F-ID<br>ORG-SUBJECT-F-NAME<br>ORG-COURSE-F-ID<br>ORG-COURSE-F-NAME<br>ORG-COURSE-F-SUBJECT-ID<br>ORG-COURSE-F-TERM-ID<br>ORG-COURSE-F-STATUS | ORG-ACT-CREATE-TERM-VERSION<br>ORG-ACT-ACTIVATE-TERM<br>ORG-ACT-CLOSE-TERM<br>ORG-ACT-ARCHIVE-TERM<br>ORG-ACT-CREATE-GRADE<br>ORG-ACT-UPDATE-GRADE<br>ORG-ACT-MARK-GRADE-HISTORICAL<br>ORG-ACT-CREATE-CLASS<br>ORG-ACT-UPDATE-CLASS<br>ORG-ACT-MARK-CLASS-HISTORICAL<br>ORG-ACT-DEACTIVATE-CLASS<br>ORG-ACT-CREATE-SUBJECT<br>ORG-ACT-UPDATE-SUBJECT<br>ORG-ACT-DEPRECATE-SUBJECT<br>ORG-ACT-CREATE-COURSE<br>ORG-ACT-UPDATE-COURSE<br>ORG-ACT-ACTIVATE-COURSE<br>ORG-ACT-END-COURSE<br>ORG-ACT-RESOLVE-CONTEXT-SCOPE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-MEMBERS | Teacher and Student Member Management | WEB | ORG-OBJ-TEACHER<br>ORG-OBJ-STUDENT | ORG-TEACHER-F-ID<br>ORG-TEACHER-F-NAME<br>ORG-TEACHER-F-MEMBER-STATE<br>ORG-STUDENT-F-ID<br>ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID<br>ORG-STUDENT-F-MEMBER-STATE | ORG-ACT-CREATE-TEACHER<br>ORG-ACT-UPDATE-TEACHER<br>ORG-ACT-SUSPEND-TEACHER<br>ORG-ACT-DEACTIVATE-TEACHER<br>ORG-ACT-CREATE-STUDENT<br>ORG-ACT-UPDATE-STUDENT<br>ORG-ACT-TRANSFER-STUDENT<br>ORG-ACT-DEACTIVATE-MEMBER | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-IMPORT-TEMPLATE | Import Object and Template Selection | WEB | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-OBJECT-TYPE<br>ORG-IMPORT-F-TEMPLATE-VERSION | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE<br>ORG-ACT-UPLOAD-IMPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-IMPORT-MAPPING | Import Mapping and Row Validation | WEB | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-MAPPING<br>ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | ORG-ACT-MAP-IMPORT-FIELDS<br>ORG-ACT-VALIDATE-IMPORT-BATCH<br>ORG-ACT-REJECT-IMPORT-BATCH<br>ORG-ACT-VALIDATE-IMPORT<br>ORG-ACT-CONFIRM-IMPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-IMPORT-RESULT | Object-level Import Result and Retry | WEB | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS<br>ORG-IMPORT-ROW-F-OBJECT-ID | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE<br>ORG-ACT-RETRY-FAILED-ROWS | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-TEACHING-ASSIGNMENT | Subject and Homeroom Teaching Assignment | WEB | ORG-OBJ-TEACHING-ASSIGNMENT<br>ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE<br>ORG-HOMEROOM-F-TEACHER-ID<br>ORG-HOMEROOM-F-CLASS-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-ACT-ASSIGN-SUBJECT-TEACHER<br>ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT<br>ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT<br>ORG-ACT-REVOKE-TEACHING-ASSIGNMENT<br>ORG-ACT-ASSIGN-HOMEROOM<br>ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-APP-MY-TEACHING-SCOPE | My Class and Teaching Scope | APP | ORG-OBJ-TEACHING-ASSIGNMENT<br>ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE<br>ORG-HOMEROOM-F-CLASS-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-ACT-VIEW-MY-TEACHING-SCOPE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-APP-IMPORT-RESULT | Import Result Notification and Anomaly Confirmation | APP | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS<br>ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION<br>ORG-IMPORT-ROW-F-CONFIRMATION-NOTE | ORG-ACT-VIEW-IMPORT-NOTIFICATION<br>ORG-ACT-CONFIRM-IMPORT-ANOMALY | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| DRAFT_MAPPING | 映射中 |
-| VALIDATING | 校验中 |
-| READY_TO_CONFIRM | 待确认 |
-| PROCESSING | 导入中 |
-| PARTIAL_SUCCESS | 部分成功 |
-| COMPLETED | 已完成 |
-| FAILED | 失败 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-ACT-CREATE-TERM-VERSION-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-TERM-VERSION | the actor meets the entry conditions for Create a School Term Version | the actor requests Create a School Term Version | Create a School Term Version returns the accepted task-specific result | DRAFT | ALLOW |  |
+| ORG-ACT-CREATE-TERM-VERSION-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-TERM-VERSION | PERMISSION_DENIED applies to Create a School Term Version | the actor requests Create a School Term Version | Create a School Term Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-TERM-VERSION-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-TERM-VERSION | VALIDATION_FAILED applies to Create a School Term Version | the actor requests Create a School Term Version | Create a School Term Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-TERM-VERSION-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-TERM-VERSION | VERSION_CONFLICT applies to Create a School Term Version | the actor requests Create a School Term Version | Create a School Term Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-TERM-SCN-SUCCESS | SUCCESS | ORG-ACT-ACTIVATE-TERM | the actor meets the entry conditions for Activate a Draft School Term | the actor requests Activate a Draft School Term | Activate a Draft School Term returns the accepted task-specific result | CURRENT | ALLOW |  |
+| ORG-ACT-ACTIVATE-TERM-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ACTIVATE-TERM | PERMISSION_DENIED applies to Activate a Draft School Term | the actor requests Activate a Draft School Term | Activate a Draft School Term returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ACTIVATE-TERM-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ACTIVATE-TERM | VALIDATION_FAILED applies to Activate a Draft School Term | the actor requests Activate a Draft School Term | Activate a Draft School Term returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ACTIVATE-TERM-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ACTIVATE-TERM | VERSION_CONFLICT applies to Activate a Draft School Term | the actor requests Activate a Draft School Term | Activate a Draft School Term returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CLOSE-TERM-SCN-SUCCESS | SUCCESS | ORG-ACT-CLOSE-TERM | the actor meets the entry conditions for Close a Current School Term | the actor requests Close a Current School Term | Close a Current School Term returns the accepted task-specific result | HISTORICAL | ALLOW |  |
+| ORG-ACT-CLOSE-TERM-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CLOSE-TERM | PERMISSION_DENIED applies to Close a Current School Term | the actor requests Close a Current School Term | Close a Current School Term returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CLOSE-TERM-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CLOSE-TERM | VALIDATION_FAILED applies to Close a Current School Term | the actor requests Close a Current School Term | Close a Current School Term returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CLOSE-TERM-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CLOSE-TERM | VERSION_CONFLICT applies to Close a Current School Term | the actor requests Close a Current School Term | Close a Current School Term returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-ARCHIVE-TERM-SCN-SUCCESS | SUCCESS | ORG-ACT-ARCHIVE-TERM | the actor meets the entry conditions for Archive a Historical School Term | the actor requests Archive a Historical School Term | Archive a Historical School Term returns the accepted task-specific result | ARCHIVED | ALLOW |  |
+| ORG-ACT-ARCHIVE-TERM-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ARCHIVE-TERM | PERMISSION_DENIED applies to Archive a Historical School Term | the actor requests Archive a Historical School Term | Archive a Historical School Term returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ARCHIVE-TERM-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ARCHIVE-TERM | VALIDATION_FAILED applies to Archive a Historical School Term | the actor requests Archive a Historical School Term | Archive a Historical School Term returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ARCHIVE-TERM-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ARCHIVE-TERM | VERSION_CONFLICT applies to Archive a Historical School Term | the actor requests Archive a Historical School Term | Archive a Historical School Term returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CREATE-GRADE-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-GRADE | the actor meets the entry conditions for Create a Term Grade | the actor requests Create a Term Grade | Create a Term Grade returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-CREATE-GRADE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-GRADE | PERMISSION_DENIED applies to Create a Term Grade | the actor requests Create a Term Grade | Create a Term Grade returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-GRADE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-GRADE | VALIDATION_FAILED applies to Create a Term Grade | the actor requests Create a Term Grade | Create a Term Grade returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-GRADE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-GRADE | VERSION_CONFLICT applies to Create a Term Grade | the actor requests Create a Term Grade | Create a Term Grade returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-UPDATE-GRADE-SCN-SUCCESS | SUCCESS | ORG-ACT-UPDATE-GRADE | the actor meets the entry conditions for Update an Active Term Grade | the actor requests Update an Active Term Grade | Update an Active Term Grade returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-UPDATE-GRADE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-UPDATE-GRADE | PERMISSION_DENIED applies to Update an Active Term Grade | the actor requests Update an Active Term Grade | Update an Active Term Grade returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-UPDATE-GRADE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-UPDATE-GRADE | VALIDATION_FAILED applies to Update an Active Term Grade | the actor requests Update an Active Term Grade | Update an Active Term Grade returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-UPDATE-GRADE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-UPDATE-GRADE | VERSION_CONFLICT applies to Update an Active Term Grade | the actor requests Update an Active Term Grade | Update an Active Term Grade returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-MARK-GRADE-HISTORICAL-SCN-SUCCESS | SUCCESS | ORG-ACT-MARK-GRADE-HISTORICAL | the actor meets the entry conditions for Mark a Grade Historical after Term Close | the actor requests Mark a Grade Historical after Term Close | Mark a Grade Historical after Term Close returns the accepted task-specific result | HISTORICAL | ALLOW |  |
+| ORG-ACT-MARK-GRADE-HISTORICAL-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-MARK-GRADE-HISTORICAL | PERMISSION_DENIED applies to Mark a Grade Historical after Term Close | the actor requests Mark a Grade Historical after Term Close | Mark a Grade Historical after Term Close returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-MARK-GRADE-HISTORICAL-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-MARK-GRADE-HISTORICAL | VALIDATION_FAILED applies to Mark a Grade Historical after Term Close | the actor requests Mark a Grade Historical after Term Close | Mark a Grade Historical after Term Close returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-MARK-GRADE-HISTORICAL-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-MARK-GRADE-HISTORICAL | VERSION_CONFLICT applies to Mark a Grade Historical after Term Close | the actor requests Mark a Grade Historical after Term Close | Mark a Grade Historical after Term Close returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CREATE-CLASS-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-CLASS | the actor meets the entry conditions for Create a Term Class | the actor requests Create a Term Class | Create a Term Class returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-CREATE-CLASS-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-CLASS | PERMISSION_DENIED applies to Create a Term Class | the actor requests Create a Term Class | Create a Term Class returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-CLASS-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-CLASS | VALIDATION_FAILED applies to Create a Term Class | the actor requests Create a Term Class | Create a Term Class returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-CLASS-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-CLASS | VERSION_CONFLICT applies to Create a Term Class | the actor requests Create a Term Class | Create a Term Class returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-UPDATE-CLASS-SCN-SUCCESS | SUCCESS | ORG-ACT-UPDATE-CLASS | the actor meets the entry conditions for Update an Active Term Class | the actor requests Update an Active Term Class | Update an Active Term Class returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-UPDATE-CLASS-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-UPDATE-CLASS | PERMISSION_DENIED applies to Update an Active Term Class | the actor requests Update an Active Term Class | Update an Active Term Class returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-UPDATE-CLASS-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-UPDATE-CLASS | VALIDATION_FAILED applies to Update an Active Term Class | the actor requests Update an Active Term Class | Update an Active Term Class returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-UPDATE-CLASS-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-UPDATE-CLASS | VERSION_CONFLICT applies to Update an Active Term Class | the actor requests Update an Active Term Class | Update an Active Term Class returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-MARK-CLASS-HISTORICAL-SCN-SUCCESS | SUCCESS | ORG-ACT-MARK-CLASS-HISTORICAL | the actor meets the entry conditions for Mark a Class Historical after Term Close | the actor requests Mark a Class Historical after Term Close | Mark a Class Historical after Term Close returns the accepted task-specific result | HISTORICAL | ALLOW |  |
+| ORG-ACT-MARK-CLASS-HISTORICAL-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-MARK-CLASS-HISTORICAL | PERMISSION_DENIED applies to Mark a Class Historical after Term Close | the actor requests Mark a Class Historical after Term Close | Mark a Class Historical after Term Close returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-MARK-CLASS-HISTORICAL-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-MARK-CLASS-HISTORICAL | VALIDATION_FAILED applies to Mark a Class Historical after Term Close | the actor requests Mark a Class Historical after Term Close | Mark a Class Historical after Term Close returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-MARK-CLASS-HISTORICAL-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-MARK-CLASS-HISTORICAL | VERSION_CONFLICT applies to Mark a Class Historical after Term Close | the actor requests Mark a Class Historical after Term Close | Mark a Class Historical after Term Close returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-DEACTIVATE-CLASS-SCN-SUCCESS | SUCCESS | ORG-ACT-DEACTIVATE-CLASS | the actor meets the entry conditions for Deactivate a Class | the actor requests Deactivate a Class | Deactivate a Class returns the accepted task-specific result | DEACTIVATED | ALLOW |  |
+| ORG-ACT-DEACTIVATE-CLASS-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-DEACTIVATE-CLASS | PERMISSION_DENIED applies to Deactivate a Class | the actor requests Deactivate a Class | Deactivate a Class returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-DEACTIVATE-CLASS-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-DEACTIVATE-CLASS | VALIDATION_FAILED applies to Deactivate a Class | the actor requests Deactivate a Class | Deactivate a Class returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-DEACTIVATE-CLASS-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-DEACTIVATE-CLASS | VERSION_CONFLICT applies to Deactivate a Class | the actor requests Deactivate a Class | Deactivate a Class returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CREATE-SUBJECT-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-SUBJECT | the actor meets the entry conditions for Create a School Subject | the actor requests Create a School Subject | Create a School Subject returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-CREATE-SUBJECT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-SUBJECT | PERMISSION_DENIED applies to Create a School Subject | the actor requests Create a School Subject | Create a School Subject returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-SUBJECT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-SUBJECT | VALIDATION_FAILED applies to Create a School Subject | the actor requests Create a School Subject | Create a School Subject returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-SUBJECT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-SUBJECT | VERSION_CONFLICT applies to Create a School Subject | the actor requests Create a School Subject | Create a School Subject returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-UPDATE-SUBJECT-SCN-SUCCESS | SUCCESS | ORG-ACT-UPDATE-SUBJECT | the actor meets the entry conditions for Update an Active School Subject | the actor requests Update an Active School Subject | Update an Active School Subject returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-UPDATE-SUBJECT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-UPDATE-SUBJECT | PERMISSION_DENIED applies to Update an Active School Subject | the actor requests Update an Active School Subject | Update an Active School Subject returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-UPDATE-SUBJECT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-UPDATE-SUBJECT | VALIDATION_FAILED applies to Update an Active School Subject | the actor requests Update an Active School Subject | Update an Active School Subject returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-UPDATE-SUBJECT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-UPDATE-SUBJECT | VERSION_CONFLICT applies to Update an Active School Subject | the actor requests Update an Active School Subject | Update an Active School Subject returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-DEPRECATE-SUBJECT-SCN-SUCCESS | SUCCESS | ORG-ACT-DEPRECATE-SUBJECT | the actor meets the entry conditions for Deprecate a School Subject | the actor requests Deprecate a School Subject | Deprecate a School Subject returns the accepted task-specific result | DEPRECATED | ALLOW |  |
+| ORG-ACT-DEPRECATE-SUBJECT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-DEPRECATE-SUBJECT | PERMISSION_DENIED applies to Deprecate a School Subject | the actor requests Deprecate a School Subject | Deprecate a School Subject returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-DEPRECATE-SUBJECT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-DEPRECATE-SUBJECT | VALIDATION_FAILED applies to Deprecate a School Subject | the actor requests Deprecate a School Subject | Deprecate a School Subject returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-DEPRECATE-SUBJECT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-DEPRECATE-SUBJECT | VERSION_CONFLICT applies to Deprecate a School Subject | the actor requests Deprecate a School Subject | Deprecate a School Subject returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CREATE-COURSE-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-COURSE | the actor meets the entry conditions for Create a Term Course | the actor requests Create a Term Course | Create a Term Course returns the accepted task-specific result | DRAFT | ALLOW |  |
+| ORG-ACT-CREATE-COURSE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-COURSE | PERMISSION_DENIED applies to Create a Term Course | the actor requests Create a Term Course | Create a Term Course returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-COURSE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-COURSE | VALIDATION_FAILED applies to Create a Term Course | the actor requests Create a Term Course | Create a Term Course returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-COURSE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-COURSE | VERSION_CONFLICT applies to Create a Term Course | the actor requests Create a Term Course | Create a Term Course returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-UPDATE-COURSE-SCN-SUCCESS | SUCCESS | ORG-ACT-UPDATE-COURSE | the actor meets the entry conditions for Update a Draft Term Course | the actor requests Update a Draft Term Course | Update a Draft Term Course returns the accepted task-specific result | DRAFT | ALLOW |  |
+| ORG-ACT-UPDATE-COURSE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-UPDATE-COURSE | PERMISSION_DENIED applies to Update a Draft Term Course | the actor requests Update a Draft Term Course | Update a Draft Term Course returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-UPDATE-COURSE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-UPDATE-COURSE | VALIDATION_FAILED applies to Update a Draft Term Course | the actor requests Update a Draft Term Course | Update a Draft Term Course returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-UPDATE-COURSE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-UPDATE-COURSE | VERSION_CONFLICT applies to Update a Draft Term Course | the actor requests Update a Draft Term Course | Update a Draft Term Course returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-COURSE-SCN-SUCCESS | SUCCESS | ORG-ACT-ACTIVATE-COURSE | the actor meets the entry conditions for Activate a Draft Term Course | the actor requests Activate a Draft Term Course | Activate a Draft Term Course returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-ACTIVATE-COURSE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ACTIVATE-COURSE | PERMISSION_DENIED applies to Activate a Draft Term Course | the actor requests Activate a Draft Term Course | Activate a Draft Term Course returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ACTIVATE-COURSE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ACTIVATE-COURSE | VALIDATION_FAILED applies to Activate a Draft Term Course | the actor requests Activate a Draft Term Course | Activate a Draft Term Course returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ACTIVATE-COURSE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ACTIVATE-COURSE | VERSION_CONFLICT applies to Activate a Draft Term Course | the actor requests Activate a Draft Term Course | Activate a Draft Term Course returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-END-COURSE-SCN-SUCCESS | SUCCESS | ORG-ACT-END-COURSE | the actor meets the entry conditions for End an Active Term Course | the actor requests End an Active Term Course | End an Active Term Course returns the accepted task-specific result | ENDED | ALLOW |  |
+| ORG-ACT-END-COURSE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-END-COURSE | PERMISSION_DENIED applies to End an Active Term Course | the actor requests End an Active Term Course | End an Active Term Course returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-END-COURSE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-END-COURSE | VALIDATION_FAILED applies to End an Active Term Course | the actor requests End an Active Term Course | End an Active Term Course returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-END-COURSE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-END-COURSE | VERSION_CONFLICT applies to End an Active Term Course | the actor requests End an Active Term Course | End an Active Term Course returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CREATE-TEACHER-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-TEACHER | the actor meets the entry conditions for Create a Teacher Profile | the actor requests Create a Teacher Profile | Create a Teacher Profile returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-CREATE-TEACHER-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-TEACHER | PERMISSION_DENIED applies to Create a Teacher Profile | the actor requests Create a Teacher Profile | Create a Teacher Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-TEACHER-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-TEACHER | VALIDATION_FAILED applies to Create a Teacher Profile | the actor requests Create a Teacher Profile | Create a Teacher Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-TEACHER-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-TEACHER | VERSION_CONFLICT applies to Create a Teacher Profile | the actor requests Create a Teacher Profile | Create a Teacher Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-UPDATE-TEACHER-SCN-SUCCESS | SUCCESS | ORG-ACT-UPDATE-TEACHER | the actor meets the entry conditions for Update an Active Teacher Profile | the actor requests Update an Active Teacher Profile | Update an Active Teacher Profile returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-UPDATE-TEACHER-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-UPDATE-TEACHER | PERMISSION_DENIED applies to Update an Active Teacher Profile | the actor requests Update an Active Teacher Profile | Update an Active Teacher Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-UPDATE-TEACHER-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-UPDATE-TEACHER | VALIDATION_FAILED applies to Update an Active Teacher Profile | the actor requests Update an Active Teacher Profile | Update an Active Teacher Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-UPDATE-TEACHER-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-UPDATE-TEACHER | VERSION_CONFLICT applies to Update an Active Teacher Profile | the actor requests Update an Active Teacher Profile | Update an Active Teacher Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-SUSPEND-TEACHER-SCN-SUCCESS | SUCCESS | ORG-ACT-SUSPEND-TEACHER | the actor meets the entry conditions for Suspend a Teacher Profile | the actor requests Suspend a Teacher Profile | Suspend a Teacher Profile returns the accepted task-specific result | SUSPENDED | ALLOW |  |
+| ORG-ACT-SUSPEND-TEACHER-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-SUSPEND-TEACHER | PERMISSION_DENIED applies to Suspend a Teacher Profile | the actor requests Suspend a Teacher Profile | Suspend a Teacher Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-SUSPEND-TEACHER-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-SUSPEND-TEACHER | VALIDATION_FAILED applies to Suspend a Teacher Profile | the actor requests Suspend a Teacher Profile | Suspend a Teacher Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-SUSPEND-TEACHER-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-SUSPEND-TEACHER | VERSION_CONFLICT applies to Suspend a Teacher Profile | the actor requests Suspend a Teacher Profile | Suspend a Teacher Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-SUSPEND-TEACHER-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-SUSPEND-TEACHER | AUDIT_FAILED applies to Suspend a Teacher Profile | the actor requests Suspend a Teacher Profile | Suspend a Teacher Profile returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-DEACTIVATE-TEACHER-SCN-SUCCESS | SUCCESS | ORG-ACT-DEACTIVATE-TEACHER | the actor meets the entry conditions for Deactivate a Teacher Profile | the actor requests Deactivate a Teacher Profile | Deactivate a Teacher Profile returns the accepted task-specific result | DEACTIVATED | ALLOW |  |
+| ORG-ACT-DEACTIVATE-TEACHER-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-DEACTIVATE-TEACHER | PERMISSION_DENIED applies to Deactivate a Teacher Profile | the actor requests Deactivate a Teacher Profile | Deactivate a Teacher Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-DEACTIVATE-TEACHER-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-DEACTIVATE-TEACHER | VALIDATION_FAILED applies to Deactivate a Teacher Profile | the actor requests Deactivate a Teacher Profile | Deactivate a Teacher Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-DEACTIVATE-TEACHER-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-DEACTIVATE-TEACHER | VERSION_CONFLICT applies to Deactivate a Teacher Profile | the actor requests Deactivate a Teacher Profile | Deactivate a Teacher Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-DEACTIVATE-TEACHER-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-DEACTIVATE-TEACHER | AUDIT_FAILED applies to Deactivate a Teacher Profile | the actor requests Deactivate a Teacher Profile | Deactivate a Teacher Profile returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-CREATE-STUDENT-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-STUDENT | the actor meets the entry conditions for Create a Student Profile | the actor requests Create a Student Profile | Create a Student Profile returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-CREATE-STUDENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-STUDENT | PERMISSION_DENIED applies to Create a Student Profile | the actor requests Create a Student Profile | Create a Student Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-STUDENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-STUDENT | VALIDATION_FAILED applies to Create a Student Profile | the actor requests Create a Student Profile | Create a Student Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-STUDENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-STUDENT | VERSION_CONFLICT applies to Create a Student Profile | the actor requests Create a Student Profile | Create a Student Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-UPDATE-STUDENT-SCN-SUCCESS | SUCCESS | ORG-ACT-UPDATE-STUDENT | the actor meets the entry conditions for Update an Active Student Profile | the actor requests Update an Active Student Profile | Update an Active Student Profile returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| ORG-ACT-UPDATE-STUDENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-UPDATE-STUDENT | PERMISSION_DENIED applies to Update an Active Student Profile | the actor requests Update an Active Student Profile | Update an Active Student Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-UPDATE-STUDENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-UPDATE-STUDENT | VALIDATION_FAILED applies to Update an Active Student Profile | the actor requests Update an Active Student Profile | Update an Active Student Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-UPDATE-STUDENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-UPDATE-STUDENT | VERSION_CONFLICT applies to Update an Active Student Profile | the actor requests Update an Active Student Profile | Update an Active Student Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-TRANSFER-STUDENT-SCN-SUCCESS | SUCCESS | ORG-ACT-TRANSFER-STUDENT | the actor meets the entry conditions for Transfer a Student Profile | the actor requests Transfer a Student Profile | Transfer a Student Profile returns the accepted task-specific result | TRANSFERRED | ALLOW |  |
+| ORG-ACT-TRANSFER-STUDENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-TRANSFER-STUDENT | PERMISSION_DENIED applies to Transfer a Student Profile | the actor requests Transfer a Student Profile | Transfer a Student Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-TRANSFER-STUDENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-TRANSFER-STUDENT | VALIDATION_FAILED applies to Transfer a Student Profile | the actor requests Transfer a Student Profile | Transfer a Student Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-TRANSFER-STUDENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-TRANSFER-STUDENT | VERSION_CONFLICT applies to Transfer a Student Profile | the actor requests Transfer a Student Profile | Transfer a Student Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-TRANSFER-STUDENT-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-TRANSFER-STUDENT | AUDIT_FAILED applies to Transfer a Student Profile | the actor requests Transfer a Student Profile | Transfer a Student Profile returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-ASSIGN-SUBJECT-TEACHER-SCN-SUCCESS | SUCCESS | ORG-ACT-ASSIGN-SUBJECT-TEACHER | the actor meets the entry conditions for Assign a Subject Teacher to Course and Class | the actor requests Assign a Subject Teacher to Course and Class | Assign a Subject Teacher to Course and Class returns the accepted task-specific result | PLANNED | ALLOW |  |
+| ORG-ACT-ASSIGN-SUBJECT-TEACHER-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ASSIGN-SUBJECT-TEACHER | PERMISSION_DENIED applies to Assign a Subject Teacher to Course and Class | the actor requests Assign a Subject Teacher to Course and Class | Assign a Subject Teacher to Course and Class returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ASSIGN-SUBJECT-TEACHER-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ASSIGN-SUBJECT-TEACHER | VALIDATION_FAILED applies to Assign a Subject Teacher to Course and Class | the actor requests Assign a Subject Teacher to Course and Class | Assign a Subject Teacher to Course and Class returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ASSIGN-SUBJECT-TEACHER-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ASSIGN-SUBJECT-TEACHER | VERSION_CONFLICT applies to Assign a Subject Teacher to Course and Class | the actor requests Assign a Subject Teacher to Course and Class | Assign a Subject Teacher to Course and Class returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT-SCN-SUCCESS | SUCCESS | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | the actor meets the entry conditions for Activate a Planned Teaching Assignment | the actor requests Activate a Planned Teaching Assignment | Activate a Planned Teaching Assignment returns the accepted task-specific result | EFFECTIVE | ALLOW |  |
+| ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | PERMISSION_DENIED applies to Activate a Planned Teaching Assignment | the actor requests Activate a Planned Teaching Assignment | Activate a Planned Teaching Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | VALIDATION_FAILED applies to Activate a Planned Teaching Assignment | the actor requests Activate a Planned Teaching Assignment | Activate a Planned Teaching Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | VERSION_CONFLICT applies to Activate a Planned Teaching Assignment | the actor requests Activate a Planned Teaching Assignment | Activate a Planned Teaching Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT-SCN-SUCCESS | SUCCESS | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | the actor meets the entry conditions for Expire an Effective Teaching Assignment | the actor requests Expire an Effective Teaching Assignment | Expire an Effective Teaching Assignment returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | PERMISSION_DENIED applies to Expire an Effective Teaching Assignment | the actor requests Expire an Effective Teaching Assignment | Expire an Effective Teaching Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | VALIDATION_FAILED applies to Expire an Effective Teaching Assignment | the actor requests Expire an Effective Teaching Assignment | Expire an Effective Teaching Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | VERSION_CONFLICT applies to Expire an Effective Teaching Assignment | the actor requests Expire an Effective Teaching Assignment | Expire an Effective Teaching Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-REVOKE-TEACHING-ASSIGNMENT-SCN-SUCCESS | SUCCESS | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT | the actor meets the entry conditions for Revoke a Teaching Assignment | the actor requests Revoke a Teaching Assignment | Revoke a Teaching Assignment returns the accepted task-specific result | REVOKED | ALLOW |  |
+| ORG-ACT-REVOKE-TEACHING-ASSIGNMENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT | PERMISSION_DENIED applies to Revoke a Teaching Assignment | the actor requests Revoke a Teaching Assignment | Revoke a Teaching Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-REVOKE-TEACHING-ASSIGNMENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT | VALIDATION_FAILED applies to Revoke a Teaching Assignment | the actor requests Revoke a Teaching Assignment | Revoke a Teaching Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-REVOKE-TEACHING-ASSIGNMENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT | VERSION_CONFLICT applies to Revoke a Teaching Assignment | the actor requests Revoke a Teaching Assignment | Revoke a Teaching Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-ASSIGN-HOMEROOM-SCN-SUCCESS | SUCCESS | ORG-ACT-ASSIGN-HOMEROOM | the actor meets the entry conditions for Assign a Homeroom Teacher to a Class | the actor requests Assign a Homeroom Teacher to a Class | Assign a Homeroom Teacher to a Class returns the accepted task-specific result | PLANNED | ALLOW |  |
+| ORG-ACT-ASSIGN-HOMEROOM-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ASSIGN-HOMEROOM | PERMISSION_DENIED applies to Assign a Homeroom Teacher to a Class | the actor requests Assign a Homeroom Teacher to a Class | Assign a Homeroom Teacher to a Class returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ASSIGN-HOMEROOM-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ASSIGN-HOMEROOM | VALIDATION_FAILED applies to Assign a Homeroom Teacher to a Class | the actor requests Assign a Homeroom Teacher to a Class | Assign a Homeroom Teacher to a Class returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ASSIGN-HOMEROOM-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ASSIGN-HOMEROOM | VERSION_CONFLICT applies to Assign a Homeroom Teacher to a Class | the actor requests Assign a Homeroom Teacher to a Class | Assign a Homeroom Teacher to a Class returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT-SCN-SUCCESS | SUCCESS | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | the actor meets the entry conditions for Activate a Planned Homeroom Assignment | the actor requests Activate a Planned Homeroom Assignment | Activate a Planned Homeroom Assignment returns the accepted task-specific result | EFFECTIVE | ALLOW |  |
+| ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | PERMISSION_DENIED applies to Activate a Planned Homeroom Assignment | the actor requests Activate a Planned Homeroom Assignment | Activate a Planned Homeroom Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | VALIDATION_FAILED applies to Activate a Planned Homeroom Assignment | the actor requests Activate a Planned Homeroom Assignment | Activate a Planned Homeroom Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | VERSION_CONFLICT applies to Activate a Planned Homeroom Assignment | the actor requests Activate a Planned Homeroom Assignment | Activate a Planned Homeroom Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT-SCN-SUCCESS | SUCCESS | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | the actor meets the entry conditions for Expire an Effective Homeroom Assignment | the actor requests Expire an Effective Homeroom Assignment | Expire an Effective Homeroom Assignment returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | PERMISSION_DENIED applies to Expire an Effective Homeroom Assignment | the actor requests Expire an Effective Homeroom Assignment | Expire an Effective Homeroom Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | VALIDATION_FAILED applies to Expire an Effective Homeroom Assignment | the actor requests Expire an Effective Homeroom Assignment | Expire an Effective Homeroom Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | VERSION_CONFLICT applies to Expire an Effective Homeroom Assignment | the actor requests Expire an Effective Homeroom Assignment | Expire an Effective Homeroom Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT-SCN-SUCCESS | SUCCESS | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | the actor meets the entry conditions for Revoke a Homeroom Assignment | the actor requests Revoke a Homeroom Assignment | Revoke a Homeroom Assignment returns the accepted task-specific result | REVOKED | ALLOW |  |
+| ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | PERMISSION_DENIED applies to Revoke a Homeroom Assignment | the actor requests Revoke a Homeroom Assignment | Revoke a Homeroom Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | VALIDATION_FAILED applies to Revoke a Homeroom Assignment | the actor requests Revoke a Homeroom Assignment | Revoke a Homeroom Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | VERSION_CONFLICT applies to Revoke a Homeroom Assignment | the actor requests Revoke a Homeroom Assignment | Revoke a Homeroom Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE-SCN-SUCCESS | SUCCESS | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | the actor meets the entry conditions for Download Object-specific Import Template | the actor requests Download Object-specific Import Template | Download Object-specific Import Template returns the accepted task-specific result | UNCHANGED | ALLOW |  |
+| ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | PERMISSION_DENIED applies to Download Object-specific Import Template | the actor requests Download Object-specific Import Template | Download Object-specific Import Template returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | VALIDATION_FAILED applies to Download Object-specific Import Template | the actor requests Download Object-specific Import Template | Download Object-specific Import Template returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | VERSION_CONFLICT applies to Download Object-specific Import Template | the actor requests Download Object-specific Import Template | Download Object-specific Import Template returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-UPLOAD-IMPORT-SCN-SUCCESS | SUCCESS | ORG-ACT-UPLOAD-IMPORT | the actor meets the entry conditions for Upload Organization Import Workbook | the actor requests Upload Organization Import Workbook | Upload Organization Import Workbook returns the accepted task-specific result | UPLOADED | ALLOW |  |
+| ORG-ACT-UPLOAD-IMPORT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-UPLOAD-IMPORT | PERMISSION_DENIED applies to Upload Organization Import Workbook | the actor requests Upload Organization Import Workbook | Upload Organization Import Workbook returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-UPLOAD-IMPORT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-UPLOAD-IMPORT | VALIDATION_FAILED applies to Upload Organization Import Workbook | the actor requests Upload Organization Import Workbook | Upload Organization Import Workbook returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-UPLOAD-IMPORT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-UPLOAD-IMPORT | VERSION_CONFLICT applies to Upload Organization Import Workbook | the actor requests Upload Organization Import Workbook | Upload Organization Import Workbook returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-MAP-IMPORT-FIELDS-SCN-SUCCESS | SUCCESS | ORG-ACT-MAP-IMPORT-FIELDS | the actor meets the entry conditions for Map Workbook Columns to Organization Fields | the actor requests Map Workbook Columns to Organization Fields | Map Workbook Columns to Organization Fields returns the accepted task-specific result | MAPPED | ALLOW |  |
+| ORG-ACT-MAP-IMPORT-FIELDS-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-MAP-IMPORT-FIELDS | PERMISSION_DENIED applies to Map Workbook Columns to Organization Fields | the actor requests Map Workbook Columns to Organization Fields | Map Workbook Columns to Organization Fields returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-MAP-IMPORT-FIELDS-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-MAP-IMPORT-FIELDS | VALIDATION_FAILED applies to Map Workbook Columns to Organization Fields | the actor requests Map Workbook Columns to Organization Fields | Map Workbook Columns to Organization Fields returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-MAP-IMPORT-FIELDS-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-MAP-IMPORT-FIELDS | VERSION_CONFLICT applies to Map Workbook Columns to Organization Fields | the actor requests Map Workbook Columns to Organization Fields | Map Workbook Columns to Organization Fields returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-VALIDATE-IMPORT-BATCH-SCN-SUCCESS | SUCCESS | ORG-ACT-VALIDATE-IMPORT-BATCH | the actor meets the entry conditions for Validate a Mapped Organization Import Batch | the actor requests Validate a Mapped Organization Import Batch | Validate a Mapped Organization Import Batch returns the accepted task-specific result | VALIDATED | ALLOW |  |
+| ORG-ACT-VALIDATE-IMPORT-BATCH-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-VALIDATE-IMPORT-BATCH | PERMISSION_DENIED applies to Validate a Mapped Organization Import Batch | the actor requests Validate a Mapped Organization Import Batch | Validate a Mapped Organization Import Batch returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-VALIDATE-IMPORT-BATCH-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-VALIDATE-IMPORT-BATCH | VALIDATION_FAILED applies to Validate a Mapped Organization Import Batch | the actor requests Validate a Mapped Organization Import Batch | Validate a Mapped Organization Import Batch returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-VALIDATE-IMPORT-BATCH-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-VALIDATE-IMPORT-BATCH | VERSION_CONFLICT applies to Validate a Mapped Organization Import Batch | the actor requests Validate a Mapped Organization Import Batch | Validate a Mapped Organization Import Batch returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-REJECT-IMPORT-BATCH-SCN-SUCCESS | SUCCESS | ORG-ACT-REJECT-IMPORT-BATCH | the actor meets the entry conditions for Reject an Invalid Organization Import Batch | the actor requests Reject an Invalid Organization Import Batch | Reject an Invalid Organization Import Batch returns the accepted task-specific result | REJECTED | ALLOW |  |
+| ORG-ACT-REJECT-IMPORT-BATCH-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-REJECT-IMPORT-BATCH | PERMISSION_DENIED applies to Reject an Invalid Organization Import Batch | the actor requests Reject an Invalid Organization Import Batch | Reject an Invalid Organization Import Batch returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-REJECT-IMPORT-BATCH-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-REJECT-IMPORT-BATCH | VALIDATION_FAILED applies to Reject an Invalid Organization Import Batch | the actor requests Reject an Invalid Organization Import Batch | Reject an Invalid Organization Import Batch returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-REJECT-IMPORT-BATCH-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-REJECT-IMPORT-BATCH | VERSION_CONFLICT applies to Reject an Invalid Organization Import Batch | the actor requests Reject an Invalid Organization Import Batch | Reject an Invalid Organization Import Batch returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-VALIDATE-IMPORT-SCN-SUCCESS | SUCCESS | ORG-ACT-VALIDATE-IMPORT | the actor meets the entry conditions for Validate Object-level Import Rows | the actor requests Validate Object-level Import Rows | each row receives CREATE, UPDATE, NO_CHANGE, REJECT, or DEACTIVATE before confirmation | VALIDATED | ALLOW |  |
+| ORG-ACT-VALIDATE-IMPORT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-VALIDATE-IMPORT | PERMISSION_DENIED applies to Validate Object-level Import Rows | the actor requests Validate Object-level Import Rows | Validate Object-level Import Rows returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-VALIDATE-IMPORT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-VALIDATE-IMPORT | VALIDATION_FAILED applies to Validate Object-level Import Rows | the actor requests Validate Object-level Import Rows | errors and conflicts block only affected rows and remain visible | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-VALIDATE-IMPORT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-VALIDATE-IMPORT | VERSION_CONFLICT applies to Validate Object-level Import Rows | the actor requests Validate Object-level Import Rows | Validate Object-level Import Rows returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CONFIRM-IMPORT-SCN-SUCCESS | SUCCESS | ORG-ACT-CONFIRM-IMPORT | the actor meets the entry conditions for Confirm Object-level Import | the actor requests Confirm Object-level Import | accepted rows remain provisional until the outcome audit succeeds; rejected rows remain object-level results for correction | PENDING_OUTCOME_AUDIT | ALLOW |  |
+| ORG-ACT-CONFIRM-IMPORT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CONFIRM-IMPORT | PERMISSION_DENIED applies to Confirm Object-level Import | the actor requests Confirm Object-level Import | Confirm Object-level Import returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CONFIRM-IMPORT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CONFIRM-IMPORT | VALIDATION_FAILED applies to Confirm Object-level Import | the actor requests Confirm Object-level Import | Confirm Object-level Import returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CONFIRM-IMPORT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CONFIRM-IMPORT | VERSION_CONFLICT applies to Confirm Object-level Import | the actor requests Confirm Object-level Import | Confirm Object-level Import returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CONFIRM-IMPORT-SCN-PARTIAL_SUCCESS | BOUNDARY | ORG-ACT-CONFIRM-IMPORT | PARTIAL_SUCCESS applies to Confirm Object-level Import | the actor requests Confirm Object-level Import | successful rows in a partial result remain provisional until outcome audit and every failed object row is reported | PENDING_PARTIAL_OUTCOME_AUDIT | ALLOW | PARTIAL_SUCCESS |
+| ORG-ACT-CONFIRM-IMPORT-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-CONFIRM-IMPORT | AUDIT_FAILED applies to Confirm Object-level Import | the actor requests Confirm Object-level Import | Confirm Object-level Import returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-FINALIZE-AUDITED-IMPORT-SCN-SUCCESS | SUCCESS | ORG-ACT-FINALIZE-AUDITED-IMPORT | the actor meets the entry conditions for Finalize an Audited Organization Import | the actor requests Finalize an Audited Organization Import | the audited provisional rows become the final accepted organization version | COMPLETED | ALLOW |  |
+| ORG-ACT-FINALIZE-AUDITED-IMPORT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-FINALIZE-AUDITED-IMPORT | PERMISSION_DENIED applies to Finalize an Audited Organization Import | the actor requests Finalize an Audited Organization Import | Finalize an Audited Organization Import returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-FINALIZE-AUDITED-IMPORT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-FINALIZE-AUDITED-IMPORT | VALIDATION_FAILED applies to Finalize an Audited Organization Import | the actor requests Finalize an Audited Organization Import | Finalize an Audited Organization Import returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-FINALIZE-AUDITED-IMPORT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-FINALIZE-AUDITED-IMPORT | VERSION_CONFLICT applies to Finalize an Audited Organization Import | the actor requests Finalize an Audited Organization Import | Finalize an Audited Organization Import returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-FINALIZE-AUDITED-IMPORT-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-FINALIZE-AUDITED-IMPORT | AUDIT_FAILED applies to Finalize an Audited Organization Import | the actor requests Finalize an Audited Organization Import | Finalize an Audited Organization Import returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT-SCN-SUCCESS | SUCCESS | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | the actor meets the entry conditions for Finalize an Audited Partial Organization Import | the actor requests Finalize an Audited Partial Organization Import | audited successful rows become final while rejected rows remain visible for correction | PARTIAL_SUCCESS | ALLOW |  |
+| ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | PERMISSION_DENIED applies to Finalize an Audited Partial Organization Import | the actor requests Finalize an Audited Partial Organization Import | Finalize an Audited Partial Organization Import returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | VALIDATION_FAILED applies to Finalize an Audited Partial Organization Import | the actor requests Finalize an Audited Partial Organization Import | Finalize an Audited Partial Organization Import returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | VERSION_CONFLICT applies to Finalize an Audited Partial Organization Import | the actor requests Finalize an Audited Partial Organization Import | Finalize an Audited Partial Organization Import returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | AUDIT_FAILED applies to Finalize an Audited Partial Organization Import | the actor requests Finalize an Audited Partial Organization Import | Finalize an Audited Partial Organization Import returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-RETRY-FAILED-ROWS-SCN-SUCCESS | SUCCESS | ORG-ACT-RETRY-FAILED-ROWS | the actor meets the entry conditions for Retry Corrected Failed Import Rows | the actor requests Retry Corrected Failed Import Rows | only corrected failed rows are retried; prior successful rows remain accepted | VALIDATED | ALLOW |  |
+| ORG-ACT-RETRY-FAILED-ROWS-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-RETRY-FAILED-ROWS | PERMISSION_DENIED applies to Retry Corrected Failed Import Rows | the actor requests Retry Corrected Failed Import Rows | Retry Corrected Failed Import Rows returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-RETRY-FAILED-ROWS-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-RETRY-FAILED-ROWS | VALIDATION_FAILED applies to Retry Corrected Failed Import Rows | the actor requests Retry Corrected Failed Import Rows | Retry Corrected Failed Import Rows returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-RETRY-FAILED-ROWS-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-RETRY-FAILED-ROWS | VERSION_CONFLICT applies to Retry Corrected Failed Import Rows | the actor requests Retry Corrected Failed Import Rows | Retry Corrected Failed Import Rows returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-MARK-IMPORT-ROW-RETRYABLE-SCN-SUCCESS | SUCCESS | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | the actor meets the entry conditions for Mark a Failed Import Row Retryable | the actor requests Mark a Failed Import Row Retryable | Mark a Failed Import Row Retryable returns the accepted task-specific result | RETRYABLE | ALLOW |  |
+| ORG-ACT-MARK-IMPORT-ROW-RETRYABLE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | PERMISSION_DENIED applies to Mark a Failed Import Row Retryable | the actor requests Mark a Failed Import Row Retryable | Mark a Failed Import Row Retryable returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-MARK-IMPORT-ROW-RETRYABLE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | VALIDATION_FAILED applies to Mark a Failed Import Row Retryable | the actor requests Mark a Failed Import Row Retryable | Mark a Failed Import Row Retryable returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-MARK-IMPORT-ROW-RETRYABLE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | VERSION_CONFLICT applies to Mark a Failed Import Row Retryable | the actor requests Mark a Failed Import Row Retryable | Mark a Failed Import Row Retryable returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-DEACTIVATE-MEMBER-SCN-SUCCESS | SUCCESS | ORG-ACT-DEACTIVATE-MEMBER | the actor meets the entry conditions for Deactivate a School Member Profile | the actor requests Deactivate a School Member Profile | Deactivate a School Member Profile returns the accepted task-specific result | DEACTIVATED | ALLOW |  |
+| ORG-ACT-DEACTIVATE-MEMBER-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-DEACTIVATE-MEMBER | PERMISSION_DENIED applies to Deactivate a School Member Profile | the actor requests Deactivate a School Member Profile | Deactivate a School Member Profile returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-DEACTIVATE-MEMBER-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-DEACTIVATE-MEMBER | VALIDATION_FAILED applies to Deactivate a School Member Profile | the actor requests Deactivate a School Member Profile | Deactivate a School Member Profile returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-DEACTIVATE-MEMBER-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-DEACTIVATE-MEMBER | VERSION_CONFLICT applies to Deactivate a School Member Profile | the actor requests Deactivate a School Member Profile | Deactivate a School Member Profile returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-DEACTIVATE-MEMBER-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-DEACTIVATE-MEMBER | AUDIT_FAILED applies to Deactivate a School Member Profile | the actor requests Deactivate a School Member Profile | Deactivate a School Member Profile returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-RESOLVE-CONTEXT-SCOPE-SCN-SUCCESS | SUCCESS | ORG-ACT-RESOLVE-CONTEXT-SCOPE | the actor meets the entry conditions for Resolve Current Term and Organization Scope | the actor requests Resolve Current Term and Organization Scope | current term and organization versions are returned for permission evaluation | UNCHANGED | ALLOW |  |
+| ORG-ACT-RESOLVE-CONTEXT-SCOPE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-RESOLVE-CONTEXT-SCOPE | PERMISSION_DENIED applies to Resolve Current Term and Organization Scope | the actor requests Resolve Current Term and Organization Scope | Resolve Current Term and Organization Scope returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-RESOLVE-CONTEXT-SCOPE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-RESOLVE-CONTEXT-SCOPE | VALIDATION_FAILED applies to Resolve Current Term and Organization Scope | the actor requests Resolve Current Term and Organization Scope | Resolve Current Term and Organization Scope returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-RESOLVE-CONTEXT-SCOPE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-RESOLVE-CONTEXT-SCOPE | VERSION_CONFLICT applies to Resolve Current Term and Organization Scope | the actor requests Resolve Current Term and Organization Scope | Resolve Current Term and Organization Scope returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-VIEW-MY-TEACHING-SCOPE-SCN-SUCCESS | SUCCESS | ORG-ACT-VIEW-MY-TEACHING-SCOPE | the actor meets the entry conditions for View My Class and Teaching Scope on App | the actor requests View My Class and Teaching Scope on App | App returns the current teacher's effective classes and teaching relationships | UNCHANGED | ALLOW |  |
+| ORG-ACT-VIEW-MY-TEACHING-SCOPE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-VIEW-MY-TEACHING-SCOPE | PERMISSION_DENIED applies to View My Class and Teaching Scope on App | the actor requests View My Class and Teaching Scope on App | View My Class and Teaching Scope on App returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-VIEW-MY-TEACHING-SCOPE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-VIEW-MY-TEACHING-SCOPE | VALIDATION_FAILED applies to View My Class and Teaching Scope on App | the actor requests View My Class and Teaching Scope on App | View My Class and Teaching Scope on App returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-VIEW-MY-TEACHING-SCOPE-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-VIEW-MY-TEACHING-SCOPE | VERSION_CONFLICT applies to View My Class and Teaching Scope on App | the actor requests View My Class and Teaching Scope on App | View My Class and Teaching Scope on App returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-VIEW-IMPORT-NOTIFICATION-SCN-SUCCESS | SUCCESS | ORG-ACT-VIEW-IMPORT-NOTIFICATION | the actor meets the entry conditions for View Import Result Notification on App | the actor requests View Import Result Notification on App | App shows batch status and object-level exceptions without exposing bulk editing | UNCHANGED | ALLOW |  |
+| ORG-ACT-VIEW-IMPORT-NOTIFICATION-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-VIEW-IMPORT-NOTIFICATION | PERMISSION_DENIED applies to View Import Result Notification on App | the actor requests View Import Result Notification on App | View Import Result Notification on App returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-VIEW-IMPORT-NOTIFICATION-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-VIEW-IMPORT-NOTIFICATION | VALIDATION_FAILED applies to View Import Result Notification on App | the actor requests View Import Result Notification on App | View Import Result Notification on App returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-VIEW-IMPORT-NOTIFICATION-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-VIEW-IMPORT-NOTIFICATION | VERSION_CONFLICT applies to View Import Result Notification on App | the actor requests View Import Result Notification on App | View Import Result Notification on App returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-SUCCESS | SUCCESS | ORG-ACT-CONFIRM-IMPORT-ANOMALY | the actor meets the entry conditions for Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | App records an explicit anomaly confirmation without executing or reproducing the bulk import workflow | VALIDATED | ALLOW |  |
+| ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CONFIRM-IMPORT-ANOMALY | PERMISSION_DENIED applies to Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | Confirm an Import Anomaly on App returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CONFIRM-IMPORT-ANOMALY | VALIDATION_FAILED applies to Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | Confirm an Import Anomaly on App returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CONFIRM-IMPORT-ANOMALY | VERSION_CONFLICT applies to Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | Confirm an Import Anomaly on App returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-CONFIRM-IMPORT-ANOMALY | AUDIT_FAILED applies to Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | Confirm an Import Anomaly on App returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 教务或管理员上传组织文件并选择对象类型。
-2. 系统生成字段映射和逐行校验结果。
-3. 操作者处理冲突、确认高影响停用。
-4. 系统对象级写入并刷新受影响身份与权限。
-
-关联 Flow: `DF-002`、`DF-013`、`DF-019`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ORG-FR-01 | 对象查询与范围筛选 | ORG-F001、ORG-F002、ORG-F003、ORG-F004、ORG-F005、ORG-F006、ORG-F007、ORG-F008 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | ORG-AC-01 |
-| ORG-FR-02 | 详情查看与版本追踪 | DAT-ORG-01、DAT-ORG-02、DAT-ORG-03、DAT-ORG-04、DAT-ORG-05、DAT-ORG-06、DAT-ORG-07、DAT-ORG-08、DAT-ORG-09、DAT-ORG-10 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | ORG-AC-02 |
-| ORG-FR-03 | 创建/修改/确认主动作 | ORG-F001、ORG-F002、ORG-F003、ORG-F004、ORG-F005、ORG-F006、ORG-F007、ORG-F008 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | ORG-AC-03 |
-| ORG-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | ORG-AC-04 |
-| ORG-FR-05 | 审计、通知与下游失效 | DF-002、DF-013、DF-019 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | ORG-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| ORG-AC-01 | 存在阻断错误时不能执行导入。 |
-| ORG-AC-02 | 部分成功必须展示成功/失败对象清单。 |
-| ORG-AC-03 | 任课关系变化后新权限生效，历史作业 Owner 不改写。 |
-| ORG-AC-04 | 学生停用后历史成绩和证据仍可授权查询。 |
-| ORG-AC-05 | 导入批次保留文件指纹、映射版本、确认人和对象结果。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-002`、`DF-013`、`DF-019`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

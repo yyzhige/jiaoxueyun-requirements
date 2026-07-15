@@ -1,225 +1,836 @@
-# 字段与 Option Set 字典
+# 字段与 Option Set 合同
 
-本文件是所有下拉、单选、多选、级联选择、自动完成、分段控件、状态菜单和动作选择的中央事实源。
+## Option Set
 
-## 1. Option Set 规则
-
-1. 固定枚举保存稳定 code；改 label 不改历史 code。
-2. 主数据选项保存对象 ID 和当时显示名快照；对象停用后历史只读显示。
-3. 权限范围选项必须在服务端按学校、身份、学期和职责过滤。
-4. 级联父字段变化时清空不再合法的子字段；存在未保存内容时先提示影响。
-5. 没有可选项时展示原因和解决入口，不自动放宽到全校或全学科。
-6. 默认值只能缩小操作范围，不能默认扩大权限或批量影响范围。
-7. 加载失败保留已选值但禁止提交，搜索无结果与接口失败使用不同状态。
-
-## 2. Option Set
-
-| Option Set | 名称 | 值与来源 | Owner | 规则 |
+| Option Set ID | 键 | 名称 | 模式 | 稳定值 / 运行时来源 |
 | --- | --- | --- | --- | --- |
-| OPT-COM-001 | 地区 | 河北省/石家庄市/区县行政区划 | 学校管理员 | 试点默认河北省石家庄市；父级变化清空子级 |
-| OPT-COM-002 | 学校 | 当前账号有成员资格的公办初中学校 | 学校管理员 | 按地区、学校状态、成员资格过滤；不自动进入最近学校 |
-| OPT-COM-003 | 工作身份 | 学生、任课教师、班主任、教务、学校管理员、平台运营 | 学校管理员 | 单账号可多身份；写权限按动作和职责重新校验 |
-| OPT-COM-004 | 学期 | 学校当前与历史学期 | 教务 | 当前学期置顶；历史学期只读，不能写入新业务事实 |
-| OPT-COM-005 | 年级 | 当前学校学期下的年级 | 教务 | 试点为七年级；切换后清空班级、课程、学生 |
-| OPT-COM-006 | 班级 | 当前授权范围内班级 | 教务 | 受学校、学期、年级、职责、任课关系过滤 |
-| OPT-COM-007 | 学科 | 学校全科目录 | 教务/学科负责人 | 任课教师按任教学科过滤；班主任查看本班全科但不获得他科写权 |
-| OPT-COM-008 | 课程 | 学校课程目录与教学任务 | 教务 | 依赖年级、学科、学期；停用课程历史只读 |
-| OPT-COM-009 | 教师 | 当前学校有效教师 | 学校管理员 | 离职教师历史显示为已停用，不可新选 |
-| OPT-COM-010 | 学生 | 当前授权范围内学生 | 教务/班主任 | 支持姓名/学号搜索；只返回有权数据范围 |
-| OPT-COM-011 | 知识点 | 教材版本、章节、知识点树 | 学科负责人 | 版本变化保留旧知识点映射，不改写历史证据 |
-| OPT-COM-012 | 作业 | 当前授权范围内作业发布版本 | 任课教师 | 归档作业只读；查询按班级、学科、时间过滤 |
-| OPT-COM-013 | 考试 | 当前授权范围内考试 | 教务/任课教师 | P1 完整启用；P0 只允许引用作业/测验成绩 |
-| OPT-COM-014 | 时间范围 | 今日、最近7天、本周、本月、本学期、自定义 | 系统 | 自定义不得越过授权范围与数据保留边界 |
-| OPT-COM-015 | 权限范围对象 | 学校、年级、班级、学科、课程、学生、业务对象 | 学校管理员 | 只返回调用者可授权对象，不泄露无权对象存在性 |
-| OPT-ENUM-001 | 是否 | YES/NO | 系统 | 高风险能力默认 NO，不能用默认值扩大影响范围 |
-| OPT-ENUM-002 | 作业类型 | ONLINE/PHOTO/MIXED/LEARNING_TASK | 任课教师 | 类型变化必须重新校验提交方式、题目、评分规则 |
-| OPT-ENUM-003 | 题型 | 单选、多选、判断、填空、计算、简答、作文、附件作答、学习任务 | 学科负责人 | AI 初评能力按题型分级，不承诺全题型自动判分 |
-| OPT-ENUM-004 | 反馈开放策略 | 随成绩发布、指定时间、订正后开放、不开放 | 任课教师 | 不得早于成绩正式发布 |
-| OPT-ENUM-005 | AI 置信状态 | HIGH/MEDIUM/LOW/UNAVAILABLE | AI 处理服务 | 只表示建议质量，不能直接映射为正式成绩 |
-| OPT-ENUM-006 | 评分修正原因 | 识别错误、评分规则不适用、计算错误、证据遗漏、教师判断、其他 | 任课教师 | OTHER 必填说明；保留原建议和原分 |
-| OPT-ENUM-007 | 成绩状态 | 未发布、已发布、缺交、免计、无效、已修正 | 任课教师 | 修正必须形成新版本，不改写历史 |
-| OPT-ENUM-008 | 证据阶段 | 首次作答、订正、再测、课堂形成性证据 | 任课教师 | 不同阶段不能合并为同一次证据 |
-| OPT-ENUM-009 | 作答结果 | 正确、部分正确、错误、无法判断 | 任课教师/AI 建议 | 无法判断不能形成强掌握结论 |
-| OPT-ENUM-010 | 错误类型 | 概念、理解、计算、步骤、表达、疏漏、未作答、其他 | 任课教师 | 学生可见解释需教师确认 |
-| OPT-ENUM-011 | 掌握状态 | 数据不足、初步掌握、基本掌握、熟练掌握、需要巩固、明显薄弱 | 任课教师 | 自动候选需教师确认后进入学生可见路径 |
-| OPT-ENUM-012 | 提升优先级 | HIGH/MEDIUM/LOW | 任课教师 | 班主任可协调负担，不改他科学科优先级 |
-| OPT-ENUM-013 | 提升任务类型 | 练习、复习、订正、阅读背诵、探究、教师面谈、其他 | 任课教师 | 成功条件单独定义，不能只靠任务类型判断完成 |
-| OPT-ENUM-014 | 报告周期 | 临时、每日、每周、每月、自定义 | 订阅创建者 | 定期报告保存订阅定义与每次快照 |
-| OPT-ENUM-015 | 报告接收范围 | 本人、本学科教师、本班班主任、本班任课教师、授权教务 | 订阅创建者 | 接收范围不得超过创建者授权 |
-| OPT-ENUM-016 | AI 能力等级 | 查询、分析、临时报表、草稿、受控执行、定期任务 | 系统 | 写入类任务必须预览、二次确认、审计 |
-| OPT-ENUM-017 | AI 操作状态 | 理解中、待澄清、查询完成、草稿已生成、待确认、执行中、成功、部分成功、失败、上下文失效 | 系统 | 学校、身份、学期变化后执行上下文失效 |
-| OPT-ENUM-018 | 通知类型 | 作业、提交、批改、发布、订正、提升、报告、权限、系统 | 源模块 | 通知不承载敏感明细，只提供摘要与入口 |
-| OPT-ENUM-019 | 通知阅读状态 | 未读、已读、已处理、已归档 | 接收者 | 归档不删除源业务对象 |
-| OPT-ENUM-020 | 导入对象类型 | 学期、班级、教师、学生、任课关系、班主任关系、课程、知识点 | 教务/学校管理员 | 对象类型决定字段映射与校验规则 |
-| OPT-ENUM-021 | 导入处理动作 | 创建、更新、无变化、拒绝、停用 | 导入确认者 | 停用为高影响动作，必须二次确认 |
-| OPT-ENUM-022 | 导入校验结果 | 通过、警告、错误、重复、冲突 | 系统 | 错误和未处理冲突阻断执行 |
-| OPT-ENUM-023 | 审计动作 | 查询、创建、修改、发布、导出、授权、撤销、登录、AI执行 | 系统 | 高风险动作必须记录请求、权限结果、对象范围 |
-| OPT-ENUM-024 | 审计结果 | 成功、部分成功、失败、拒绝 | 系统 | 拒绝事件不泄露无权目标内容 |
-| OPT-ENUM-025 | 账号标识类型 | 手机号、工号、学号 | 学校管理员 | 按学校登录策略启用 |
-| OPT-ENUM-026 | 激活方式 | 初始口令、一次性验证码、管理员确认 | 学校管理员 | 只展示学校启用方式 |
-| OPT-ENUM-027 | 图片质检结果 | 可用、模糊、不完整、反光、方向异常、上传失败 | 系统 | 失败项允许重拍；原图版本保留 |
-| OPT-ENUM-028 | 订正判定 | 通过、未通过、需补充、关闭 | 任课教师 | AI 只能建议，对应任课教师确认 |
-| OPT-ENUM-029 | 排课约束性质 | 硬约束、软约束 | 教务 | 未确认约束不自动推断性质 |
-| OPT-ENUM-030 | 课表视角 | 教师、班级、教室 | 教务 | 只影响视图，不改变课表事实 |
-| OPT-RUN-001 | 可提交草稿版本 | 学生本人当前作业下仍可提交的草稿 | SUB-001 | 只返回本人版本；已提交或被替代版本只读 |
-| OPT-RUN-002 | 当前作业题目 | 作业发布版本中的题目项 | HW-001 | 顺序与发布版本一致 |
-| OPT-RUN-003 | 可批量确认评分 | 满足高置信与规则条件的评分决定 | GRD-001 | 排除低置信、主观题、失败、规则冲突 |
-| OPT-RUN-004 | 可发布学生 | 当前作业范围内已满足发布条件的学生 | PUB-001 | 确认前重新计算阻断原因 |
-| OPT-RUN-005 | 成绩册显示列 | 当前查询范围内有权查看的成绩项 | SCO-001 | 按学期、班级、学科、类型、状态过滤 |
-| OPT-RUN-006 | 可引用证据 | 当前学生、学科、知识点下有效学习证据 | INS-001 | 失效证据只读，不能支撑新结论 |
-| OPT-RUN-007 | 可执行 AI 任务 | 当前用户、身份、上下文可执行的结构化任务 | AIX-001 | 只返回可预览和可校验任务 |
-| OPT-RUN-008 | 报告数据范围 | 当前角色可订阅或查看的学生/班级/学科范围 | RPT-001 | 订阅运行时再次校验权限 |
+| OPT-COM-001 | region | 地区 | STATIC | CN-HEBEI=河北省<br>CN-HEBEI-SHIJIAZHUANG=石家庄市 |
+| OPT-COM-002 | school | 学校 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZED-SCHOOLS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["actorId","regionId"]} |
+| OPT-COM-003 | loginRole | 登录角色 | STATIC | ROLE-STUDENT=学生<br>ROLE-TEACHER=教师<br>ROLE-ACADEMIC=教务<br>ROLE-SCHOOL-ADMIN=学校管理员<br>ROLE-PLATFORM-OPS=平台运营 |
+| OPT-COM-004 | term | 学期 | RUNTIME_QUERY | {"queryId":"QUERY-SCHOOL-TERMS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","actorId"]} |
+| OPT-COM-005 | grade | 年级 | RUNTIME_QUERY | {"queryId":"QUERY-SCHOOL-GRADES","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","actorId"]} |
+| OPT-COM-006 | class | 班级 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZED-CLASSES","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","gradeId","roleId","dutyIds"]} |
+| OPT-COM-007 | subject | 学科 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZED-SUBJECTS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","roleId","dutyIds"]} |
+| OPT-COM-008 | course | 课程 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZED-COURSES","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","gradeId","subjectId","roleId","dutyIds"]} |
+| OPT-COM-009 | teacher | 教师 | RUNTIME_QUERY | {"queryId":"QUERY-SCHOOL-TEACHERS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","actorId"]} |
+| OPT-COM-010 | student | 学生 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZED-STUDENTS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","classIds","roleId","dutyIds"]} |
+| OPT-COM-011 | knowledgePoint | 知识点 | RUNTIME_QUERY | {"queryId":"QUERY-KNOWLEDGE-POINTS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","courseId","subjectId","curriculumVersionId"]} |
+| OPT-COM-012 | assignment | 作业 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZED-ASSIGNMENTS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","classIds","subjectIds","actorId"]} |
+| OPT-COM-013 | exam | 考试 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZED-EXAMS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","classIds","subjectIds","actorId"]} |
+| OPT-COM-014 | timeRange | 时间范围 | STATIC | TODAY=今日<br>LAST-7-DAYS=最近7天<br>THIS-WEEK=本周<br>THIS-MONTH=本月<br>THIS-TERM=本学期<br>CUSTOM=自定义 |
+| OPT-COM-015 | scopeObject | 权限范围对象 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZABLE-SCOPE-OBJECTS","idKind":"OBJECT_ID","valueField":"objectId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","roleId","dutyIds","actionId"]} |
+| OPT-COM-016 | authorizableAction | 可授权动作 | RUNTIME_QUERY | {"queryId":"QUERY-AUTHORIZABLE-ACTIONS","idKind":"ACTION_ID","valueField":"actionId","labelField":"displayName","labelSnapshot":true,"filterContext":["schoolId","termId","grantorRoleId","grantorDutyIds","targetDutyId","scopeObjectIds"]} |
+| OPT-ENUM-001 | yesNo | 是否 | STATIC | YES=是<br>NO=否 |
+| OPT-ENUM-002 | assignmentType | 作业类型 | STATIC | ONLINE=在线<br>PHOTO=拍照<br>MIXED=混合<br>LEARNING_TASK=学习任务 |
+| OPT-ENUM-031 | submissionMethod | 提交方式 | STATIC | ONLINE-FORM=在线作答<br>TEXT=文本提交<br>IMAGE-UPLOAD=图片上传<br>FILE-UPLOAD=文件上传<br>MIXED-MEDIA=混合提交 |
+| OPT-ENUM-003 | questionType | 题型 | STATIC | SINGLE-CHOICE=单选<br>MULTIPLE-CHOICE=多选<br>TRUE-FALSE=判断<br>FILL-BLANK=填空<br>CALCULATION=计算<br>SHORT-ANSWER=简答<br>ESSAY=作文<br>ATTACHMENT-ANSWER=附件作答<br>LEARNING-TASK=学习任务 |
+| OPT-ENUM-032 | latePolicy | 迟交策略 | STATIC | NOT-ALLOWED=不允许迟交<br>ALLOW-WITH-MARK=允许并标记迟交<br>ALLOW-UNTIL-DATE=允许至指定时间 |
+| OPT-ENUM-033 | resubmissionPolicy | 重新提交策略 | STATIC | NOT-ALLOWED=不允许重提<br>BEFORE-DEADLINE=截止前允许<br>AFTER-FEEDBACK=反馈后允许<br>TEACHER-APPROVAL=教师批准后允许 |
+| OPT-ENUM-004 | feedbackPolicy | 反馈开放策略 | STATIC | WITH-SCORE-PUBLISH=随成绩发布<br>SCHEDULED=指定时间开放<br>AFTER-CORRECTION=订正后开放<br>CLOSED=不开放 |
+| OPT-ENUM-005 | aiConfidence | AI置信状态 | STATIC | HIGH=高<br>MEDIUM=中<br>LOW=低<br>UNAVAILABLE=不可用 |
+| OPT-ENUM-006 | gradingCorrectionReason | 评分修正原因 | STATIC | RECOGNITION-ERROR=识别错误<br>RUBRIC-NOT-APPLICABLE=评分规则不适用<br>CALCULATION-ERROR=计算错误<br>EVIDENCE-OMITTED=证据遗漏<br>TEACHER-JUDGMENT=教师判断<br>OTHER=其他 |
+| OPT-ENUM-007 | scoreState | 成绩状态 | STATIC | UNPUBLISHED=未发布<br>PUBLISHED=已发布<br>MISSING=缺交<br>EXEMPT=免计<br>INVALID=无效<br>CORRECTED=已修正 |
+| OPT-ENUM-008 | evidenceStage | 证据阶段 | STATIC | FIRST-ANSWER=首次作答<br>CORRECTION=订正<br>RETEST=再测<br>FORMATIVE=课堂形成性证据 |
+| OPT-ENUM-009 | answerResult | 作答结果 | STATIC | CORRECT=正确<br>PARTIAL=部分正确<br>INCORRECT=错误<br>UNDETERMINED=无法判断 |
+| OPT-ENUM-010 | errorType | 错误类型 | STATIC | CONCEPT=概念<br>COMPREHENSION=理解<br>CALCULATION=计算<br>STEP=步骤<br>EXPRESSION=表达<br>OVERSIGHT=疏漏<br>NO-ANSWER=未作答<br>OTHER=其他 |
+| OPT-ENUM-011 | masteryState | 掌握状态 | STATIC | INSUFFICIENT-DATA=数据不足<br>INITIAL=初步掌握<br>BASIC=基本掌握<br>PROFICIENT=熟练掌握<br>NEEDS-CONSOLIDATION=需要巩固<br>WEAK=明显薄弱 |
+| OPT-ENUM-012 | improvementPriority | 提升优先级 | STATIC | HIGH=高<br>MEDIUM=中<br>LOW=低 |
+| OPT-ENUM-013 | improvementTaskType | 提升任务类型 | STATIC | PRACTICE=练习<br>REVIEW=复习<br>CORRECTION=订正<br>READING-RECITATION=阅读背诵<br>INQUIRY=探究<br>TEACHER-CONFERENCE=教师面谈<br>OTHER=其他 |
+| OPT-ENUM-034 | completionEvidenceType | 完成证据类型 | STATIC | SYSTEM-RESULT=系统结果<br>STUDENT-SUBMISSION=学生提交<br>TEACHER-CONFIRMATION=教师确认<br>SCORE-IMPROVEMENT=成绩改善<br>STUDENT-REFLECTION=学生反思 |
+| OPT-ENUM-014 | reportCadence | 报告周期 | STATIC | AD-HOC=临时<br>DAILY=每日<br>WEEKLY=每周<br>MONTHLY=每月<br>CUSTOM=自定义 |
+| OPT-ENUM-035 | reportScheduleTimezone | 报告计划时区 | STATIC | ASIA-SHANGHAI=北京时间 |
+| OPT-ENUM-036 | reportScheduleTime | 报告计划时间 | STATIC | 08:00=08:00<br>17:00=17:00<br>CUSTOM-LOCAL-TIME=自定义本地时间 |
+| OPT-ENUM-015 | reportRecipientScope | 报告接收范围 | STATIC | SELF=本人<br>SUBJECT-TEACHERS=本学科教师<br>CLASS-HOMEROOM=本班班主任<br>CLASS-TEACHERS=本班任课教师<br>AUTHORIZED-ACADEMIC=授权教务 |
+| OPT-ENUM-037 | reportMetric | 报告指标 | STATIC | SUBMISSION-RATE=提交率<br>SCORE-DISTRIBUTION=成绩分布<br>MASTERY=掌握情况<br>IMPROVEMENT-COMPLETION=提升任务完成率<br>RISK-STUDENT=需关注学生 |
+| OPT-ENUM-016 | aiCapability | AI能力等级 | STATIC | QUERY=查询<br>ANALYSIS=分析<br>AD-HOC-REPORT=临时报表<br>DRAFT=草稿<br>CONTROLLED-EXECUTION=受控执行<br>SCHEDULED-TASK=定期任务 |
+| OPT-ENUM-041 | aiCapabilityDecision | AI能力决策 | STATIC | AUTO_SUPPORTED=支持自动处理<br>SUGGESTION_ONLY=仅提供建议<br>MANDATORY_REVIEW=必须人工复核<br>MANUAL_ONLY=仅人工处理<br>UNAVAILABLE=不可用 |
+| OPT-ENUM-038 | aiRisk | AI风险等级 | STATIC | READ-ONLY=只读<br>DRAFT=草稿<br>CONTROLLED-WRITE=受控写入<br>HIGH-IMPACT=高影响 |
+| OPT-ENUM-017 | aiTaskStatus | AI任务状态 | STATIC | UNDERSTANDING=理解中<br>NEEDS-CLARIFICATION=待澄清<br>QUERY-COMPLETED=查询完成<br>DRAFT-GENERATED=草稿已生成<br>AWAITING-CONFIRMATION=待确认<br>QUEUED=排队中<br>PROCESSING=处理中<br>MANUAL-FALLBACK=人工兜底<br>SUCCEEDED=成功<br>PARTIALLY-SUCCEEDED=部分成功<br>FAILED=失败<br>CONTEXT-EXPIRED=上下文失效 |
+| OPT-ENUM-018 | notificationType | 通知类型 | STATIC | ASSIGNMENT=作业<br>SUBMISSION=提交<br>GRADING=批改<br>PUBLISH=发布<br>CORRECTION=订正<br>IMPROVEMENT=提升<br>REPORT=报告<br>PERMISSION=权限<br>SYSTEM=系统 |
+| OPT-ENUM-019 | notificationReadState | 通知阅读状态 | STATIC | UNREAD=未读<br>READ=已读<br>HANDLED=已处理<br>ARCHIVED=已归档 |
+| OPT-ENUM-020 | importObject | 导入对象类型 | STATIC | TERM=学期<br>CLASS=班级<br>TEACHER=教师<br>STUDENT=学生<br>TEACHING-ASSIGNMENT=任课关系<br>HOMEROOM-ASSIGNMENT=班主任关系<br>COURSE=课程<br>KNOWLEDGE-POINT=知识点 |
+| OPT-ENUM-021 | importAction | 导入处理动作 | STATIC | CREATE=创建<br>UPDATE=更新<br>UNCHANGED=无变化<br>REJECT=拒绝<br>DEACTIVATE=停用 |
+| OPT-ENUM-022 | importResult | 导入校验结果 | STATIC | PASSED=通过<br>WARNING=警告<br>ERROR=错误<br>DUPLICATE=重复<br>CONFLICT=冲突 |
+| OPT-ENUM-023 | auditAction | 审计动作 | STATIC | QUERY=查询<br>CREATE=创建<br>UPDATE=修改<br>PUBLISH=发布<br>EXPORT=导出<br>GRANT=授权<br>REVOKE=撤销<br>LOGIN=登录<br>AI-EXECUTE=AI执行 |
+| OPT-ENUM-024 | auditResult | 审计结果 | STATIC | SUCCEEDED=成功<br>PARTIALLY-SUCCEEDED=部分成功<br>FAILED=失败<br>DENIED=拒绝 |
+| OPT-ENUM-025 | accountIdentifier | 账号标识类型 | STATIC | MOBILE=手机号<br>EMPLOYEE-NUMBER=工号<br>STUDENT-NUMBER=学号 |
+| OPT-ENUM-026 | activationMethod | 激活方式 | STATIC | INITIAL-PASSWORD=初始口令<br>ONE-TIME-CODE=一次性验证码<br>ADMIN-CONFIRMATION=管理员确认 |
+| OPT-ENUM-027 | imageQuality | 图片质检结果 | STATIC | USABLE=可用<br>BLURRY=模糊<br>INCOMPLETE=不完整<br>GLARE=反光<br>ORIENTATION-ERROR=方向异常<br>UPLOAD-FAILED=上传失败 |
+| OPT-ENUM-028 | correctionDecision | 订正判定 | STATIC | PASSED=通过<br>NOT-PASSED=未通过<br>NEEDS-MORE=需补充<br>CLOSED=关闭 |
+| OPT-ENUM-029 | schedulingConstraint | 排课约束性质 | STATIC | HARD=硬约束<br>SOFT=软约束 |
+| OPT-ENUM-030 | schedulingView | 课表视角 | STATIC | TEACHER=教师<br>CLASS=班级<br>CLASSROOM=教室 |
+| OPT-ENUM-039 | scoreRounding | 成绩舍入规则 | STATIC | NONE=不舍入<br>HALF-UP-INTEGER=四舍五入到整数<br>HALF-UP-ONE-DECIMAL=四舍五入到一位小数<br>FLOOR-INTEGER=向下取整 |
+| OPT-ENUM-040 | visibilityPolicy | 可见性策略 | STATIC | PRIVATE=仅本人<br>SUBJECT-TEACHERS=对应学科教师<br>HOMEROOM-READ=班主任只读<br>SCHOOL-AUTHORIZED=学校授权角色<br>STUDENT-VISIBLE=学生可见 |
+| OPT-ENUM-042 | workDuty | 工作职责 | STATIC | DUTY-SUBJECT-TEACHER=任课教师<br>DUTY-HOMEROOM=班主任<br>DUTY-SUBJECT-LEAD=学科负责人 |
+| OPT-ENUM-043 | knowledgeMappingRelation | 知识映射关系 | STATIC | PRIMARY=主要知识点<br>SUPPORTING=辅助知识点<br>PREREQUISITE=前置知识点<br>EXTENSION=拓展知识点 |
+| OPT-ENUM-044 | dataRetentionCategory | 数据保留类别 | STATIC | ACCOUNT_IDENTITY=账号与身份<br>ORGANIZATION=组织与成员<br>TEACHING_CONTENT=教学内容<br>STUDENT_WORK=学生作答与提交<br>SCORE_FEEDBACK=成绩与反馈<br>AUDIT_EXPORT=审计与导出 |
+| OPT-ENUM-045 | modelTrainingUse | 模型训练使用 | STATIC | DENIED=禁止用于模型训练<br>SEPARATELY_APPROVED=经学校单独批准 |
+| OPT-ENUM-046 | teacherWorkspaceView | 教师工作台默认视图 | STATIC | TODAY=今日待办<br>GRADING_QUEUE=批改队列<br>HOMEROOM_OVERVIEW=班主任全科概览<br>REPORTS=报告摘要 |
+| OPT-ENUM-047 | notificationChannel | 通知渠道 | STATIC | IN_PRODUCT=站内 |
+| OPT-ENUM-048 | reportDataScope | 报告数据范围 | STATIC | SUBJECT_ASSIGNED=任教学科与班级范围<br>HOMEROOM_ASSIGNED_CLASS_AGGREGATE=班主任本班全学科汇总<br>ACADEMIC_AUTHORIZED_AGGREGATE=教务授权范围汇总 |
+| OPT-TL-001 | questionOrder | 题目顺序 | STATIC | FIXED=固定顺序<br>SHUFFLED=随机顺序 |
+| OPT-TL-002 | assignmentNotificationPolicy | 作业通知策略 | STATIC | NONE=不通知<br>IN-APP-IMMEDIATE=产品内立即通知<br>IN-APP-SCHEDULED=产品内定时通知 |
+| OPT-TL-003 | subjectFamily | 学科族 | STATIC | CHINESE=语文<br>MATHEMATICS=数学<br>ENGLISH=英语<br>MORALITY-AND-LAW=道德与法治<br>HISTORY=历史<br>GEOGRAPHY=地理<br>BIOLOGY=生物<br>PHYSICS=物理<br>CHEMISTRY=化学<br>PHYSICAL-EDUCATION=体育<br>ARTS=艺术<br>INFORMATION-TECHNOLOGY=信息技术 |
+| OPT-TL-004 | recognitionLevel | 识别级别 | STATIC | NONE=不识别<br>METADATA=仅媒体和区域元数据<br>CONTENT=内容识别<br>STRUCTURED=结构化答案识别 |
+| OPT-TL-005 | scoringLevel | 评分级别 | STATIC | AUTO-SCORE=规则自动建议分<br>RULE-SUGGESTION=规则评分建议<br>AI-SUGGESTION=AI评分建议<br>MANUAL-ONLY=仅人工评分 |
+| OPT-TL-006 | gradingEvidenceRequirement | 批改证据要求 | STATIC | ANSWER-PAYLOAD=结构化答案载荷<br>MEDIA=媒体原件<br>REGION-MAP=页题区域映射<br>IMAGE-QUALITY=图片质量结果<br>ITEM-VERSION=题目版本<br>RUBRIC-VERSION=Rubric版本<br>TEACHER-JUDGMENT=教师专业判断 |
+| OPT-TL-007 | batchConfirmEligibility | 批量确认资格 | STATIC | ELIGIBLE=可批量确认<br>INELIGIBLE=不可批量确认 |
+| OPT-TL-008 | gradingUnavailableFallback | 不可用兜底 | STATIC | MANUAL-GRADING=人工批改<br>MANUAL-TRANSCRIPTION-THEN-GRADING=人工录入后批改 |
+| OPT-TL-009 | publicationEligibility | 发布资格 | STATIC | ELIGIBLE=可发布<br>BLOCKED=阻断发布 |
+| OPT-TL-010 | publicationNotificationStatus | 发布通知状态 | STATIC | PENDING=待发送<br>SENT=已发送<br>FAILED=发送失败<br>NOT-REQUIRED=无需发送 |
+| OPT-TL-011 | gradingRoute | 批改路由 | STATIC | AI-SUGGESTION-REVIEW=AI建议后教师复核<br>AUTO-SCORE-CONFIRMATION=自动建议分后教师确认<br>MANUAL-GRADING=人工批改<br>MANUAL-TRANSCRIPTION-THEN-GRADING=人工录入后批改 |
+| OPT-TL-012 | publicationNotificationPolicy | 成绩发布通知策略 | STATIC | NONE=不通知<br>ON-PUBLISH=发布时通知 |
+| OPT-EXT-001 | lessonPlanStatus | 教案状态 | STATIC | DRAFT=草稿<br>CONFIRMED=已确认 |
+| OPT-EXT-002 | materialLicenseStatus | 素材许可状态 | STATIC | PENDING=待核验<br>VERIFIED=已核验 |
+| OPT-EXT-003 | contentAvailability | 内容可用状态 | STATIC | DRAFT=草稿<br>PUBLISHED=已发布 |
+| OPT-EXT-004 | examEventStatus | 考试事件状态 | STATIC | DRAFT=草稿<br>PUBLISHED=已发布<br>CORRECTION_OPEN=订正开放 |
+| OPT-EXT-005 | scoreImportValidation | 成绩导入校验 | STATIC | PENDING=待校验<br>PASSED=已通过<br>REJECTED=已拒绝 |
+| OPT-EXT-006 | scheduleConstraintHardness | 排课约束强度 | STATIC | HARD=硬约束<br>SOFT=软约束 |
+| OPT-EXT-007 | scheduleHardConstraintCheck | 硬约束校验结果 | STATIC | PASS=通过<br>FAIL=不通过 |
+| OPT-EXT-008 | serviceState | 服务状态 | STATIC | DRAFT=草稿<br>CONFIRMED=学校已确认<br>ACTIVE=服务中 |
+| OPT-EXT-009 | supportCaseStatus | 支持工单状态 | STATIC | OPEN=处理中<br>CLOSED=已关闭 |
+| OPT-EXT-010 | contentPermissionScope | 内容权限范围 | STATIC | SCHOOL=全校<br>SUBJECT=学科<br>COURSE=课程 |
+| OPT-EXT-011 | contentLicenseStatus | 内容版权状态 | STATIC | DRAFT=待确认<br>ACTIVE=有效 |
+| OPT-EXT-012 | activityStatus | 课堂活动状态 | STATIC | PLANNED=已计划<br>RECORDED=已记录 |
+| OPT-EXT-013 | assignmentDraftStatus | 作业草稿状态 | STATIC | DRAFT=待任课教师确认<br>READY_FOR_HANDOFF=已确认可转正式作业草稿 |
+| OPT-EXT-014 | scheduleCandidateStatus | 排课候选状态 | STATIC | GENERATED=已生成<br>REVIEWED=已复核<br>CONFIRMED=已确认<br>PUBLISHED=已发布<br>STALE=已失效 |
+| OPT-EXT-015 | platformCaseStatus | 入驻服务状态 | STATIC | OPEN=处理中<br>SCHOOL_CONFIRMED=学校已确认 |
+| OPT-EXT-016 | policyTemplateStatus | 策略模板状态 | STATIC | DRAFT=草稿<br>CONFIRMED=学校已确认<br>ACTIVE=已生效 |
+| OPT-EXT-017 | scheduleConstraintKind | 排课约束类型 | STATIC | TEACHER_AVAILABILITY=教师可用时间<br>CLASS_PERIOD=班级时段<br>COURSE_LOAD=课程课时<br>ROOM_CAPACITY=教室容量 |
+| OPT-EXT-018 | scoreConfirmationDecision | 学科成绩确认决定 | STATIC | CONFIRM=确认<br>REJECT=驳回 |
 
-## 3. 模块字段登记
+## 字段引用
 
-| Field ID | 模块 | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| 模块 | Object ID | Field ID | 字段 | 类型 | 值来源 | 必填 | 可变性 | 可见性 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ACC-F001 | ACC-001 | 地区 | 级联选择 | OPT-COM-001 | 否；默认河北省/石家庄市 | 控制学校搜索范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ACC-F002 | ACC-001 | 学校 | 自动完成 | OPT-COM-002 | 是；不自动选 | 只返回当前账号有权进入学校 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ACC-F003 | ACC-001 | 账号标识类型 | 分段控件 | OPT-ENUM-025 | 按学校策略 | 决定登录输入框 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ACC-F004 | ACC-001 | 激活方式 | 单选卡片 | OPT-ENUM-026 | 首次激活必填 | 只展示学校启用方式 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ACC-F005 | ACC-001 | 当前身份 | 单选卡片 | OPT-COM-003 | 是 | 展示实际班级、学科、职责范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ACC-F006 | ACC-001 | 当前学期 | 单选下拉 | OPT-COM-004 | 是；默认当前学期 | 切换后重算所有选项和 AI 上下文 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F001 | ORG-001 | 导入对象类型 | 单选下拉 | OPT-ENUM-020 | 是 | 决定模板、字段映射与校验规则 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F002 | ORG-001 | 学期 | 单选下拉 | OPT-COM-004 | 是 | 所有组织对象必须归属学期或全局学校 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F003 | ORG-001 | 年级 | 单选下拉 | OPT-COM-005 | 班级/学生导入必填 | 试点默认七年级但仍保存 code | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F004 | ORG-001 | 班级 | 自动完成 | OPT-COM-006 | 按对象类型 | 任课、学生、班主任关系依赖班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F005 | ORG-001 | 教师 | 自动完成 | OPT-COM-009 | 任课/班主任关系必填 | 离职教师不可新建关系 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F006 | ORG-001 | 学生 | 自动完成 | OPT-COM-010 | 学生关系必填 | 学生停用不删除历史成绩 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F007 | ORG-001 | 处理动作 | 单选下拉 | OPT-ENUM-021 | 逐行必填 | 停用需要二次确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| ORG-F008 | ORG-001 | 校验结果 | 只读状态 | OPT-ENUM-022 | 系统生成 | 错误和未处理冲突阻断导入 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F001 | IAM-001 | 工作身份 | 单选/多选卡片 | OPT-COM-003 | 是 | 同一教师身份可挂载任课和班主任职责 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F002 | IAM-001 | 权限范围对象 | 级联选择 | OPT-COM-015 | 授权必填 | 只能授予操作者可管理范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F003 | IAM-001 | 班级 | 多选下拉 | OPT-COM-006 | 按职责 | 班主任职责必须绑定班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F004 | IAM-001 | 学科 | 多选下拉 | OPT-COM-007 | 任课职责必填 | 班主任查看全科不获得他科写权 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F005 | IAM-001 | 临时授权原因 | 文本+单选 | OPT-ENUM-023 | 临时授权必填 | 进入审计，自动到期 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F006 | IAM-001 | 审计结果 | 只读状态 | OPT-ENUM-024 | 系统生成 | 拒绝事件不泄露无权目标 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F001 | DGV-001 | 数据域 | 单选下拉 | OPT-COM-015 | 是 | 选择成绩、作业、证据、计划等域 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F002 | DGV-001 | 保留期限 | 数值+单位 | OPT-COM-014 | 是 | 不得短于学校合规最低要求 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F003 | DGV-001 | AI 使用等级 | 多选下拉 | OPT-ENUM-016 | 是 | 决定查询/分析/草稿/执行边界 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F004 | DGV-001 | 导出范围 | 级联选择 | OPT-COM-015 | 导出必填 | 导出前展示字段和人数 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| DGV-F005 | DGV-001 | 脱敏策略 | 单选下拉 | OPT-ENUM-001 | 导出必填 | 默认脱敏，明细导出需审批 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F001 | AUD-001 | 审计动作 | 多选下拉 | OPT-ENUM-023 | 查询必填 | 按动作过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F002 | AUD-001 | 审计结果 | 多选下拉 | OPT-ENUM-024 | 查询必填 | 拒绝事件可查询但隐藏目标明细 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F003 | AUD-001 | 时间范围 | 时间范围选择 | OPT-COM-014 | 是 | 默认最近7天 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F004 | AUD-001 | 对象域 | 级联选择 | OPT-COM-015 | 否 | 只能查有权审计域 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F005 | AUD-001 | 访问原因 | 文本 | OPT-ENUM-023 | 敏感访问必填 | 进入审计，不可后改 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F001 | CURR-001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 控制课程、教材、知识点树 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F002 | CURR-001 | 课程 | 单选下拉 | OPT-COM-008 | 是 | 依赖年级和学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F003 | CURR-001 | 教材版本 | 自动完成 | OPT-COM-011 | 是 | 版本发布后只读 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F004 | CURR-001 | 章节/单元 | 级联选择 | OPT-COM-011 | 否 | 控制知识点候选 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F005 | CURR-001 | 知识点 | 树形多选 | OPT-COM-011 | 是 | 作业题目可多知识点标记 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| TEA-F001 | TEA-001 | 任务类型 | 多选下拉 | OPT-ENUM-018 | 否 | 按源业务对象过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| TEA-F002 | TEA-001 | 班级 | 多选下拉 | OPT-COM-006 | 否 | 任课按任课关系，班主任按本班 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| TEA-F003 | TEA-001 | 学科 | 多选下拉 | OPT-COM-007 | 否 | 班主任可看全科摘要 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| TEA-F004 | TEA-001 | 时间范围 | 单选下拉 | OPT-COM-014 | 否；最近7天 | 不越过学期边界 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| TEA-F005 | TEA-001 | 协调对象 | 多选选择器 | OPT-COM-009 | 协调必填 | 只能选择本班任课教师 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F001 | HW-001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 决定课程、知识点和任课班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F002 | HW-001 | 课程 | 单选下拉 | OPT-COM-008 | 是 | 依赖年级、学科、学期 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F003 | HW-001 | 发布班级 | 多选下拉 | OPT-COM-006 | 是；不默认全选 | 只含当前任课班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F004 | HW-001 | 作业类型 | 单选卡片 | OPT-ENUM-002 | 是 | 类型变化重校验提交方式 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F005 | HW-001 | 题型 | 单选下拉 | OPT-ENUM-003 | 每题必填 | 决定答案、评分和 AI 能力提示 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F006 | HW-001 | 知识点 | 树形多选 | OPT-COM-011 | 每题至少一个 | 保存版本快照 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F007 | HW-001 | 反馈开放策略 | 单选下拉 | OPT-ENUM-004 | 是 | 不得早于成绩发布 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F008 | HW-001 | 发布通知 | 开关 | OPT-ENUM-001 | 否；默认 YES | 范围等于发布学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F001 | SUB-001 | 提交方式 | 分段控件 | OPT-ENUM-002 | 是 | 由作业发布版本决定 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F002 | SUB-001 | 当前题目 | 题目列表 | OPT-RUN-002 | 是 | 按发布版本顺序 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F003 | SUB-001 | 图片质检结果 | 只读状态 | OPT-ENUM-027 | 图片提交必有 | 失败允许重拍 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F004 | SUB-001 | 可提交草稿版本 | 单选卡片 | OPT-RUN-001 | 多版本时必选 | 只返回本人草稿 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SUB-F005 | SUB-001 | 迟交/重提确认 | 确认对话 | OPT-ENUM-001 | 触发时必填 | 展示规则和影响 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F001 | GRD-001 | 作业 | 自动完成 | OPT-COM-012 | 是 | 当前任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F002 | GRD-001 | 班级 | 多选下拉 | OPT-COM-006 | 否 | 依赖作业发布范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F003 | GRD-001 | AI 置信状态 | 多选下拉 | OPT-ENUM-005 | 否 | 低置信优先显示 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F004 | GRD-001 | 当前题目 | 题目导航 | OPT-RUN-002 | 是 | 绑定提交版本和题目版本 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F005 | GRD-001 | 修改原因 | 单选下拉 | OPT-ENUM-006 | 改分/修正必填 | OTHER 必填说明 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F006 | GRD-001 | 可批量确认范围 | 多选列表 | OPT-RUN-003 | 批量必选 | 排除主观题、低置信、失败项 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F001 | PUB-001 | 可发布学生 | 多选列表 | OPT-RUN-004 | 发布必选 | 确认前重新计算 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F002 | PUB-001 | 成绩状态 | 多选下拉 | OPT-ENUM-007 | 查询必填 | 按学生对象级展示 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F003 | PUB-001 | 反馈开放策略 | 单选下拉 | OPT-ENUM-004 | 发布必填 | 继承作业策略，可缩小不可扩大 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F004 | PUB-001 | 修正原因 | 单选下拉 | OPT-ENUM-006 | 修正必填 | 展示公开说明策略 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PUB-F005 | PUB-001 | 通知 | 开关 | OPT-ENUM-001 | 默认 YES | 通知不承载敏感明细 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCO-F001 | SCO-001 | 班级 | 多选下拉 | OPT-COM-006 | 查询必填 | 按职责过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCO-F002 | SCO-001 | 学科 | 多选下拉 | OPT-COM-007 | 查询必填 | 班主任可选全科只读 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCO-F003 | SCO-001 | 成绩状态 | 多选下拉 | OPT-ENUM-007 | 否 | 默认已发布 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCO-F004 | SCO-001 | 显示列 | 列选择器 | OPT-RUN-005 | 是 | 只返回有权查看成绩项 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCO-F005 | SCO-001 | 时间范围 | 时间范围选择 | OPT-COM-014 | 否；本学期 | 不越过授权范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F001 | STU-001 | 班级 | 单选/多选下拉 | OPT-COM-006 | 是 | 任课/班主任范围过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F002 | STU-001 | 学生 | 自动完成 | OPT-COM-010 | 详情必填 | 只返回授权学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F003 | STU-001 | 学科 | 多选下拉 | OPT-COM-007 | 任课默认本人学科 | 班主任可查看全科摘要 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F004 | STU-001 | 关注事件 | 多选下拉 | OPT-ENUM-018 | 否 | 由源事实生成 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| STU-F005 | STU-001 | 跟进可见范围 | 单选下拉 | OPT-COM-015 | 记录必填 | 不得超过创建者授权 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F001 | INS-001 | 学生 | 自动完成 | OPT-COM-010 | 是 | 按授权范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F002 | INS-001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 对应任课教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F003 | INS-001 | 知识点 | 树形选择 | OPT-COM-011 | 是 | 保存版本 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F004 | INS-001 | 证据阶段 | 单选下拉 | OPT-ENUM-008 | 是 | 首次/订正/再测分开 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F005 | INS-001 | 作答结果 | 单选下拉 | OPT-ENUM-009 | 证据必填 | 无法判断不形成强结论 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F006 | INS-001 | 错误类型 | 多选下拉 | OPT-ENUM-010 | 错误证据必填 | 学生可见解释需教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F007 | INS-001 | 掌握状态 | 单选下拉 | OPT-ENUM-011 | 结论必填 | 自动候选需确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F001 | PLN-001 | 学生 | 自动完成 | OPT-COM-010 | 是 | 按授权范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F002 | PLN-001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 对应任课教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F003 | PLN-001 | 知识点 | 树形选择 | OPT-COM-011 | 是 | 引用掌握证据 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F004 | PLN-001 | 提升优先级 | 单选下拉 | OPT-ENUM-012 | 是 | AI 可建议，教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F005 | PLN-001 | 任务类型 | 单选下拉 | OPT-ENUM-013 | 是 | 成功条件另填 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F006 | PLN-001 | 可引用证据 | 多选列表 | OPT-RUN-006 | 候选必填 | 必须引用具体证据 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F007 | PLN-001 | 报告接收范围 | 多选下拉 | OPT-ENUM-015 | 同步必填 | 对应任课教师和班主任同步 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F001 | APP-001 | 任务类型 | 分段/多选 | OPT-ENUM-018 | 否 | 源对象派生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F002 | APP-001 | 学科 | 多选下拉 | OPT-COM-007 | 否 | 只展示本人任务关联学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F003 | APP-001 | 时间范围 | 单选 | OPT-COM-014 | 否；今日 | 任务按截止时间排序 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F004 | APP-001 | 困难反馈 | 单选+文本 | OPT-ENUM-010 | 反馈必填 | 进入对应教师处理队列 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| APP-F005 | APP-001 | AI 能力等级 | 只读策略 | OPT-ENUM-016 | 系统生成 | 学生 AI 继承作业/反馈开放策略 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F001 | CORR-001 | 学生 | 自动完成 | OPT-COM-010 | 教师视图必填 | 按任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F002 | CORR-001 | 作业 | 自动完成 | OPT-COM-012 | 是 | 只含已发布反馈作业 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F003 | CORR-001 | 当前题目 | 题目列表 | OPT-RUN-002 | 是 | 只含需订正题目 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F004 | CORR-001 | 订正判定 | 单选下拉 | OPT-ENUM-028 | 教师确认必填 | AI 只能建议 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F005 | CORR-001 | 错误类型 | 多选下拉 | OPT-ENUM-010 | 否 | 教师可修正学生可见解释 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F001 | AIX-001 | AI 能力等级 | 只读分级 | OPT-ENUM-016 | 系统生成 | 由意图和目标动作派生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F002 | AIX-001 | AI 操作状态 | 状态机 | OPT-ENUM-017 | 系统生成 | 驱动确认与执行按钮 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F003 | AIX-001 | 报告数据范围 | 范围选择器 | OPT-RUN-008 | 报表/查询必填 | 按当前权限预览 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F004 | AIX-001 | 可执行 AI 任务 | 命令列表 | OPT-RUN-007 | 执行前必选 | 只返回可校验任务 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F005 | AIX-001 | 确认执行 | 确认对话 | OPT-ENUM-001 | 写入必填 | 默认取消，确认前重校验 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F001 | RPT-001 | 报告周期 | 单选下拉 | OPT-ENUM-014 | 是 | 临时/每日/每周/每月/自定义 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F002 | RPT-001 | 时间范围 | 时间范围选择 | OPT-COM-014 | 是 | 不可越过授权和保留边界 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F003 | RPT-001 | 班级 | 多选下拉 | OPT-COM-006 | 按角色 | 班主任本班，任课本学科班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F004 | RPT-001 | 学科 | 多选下拉 | OPT-COM-007 | 按角色 | 班主任可全科，任课本学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F005 | RPT-001 | 接收范围 | 多选下拉 | OPT-ENUM-015 | 定期报告必填 | 不得超过创建者授权 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| RPT-F006 | RPT-001 | 报告数据范围 | 范围预览 | OPT-RUN-008 | 确认前必看 | 运行时再次校验权限 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F001 | LPATH-001 | 学生 | 自动完成 | OPT-COM-010 | 是 | 本人或授权学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F002 | LPATH-001 | 学科 | 多选下拉 | OPT-COM-007 | 否 | 学生可全科，任课本学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F003 | LPATH-001 | 知识点 | 树形选择 | OPT-COM-011 | 否 | 按版本过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F004 | LPATH-001 | 时间范围 | 时间轴选择 | OPT-COM-014 | 否；本学期 | 支持长期跨度但受保留策略限制 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F005 | LPATH-001 | 掌握状态 | 多选下拉 | OPT-ENUM-011 | 否 | 仅展示已确认或数据不足 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F001 | NOTI-001 | 通知类型 | 多选下拉 | OPT-ENUM-018 | 是 | 由源模块决定 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F002 | NOTI-001 | 接收范围 | 范围选择 | OPT-COM-015 | 是 | 只含必要接收人 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F003 | NOTI-001 | 阅读状态 | 分段控件 | OPT-ENUM-019 | 查询必填 | 接收者本人更新 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F004 | NOTI-001 | 时间范围 | 时间范围选择 | OPT-COM-014 | 否；最近7天 | 按接收时间过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F005 | NOTI-001 | 源对象 | 对象引用 | OPT-COM-015 | 是 | 通知点击回源模块 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F001 | PREP-001 | 年级 | 单选下拉 | OPT-COM-005 | 是 | 控制课程 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F002 | PREP-001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F003 | PREP-001 | 课程 | 单选下拉 | OPT-COM-008 | 是 | 依赖年级学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F004 | PREP-001 | 知识点 | 树形选择 | OPT-COM-011 | 否 | 用于生成作业草稿 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F005 | PREP-001 | 共享范围 | 多选选择 | OPT-COM-015 | 否 | 只能选学校允许范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F001 | CONTENT-001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 控制题型和知识点 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F002 | CONTENT-001 | 题型 | 单选下拉 | OPT-ENUM-003 | 是 | 决定答案结构 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F003 | CONTENT-001 | 知识点 | 树形多选 | OPT-COM-011 | 是 | 至少一个 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F004 | CONTENT-001 | 授权范围 | 多选选择 | OPT-COM-015 | 是 | 学校/学科组/教师 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F005 | CONTENT-001 | AI 使用等级 | 多选 | OPT-ENUM-016 | 否 | 决定是否可用于草稿或评分建议 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F001 | EXM-001 | 考试 | 自动完成 | OPT-COM-013 | 是 | 当前学期授权考试 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F002 | EXM-001 | 班级 | 多选下拉 | OPT-COM-006 | 是 | 按教务或任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F003 | EXM-001 | 学科 | 多选下拉 | OPT-COM-007 | 是 | 科目成绩 Owner 为对应任课教师 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F004 | EXM-001 | 学生 | 自动完成 | OPT-COM-010 | 录入/查询按需 | 只含考试范围学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| EXM-F005 | EXM-001 | 成绩状态 | 单选下拉 | OPT-ENUM-007 | 是 | 缺考/免计/无效单独记录 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F001 | SCH-001 | 班级 | 多选下拉 | OPT-COM-006 | 是 | 排课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F002 | SCH-001 | 教师 | 多选下拉 | OPT-COM-009 | 是 | 任课关系来源 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F003 | SCH-001 | 课程 | 多选下拉 | OPT-COM-008 | 是 | 课时规则 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F004 | SCH-001 | 约束性质 | 单选下拉 | OPT-ENUM-029 | 约束必填 | 硬约束不可违反 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F005 | SCH-001 | 课表视角 | 分段控件 | OPT-ENUM-030 | 否；班级 | 只影响预览 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| REPORT-F001 | REPORT-001 | 报告数据范围 | 范围预览 | OPT-RUN-008 | 是 | 只含学校允许字段 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| REPORT-F002 | REPORT-001 | 接收范围 | 多选下拉 | OPT-ENUM-015 | 是 | 未来扩展到监护人渠道 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| REPORT-F003 | REPORT-001 | 有效期 | 时间选择 | OPT-COM-014 | 是 | 到期不可访问 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| REPORT-F004 | REPORT-001 | 脱敏策略 | 单选 | OPT-ENUM-001 | 是；默认脱敏 | 明细需审批 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| REPORT-F005 | REPORT-001 | 审计动作 | 只读 | OPT-ENUM-023 | 系统生成 | 访问进入审计 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F001 | PLAT-001 | 学校 | 自动完成 | OPT-COM-002 | 是 | 入驻或服务范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F002 | PLAT-001 | 地区 | 级联选择 | OPT-COM-001 | 是 | 试点为石家庄 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F003 | PLAT-001 | 服务状态 | 单选 | OPT-ENUM-001 | 是 | 启用/暂停/终止另有状态 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F004 | PLAT-001 | 权限范围对象 | 级联选择 | OPT-COM-015 | 支持访问必填 | 学校授权，限时 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F005 | PLAT-001 | 审计结果 | 只读 | OPT-ENUM-024 | 系统生成 | 平台操作全部审计 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-ID | School ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-SOURCE-REF | School Directory Source Reference | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-SOURCE-VERSION | School Directory Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-NAME | School Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-REGION | School Region | STRING | OPTION_SET: OPT-COM-001 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-TYPE | School Type | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-SCHOOL-VERSION | School Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-SCHOOL | ACC-SCHOOL-F-SERVICE-STATE | Service State | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-MEMBERSHIP | ACC-MEMBER-F-ID | Account Membership ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-MEMBERSHIP | ACC-MEMBER-F-ACCOUNT-ID-TYPE | Account Identifier Type | STRING | OPTION_SET: OPT-ENUM-025 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-MEMBERSHIP | ACC-MEMBER-F-ACCOUNT-ID | Account Identifier Value | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-MEMBERSHIP | ACC-MEMBER-F-SCHOOL-ID | Membership School ID | STRING | OPTION_SET: OPT-COM-002 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-MEMBERSHIP | ACC-MEMBER-F-ACTIVATION | Activation Method | STRING | OPTION_SET: OPT-ENUM-026 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-MEMBERSHIP | ACC-MEMBER-F-STATE | Membership State | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-ID | Identity Assignment ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-SOURCE-REF | Identity Directory Source Reference | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-SOURCE-VERSION | Identity Directory Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-ROLE | Login Role | STRING | OPTION_SET: OPT-COM-003 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-DUTIES | Assigned Duties | STRING_ARRAY | OPTION_SET: OPT-ENUM-042 | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-SCOPES | Effective Data Scopes | STRING_ARRAY | SYSTEM | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-IDENTITY-VERSION | Identity Assignment Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-EFFECTIVE | Effective At | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-IDENTITY | ACC-IDENTITY-F-EXPIRY | Expires At | DATETIME | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-ID | Work Context ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-SCHOOL-ID | Context School ID | STRING | OPTION_SET: OPT-COM-002 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-IDENTITY-ID | Context Identity ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-TERM-ID | Context Term ID | STRING | OPTION_SET: OPT-COM-004 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-CREATED | Created At | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-EXPIRY | Expires At | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-CONTEXT-VERSION | Context Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ACC-001 | ACC-OBJ-CONTEXT | ACC-CONTEXT-F-STATUS | Context Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TERM | ORG-TERM-F-ID | Term ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TERM | ORG-TERM-F-NAME | Term Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TERM | ORG-TERM-F-START | Start Date | DATE | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TERM | ORG-TERM-F-END | End Date | DATE | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TERM | ORG-TERM-F-TERM-VERSION | Term Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TERM | ORG-TERM-F-STATUS | Term Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-GRADE | ORG-GRADE-F-ID | Grade ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-GRADE | ORG-GRADE-F-NAME | Grade Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-GRADE | ORG-GRADE-F-TERM-ID | Term ID | STRING | OPTION_SET: OPT-COM-004 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-GRADE | ORG-GRADE-F-STATUS | Grade Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-CLASS | ORG-CLASS-F-ID | Class ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-CLASS | ORG-CLASS-F-NAME | Class Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-CLASS | ORG-CLASS-F-GRADE-ID | Grade ID | STRING | OPTION_SET: OPT-COM-005 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-CLASS | ORG-CLASS-F-STATUS | Class Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-SUBJECT | ORG-SUBJECT-F-ID | Subject ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-SUBJECT | ORG-SUBJECT-F-NAME | Subject Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-SUBJECT | ORG-SUBJECT-F-STATUS | Subject Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-COURSE | ORG-COURSE-F-ID | Course ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-COURSE | ORG-COURSE-F-NAME | Course Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-COURSE | ORG-COURSE-F-SUBJECT-ID | Subject ID | STRING | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-COURSE | ORG-COURSE-F-TERM-ID | Term ID | STRING | OPTION_SET: OPT-COM-004 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-COURSE | ORG-COURSE-F-STATUS | Course Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHER | ORG-TEACHER-F-ID | Teacher ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHER | ORG-TEACHER-F-NAME | Teacher Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHER | ORG-TEACHER-F-MEMBER-STATE | Member State | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-STUDENT | ORG-STUDENT-F-ID | Student ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-STUDENT | ORG-STUDENT-F-NAME | Student Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-STUDENT | ORG-STUDENT-F-CLASS-ID | Class ID | STRING | OPTION_SET: OPT-COM-006 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-STUDENT | ORG-STUDENT-F-MEMBER-STATE | Member State | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHING-ASSIGNMENT | ORG-TEACHING-F-ID | Teaching Assignment ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHING-ASSIGNMENT | ORG-TEACHING-F-TEACHER-ID | Teacher ID | STRING | OPTION_SET: OPT-COM-009 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHING-ASSIGNMENT | ORG-TEACHING-F-COURSE-ID | Course ID | STRING | OPTION_SET: OPT-COM-008 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHING-ASSIGNMENT | ORG-TEACHING-F-CLASS-ID | Class ID | STRING | OPTION_SET: OPT-COM-006 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-TEACHING-ASSIGNMENT | ORG-TEACHING-F-EFFECTIVE | Effective Range | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-HOMEROOM-F-ID | Homeroom Assignment ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-HOMEROOM-F-TEACHER-ID | Homeroom Teacher ID | STRING | OPTION_SET: OPT-COM-009 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-HOMEROOM-F-CLASS-ID | Homeroom Class ID | STRING | OPTION_SET: OPT-COM-006 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-HOMEROOM-F-EFFECTIVE | Effective Range | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-ID | Import Batch ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-OBJECT-TYPE | Import Object Type | STRING | OPTION_SET: OPT-ENUM-020 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-TEMPLATE-VERSION | Template Version | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-MAPPING | Field Mapping | JSON | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-BATCH-VERSION | Import Batch Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-STATUS | Import Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-ID | Import Row ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-BATCH-ID | Import Batch ID | STRING | SYSTEM | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-ROW-VERSION | Import Row Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-RESULT-TYPE | Object Result Type | STRING | OPTION_SET: OPT-ENUM-021 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-VALIDATION-RESULT | Row Validation Result | STRING | OPTION_SET: OPT-ENUM-022 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-ERRORS | Row Errors | STRING_ARRAY | SYSTEM | 否 | READ_ONLY | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-CONFLICTS | Row Conflicts | STRING_ARRAY | SYSTEM | 否 | READ_ONLY | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-OBJECT-ID | Affected Object ID | STRING | SYSTEM | 否 | READ_ONLY | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION | Anomaly Confirmation | STRING | OPTION_SET: OPT-ENUM-001 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| ORG-001 | ORG-OBJ-IMPORT-ROW | ORG-IMPORT-ROW-F-CONFIRMATION-NOTE | Anomaly Confirmation Note | TEXT | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-ROLE-POLICY | IAM-ROLE-F-ID | Role Policy ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-ROLE-POLICY | IAM-ROLE-F-SOURCE-REF | Role Policy Source Reference | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-ROLE-POLICY | IAM-ROLE-F-SOURCE-VERSION | Role Policy Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-ROLE-POLICY | IAM-ROLE-F-ROLE | Login Role | STRING | OPTION_SET: OPT-COM-003 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-ROLE-POLICY | IAM-ROLE-F-ACTIONS | Allowed Action Set | STRING_ARRAY | OPTION_SET: OPT-COM-016 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-ROLE-POLICY | IAM-ROLE-F-VERSION | Policy Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-ID | Duty Grant ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-GRANTOR-AUTHORITY | Grantor Authority | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-SUBJECT | Subject Account ID | STRING | OPTION_SET: OPT-COM-009 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-DUTY | Duty ID | STRING | OPTION_SET: OPT-ENUM-042 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-SCOPE | Duty Object Scope | JSON | OPTION_SET: OPT-COM-015 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-ACTIONS | Duty Granted Actions | STRING_ARRAY | OPTION_SET: OPT-COM-016 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-EFFECTIVE | Effective At | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-EXPIRY | Expires At | DATETIME | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-REASON | Grant Reason | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-STATUS | Duty Grant Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-ID | Data Scope Grant ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-GRANTOR-AUTHORITY | Scope Grantor Authority | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-SUBJECT | Scope Subject ID | STRING | OPTION_SET: OPT-COM-009 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-DUTY | Target Duty ID | STRING | OPTION_SET: OPT-ENUM-042 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-SCOPE | Granted Object Scope | JSON | OPTION_SET: OPT-COM-015 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-ACTIONS | Granted Actions | STRING_ARRAY | OPTION_SET: OPT-COM-016 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-EFFECTIVE | Scope Effective At | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-EXPIRY | Scope Expires At | DATETIME | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-REASON | Scope Grant Reason | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-STATUS | Scope Grant Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-ID | Permission Decision ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-SUBJECT | Decision Subject ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-ACTION | Evaluated Action | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-SCOPE | Evaluated Object Scope | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-RESULT | Permission Result | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-REASON | Permission Reason | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-SOURCE-VERSIONS | Permission Source Versions | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-DECISION-VERSION | Permission Decision Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-ID | Temporary Grant ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-GRANTOR-AUTHORITY | Temporary Grantor Authority | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-SUBJECT | Temporary Subject ID | STRING | OPTION_SET: OPT-COM-009 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-DUTY | Temporary Duty ID | STRING | OPTION_SET: OPT-ENUM-042 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-SCOPE | Temporary Scope | JSON | OPTION_SET: OPT-COM-015 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-ACTIONS | Temporary Actions | STRING_ARRAY | OPTION_SET: OPT-COM-016 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-EFFECTIVE | Temporary Effective At | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-EXPIRY | Mandatory Expiry | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-REASON | Temporary Grant Reason | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| IAM-001 | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-STATUS | Temporary Grant Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-POLICY | DGV-POLICY-F-ID | Governance Policy ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-POLICY | DGV-POLICY-F-SOURCE-REF | Governance Policy Source Reference | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-POLICY | DGV-POLICY-F-SOURCE-VERSION | Governance Policy Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-POLICY | DGV-POLICY-F-SCHOOL-ID | Governed School ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-POLICY | DGV-POLICY-F-VERSION | Governance Policy Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-POLICY | DGV-POLICY-F-EXPLANATION | Data Use Explanation | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-RETENTION | DGV-RETENTION-F-ID | Retention Rule ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-RETENTION | DGV-RETENTION-F-CATEGORY | Data Category | STRING | OPTION_SET: OPT-ENUM-044 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-RETENTION | DGV-RETENTION-F-PERIOD | School-owned Retention Period | DURATION | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-RETENTION | DGV-RETENTION-F-ACTIVATED-BY | Activated By School Administrator | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-RETENTION | DGV-RETENTION-F-STATUS | Retention Configuration Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-AI-RULE | DGV-AI-F-ID | AI Data Use Rule ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-AI-RULE | DGV-AI-F-DATA-SCOPE | Allowed AI Data Scope | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-AI-RULE | DGV-AI-F-PURPOSE | Allowed AI Purpose | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-AI-RULE | DGV-AI-F-MODEL-USE | Model Training Use | STRING | OPTION_SET: OPT-ENUM-045 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-AI-RULE | DGV-AI-F-STATUS | AI Data Use Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-ID | Export Request ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-SCOPE | Export Object Scope | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-PURPOSE | Export Purpose | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-APPROVER | Export Approver ID | STRING | SYSTEM | required before APPROVED；状态=APPROVED | IMMUTABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-DECISION-REASON | Export Decision Reason | TEXT | USER_INPUT | required for APPROVED or DENIED；状态=APPROVED/DENIED | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-EXPIRY | Export File Expiry | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-RESULT | Export Result | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| DGV-001 | DGV-OBJ-EXPORT | DGV-EXPORT-F-AUDIT-REF | Export Audit Reference | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-EVENT | AUD-EVENT-F-ID | Audit Event ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-EVENT | AUD-EVENT-F-TIME | Event Time | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-EVENT | AUD-EVENT-F-ACTOR | Actor ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-EVENT | AUD-EVENT-F-ACTION | Audited Action | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-EVENT | AUD-EVENT-F-SCOPE | Audited Object Scope | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-EVENT | AUD-EVENT-F-RESULT | Audited Result | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-EVENT | AUD-EVENT-F-EVENT-VERSION | Audit Event Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-ID | Sensitive Access Request ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-REQUESTER | Access Requester ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-SCOPE | Requested Sensitive Scope | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-PURPOSE | Sensitive Access Purpose | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-EXPIRY | Requested Access Expiry | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-APPROVER | School Approver ID | STRING | SYSTEM | required before APPROVED；状态=APPROVED | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-DECISION-REASON | Sensitive Access Decision Reason | TEXT | USER_INPUT | required for APPROVED or DENIED；状态=APPROVED/DENIED | EDITABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-RESULT | Access Decision Result | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-VERSION | Sensitive Access Request Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-ID | Sensitive Session ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-REQUEST-ID | Approved Request ID | ID | OBJECT_REF: AUD-OBJ-ACCESS-REQUEST | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-REQUEST-VERSION | Approved Request Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-SCOPE | Session Object Scope | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-START | Session Start | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-EXPIRY | Session Expiry | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-AUTHORIZED-OPERATOR-ID | Authorized Session Operator | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-STATUS | Session Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-VERSION | Sensitive Access Session Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-REVIEW | AUD-REVIEW-F-ID | Review Case ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-REVIEW | AUD-REVIEW-F-EVENT-IDS | Related Audit Event IDs | STRING_ARRAY | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-REVIEW | AUD-REVIEW-F-REASON | Review Reason | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-REVIEW | AUD-REVIEW-F-RESOLUTION | Review Resolution | STRING | USER_INPUT | required before RESOLVED；状态=RESOLVED | EDITABLE | AUTHORIZED_SCOPE |
+| AUD-001 | AUD-OBJ-REVIEW | AUD-REVIEW-F-STATUS | Review Case Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-ID | Curriculum Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-NAME | Curriculum Version Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-SUBJECT | Curriculum Subject | STRING | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-VERSION | Curriculum Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-STATUS | Curriculum Version Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-VALIDATION | Version Validation Result | JSON | SYSTEM | required when the curriculum version reaches VALIDATED；状态=VALIDATED | READ_ONLY | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-PUBLISHED-AT | Published At | DATETIME | SYSTEM | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-TEXTBOOK | CURR-TEXTBOOK-F-ID | Textbook Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-TEXTBOOK | CURR-TEXTBOOK-F-CURRICULUM-ID | Curriculum Version ID | STRING | SYSTEM | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-TEXTBOOK | CURR-TEXTBOOK-F-NAME | Textbook Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-TEXTBOOK | CURR-TEXTBOOK-F-EDITION | Textbook Edition | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-TEXTBOOK | CURR-TEXTBOOK-F-STATUS | Textbook Version Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CHAPTER | CURR-CHAPTER-F-ID | Chapter ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CHAPTER | CURR-CHAPTER-F-TEXTBOOK-ID | Textbook Version ID | STRING | SYSTEM | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CHAPTER | CURR-CHAPTER-F-TITLE | Chapter Title | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CHAPTER | CURR-CHAPTER-F-ORDER | Chapter Order | INTEGER | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-CHAPTER | CURR-CHAPTER-F-STATUS | Chapter Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-ID | Knowledge Point ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-NAME | Knowledge Point Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-DEFINITION | Knowledge Point Definition | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-PARENT-ID | Parent Knowledge Point ID | STRING | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-STATUS | Knowledge Point Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-MAPPING | CURR-MAPPING-F-ID | Knowledge Mapping ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-MAPPING | CURR-MAPPING-F-CHAPTER-ID | Mapped Chapter ID | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-MAPPING | CURR-MAPPING-F-KP-ID | Mapped Knowledge Point ID | STRING | OPTION_SET: OPT-COM-011 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-MAPPING | CURR-MAPPING-F-RELATION | Mapping Relation | STRING | OPTION_SET: OPT-ENUM-043 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-MAPPING | CURR-MAPPING-F-VERSION | Mapping Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CURR-001 | CURR-OBJ-MAPPING | CURR-MAPPING-F-STATUS | Mapping Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-TODO-VIEW | TEA-TODO-F-ID | Todo View Definition ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-TODO-VIEW | TEA-TODO-F-TEACHER-ID | Teacher ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-TODO-VIEW | TEA-TODO-F-SUBJECT-SCOPE | Subject Assignment Scope | JSON | SYSTEM | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-TODO-VIEW | TEA-TODO-F-SOURCE-REFS | External Todo Source References | JSON | SYSTEM | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-TODO-VIEW | TEA-TODO-F-PROJECTION-SOURCE-REF | Todo Projection Source Reference | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-TODO-VIEW | TEA-TODO-F-PROJECTION-SOURCE-VERSION | Todo Projection Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-TODO-VIEW | TEA-TODO-F-FILTER | Todo View Filter | JSON | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-COORDINATION | TEA-COORD-F-ID | Coordination Item ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-COORDINATION | TEA-COORD-F-CLASS-ID | Coordinated Class ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-COORDINATION | TEA-COORD-F-SUBJECT-REFS | Referenced Subject Facts | JSON | SYSTEM | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-COORDINATION | TEA-COORD-F-TITLE | Coordination Title | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-COORDINATION | TEA-COORD-F-NOTE | Coordination Note | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-COORDINATION | TEA-COORD-F-STATUS | Coordination Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-PREFERENCE | TEA-PREF-F-ID | Work Preference ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-PREFERENCE | TEA-PREF-F-TEACHER-ID | Preference Teacher ID | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-PREFERENCE | TEA-PREF-F-DEFAULT-VIEW | Default Workspace View | STRING | OPTION_SET: OPT-ENUM-046 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| TEA-001 | TEA-OBJ-PREFERENCE | TEA-PREF-F-FILTERS | Saved Workspace Filters | JSON | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-ID | Assignment ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-TITLE | Assignment Title | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-INSTRUCTIONS | Assignment Instructions | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-SUBJECT-ID | Subject | ID | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-COURSE-ID | Course | ID | OPTION_SET: OPT-COM-008 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-CLASS-SCOPE-IDS | Class Scope | STRING_ARRAY | OPTION_SET: OPT-COM-006 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS | Published Student Fanout Set | STRING_ARRAY | SYSTEM | required when the assignment reaches PUBLISHED；状态=PUBLISHED | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-OPEN-AT | Open Time | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-DUE-AT | Due Time | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-LATE-POLICY | Late Policy | STRING | OPTION_SET: OPT-ENUM-032 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-RESUBMISSION-POLICY | Resubmission Policy | STRING | OPTION_SET: OPT-ENUM-033 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-ASSIGNMENT-TYPE | Assignment Type | STRING | OPTION_SET: OPT-ENUM-002 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-QUESTION-ORDER | Question Order | STRING | OPTION_SET: OPT-TL-001 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-RUBRIC-VERSION | Assignment Rubric Version | ID | RUNTIME_QUERY: QUERY-AUTHORIZED-RUBRIC-VERSIONS | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS | Assignment Knowledge Points | STRING_ARRAY | OPTION_SET: OPT-COM-011 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-FEEDBACK-POLICY | Feedback Policy | STRING | OPTION_SET: OPT-ENUM-004 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-NOTIFICATION-POLICY | Notification Policy | STRING | OPTION_SET: OPT-TL-002 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-PUBLICATION-VERSION | Publication Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-REVISION-REASON | Revision Reason | TEXT | USER_INPUT | required when revising a published assignment；状态=REVISION_DRAFT；动作=HW-ACT-REVISE | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-ID | Assignment Item ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-ITEM-VERSION | Item Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-QUESTION-TYPE | Question Type | STRING | OPTION_SET: OPT-ENUM-003 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-ORDER | Item Order | INTEGER | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-PROMPT | Question Prompt | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-ANSWER-KEY | Answer Key | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-POINTS | Item Points | DECIMAL | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-RUBRIC-VERSION | Item Rubric Version | ID | RUNTIME_QUERY: QUERY-AUTHORIZED-RUBRIC-VERSIONS | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-RUBRIC-REF | Item Rubric Reference | ID | OBJECT_REF: HW-OBJ-RUBRIC | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-ITEM | HW-ITEM-F-KNOWLEDGE-POINT-IDS | Item Knowledge Points | STRING_ARRAY | OPTION_SET: OPT-COM-011 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-RUBRIC | HW-RUBRIC-F-ID | Rubric ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-RUBRIC | HW-RUBRIC-F-RUBRIC-VERSION | Rubric Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-RUBRIC | HW-RUBRIC-F-SOURCE-REF | Rubric Source Reference | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-RUBRIC | HW-RUBRIC-F-SOURCE-VERSION | Rubric Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| HW-001 | HW-OBJ-RUBRIC | HW-RUBRIC-F-CRITERIA | Rubric Criteria | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-ID | Submission Draft ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-ANSWER-PAYLOAD | Answer Payload by Question Type | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-MEDIA-METADATA | Media Metadata | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-PAGE-ITEM-MAPPING | Page and Item Mapping | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-IMAGE-QUALITY | Image Quality | STRING | OPTION_SET: OPT-ENUM-027 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-UPLOAD-SESSION-ID | Upload Session | ID | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-PENDING-CHUNK | Pending Upload Chunk | FILE_REFERENCE | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-SUCCESSFUL-CHUNKS | Successful Upload Chunks | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-DRAFT-VERSION | Draft Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT | Weak Network Recovery Checkpoint | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-DRAFT | SUB-DRAFT-F-ASSIGNMENT-VERSION | Assignment Publication Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-ATTEMPT | SUB-ATTEMPT-F-ID | Submission Attempt ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-ATTEMPT | SUB-ATTEMPT-F-DRAFT-VERSION | Submitted Draft Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-ATTEMPT | SUB-ATTEMPT-F-SUBMISSION-VERSION | Submission Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-ATTEMPT | SUB-ATTEMPT-F-LATE-FLAG | Late Submission Flag | BOOLEAN | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-ATTEMPT | SUB-ATTEMPT-F-RESUBMISSION-OF | Resubmission Relationship | ID | SYSTEM | required for a resubmission and absent for the first accepted submission；状态=RESUBMITTED；动作=SUB-ACT-RESUBMIT | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-ATTEMPT | SUB-ATTEMPT-F-RECEIPT-ID | Submission Receipt | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SUB-001 | SUB-OBJ-ATTEMPT | SUB-ATTEMPT-F-RECEIPT-ISSUED-AT | Receipt Issued Time | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-RULE-ID | Capability Rule ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-RULE-VERSION | Capability Rule Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-SOURCE-REF | Capability Rule Source Reference | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-SOURCE-VERSION | Capability Rule Source Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-SUBJECT-FAMILY | Subject Family | STRING | OPTION_SET: OPT-TL-003 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-QUESTION-TYPE | Question Type | STRING | OPTION_SET: OPT-ENUM-003 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-SUBMISSION-METHOD | Submission Method | STRING | OPTION_SET: OPT-ENUM-031 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-RECOGNITION-LEVEL | Recognition Level | STRING | OPTION_SET: OPT-TL-004 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-SCORING-LEVEL | Scoring Level | STRING | OPTION_SET: OPT-TL-005 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-REQUIRED-EVIDENCE | Required Evidence | STRING_ARRAY | OPTION_SET: OPT-TL-006 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-TEACHER-REVIEW | Teacher Review Required | STRING | OPTION_SET: OPT-ENUM-001 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-BATCH-CONFIRM | Batch Confirmation Eligibility | STRING | OPTION_SET: OPT-TL-007 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-CAPABILITY-RULE | GRD-CAP-F-UNAVAILABLE-FALLBACK | Unavailable Fallback | STRING | OPTION_SET: OPT-TL-008 | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-ID | Grading Decision ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-RECOGNIZED-ANSWER | Recognized Answer | JSON | SYSTEM | required when automated grading processing produces recognition evidence；状态=PROCESSING；动作=GRD-ACT-PROCESS | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-RECOGNIZED-REGION | Recognized Region | JSON | SYSTEM | required when automated grading processing produces recognition evidence；状态=PROCESSING；动作=GRD-ACT-PROCESS | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-SUBMISSION-REF | Input Submission Reference | ID | OBJECT_REF: SUB-OBJ-ATTEMPT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-SUBMISSION-VERSION | Input Submission Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-ITEM-REF | Input Item Reference | ID | OBJECT_REF: HW-OBJ-ITEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-ITEM-VERSION | Input Item Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-RUBRIC-REF | Input Rubric Reference | ID | OBJECT_REF: HW-OBJ-RUBRIC | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-RUBRIC-VERSION | Input Rubric Version | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-CAPABILITY-RULE-REF | Capability Rule Reference | ID | OBJECT_REF: GRD-OBJ-CAPABILITY-RULE | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-CAPABILITY-RULE-VERSION | Capability Rule Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-SUGGESTED-SCORE | Suggested Score | DECIMAL | SYSTEM | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-SCORING-RATIONALE | Scoring Rationale | TEXT | SYSTEM | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-CONFIDENCE | Confidence Status | STRING | OPTION_SET: OPT-ENUM-005 | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-LIMITATION | Limitation Note | TEXT | SYSTEM | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-OFFICIAL-SCORE | Teacher Official Score | DECIMAL | USER_INPUT | required when the grading decision reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-TEACHER-FEEDBACK | Teacher Feedback | TEXT | USER_INPUT | required when the grading decision reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-CORRECTION-REASON | Correction Reason | STRING | OPTION_SET: OPT-ENUM-006 | required when correcting recognition, overriding a score, or revising a confirmed decision；状态=ROUTED_REVIEW/TEACHER_CONFIRMED/REVISION_PENDING/QUEUED；动作=GRD-ACT-CORRECT-RECOGNITION/GRD-ACT-OVERRIDE-SCORE/GRD-ACT-OPEN-CONFIRMED-REVISION/GRD-ACT-CONFIRM-REVISION/GRD-ACT-RESOLVE-VERSION-CONFLICT | EDITABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-DECISION-VERSION | Decision Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-PRIOR-DECISION-VERSION | Prior Confirmed Decision Version | INTEGER | SYSTEM | required when revising a confirmed decision；状态=REVISION_PENDING；动作=GRD-ACT-OPEN-CONFIRMED-REVISION | IMMUTABLE | AUTHORIZED_SCOPE |
+| GRD-001 | GRD-OBJ-DECISION | GRD-DECISION-F-ROUTE | Grading Route | STRING | OPTION_SET: OPT-TL-011 | required when the grading decision reaches ROUTED_REVIEW or ROUTED_MANUAL；状态=ROUTED_REVIEW/ROUTED_MANUAL | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-ID | Publication Batch ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-SELECTED-STUDENT-IDS | Selected Student Scope | STRING_ARRAY | OPTION_SET: OPT-COM-010 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-VISIBILITY-POLICY | Result Visibility Policy | STRING | OPTION_SET: OPT-ENUM-040 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-ANSWER-VISIBLE-AT | Configured Answer Visible Time | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-FEEDBACK-VISIBLE-AT | Configured Feedback Visible Time | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-NOTIFICATION-POLICY | Result Notification Policy | STRING | OPTION_SET: OPT-TL-012 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-BATCH-VERSION | Publication Batch Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-STUDENT-SCOPE-SNAPSHOT | Immutable Selected Student Scope | STRING_ARRAY | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-OBJECT-RESULTS | Student-level Publication Results | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-BATCH | PUB-BATCH-F-STATUS | Publication Batch Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-ID | Publication Preview ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-BATCH-REF | Publication Batch Reference | ID | OBJECT_REF: PUB-OBJ-BATCH | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-STUDENT-REF | Selected Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-DECISION-REF | Confirmed Decision Reference | ID | OBJECT_REF: GRD-OBJ-DECISION | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-ELIGIBILITY | Preview Publication Eligibility | STRING | OPTION_SET: OPT-TL-009 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-BLOCKING-CODES | Preview Publication Blocking Codes | STRING_ARRAY | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-ANSWER-VISIBLE-AT | Resolved Answer Visible Time | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-FEEDBACK-VISIBLE-AT | Resolved Feedback Visible Time | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-PREVIEW | PUB-PREVIEW-F-NOTIFICATION-PREVIEW | Resolved Notification Preview | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-ID | Published Result ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-STUDENT-REF | Selected Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-SOURCE-DECISION-REF | Source Decision Reference | ID | OBJECT_REF: GRD-OBJ-DECISION | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-DECISION-VERSION | Confirmed Decision Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-CORRECTION-DECISION-REF | Correction Decision Reference | ID | OBJECT_REF: GRD-OBJ-DECISION | required when correcting a published result；状态=INVALIDATED | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-NEW-DECISION-VERSION | New Confirmed Decision Version | INTEGER | SYSTEM | required when correcting a published result；状态=INVALIDATED | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-ANSWER | Published Answer | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-SCORE | Published Score | DECIMAL | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-FEEDBACK | Published Feedback | TEXT | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-ELIGIBILITY | Publication Eligibility | STRING | OPTION_SET: OPT-TL-009 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-BLOCKING-CODES | Publication Blocking Codes | STRING_ARRAY | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-ANSWER-VISIBLE-AT | Answer Visible Time | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-SCORE-VISIBLE-AT | Score Visible Time | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-FEEDBACK-VISIBLE-AT | Feedback Visible Time | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-RESULT-VERSION | Result Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-CORRECTION-VERSION | Correction Version | INTEGER | SYSTEM | required when a published result is corrected；状态=INVALIDATED | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-INVALIDATION-VERSION | Dependent Invalidation Version | INTEGER | SYSTEM | required when a published result correction invalidates dependent interpretations；状态=INVALIDATED | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-PUBLIC-CORRECTION-NOTE | Public Correction Note | TEXT | USER_INPUT | required when a published result is corrected；状态=INVALIDATED | EDITABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-NOTIFICATION-STATUS | Notification Status | STRING | OPTION_SET: OPT-TL-010 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-RESULT | PUB-RESULT-F-DOWNSTREAM-INVALIDATIONS | Downstream Invalidation Records | JSON | SYSTEM | required when a published result correction invalidates dependent interpretations；状态=INVALIDATED | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-DEPENDENCY-SNAPSHOT | PUB-DEPENDENCY-SNAPSHOT-F-ID | Dependency Snapshot ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-DEPENDENCY-SNAPSHOT | PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-REF | Dependency Snapshot Source Result | ID | OBJECT_REF: PUB-OBJ-RESULT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-DEPENDENCY-SNAPSHOT | PUB-DEPENDENCY-SNAPSHOT-F-SOURCE-RESULT-VERSION | Dependency Snapshot Source Result Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-DEPENDENCY-SNAPSHOT | PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET | Resolved Dependency Set | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PUB-001 | PUB-OBJ-DEPENDENCY-SNAPSHOT | PUB-DEPENDENCY-SNAPSHOT-F-SNAPSHOT-VERSION | Dependency Snapshot Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-ID | Gradebook View ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-STUDENT-REF | Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-RESULT-DATA-ID | Source Result Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-RESULT-REF | Source Result Reference | ID | OBJECT_REF: PUB-OBJ-RESULT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-RESULT-VERSION | Source Result Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-EVIDENCE-DATA-ID | Source Evidence Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-EVIDENCE-REF | Source Evidence Reference | ID | OBJECT_REF: INS-OBJ-EVIDENCE | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-EVIDENCE-VERSION | Source Evidence Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-PLAN-DATA-ID | Source Plan Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-PLAN-REF | Source Plan Reference | ID | OBJECT_REF: PLN-OBJ-PLAN | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-PLAN-VERSION | Source Plan Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-QUERY-DEFINITION | Gradebook Query Definition | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-COLUMN-DEFINITION | Gradebook Column Definition | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-SAVED-VIEW-DEFINITION | Saved Gradebook View Definition | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-VIEW | SCO-VIEW-F-VIEW-VERSION | Gradebook View Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-ID | Gradebook Follow-up ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-VIEW-REF | Gradebook View Reference | ID | OBJECT_REF: SCO-OBJ-VIEW | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-VIEW-VERSION | Gradebook View Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-ATTENTION-KIND | Attention Event Kind | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-NOTE | Follow-up Note | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCO-001 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-VERSION | Follow-up Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-ID | Evidence Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STUDENT-REF | Evidence Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-DATA-ID | Evidence Source Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-RESULT-REF | Source Published Result Reference | ID | OBJECT_REF: PUB-OBJ-RESULT | required for evidence derived from a published result；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-RESULT-VERSION | Source Published Result Version | INTEGER | SYSTEM | required for evidence derived from a published result；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-CORRECTION-REF | Source Correction Attempt Reference | ID | OBJECT_REF: CORR-OBJ-ATTEMPT | required for correction-stage evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION | Source Correction Version | INTEGER | SYSTEM | required for correction-stage evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-EVIDENCE-SOURCE | Evidence Source | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STAGE | Evidence Stage | STRING | OPTION_SET: OPT-ENUM-008 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-KNOWLEDGE-POINT-REF | Knowledge Point Reference | ID | OBJECT_REF: CURR-OBJ-KNOWLEDGE-POINT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION | Knowledge Point Version | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-RESULT | Answer Result | STRING | OPTION_SET: OPT-ENUM-009 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-ERROR-TYPE | Error Type | STRING | OPTION_SET: OPT-ENUM-010 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-WEIGHT | Evidence Weight | DECIMAL | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-VALIDITY | Evidence Validity | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-MASTERY-CANDIDATE | Mastery Interpretation Candidate | TEXT | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-MASTERY-INTERPRETATION | Teacher-confirmed Mastery Interpretation | TEXT | USER_INPUT | required when evidence reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | EDITABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-TEACHER-CONFIRMATION | Teacher Confirmation | STRING | USER_INPUT | required when evidence reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | EDITABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STUDENT-VISIBLE-AT | Student Visible At | DATETIME | SYSTEM | required when evidence reaches STUDENT_VISIBLE；状态=STUDENT_VISIBLE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-INVALIDATION-REASON | Evidence Invalidation Reason | TEXT | SYSTEM | required when evidence becomes stale；状态=STALE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-PRIOR-EVIDENCE-REF | Prior Evidence Reference | ID | OBJECT_REF: INS-OBJ-EVIDENCE | required when a new evidence version supersedes prior evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION | Prior Evidence Version | INTEGER | SYSTEM | required when a new evidence version supersedes prior evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | IMMUTABLE | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION | Mastery Interpretation Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| INS-001 | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-EVIDENCE-VERSION | Evidence Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-ID | Improvement Plan ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-STUDENT-REF | Plan Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-SOURCE-DATA-ID | Source Evidence Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-SOURCE-EVIDENCE-REF | Source Evidence Reference | ID | OBJECT_REF: INS-OBJ-EVIDENCE | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-SOURCE-EVIDENCE-VERSION | Source Evidence Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-GOAL-CANDIDATE | Improvement Goal Candidate | TEXT | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-TASK-CONTENT-CANDIDATE | Improvement Task Content Candidate | TEXT | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-WORKLOAD-CANDIDATE | Planned Workload Candidate | DECIMAL | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-DUE-AT-CANDIDATE | Plan Due Time Candidate | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-SUCCESS-CONDITION-CANDIDATE | Plan Success Condition Candidate | TEXT | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-EVIDENCE-REQUIREMENT-CANDIDATE | Completion Evidence Requirement Candidate | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-REVALIDATION-METHOD-CANDIDATE | Plan Revalidation Method Candidate | TEXT | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-GOAL | Improvement Goal | TEXT | USER_INPUT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-SUBJECT | Improvement Subject | ID | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-KNOWLEDGE-POINT-REF | Plan Knowledge Point Reference | ID | OBJECT_REF: CURR-OBJ-KNOWLEDGE-POINT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-KNOWLEDGE-POINT-VERSION | Plan Knowledge Point Version | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-PRIORITY | Improvement Priority | STRING | OPTION_SET: OPT-ENUM-012 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-TASK-CONTENT | Improvement Task Content | TEXT | USER_INPUT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-WORKLOAD | Planned Workload | DECIMAL | USER_INPUT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-DUE-AT | Plan Due Time | DATETIME | USER_INPUT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-SUCCESS-CONDITION | Plan Success Condition | TEXT | USER_INPUT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-EVIDENCE-REQUIREMENT | Completion Evidence Requirement | STRING | OPTION_SET: OPT-ENUM-034 | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-REVALIDATION-METHOD | Plan Revalidation Method | TEXT | USER_INPUT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-TEACHER-CONFIRMER-REF | Plan Teacher Confirmer Reference | ID | OBJECT_REF: ORG-OBJ-TEACHER | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF | Student Difficulty Feedback Reference | ID | OBJECT_REF: APP-OBJ-TODO | required when a student difficulty report changes the plan；状态=ACTIVE；动作=PLN-ACT-ADJUST-PLAN | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION | Student Difficulty Feedback Version | INTEGER | SYSTEM | required when a student difficulty report changes the plan；状态=ACTIVE；动作=PLN-ACT-ADJUST-PLAN | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-ADJUSTMENT-REASON | Plan Adjustment Reason | TEXT | USER_INPUT | required when plan content or workload changes；状态=ACTIVE；动作=PLN-ACT-ADJUST-PLAN | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-CLOSE-REASON | Plan Close Reason | TEXT | USER_INPUT | required when the plan closes；状态=CLOSED；动作=PLN-ACT-CLOSE-PLAN | EDITABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-INVALIDATION-REF | Plan Evaluation Invalidation Reference | ID | OBJECT_REF: CORR-OBJ-INVALIDATION | required when the plan evaluation enters pending reconfirmation；状态=PENDING_RECONFIRM | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-INVALIDATION-VERSION | Plan Evaluation Invalidation Version | INTEGER | SYSTEM | required when the plan evaluation enters pending reconfirmation；状态=PENDING_RECONFIRM | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-EVALUATION-STATE | Plan Evaluation State | STRING | SYSTEM | required when an ACTIVE plan enters evaluation；状态=PENDING_RECONFIRM | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-EVALUATION-VERSION | Plan Evaluation Version | INTEGER | SYSTEM | required when an ACTIVE plan enters evaluation；状态=PENDING_RECONFIRM | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-PLAN | PLN-PLAN-F-PLAN-VERSION | Improvement Plan Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-SUBJECT-SYNC | PLN-SUBJECT-SYNC-F-ID | Subject Teacher Sync Output ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-SUBJECT-SYNC | PLN-SUBJECT-SYNC-F-PLAN-REF | Synced Plan Reference | ID | OBJECT_REF: PLN-OBJ-PLAN | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-SUBJECT-SYNC | PLN-SUBJECT-SYNC-F-PLAN-VERSION | Synced Plan Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-SUBJECT-SYNC | PLN-SUBJECT-SYNC-F-SUBJECT | Synced Subject | ID | OPTION_SET: OPT-COM-007 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-SUBJECT-SYNC | PLN-SUBJECT-SYNC-F-TEACHER-CONFIRMER-REF | Confirmed Subject Teacher Reference | ID | OBJECT_REF: ORG-OBJ-TEACHER | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-SUBJECT-SYNC | PLN-SUBJECT-SYNC-F-STATUS | Subject Teacher Sync Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-SUBJECT-SYNC | PLN-SUBJECT-SYNC-F-OUTPUT-VERSION | Subject Teacher Sync Output Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-ID | Homeroom Coordination Output ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-PLAN-REF | Coordinated Plan Reference | ID | OBJECT_REF: PLN-OBJ-PLAN | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-PLAN-VERSION | Coordinated Plan Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-CLASS-SCOPE | Homeroom Class Scope | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-LOAD-SUMMARY | Read-only Cross-subject Coordination Load | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-STATUS | Homeroom Coordination Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLN-001 | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-OUTPUT-VERSION | Homeroom Coordination Output Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-ID | Student Todo Aggregation ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-STUDENT-REF | Todo Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-SOURCE-PLAN-REF | Source Improvement Plan Reference | ID | OBJECT_REF: PLN-OBJ-PLAN | required when the todo links to an improvement plan；状态=READY；动作=APP-ACT-CREATE-PLAN-TODO | IMMUTABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-SOURCE-PLAN-VERSION | Source Improvement Plan Version | INTEGER | SYSTEM | required when the todo links to an improvement plan；状态=READY；动作=APP-ACT-CREATE-PLAN-TODO | IMMUTABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-SOURCE-ASSIGNMENT-REF | Source Assignment Reference | ID | OBJECT_REF: HW-OBJ-ASSIGNMENT | required when the todo links to homework；状态=READY；动作=APP-ACT-CREATE-HOMEWORK-TODO | IMMUTABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-SOURCE-ASSIGNMENT-VERSION | Source Assignment Version | INTEGER | SYSTEM | required when the todo links to homework；状态=READY；动作=APP-ACT-CREATE-HOMEWORK-TODO | IMMUTABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-TASK-DEEP-LINK | Task Deep Link | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-LOCAL-PROGRESS | Student Local Progress | JSON | USER_INPUT | required when the student records local todo execution state；状态=READY；动作=APP-ACT-UPDATE-LOCAL-PROGRESS | EDITABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-COMPLETION-EVIDENCE | Student Completion Evidence | JSON | USER_INPUT | required when the student records local todo execution state；状态=READY；动作=APP-ACT-UPDATE-LOCAL-PROGRESS | EDITABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-DIFFICULTY-FEEDBACK | Student Difficulty Feedback | TEXT | USER_INPUT | required when the student records local todo execution state；状态=READY；动作=APP-ACT-UPDATE-LOCAL-PROGRESS | EDITABLE | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-STUDENT-VISIBLE-AT | Todo Student Visible At | DATETIME | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| APP-001 | APP-OBJ-TODO | APP-TODO-F-AGGREGATION-VERSION | Todo Aggregation Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-ID | Correction Task ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-STUDENT-REF | Correction Task Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-SOURCE-DATA-ID | Correction Task Source Result Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-SOURCE-RESULT-REF | Correction Task Source Result Reference | ID | OBJECT_REF: PUB-OBJ-RESULT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-SOURCE-RESULT-VERSION | Correction Task Source Result Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-DUE-AT | Correction Task Due Time | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-OVERDUE-HANDLING | Correction Task Overdue Handling | TEXT | SYSTEM | required when the correction task reaches OVERDUE；状态=OVERDUE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-TASK | CORR-TASK-F-TASK-VERSION | Correction Task Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-ID | Correction Attempt ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-STUDENT-REF | Correction Attempt Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TASK-REF | Correction Task Reference | ID | OBJECT_REF: CORR-OBJ-TASK | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TASK-VERSION | Correction Task Version at Submission | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF | Prior Correction Attempt Reference | ID | OBJECT_REF: CORR-OBJ-ATTEMPT | required for a resubmission and absent for the first accepted submission；状态=SUBMITTED；动作=CORR-ACT-RESUBMIT | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION | Prior Correction Attempt Version | INTEGER | SYSTEM | required for a resubmission and absent for the first accepted submission；状态=SUBMITTED；动作=CORR-ACT-RESUBMIT | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-CORRECTION-ANSWER | Student Correction Answer | JSON | USER_INPUT | required when the correction reaches SUBMITTED；状态=SUBMITTED | EDITABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TEACHER-JUDGMENT | Teacher Correction Judgment | STRING | OPTION_SET: OPT-ENUM-028 | required when the correction reaches JUDGED or NEEDS_RETRY；状态=JUDGED/NEEDS_RETRY | EDITABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF | Correction Teacher Confirmer Reference | ID | OBJECT_REF: ORG-OBJ-TEACHER | required when the correction reaches JUDGED or NEEDS_RETRY；状态=JUDGED/NEEDS_RETRY | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT | Repeated Correction Count | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-OVERDUE-HANDLING | Correction Overdue Handling | TEXT | SYSTEM | required when an overdue correction is submitted；状态=SUBMITTED；动作=CORR-ACT-SUBMIT-LATE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-CORRECTION-VERSION | Correction Attempt Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-ID | Correction Invalidation Record ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-SOURCE-DATA-ID | Invalidated Source Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-SOURCE-RESULT-REF | Invalidated Source Result Reference | ID | OBJECT_REF: PUB-OBJ-RESULT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-SOURCE-RESULT-VERSION | Invalidated Source Result Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-SOURCE-DECISION-REF | Invalidated Source Decision Reference | ID | OBJECT_REF: GRD-OBJ-DECISION | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-SOURCE-DECISION-VERSION | Invalidated Source Decision Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-TARGET-KINDS | Invalidation Target Kinds | STRING_ARRAY | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-TARGET-TRANSITIONS | Per-target Invalidation Transitions | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-TARGET-VERSIONS | Invalidation Target Versions | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-TARGET-OUTCOMES | Per-target Invalidation Outcomes | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-HISTORY-PRESERVATION | Invalidation History Preservation | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CORR-001 | CORR-OBJ-INVALIDATION | CORR-INVALIDATION-F-INVALIDATION-VERSION | Invalidation Record Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-ID | Student Management Profile View ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-STUDENT-REF | Managed Student Reference | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-RESULT-DATA-ID | Source Result Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-RESULT-REF | Source Result Reference | ID | OBJECT_REF: PUB-OBJ-RESULT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-RESULT-VERSION | Source Result Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-EVIDENCE-DATA-ID | Source Evidence Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-EVIDENCE-REF | Source Evidence Reference | ID | OBJECT_REF: INS-OBJ-EVIDENCE | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-EVIDENCE-VERSION | Source Evidence Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-PLAN-DATA-ID | Source Plan Data ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-PLAN-REF | Source Plan Reference | ID | OBJECT_REF: PLN-OBJ-PLAN | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-PLAN-VERSION | Source Plan Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-QUERY-DEFINITION | Student Profile Query Definition | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-COLUMN-DEFINITION | Student Profile Column Definition | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-SAVED-VIEW-DEFINITION | Saved Student Profile View Definition | JSON | USER_INPUT | required when a teacher saves a custom profile view；状态=READY；动作=STU-ACT-SAVE-VIEW | EDITABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-PROFILE | STU-PROFILE-F-PROFILE-VERSION | Student Profile View Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-ATTENTION | STU-ATTENTION-F-ID | Student Attention Record ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-ATTENTION | STU-ATTENTION-F-PROFILE-REF | Student Profile View Reference | ID | OBJECT_REF: STU-OBJ-PROFILE | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-ATTENTION | STU-ATTENTION-F-PROFILE-VERSION | Student Profile View Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-ATTENTION | STU-ATTENTION-F-KIND | Student Attention Event Kind | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-ATTENTION | STU-ATTENTION-F-FOLLOW-UP-NOTE | Student Attention Follow-up Note | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| STU-001 | STU-OBJ-ATTENTION | STU-ATTENTION-F-VERSION | Student Attention Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-ID | AI Task Preview ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-TASK-ID | Registered AI Task ID | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-TARGET-ACTION-ID | Target Action ID | ID | OPTION_SET: OPT-COM-016 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-PARAMETERS | Resolved Parameters | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-PERMISSION-RESULT | Permission Result | STRING | SYSTEM | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-SOURCE-VERSIONS | Source Versions | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-PAYLOAD | Structured Preview Payload | JSON | SYSTEM | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-EXPIRES-AT | Preview Expiry Time | DATETIME | SYSTEM | 是 | READ_ONLY | AUTHORIZED_SCOPE |
+| AIX-001 | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-VERSION | AI Task Preview Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DEFINITION | RPT-DEFINITION-F-ID | Report Definition ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DEFINITION | RPT-DEFINITION-F-NAME | Report Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DEFINITION | RPT-DEFINITION-F-METRIC-IDS | Report Metric IDs | STRING_ARRAY | OPTION_SET: OPT-ENUM-037 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DEFINITION | RPT-DEFINITION-F-DATA-SCOPE | Authorized Data Scope | STRING | OPTION_SET: OPT-ENUM-048 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DEFINITION | RPT-DEFINITION-F-TIME-RANGE | Report Time Range | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DEFINITION | RPT-DEFINITION-F-VERSION | Report Definition Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-ID | Report Subscription ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-CREATOR-REF | Report Subscription Creator | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-DEFINITION-REF | Subscribed Report Definition | ID | OBJECT_REF: RPT-OBJ-DEFINITION | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-DEFINITION-VERSION | Subscribed Report Definition Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY | Schedule Frequency | STRING | OPTION_SET: OPT-ENUM-014 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-EXECUTION-TIME | Scheduled Execution Time | STRING | OPTION_SET: OPT-ENUM-036 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-TIMEZONE | Schedule Timezone | STRING | OPTION_SET: OPT-ENUM-035 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-RECIPIENTS | Authorized Report Recipients | STRING_ARRAY | OPTION_SET: OPT-ENUM-015 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-DATA-SCOPE | Subscription Data Scope | STRING | OPTION_SET: OPT-ENUM-048 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SUBSCRIPTION | RPT-SUBSCRIPTION-F-VERSION | Report Subscription Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-ID | Report Run ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-DEFINITION-REF | Run Report Definition | ID | OBJECT_REF: RPT-OBJ-DEFINITION | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-DEFINITION-VERSION | Run Report Definition Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-SUBSCRIPTION-REF | Run Report Subscription | ID | OBJECT_REF: RPT-OBJ-SUBSCRIPTION | required only for a periodic report run；状态=QUEUED；动作=RPT-ACT-CREATE-RUN | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-SUBSCRIPTION-VERSION | Run Report Subscription Version | INTEGER | SYSTEM | required only for a periodic report run；状态=QUEUED；动作=RPT-ACT-CREATE-RUN | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-DATA-CUTOFF | Run Data Cutoff | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-PERMISSION-RESULT | Run Permission Result | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-SOURCE-VERSIONS | Pinned Run Source Versions | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-RESULT | Report Run Result | JSON | SYSTEM | required when a report run succeeds；状态=SUCCEEDED；动作=RPT-ACT-COMPLETE-RUN | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-RUN | RPT-RUN-F-VERSION | Report Run Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-ID | Report Snapshot ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-RUN-REF | Source Report Run | ID | OBJECT_REF: RPT-OBJ-RUN | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-RUN-VERSION | Source Report Run Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-SOURCE-VERSIONS | Snapshot Source Versions | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-DATA-CUTOFF | Snapshot Data Cutoff | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-PERMISSION-RESULT | Snapshot Permission Result | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-RUN-RESULT | Snapshot Run Result | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-SNAPSHOT | RPT-SNAPSHOT-F-VERSION | Report Snapshot Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DELIVERY | RPT-DELIVERY-F-ID | Report Delivery ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DELIVERY | RPT-DELIVERY-F-SNAPSHOT-REF | Delivered Report Snapshot | ID | OBJECT_REF: RPT-OBJ-SNAPSHOT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DELIVERY | RPT-DELIVERY-F-SNAPSHOT-VERSION | Delivered Report Snapshot Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DELIVERY | RPT-DELIVERY-F-RECIPIENTS | Delivery Recipients | STRING_ARRAY | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DELIVERY | RPT-DELIVERY-F-CHANNEL | Delivery Channel | STRING | OPTION_SET: OPT-ENUM-047 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DELIVERY | RPT-DELIVERY-F-STATE | Report Delivery State | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| RPT-001 | RPT-OBJ-DELIVERY | RPT-DELIVERY-F-VERSION | Report Delivery Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-ID | Learning Timeline Entry ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-STUDENT-REF | Learning Path Student | ID | OBJECT_REF: ORG-OBJ-STUDENT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-TERM-ID | Timeline Entry Term | ID | OPTION_SET: OPT-COM-003 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-EVENT-TYPE | Learning Path Event Type | STRING | OPTION_SET: OPT-ENUM-013 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-PUBLISHED-RESULT-REF | PUBLISHED-RESULT Source Reference | ID | OBJECT_REF: PUB-OBJ-RESULT | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION | PUBLISHED-RESULT Source Version | INTEGER | SYSTEM | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-EVIDENCE-REF | EVIDENCE Source Reference | ID | OBJECT_REF: INS-OBJ-EVIDENCE | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-EVIDENCE-VERSION | EVIDENCE Source Version | INTEGER | SYSTEM | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-CORRECTION-REF | CORRECTION Source Reference | ID | OBJECT_REF: CORR-OBJ-ATTEMPT | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-CORRECTION-VERSION | CORRECTION Source Version | INTEGER | SYSTEM | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-PLAN-EXECUTION-REF | PLAN-EXECUTION Source Reference | ID | OBJECT_REF: APP-OBJ-TODO | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-PLAN-EXECUTION-VERSION | PLAN-EXECUTION Source Version | INTEGER | SYSTEM | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-TEACHER-CONFIRMATION-REF | TEACHER-CONFIRMATION Source Reference | ID | OBJECT_REF: GRD-OBJ-DECISION | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-TEACHER-CONFIRMATION-VERSION | TEACHER-CONFIRMATION Source Version | INTEGER | SYSTEM | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-RECORDED-AT | Timeline Entry Recorded At | DATETIME | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-VERSION | Learning Timeline Entry Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-ID | Learning Path Interpretation ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-SUBJECT | Interpretation Subject | ID | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF | Interpretation Knowledge Point | ID | OBJECT_REF: CURR-OBJ-KNOWLEDGE-POINT | 否 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-VERSION | Interpretation Knowledge Point Version | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-EVIDENCE-REFS | Versioned Evidence References | JSON | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-EXPLANATION | Teacher-confirmed Explanation | TEXT | USER_INPUT | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | EDITABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-CONFIDENCE | Explanation Confidence | DECIMAL | USER_INPUT | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | EDITABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-LIMITATIONS | Explanation Limitations | TEXT | USER_INPUT | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | EDITABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-TEACHER-CONFIRMER | Corresponding Subject Teacher Confirmer | ID | OBJECT_REF: ORG-OBJ-TEACHER | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-VISIBLE-FROM | Student Visible From | DATETIME | USER_INPUT | required when the interpretation becomes student visible；状态=STUDENT_VISIBLE；动作=LPATH-ACT-PUBLISH-INTERPRETATION | EDITABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF | Superseding Interpretation Reference | ID | OBJECT_REF: LPATH-OBJ-INTERPRETATION | required when a prior interpretation is superseded；状态=SUPERSEDED；动作=LPATH-ACT-SUPERSEDE-INTERPRETATION | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION | Superseding Interpretation Version | INTEGER | SYSTEM | required when a prior interpretation is superseded；状态=SUPERSEDED；动作=LPATH-ACT-SUPERSEDE-INTERPRETATION | IMMUTABLE | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-STALE-REASON | Interpretation Stale Reason | TEXT | SYSTEM | required when a source version makes the interpretation stale；状态=STALE；动作=LPATH-ACT-MARK-INTERPRETATION-STALE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| LPATH-001 | LPATH-OBJ-INTERPRETATION | LPATH-INTERPRETATION-F-VERSION | Learning Path Interpretation Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-ID | Notification ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-SOURCE-EVENT | Notification Source Event | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-RECIPIENT | Notification Recipient | ID | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE | Summary Template | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-DEEP-LINK | Authorized Product Deep Link | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-CHANNEL | Notification Channel | STRING | OPTION_SET: OPT-ENUM-047 | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-DELIVERED-AT | Delivered At | DATETIME | SYSTEM | required only when NOTI-ACT-DELIVER succeeds；状态=DELIVERED；动作=NOTI-ACT-DELIVER | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-READ-AT | Read At | DATETIME | SYSTEM | required only when NOTI-ACT-MARK-READ succeeds；状态=READ；动作=NOTI-ACT-MARK-READ | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-HANDLED-AT | Handled At | DATETIME | SYSTEM | required only when NOTI-ACT-MARK-HANDLED succeeds；状态=HANDLED；动作=NOTI-ACT-MARK-HANDLED | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-FAILURE-CODE | Delivery Failure Code | STRING | SYSTEM | required only when NOTI-ACT-FAIL-DELIVERY succeeds；状态=FAILED；动作=NOTI-ACT-FAIL-DELIVERY | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-RETRY-COUNT | Delivery Retry Count | INTEGER | SYSTEM | required when notification creation initializes or retry increments the counter；状态=QUEUED；动作=NOTI-ACT-CREATE-REMINDER/NOTI-ACT-CREATE-REPORT-NOTIFICATION/NOTI-ACT-RETRY-DELIVERY | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| NOTI-001 | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-VERSION | Notification Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-ID | Lesson Plan Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-SUBJECT | Subject | ID | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-COURSE | Course | ID | OPTION_SET: OPT-COM-008 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-TITLE | Lesson Plan Title | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-RUBRIC-VERSION | Lesson Rubric Version | ID | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-KNOWLEDGE-POINT-IDS | Lesson Knowledge Points | STRING_ARRAY | OPTION_SET: OPT-COM-011 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-VERSION | Lesson Plan Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-LESSON-PLAN | PREP-LESSON-F-STATUS | Lesson Plan Status | STRING | OPTION_SET: OPT-EXT-001 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-MATERIAL-REF | PREP-MATERIAL-F-ID | Teaching Material Reference ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-MATERIAL-REF | PREP-MATERIAL-F-REFERENCE | Teaching Material Reference | FILE_REFERENCE | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-MATERIAL-REF | PREP-MATERIAL-F-USAGE-PURPOSE | Material Usage Purpose | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-MATERIAL-REF | PREP-MATERIAL-F-LICENSE-STATUS | Material License Status | STRING | OPTION_SET: OPT-EXT-002 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-CLASSROOM-ACTIVITY | PREP-ACTIVITY-F-ID | Classroom Activity Record ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-CLASSROOM-ACTIVITY | PREP-ACTIVITY-F-INSTRUCTIONS | Classroom Activity Instructions | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-CLASSROOM-ACTIVITY | PREP-ACTIVITY-F-EVIDENCE | Classroom Activity Evidence | JSON | USER_INPUT | required only when classroom activity completion is recorded；状态=RECORDED；动作=PREP-ACT-RECORD-CLASSROOM-ACTIVITY | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-CLASSROOM-ACTIVITY | PREP-ACTIVITY-F-STATUS | Classroom Activity Status | STRING | OPTION_SET: OPT-EXT-012 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-ASSIGNMENT-DRAFT | PREP-DRAFT-F-ID | Generated Assignment Draft ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-ASSIGNMENT-DRAFT | PREP-DRAFT-F-CONTENT | Generated and Teacher-completed Assignment Draft Content | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-ASSIGNMENT-DRAFT | PREP-DRAFT-F-SOURCE-LESSON-REF | Pinned Confirmed Lesson Plan | ID | OBJECT_REF: PREP-OBJ-LESSON-PLAN | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-ASSIGNMENT-DRAFT | PREP-DRAFT-F-SOURCE-LESSON-VERSION | Source Lesson Plan Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PREP-001 | PREP-OBJ-ASSIGNMENT-DRAFT | PREP-DRAFT-F-STATUS | Assignment Draft Status | STRING | OPTION_SET: OPT-EXT-013 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-ID | Question Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-SCHOOL-ID | Content School | ID | OPTION_SET: OPT-COM-002 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-SUBJECT-ID | Content Subject | ID | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-COURSE-ID | Content Course | ID | OPTION_SET: OPT-COM-008 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-STEM | Question Stem | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-ANSWER | Question Answer | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-ANALYSIS | Question Analysis | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-KNOWLEDGE-MAPPINGS | Knowledge Point Mappings | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-VERSION | Question Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-AVAILABILITY | Question Availability | STRING | OPTION_SET: OPT-EXT-003 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-LICENSE-REF | Pinned Content License | ID | OBJECT_REF: CONTENT-OBJ-LICENSE | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-LICENSE-VERSION | Pinned Content License Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-PERMISSION-REF | Pinned Content Permission | ID | OBJECT_REF: CONTENT-OBJ-PERMISSION | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-QUESTION-VERSION | CONTENT-QUESTION-F-PERMISSION-VERSION | Pinned Content Permission Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-LICENSE | CONTENT-LICENSE-F-ID | Content License Record ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-LICENSE | CONTENT-LICENSE-F-RIGHTSHOLDER | Content Rightsholder | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-LICENSE | CONTENT-LICENSE-F-TERMS | Content License Terms | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-LICENSE | CONTENT-LICENSE-F-STATUS | Content License Status | STRING | OPTION_SET: OPT-EXT-011 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-LICENSE | CONTENT-LICENSE-F-VERSION | Content License Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-ID | Content Permission Grant ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-SCOPE | Content Permission Scope | STRING | OPTION_SET: OPT-EXT-010 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-SCHOOL-ID | Authorized School | ID | OPTION_SET: OPT-COM-002 | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-SUBJECT-ID | Authorized Subject | ID | OPTION_SET: OPT-COM-007 | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-COURSE-ID | Authorized Course | ID | OPTION_SET: OPT-COM-008 | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-GRANTEE-ID | Permission Grantee | ID | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-EFFECTIVE-AT | Permission Effective Time | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-EXPIRES-AT | Permission Expiry Time | DATETIME | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| CONTENT-001 | CONTENT-OBJ-PERMISSION | CONTENT-PERMISSION-F-VERSION | Content Permission Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-EXAM-EVENT | EXM-EVENT-F-ID | Exam Event ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-EXAM-EVENT | EXM-EVENT-F-NAME | Exam Event Name | STRING | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-EXAM-EVENT | EXM-EVENT-F-TERM | Exam Term | STRING | OPTION_SET: OPT-COM-004 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-EXAM-EVENT | EXM-EVENT-F-STATUS | Exam Event Status | STRING | OPTION_SET: OPT-EXT-004 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-EXAM-EVENT | EXM-EVENT-F-PUBLICATION-AT | Exam Publication Time | DATETIME | SYSTEM | required only when the exam event is published；状态=PUBLISHED；动作=EXM-ACT-PUBLISH-EVENT | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SCORE-IMPORT | EXM-IMPORT-F-ID | Subject Score Import Batch ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SCORE-IMPORT | EXM-IMPORT-F-FILE | Subject Score Import File | FILE_REFERENCE | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SCORE-IMPORT | EXM-IMPORT-F-SUBJECT | Imported Subject | STRING | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SCORE-IMPORT | EXM-IMPORT-F-VALIDATION | Import Validation Result | STRING | OPTION_SET: OPT-EXT-005 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SCORE-IMPORT | EXM-IMPORT-F-EVIDENCE | Import Validation Evidence | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SCORE-IMPORT | EXM-IMPORT-F-VERSION | Score Import Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SCORE-IMPORT | EXM-IMPORT-F-REJECTION-REASON | Score Import Rejection Reason | TEXT | USER_INPUT | required when score import validation is REJECTED；状态=REJECTED；动作=EXM-ACT-REJECT-SCORE-IMPORT | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-AGGREGATE-RULE | EXM-RULE-F-ID | Aggregate Score Rule Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-AGGREGATE-RULE | EXM-RULE-F-DEFINITION | Aggregate Score Rule Definition | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-AGGREGATE-RULE | EXM-RULE-F-VERSION | Aggregate Score Rule Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-ID | Published Subject Score Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-STUDENT-ID | Student | ID | OPTION_SET: OPT-COM-010 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-SUBJECT | Subject | ID | OPTION_SET: OPT-COM-007 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-SCORE | Published Subject Score | DECIMAL | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-EVIDENCE | Subject Score Evidence | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-IMPORT-REF | Pinned Passed Score Import | ID | OBJECT_REF: EXM-OBJ-SCORE-IMPORT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-IMPORT-VERSION | Pinned Score Import Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-TEACHER-CONFIRMED-AT | Subject Teacher Confirmation Time | DATETIME | SYSTEM | required only after subject-teacher confirmation；状态=TEACHER_CONFIRMED；动作=EXM-ACT-CONFIRM-SUBJECT-SCORE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-VISIBLE-AT | Student Score Visible Time | DATETIME | SYSTEM | required when the subject score is first published；状态=PUBLISHED；动作=EXM-ACT-PUBLISH-SUBJECT-SCORE | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-CONFIRMATION-DECISION | Subject Score Confirmation Decision | STRING | OPTION_SET: OPT-EXT-018 | required for subject-teacher confirmation or rejection；状态=TEACHER_CONFIRMED/REJECTED；动作=EXM-ACT-CONFIRM-SUBJECT-SCORE/EXM-ACT-REJECT-SUBJECT-SCORE | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-CONFIRMATION-REASON | Subject Score Confirmation Reason | TEXT | USER_INPUT | required for subject-teacher confirmation or rejection；状态=TEACHER_CONFIRMED/REJECTED；动作=EXM-ACT-CONFIRM-SUBJECT-SCORE/EXM-ACT-REJECT-SUBJECT-SCORE | EDITABLE | AUTHORIZED_SCOPE |
+| EXM-001 | EXM-OBJ-SUBJECT-SCORE | EXM-SCORE-F-VERSION | Subject Score Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CALENDAR | SCH-CALENDAR-F-ID | School Calendar Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CALENDAR | SCH-CALENDAR-F-TERM | School Term | STRING | OPTION_SET: OPT-COM-004 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CALENDAR | SCH-CALENDAR-F-WORKING-DAYS | Working Days and Periods | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CALENDAR | SCH-CALENDAR-F-VERSION | Calendar Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-ID | Schedule Constraint ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-KIND | Constraint Kind | STRING | OPTION_SET: OPT-EXT-017 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-HARDNESS | Constraint Hardness | STRING | OPTION_SET: OPT-EXT-006 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-TEACHER-AVAILABILITY-WINDOWS | Teacher Availability Windows | JSON | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-CLASS-COURSE-PERIOD-RULES | Class Course Period Rules | JSON | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-TEACHER-LOAD-LIMITS | Teacher Course Load Limits | JSON | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-ROOM-CAPACITY-RULES | Room Capacity Rules | JSON | USER_INPUT | 否 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT | SCH-CONSTRAINT-F-VERSION | Constraint Snapshot Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT-SNAPSHOT | SCH-CONSTRAINT-SNAPSHOT-F-ID | Immutable Constraint Snapshot ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT-SNAPSHOT | SCH-CONSTRAINT-SNAPSHOT-F-ITEMS | Constraint Snapshot Items | JSON | USER_INPUT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT-SNAPSHOT | SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS | Constraint Snapshot Stable IDs | STRING_ARRAY | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT-SNAPSHOT | SCH-CONSTRAINT-SNAPSHOT-F-HASH | Constraint Snapshot Hash | STRING | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT-SNAPSHOT | SCH-CONSTRAINT-SNAPSHOT-F-STATUS | Constraint Snapshot Status | STRING | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CONSTRAINT-SNAPSHOT | SCH-CONSTRAINT-SNAPSHOT-F-VERSION | Constraint Snapshot Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-ID | Schedule Candidate Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-ASSIGNMENTS | Candidate Teacher Class Course Room Assignments | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-HARD-CHECK | Hard Constraint Check | STRING | OPTION_SET: OPT-EXT-007 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-CONFLICTS | Conflict Review Findings | JSON | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED | Soft Constraint Acknowledgement | BOOLEAN | USER_INPUT | required when the schedule candidate is confirmed；状态=CONFIRMED；动作=SCH-ACT-CONFIRM-CANDIDATE | EDITABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-STATUS | Schedule Candidate Status | STRING | OPTION_SET: OPT-EXT-014 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-CALENDAR-REF | Pinned Calendar Version | ID | OBJECT_REF: SCH-OBJ-CALENDAR | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-CALENDAR-VERSION | Pinned Calendar Version Number | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF | Pinned Constraint Snapshot | ID | OBJECT_REF: SCH-OBJ-CONSTRAINT-SNAPSHOT | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| SCH-001 | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION | Pinned Constraint Snapshot Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-ONBOARDING-CASE | PLAT-CASE-F-ID | School Onboarding Case ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-ONBOARDING-CASE | PLAT-CASE-F-SCHOOL | Onboarding School | ID | OPTION_SET: OPT-COM-002 | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-ONBOARDING-CASE | PLAT-CASE-F-IMPLEMENTATION-NOTES | Onboarding Implementation Notes | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-ONBOARDING-CASE | PLAT-CASE-F-STATUS | Onboarding Case Status | STRING | OPTION_SET: OPT-EXT-015 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SERVICE-PLAN | PLAT-PLAN-F-ID | School Service Plan ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SERVICE-PLAN | PLAT-PLAN-F-SCOPE | School Service Plan Scope | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SERVICE-PLAN | PLAT-PLAN-F-SERVICE-STATE | School Service State | STRING | OPTION_SET: OPT-EXT-008 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SERVICE-PLAN | PLAT-PLAN-F-SCHOOL-CONFIRMED-AT | School Confirmation Time | DATETIME | SYSTEM | required only when the school confirms the service plan；状态=CONFIRMED；动作=PLAT-ACT-CONFIRM-SERVICE-PLAN | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-POLICY-TEMPLATE | PLAT-POLICY-F-ID | School Policy Template Version ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-POLICY-TEMPLATE | PLAT-POLICY-F-CONTENT | School Policy Template Content | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-POLICY-TEMPLATE | PLAT-POLICY-F-VERSION | Policy Template Version | INTEGER | SYSTEM | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-POLICY-TEMPLATE | PLAT-POLICY-F-STATUS | Policy Template Status | STRING | OPTION_SET: OPT-EXT-016 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-ID | Audited School Support Case ID | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-PURPOSE | Support Case Purpose | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE | Requested Support Scope | JSON | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-AUDIT-REASON | Support Case Audit Reason | TEXT | USER_INPUT | 是 | EDITABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-AUD-SESSION-REF | Pinned Audited Access Session | ID | OBJECT_REF: AUD-OBJ-ACCESS-SESSION | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION | Pinned Audited Session Version | INTEGER | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID | Authorized Session Operator Projection | ID | SYSTEM | 是 | IMMUTABLE | AUTHORIZED_SCOPE |
+| PLAT-001 | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-STATUS | Support Case Status | STRING | OPTION_SET: OPT-EXT-009 | 是 | SYSTEM_MANAGED | AUTHORIZED_SCOPE |

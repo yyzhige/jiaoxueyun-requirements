@@ -1,142 +1,141 @@
-# INS-001 学习证据、知识点归因与掌握判断 PRD v2.0
+# INS-001 Evidence and Mastery Interpretation PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师、班主任、学生 |
-| 关联线框 | [14-mastery-evidence-insight-wireframe.zh-CN.md](../05-wireframe-contracts/14-mastery-evidence-insight-wireframe.zh-CN.md) |
+| 目标 | Preserve versioned evidence lineage and require subject-teacher confirmation before a mastery interpretation becomes student-visible |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-006`、`NFR-008` |
+| 进入条件 | a published result or confirmed correction provides an immutable source version |
+| 退出条件 | the evidence remains a candidate, becomes teacher-confirmed and student-visible, or is versioned as stale with history preserved |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-把作业、订正、测验和课堂形成性数据归因为可追溯学习证据，形成教师可确认的知识点掌握判断。
+- 本模块权威拥有 1 个对象、6 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-INS-01 | Learning Evidence | 任课教师 | 学习证据 | 系统/教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-INS-02 | Knowledge Attribution | 任课教师 | 知识点归因 | AI/系统 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-INS-03 | Mastery State | 任课教师 | 掌握状态 | 系统/AI | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-INS-04 | Teacher Insight Correction | 任课教师 | 教师修正记录 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
+### INS-OBJ-EVIDENCE Evidence and Mastery Interpretation Version
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_EVIDENCE_AND_MASTERY | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S3 | STUDENT_TIMED_RELEASE | CANDIDATE / TEACHER_CONFIRMED / STUDENT_VISIBLE / STALE |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| INS-EVIDENCE-F-ID | Evidence Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-STUDENT-REF | Evidence Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-SOURCE-DATA-ID | Evidence Source Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-SOURCE-RESULT-REF | Source Published Result Reference | ID | required for evidence derived from a published result；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-SOURCE-RESULT-VERSION | Source Published Result Version | INTEGER | required for evidence derived from a published result；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-SOURCE-CORRECTION-REF | Source Correction Attempt Reference | ID | required for correction-stage evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | OBJECT_REF: CORR-OBJ-ATTEMPT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION | Source Correction Version | INTEGER | required for correction-stage evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-EVIDENCE-SOURCE | Evidence Source | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-STAGE | Evidence Stage | STRING | 是 | OPTION_SET: OPT-ENUM-008 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-KNOWLEDGE-POINT-REF | Knowledge Point Reference | ID | 是 | OBJECT_REF: CURR-OBJ-KNOWLEDGE-POINT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION | Knowledge Point Version | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-RESULT | Answer Result | STRING | 是 | OPTION_SET: OPT-ENUM-009 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-ERROR-TYPE | Error Type | STRING | 是 | OPTION_SET: OPT-ENUM-010 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-WEIGHT | Evidence Weight | DECIMAL | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-VALIDITY | Evidence Validity | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-MASTERY-CANDIDATE | Mastery Interpretation Candidate | TEXT | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-MASTERY-INTERPRETATION | Teacher-confirmed Mastery Interpretation | TEXT | required when evidence reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-TEACHER-CONFIRMATION | Teacher Confirmation | STRING | required when evidence reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-STUDENT-VISIBLE-AT | Student Visible At | DATETIME | required when evidence reaches STUDENT_VISIBLE；状态=STUDENT_VISIBLE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-INVALIDATION-REASON | Evidence Invalidation Reason | TEXT | required when evidence becomes stale；状态=STALE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-PRIOR-EVIDENCE-REF | Prior Evidence Reference | ID | required when a new evidence version supersedes prior evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | OBJECT_REF: INS-OBJ-EVIDENCE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION | Prior Evidence Version | INTEGER | required when a new evidence version supersedes prior evidence；状态=CANDIDATE；动作=INS-ACT-CREATE-CANDIDATE | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION | Mastery Interpretation Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| INS-EVIDENCE-F-EVIDENCE-VERSION | Evidence Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 任课教师、班主任、学生
-- 解决问题: 把作业、订正、测验和课堂形成性数据归因为可追溯学习证据，形成教师可确认的知识点掌握判断。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+## 3. 对象关系
 
-### 1.2 本模块负责
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
 
-- DAT-INS-01 Learning Evidence
-- DAT-INS-02 Knowledge Attribution
-- DAT-INS-03 Mastery State
-- DAT-INS-04 Teacher Insight Correction
+## 4. 可执行动作合同
 
-### 1.3 本模块不负责
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| INS-ACT-CREATE-CANDIDATE | Create a Correction Evidence Candidate | INS-OBJ-EVIDENCE | CREATE |  | INS-EVIDENCE-F-ID<br>INS-EVIDENCE-F-STUDENT-REF<br>INS-EVIDENCE-F-SOURCE-DATA-ID<br>INS-EVIDENCE-F-SOURCE-RESULT-REF<br>INS-EVIDENCE-F-SOURCE-RESULT-VERSION<br>INS-EVIDENCE-F-SOURCE-CORRECTION-REF<br>INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-SOURCE<br>INS-EVIDENCE-F-STAGE<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-REF<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION<br>INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-ERROR-TYPE<br>INS-EVIDENCE-F-WEIGHT<br>INS-EVIDENCE-F-VALIDITY<br>INS-EVIDENCE-F-MASTERY-CANDIDATE<br>INS-EVIDENCE-F-PRIOR-EVIDENCE-REF<br>INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | CREATE（成功状态由 INS-ACT-CREATE-CANDIDATE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified correction Flow creates or invalidates only versioned evidence candidates<br>DENY:AI — AI cannot directly confirm evidence or publish a student-visible mastery interpretation<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal evidence candidate or invalidation step directly | FLOW_INTERNAL | LOW | REQUIRED | INS-ACT-CREATE-CANDIDATE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| INS-ACT-MARK-STALE | Mark Prior Evidence and Interpretation Stale | INS-OBJ-EVIDENCE | UPDATE |  | INS-EVIDENCE-F-VALIDITY<br>INS-EVIDENCE-F-INVALIDATION-REASON<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | STUDENT_VISIBLE → STALE | ALLOW:SYSTEM — the verified correction Flow creates or invalidates only versioned evidence candidates<br>DENY:AI — AI cannot directly confirm evidence or publish a student-visible mastery interpretation<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal evidence candidate or invalidation step directly | FLOW_INTERNAL | HIGH | REQUIRED | INS-ACT-MARK-STALE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT / AUDIT_FAILED |
+| INS-ACT-CONFIRM-MASTERY | Confirm the Evidence and Mastery Interpretation | INS-OBJ-EVIDENCE | UPDATE | INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-TEACHER-CONFIRMATION | INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-TEACHER-CONFIRMATION<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | CANDIDATE → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail<br>DENY:AI — AI may create only an attribution or mastery candidate and cannot confirm or publish the student-visible interpretation | WEB / APP | HIGH | REQUIRED | INS-ACT-CONFIRM-MASTERY:school:object:source-version:request-id | PERMISSION_DENIED / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| INS-ACT-PUBLISH-INTERPRETATION | Publish the Teacher-confirmed Mastery Interpretation | INS-OBJ-EVIDENCE | UPDATE |  | INS-EVIDENCE-F-STUDENT-VISIBLE-AT<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | TEACHER_CONFIRMED → STUDENT_VISIBLE | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail<br>DENY:AI — AI may create only an attribution or mastery candidate and cannot confirm or publish the student-visible interpretation | WEB / APP | HIGH | REQUIRED | INS-ACT-PUBLISH-INTERPRETATION:school:object:source-version:request-id | PERMISSION_DENIED / TEACHER_CONFIRMATION_REQUIRED / VERSION_CONFLICT / AUDIT_FAILED |
+| INS-ACT-READ-CONFIRMED-EVIDENCE | Read Confirmed Evidence for Authorized Coordination | INS-OBJ-EVIDENCE | READ | INS-EVIDENCE-F-ID | INS-EVIDENCE-F-ID<br>INS-EVIDENCE-F-STUDENT-REF<br>INS-EVIDENCE-F-STAGE<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-REF<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION<br>INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-ERROR-TYPE<br>INS-EVIDENCE-F-WEIGHT<br>INS-EVIDENCE-F-VALIDITY<br>INS-EVIDENCE-F-TEACHER-CONFIRMATION<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | UNCHANGED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher reads only the assigned subject, class, and student scope<br>ALLOW:DUTY-HOMEROOM — the homeroom teacher reads the assigned class across subjects for read-only coordination<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator has no default permission to read student learning detail<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default permission to read student learning detail | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+| INS-ACT-VIEW-MASTERY | View My Teacher-confirmed Mastery Interpretation | INS-OBJ-EVIDENCE | READ | INS-EVIDENCE-F-STUDENT-REF | INS-EVIDENCE-F-STUDENT-REF<br>INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-STUDENT-VISIBLE-AT | UNCHANGED | ALLOW:ROLE-STUDENT — the student reads only the student's own teacher-confirmed interpretation after its release time<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student evidence or mastery interpretation | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND / NOT_TEACHER_CONFIRMED / NOT_YET_VISIBLE |
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+## 6. 状态可达性
 
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 证据列表、知识点归因、掌握判断、教师修正、学生详情嵌入 | 学生查看已确认解释、教师移动查看薄弱点、订正后变化提醒 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| INS-OBJ-EVIDENCE | CANDIDATE | INS-ACT-CREATE-CANDIDATE | INS-ACT-CONFIRM-MASTERY |
+| INS-OBJ-EVIDENCE | TEACHER_CONFIRMED | INS-ACT-CONFIRM-MASTERY | INS-ACT-PUBLISH-INTERPRETATION |
+| INS-OBJ-EVIDENCE | STUDENT_VISIBLE | INS-ACT-PUBLISH-INTERPRETATION | INS-ACT-MARK-STALE |
+| INS-OBJ-EVIDENCE | STALE | INS-ACT-MARK-STALE |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-009 | Published Result Correction | 1 | GRD-001 / PUB-001 / INS-001 / PLN-001 / CORR-001 | INS-ACT-MARK-STALE | PUBLISHED_STUDENT_RESULT_AND_DEPENDENT_INTERPRETATION_OBJECT；{"strategy":"REFRESH_RESULT_DECISION_EVIDENCE_AND_PLAN_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["STALE_DECISION_VERSION","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_RESULT_AND_DEPENDENT_VERSIONS_UNTIL_OBJECT_OUTCOMES_COMMIT","description":"a failed correction leaves prior result, evidence, mastery, plan evaluation, report, and learning-path history intact and retries only failed objects"}；{"strategy":"VERSION_AND_REQUIRE_RECONFIRMATION_FOR_EVERY_DEPENDENT_TARGET_KIND","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-010 | Correction Submission Judgment and New Evidence | 1 | PUB-001 / INS-001 / PLN-001 / CORR-001 | INS-ACT-MARK-STALE<br>INS-ACT-CREATE-CANDIDATE<br>INS-ACT-CONFIRM-MASTERY<br>INS-ACT-PUBLISH-INTERPRETATION | CORRECTION_AND_DEPENDENT_EVIDENCE_OBJECT；{"strategy":"REFRESH_RESULT_EVIDENCE_AND_CORRECTION_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_VISIBLE_RESULT_AND_EVIDENCE_HISTORY","description":"a failed correction or invalidation leaves prior visible versions intact and retries only failed dependent objects"}；{"strategy":"VERSION_AND_RECONFIRM_EVERY_DEPENDENT_INTERPRETATION","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-012 | Improvement Candidate to Subject Plan and Cross-subject Coordination | 1 | INS-001 / PLN-001 / APP-001 | INS-ACT-READ-CONFIRMED-EVIDENCE | STUDENT_SUBJECT_PLAN_AND_SYNC_OUTPUT_OBJECT；{"strategy":"RETRY_FAILED_SYNC_OR_TODO_OUTPUT_AFTER_SOURCE_VERSION_REFRESH","maxAttempts":4,"retryableFailureResults":["SYNC_DELIVERY_FAILED","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_CONFIRMED_PLAN_AND_RETRY_ONLY_FAILED_OUTPUTS","description":"a sync failure never rolls back the teacher-confirmed plan and never grants homeroom plan-content mutation"}；{"strategy":"INVALIDATE_STALE_PLAN_OUTPUTS_BY_OBJECT_VERSION","targets":["subject teacher sync output","homeroom coordination output","student todo deep link"]} |
+| DF-014 | Student Management Profile Aggregation | 1 | SCO-001 / INS-001 / PLN-001 / APP-001 / STU-001 | INS-ACT-READ-CONFIRMED-EVIDENCE | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PROFILE_AND_TODO_VIEW_VERSIONS","description":"a failed aggregation preserves the prior view definitions and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_AND_TODO_PROJECTIONS","targets":["gradebook view definition","student profile view definition","student todo aggregation"]} |
+| DF-011 | Versioned Learning Facts to Cross-term Learning Path | 1 | PUB-001 / INS-001 / CORR-001 / APP-001 / GRD-001 / LPATH-001 |  | STUDENT_SOURCE_FACT_VERSION；{"strategy":"REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_ACCEPTED_SOURCE_FACT_AND_RETRY_ONLY_FAILED_DERIVED_OBJECTS","description":"a learning-path failure never rewrites evidence and never removes an accepted timeline entry"}；{"strategy":"SUPERSEDE_OR_MARK_STALE_BY_SOURCE_VERSION","targets":["learning path interpretation version","authorized path read model"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| INS-F001 | 学生 | 自动完成 | OPT-COM-010 | 是 | 按授权范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F002 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 对应任课教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F003 | 知识点 | 树形选择 | OPT-COM-011 | 是 | 保存版本 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F004 | 证据阶段 | 单选下拉 | OPT-ENUM-008 | 是 | 首次/订正/再测分开 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F005 | 作答结果 | 单选下拉 | OPT-ENUM-009 | 证据必填 | 无法判断不形成强结论 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F006 | 错误类型 | 多选下拉 | OPT-ENUM-010 | 错误证据必填 | 学生可见解释需教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| INS-F007 | 掌握状态 | 单选下拉 | OPT-ENUM-011 | 结论必填 | 自动候选需确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| INS-PAGE-EVIDENCE-REVIEW | Evidence and Mastery Review | WEB / APP | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-ID<br>INS-EVIDENCE-F-STUDENT-REF<br>INS-EVIDENCE-F-SOURCE-DATA-ID<br>INS-EVIDENCE-F-SOURCE-RESULT-REF<br>INS-EVIDENCE-F-SOURCE-RESULT-VERSION<br>INS-EVIDENCE-F-SOURCE-CORRECTION-REF<br>INS-EVIDENCE-F-SOURCE-CORRECTION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-SOURCE<br>INS-EVIDENCE-F-STAGE<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-REF<br>INS-EVIDENCE-F-KNOWLEDGE-POINT-VERSION<br>INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-ERROR-TYPE<br>INS-EVIDENCE-F-WEIGHT<br>INS-EVIDENCE-F-VALIDITY<br>INS-EVIDENCE-F-MASTERY-CANDIDATE<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-TEACHER-CONFIRMATION<br>INS-EVIDENCE-F-STUDENT-VISIBLE-AT<br>INS-EVIDENCE-F-INVALIDATION-REASON<br>INS-EVIDENCE-F-PRIOR-EVIDENCE-REF<br>INS-EVIDENCE-F-PRIOR-EVIDENCE-VERSION<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION-VERSION<br>INS-EVIDENCE-F-EVIDENCE-VERSION | INS-ACT-CONFIRM-MASTERY<br>INS-ACT-PUBLISH-INTERPRETATION<br>INS-ACT-READ-CONFIRMED-EVIDENCE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| INS-PAGE-STUDENT-MASTERY | Student Mastery Interpretation | WEB / APP | INS-OBJ-EVIDENCE | INS-EVIDENCE-F-STUDENT-REF<br>INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-STUDENT-VISIBLE-AT | INS-ACT-VIEW-MASTERY | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| EVIDENCE_COLLECTED | 已采集 |
-| ATTRIBUTED | 已归因 |
-| CANDIDATE | 候选判断 |
-| CONFIRMED | 已确认 |
-| STALE | 已失效 |
-| INSUFFICIENT | 数据不足 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| INS-ACT-CREATE-CANDIDATE-SCN-SUCCESS | SUCCESS | INS-ACT-CREATE-CANDIDATE | the actor meets the entry conditions for Create a Correction Evidence Candidate | the actor requests Create a Correction Evidence Candidate | creates only an attribution and mastery candidate from the confirmed correction version while retaining the prior evidence reference | CANDIDATE | ALLOW |  |
+| INS-ACT-CREATE-CANDIDATE-SCN-PERMISSION_DENIED | FAILURE | INS-ACT-CREATE-CANDIDATE | PERMISSION_DENIED applies to Create a Correction Evidence Candidate | the actor requests Create a Correction Evidence Candidate | Create a Correction Evidence Candidate returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| INS-ACT-CREATE-CANDIDATE-SCN-SOURCE_VERSION_STALE | FAILURE | INS-ACT-CREATE-CANDIDATE | SOURCE_VERSION_STALE applies to Create a Correction Evidence Candidate | the actor requests Create a Correction Evidence Candidate | Create a Correction Evidence Candidate returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| INS-ACT-CREATE-CANDIDATE-SCN-VERSION_CONFLICT | FAILURE | INS-ACT-CREATE-CANDIDATE | VERSION_CONFLICT applies to Create a Correction Evidence Candidate | the actor requests Create a Correction Evidence Candidate | Create a Correction Evidence Candidate returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| INS-ACT-MARK-STALE-SCN-SUCCESS | SUCCESS | INS-ACT-MARK-STALE | the actor meets the entry conditions for Mark Prior Evidence and Interpretation Stale | the actor requests Mark Prior Evidence and Interpretation Stale | creates a stale evidence version with a reason while retaining the prior student-visible evidence and interpretation versions | STALE | ALLOW |  |
+| INS-ACT-MARK-STALE-SCN-PERMISSION_DENIED | FAILURE | INS-ACT-MARK-STALE | PERMISSION_DENIED applies to Mark Prior Evidence and Interpretation Stale | the actor requests Mark Prior Evidence and Interpretation Stale | Mark Prior Evidence and Interpretation Stale returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| INS-ACT-MARK-STALE-SCN-SOURCE_VERSION_STALE | FAILURE | INS-ACT-MARK-STALE | SOURCE_VERSION_STALE applies to Mark Prior Evidence and Interpretation Stale | the actor requests Mark Prior Evidence and Interpretation Stale | Mark Prior Evidence and Interpretation Stale returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| INS-ACT-MARK-STALE-SCN-VERSION_CONFLICT | FAILURE | INS-ACT-MARK-STALE | VERSION_CONFLICT applies to Mark Prior Evidence and Interpretation Stale | the actor requests Mark Prior Evidence and Interpretation Stale | Mark Prior Evidence and Interpretation Stale returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| INS-ACT-MARK-STALE-SCN-AUDIT_FAILED | FAILURE | INS-ACT-MARK-STALE | AUDIT_FAILED applies to Mark Prior Evidence and Interpretation Stale | the actor requests Mark Prior Evidence and Interpretation Stale | Mark Prior Evidence and Interpretation Stale returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| INS-ACT-CONFIRM-MASTERY-SCN-SUCCESS | SUCCESS | INS-ACT-CONFIRM-MASTERY | the actor meets the entry conditions for Confirm the Evidence and Mastery Interpretation | the actor requests Confirm the Evidence and Mastery Interpretation | the corresponding subject teacher confirms the evidence interpretation into a new immutable version | TEACHER_CONFIRMED | ALLOW |  |
+| INS-ACT-CONFIRM-MASTERY-SCN-PERMISSION_DENIED | FAILURE | INS-ACT-CONFIRM-MASTERY | PERMISSION_DENIED applies to Confirm the Evidence and Mastery Interpretation | the actor requests Confirm the Evidence and Mastery Interpretation | Confirm the Evidence and Mastery Interpretation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| INS-ACT-CONFIRM-MASTERY-SCN-STALE_INPUT_VERSION | FAILURE | INS-ACT-CONFIRM-MASTERY | STALE_INPUT_VERSION applies to Confirm the Evidence and Mastery Interpretation | the actor requests Confirm the Evidence and Mastery Interpretation | Confirm the Evidence and Mastery Interpretation returns STALE_INPUT_VERSION without hidden writes | UNCHANGED | DENY | STALE_INPUT_VERSION |
+| INS-ACT-CONFIRM-MASTERY-SCN-VERSION_CONFLICT | FAILURE | INS-ACT-CONFIRM-MASTERY | VERSION_CONFLICT applies to Confirm the Evidence and Mastery Interpretation | the actor requests Confirm the Evidence and Mastery Interpretation | Confirm the Evidence and Mastery Interpretation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| INS-ACT-CONFIRM-MASTERY-SCN-AUDIT_FAILED | FAILURE | INS-ACT-CONFIRM-MASTERY | AUDIT_FAILED applies to Confirm the Evidence and Mastery Interpretation | the actor requests Confirm the Evidence and Mastery Interpretation | Confirm the Evidence and Mastery Interpretation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| INS-ACT-PUBLISH-INTERPRETATION-SCN-SUCCESS | SUCCESS | INS-ACT-PUBLISH-INTERPRETATION | the actor meets the entry conditions for Publish the Teacher-confirmed Mastery Interpretation | the actor requests Publish the Teacher-confirmed Mastery Interpretation | Publish the Teacher-confirmed Mastery Interpretation returns the accepted versioned result | STUDENT_VISIBLE | ALLOW |  |
+| INS-ACT-PUBLISH-INTERPRETATION-SCN-PERMISSION_DENIED | FAILURE | INS-ACT-PUBLISH-INTERPRETATION | PERMISSION_DENIED applies to Publish the Teacher-confirmed Mastery Interpretation | the actor requests Publish the Teacher-confirmed Mastery Interpretation | Publish the Teacher-confirmed Mastery Interpretation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| INS-ACT-PUBLISH-INTERPRETATION-SCN-TEACHER_CONFIRMATION_REQUIRED | FAILURE | INS-ACT-PUBLISH-INTERPRETATION | TEACHER_CONFIRMATION_REQUIRED applies to Publish the Teacher-confirmed Mastery Interpretation | the actor requests Publish the Teacher-confirmed Mastery Interpretation | Publish the Teacher-confirmed Mastery Interpretation returns TEACHER_CONFIRMATION_REQUIRED without hidden writes | UNCHANGED | DENY | TEACHER_CONFIRMATION_REQUIRED |
+| INS-ACT-PUBLISH-INTERPRETATION-SCN-VERSION_CONFLICT | FAILURE | INS-ACT-PUBLISH-INTERPRETATION | VERSION_CONFLICT applies to Publish the Teacher-confirmed Mastery Interpretation | the actor requests Publish the Teacher-confirmed Mastery Interpretation | Publish the Teacher-confirmed Mastery Interpretation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| INS-ACT-PUBLISH-INTERPRETATION-SCN-AUDIT_FAILED | FAILURE | INS-ACT-PUBLISH-INTERPRETATION | AUDIT_FAILED applies to Publish the Teacher-confirmed Mastery Interpretation | the actor requests Publish the Teacher-confirmed Mastery Interpretation | Publish the Teacher-confirmed Mastery Interpretation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| INS-ACT-READ-CONFIRMED-EVIDENCE-SCN-SUCCESS | SUCCESS | INS-ACT-READ-CONFIRMED-EVIDENCE | the actor meets the entry conditions for Read Confirmed Evidence for Authorized Coordination | the actor requests Read Confirmed Evidence for Authorized Coordination | Read Confirmed Evidence for Authorized Coordination returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| INS-ACT-READ-CONFIRMED-EVIDENCE-SCN-PERMISSION_DENIED | FAILURE | INS-ACT-READ-CONFIRMED-EVIDENCE | PERMISSION_DENIED applies to Read Confirmed Evidence for Authorized Coordination | the actor requests Read Confirmed Evidence for Authorized Coordination | Read Confirmed Evidence for Authorized Coordination returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| INS-ACT-READ-CONFIRMED-EVIDENCE-SCN-NOT_FOUND | FAILURE | INS-ACT-READ-CONFIRMED-EVIDENCE | NOT_FOUND applies to Read Confirmed Evidence for Authorized Coordination | the actor requests Read Confirmed Evidence for Authorized Coordination | Read Confirmed Evidence for Authorized Coordination returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| INS-ACT-VIEW-MASTERY-SCN-SUCCESS | SUCCESS | INS-ACT-VIEW-MASTERY | the actor meets the entry conditions for View My Teacher-confirmed Mastery Interpretation | the actor requests View My Teacher-confirmed Mastery Interpretation | View My Teacher-confirmed Mastery Interpretation returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| INS-ACT-VIEW-MASTERY-SCN-PERMISSION_DENIED | FAILURE | INS-ACT-VIEW-MASTERY | PERMISSION_DENIED applies to View My Teacher-confirmed Mastery Interpretation | the actor requests View My Teacher-confirmed Mastery Interpretation | View My Teacher-confirmed Mastery Interpretation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| INS-ACT-VIEW-MASTERY-SCN-NOT_FOUND | FAILURE | INS-ACT-VIEW-MASTERY | NOT_FOUND applies to View My Teacher-confirmed Mastery Interpretation | the actor requests View My Teacher-confirmed Mastery Interpretation | View My Teacher-confirmed Mastery Interpretation returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| INS-ACT-VIEW-MASTERY-SCN-NOT_TEACHER_CONFIRMED | FAILURE | INS-ACT-VIEW-MASTERY | NOT_TEACHER_CONFIRMED applies to View My Teacher-confirmed Mastery Interpretation | the actor requests View My Teacher-confirmed Mastery Interpretation | View My Teacher-confirmed Mastery Interpretation returns NOT_TEACHER_CONFIRMED without hidden writes | UNCHANGED | DENY | NOT_TEACHER_CONFIRMED |
+| INS-ACT-VIEW-MASTERY-SCN-NOT_YET_VISIBLE | FAILURE | INS-ACT-VIEW-MASTERY | NOT_YET_VISIBLE applies to View My Teacher-confirmed Mastery Interpretation | the actor requests View My Teacher-confirmed Mastery Interpretation | View My Teacher-confirmed Mastery Interpretation returns NOT_YET_VISIBLE without hidden writes | UNCHANGED | DENY | NOT_YET_VISIBLE |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 系统从发布成绩、订正、测验和课堂记录生成证据。
-2. AI 可建议知识点归因和错误模式。
-3. 任课教师确认或修正掌握判断。
-4. 确认后的结论进入提升计划和长期路径。
-
-关联 Flow: `DF-010`、`DF-011`、`DF-017`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| INS-FR-01 | 对象查询与范围筛选 | INS-F001、INS-F002、INS-F003、INS-F004、INS-F005、INS-F006、INS-F007 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | INS-AC-01 |
-| INS-FR-02 | 详情查看与版本追踪 | DAT-INS-01、DAT-INS-02、DAT-INS-03、DAT-INS-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | INS-AC-02 |
-| INS-FR-03 | 创建/修改/确认主动作 | INS-F001、INS-F002、INS-F003、INS-F004、INS-F005、INS-F006、INS-F007 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | INS-AC-03 |
-| INS-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | INS-AC-04 |
-| INS-FR-05 | 审计、通知与下游失效 | DF-010、DF-011、DF-017 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | INS-AC-05 |
+| AI-TASK-LEARNING-ANALYSIS | Explain my teacher-confirmed mastery for this knowledge point | ANALYSIS | INS-ACT-VIEW-MASTERY | ROLE-STUDENT | {"mode":"NOT_REQUIRED"} | INS-EVIDENCE-F-RESULT<br>INS-EVIDENCE-F-MASTERY-INTERPRETATION<br>INS-EVIDENCE-F-STUDENT-VISIBLE-AT | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| INS-AC-01 | 学习证据必须引用源对象、源版本和知识点版本。 |
-| INS-AC-02 | AI 解释性结论未经任课教师确认不能对学生展示。 |
-| INS-AC-03 | 成绩修正后受影响掌握状态标记失效。 |
-| INS-AC-04 | 班主任可查看摘要但不能确认他科掌握结论。 |
-| INS-AC-05 | 数据不足状态不能生成强制提升任务。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-010`、`DF-011`、`DF-017`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

@@ -1,138 +1,124 @@
-# NOTI-001 站内通知、投递与阅读状态 PRD v2.0
+# NOTI-001 In-product Notification Delivery PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 全角色 |
-| 关联线框 | [21-in-app-notification-wireframe.zh-CN.md](../05-wireframe-contracts/21-in-app-notification-wireframe.zh-CN.md) |
+| 目标 | Deliver authorized product summaries and deep links without rolling back accepted source business facts |
+| 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-002`、`NFR-008` |
+| 进入条件 | an authorized source event or reminder request identifies recipients |
+| 退出条件 | the in-product notification is queued with independent delivery state |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-提供第一阶段站内通知和任务入口，不向第三方渠道发送学生明细。
+- 本模块权威拥有 1 个对象、7 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-NOTI-01 | Notification Template | 源模块 Owner | 通知模板 | 源模块 Owner | 源模块 Owner | 源模块 Owner | S2 教学业务数据 |
-| DAT-NOTI-02 | Notification Delivery | 系统 | 通知投递记录 | 系统 | 系统 | 系统 | S2 教学业务数据 |
-| DAT-NOTI-03 | Notification Read State | 接收者 | 阅读状态 | 接收者 | 接收者 | 接收者 | S2 教学业务数据 |
+### NOTI-OBJ-NOTIFICATION In-product Notification
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | NO_DIRECT_READ | QUEUED / DELIVERED / READ / HANDLED / FAILED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| NOTI-NOTIFICATION-F-ID | Notification ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-SOURCE-EVENT | Notification Source Event | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-RECIPIENT | Notification Recipient | ID | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE | Summary Template | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-DEEP-LINK | Authorized Product Deep Link | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-CHANNEL | Notification Channel | STRING | 是 | OPTION_SET: OPT-ENUM-047 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-DELIVERED-AT | Delivered At | DATETIME | required only when NOTI-ACT-DELIVER succeeds；状态=DELIVERED；动作=NOTI-ACT-DELIVER | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-READ-AT | Read At | DATETIME | required only when NOTI-ACT-MARK-READ succeeds；状态=READ；动作=NOTI-ACT-MARK-READ | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-HANDLED-AT | Handled At | DATETIME | required only when NOTI-ACT-MARK-HANDLED succeeds；状态=HANDLED；动作=NOTI-ACT-MARK-HANDLED | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-FAILURE-CODE | Delivery Failure Code | STRING | required only when NOTI-ACT-FAIL-DELIVERY succeeds；状态=FAILED；动作=NOTI-ACT-FAIL-DELIVERY | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-RETRY-COUNT | Delivery Retry Count | INTEGER | required when notification creation initializes or retry increments the counter；状态=QUEUED；动作=NOTI-ACT-CREATE-REMINDER/NOTI-ACT-CREATE-REPORT-NOTIFICATION/NOTI-ACT-RETRY-DELIVERY | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| NOTI-NOTIFICATION-F-VERSION | Notification Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 全角色
-- 解决问题: 提供第一阶段站内通知和任务入口，不向第三方渠道发送学生明细。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+## 3. 对象关系
 
-### 1.2 本模块负责
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
 
-- DAT-NOTI-01 Notification Template
-- DAT-NOTI-02 Notification Delivery
-- DAT-NOTI-03 Notification Read State
+## 4. 可执行动作合同
 
-### 1.3 本模块不负责
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| NOTI-ACT-CREATE-REMINDER | Create an In-product Learning Reminder | NOTI-OBJ-NOTIFICATION | CREATE | NOTI-NOTIFICATION-F-SOURCE-EVENT<br>NOTI-NOTIFICATION-F-RECIPIENT<br>NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE<br>NOTI-NOTIFICATION-F-DEEP-LINK | NOTI-NOTIFICATION-F-ID<br>NOTI-NOTIFICATION-F-CHANNEL<br>NOTI-NOTIFICATION-F-RETRY-COUNT<br>NOTI-NOTIFICATION-F-VERSION | CREATE（成功状态由 NOTI-ACT-CREATE-REMINDER-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned subject, class, and student scope<br>DENY:ROLE-STUDENT — a student attempts to create or manage a teacher-owned definition or reminder<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | LOW | REQUIRED | NOTI-ACT-CREATE-REMINDER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| NOTI-ACT-CREATE-REPORT-NOTIFICATION | Create an In-product Report Notification | NOTI-OBJ-NOTIFICATION | CREATE |  | NOTI-NOTIFICATION-F-ID<br>NOTI-NOTIFICATION-F-SOURCE-EVENT<br>NOTI-NOTIFICATION-F-RECIPIENT<br>NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE<br>NOTI-NOTIFICATION-F-DEEP-LINK<br>NOTI-NOTIFICATION-F-CHANNEL<br>NOTI-NOTIFICATION-F-RETRY-COUNT<br>NOTI-NOTIFICATION-F-VERSION | CREATE（成功状态由 NOTI-ACT-CREATE-REPORT-NOTIFICATION-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified report Flow writes only authorized source-pinned report records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal report materialization action directly | FLOW_INTERNAL | LOW | REQUIRED | NOTI-ACT-CREATE-REPORT-NOTIFICATION:school:object:source-version:request-id | PERMISSION_DENIED / DELIVERY_FAILED / VERSION_CONFLICT |
+| NOTI-ACT-DELIVER | Record an In-product Notification Delivery | NOTI-OBJ-NOTIFICATION | UPDATE |  | NOTI-NOTIFICATION-F-DELIVERED-AT<br>NOTI-NOTIFICATION-F-VERSION | QUEUED → DELIVERED | ALLOW:SYSTEM — the verified delivery event updates only the target notification<br>DENY:CURRENT_ACTOR — a user cannot invoke notification delivery state changes directly | SYSTEM_EVENT | LOW | REQUIRED | NOTI-ACT-DELIVER:school:object:source-version:request-id | PERMISSION_DENIED / VERSION_CONFLICT |
+| NOTI-ACT-FAIL-DELIVERY | Record an In-product Notification Delivery Failure | NOTI-OBJ-NOTIFICATION | UPDATE |  | NOTI-NOTIFICATION-F-FAILURE-CODE<br>NOTI-NOTIFICATION-F-VERSION | QUEUED → FAILED | ALLOW:SYSTEM — the verified delivery event updates only the target notification<br>DENY:CURRENT_ACTOR — a user cannot invoke notification delivery state changes directly | SYSTEM_EVENT | LOW | REQUIRED | NOTI-ACT-FAIL-DELIVERY:school:object:source-version:request-id | PERMISSION_DENIED / VERSION_CONFLICT |
+| NOTI-ACT-RETRY-DELIVERY | Retry an In-product Notification Delivery | NOTI-OBJ-NOTIFICATION | UPDATE |  | NOTI-NOTIFICATION-F-RETRY-COUNT<br>NOTI-NOTIFICATION-F-VERSION | FAILED → QUEUED | ALLOW:SYSTEM — the verified delivery event updates only the target notification<br>DENY:CURRENT_ACTOR — a user cannot invoke notification delivery state changes directly | SYSTEM_EVENT | LOW | REQUIRED | NOTI-ACT-RETRY-DELIVERY:school:object:source-version:request-id | PERMISSION_DENIED / VERSION_CONFLICT |
+| NOTI-ACT-MARK-READ | Mark an In-product Notification Read | NOTI-OBJ-NOTIFICATION | UPDATE | NOTI-NOTIFICATION-F-ID | NOTI-NOTIFICATION-F-READ-AT<br>NOTI-NOTIFICATION-F-VERSION | DELIVERED → READ | ALLOW:CURRENT_ACTOR — the authenticated recipient is acting on the recipient's own notification<br>DENY:CURRENT_ACTOR — the authenticated actor is not the notification recipient<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student notifications | WEB / APP | LOW | REQUIRED | NOTI-ACT-MARK-READ:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| NOTI-ACT-MARK-HANDLED | Mark an In-product Notification Handled | NOTI-OBJ-NOTIFICATION | UPDATE | NOTI-NOTIFICATION-F-ID | NOTI-NOTIFICATION-F-HANDLED-AT<br>NOTI-NOTIFICATION-F-VERSION | READ → HANDLED | ALLOW:CURRENT_ACTOR — the authenticated recipient is acting on the recipient's own notification<br>DENY:CURRENT_ACTOR — the authenticated actor is not the notification recipient<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student notifications | WEB / APP | LOW | REQUIRED | NOTI-ACT-MARK-HANDLED:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+## 6. 状态可达性
 
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 通知中心、筛选、批量已读、源对象跳转、投递结果 | 推送式站内提醒、任务入口、已读/处理状态、摘要查看 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| NOTI-OBJ-NOTIFICATION | QUEUED | NOTI-ACT-CREATE-REMINDER<br>NOTI-ACT-CREATE-REPORT-NOTIFICATION<br>NOTI-ACT-RETRY-DELIVERY | NOTI-ACT-DELIVER<br>NOTI-ACT-FAIL-DELIVERY |
+| NOTI-OBJ-NOTIFICATION | DELIVERED | NOTI-ACT-DELIVER | NOTI-ACT-MARK-READ |
+| NOTI-OBJ-NOTIFICATION | READ | NOTI-ACT-MARK-READ | NOTI-ACT-MARK-HANDLED |
+| NOTI-OBJ-NOTIFICATION | HANDLED | NOTI-ACT-MARK-HANDLED |  |
+| NOTI-OBJ-NOTIFICATION | FAILED | NOTI-ACT-FAIL-DELIVERY | NOTI-ACT-RETRY-DELIVERY |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-013 | Student Plan Execution to Report Snapshot and In-product Delivery | 1 | APP-001 / PLN-001 / RPT-001 / NOTI-001 | NOTI-ACT-CREATE-REPORT-NOTIFICATION | REPORT_RUN_SNAPSHOT_DELIVERY_AND_NOTIFICATION_OBJECT；{"strategy":"RECHECK_PERMISSION_REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_OUTPUTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","DELIVERY_FAILED","VERSION_CONFLICT"]}；{"strategy":"KEEP_SOURCE_EXECUTION_RUN_AND_SNAPSHOT_WHILE_RETRYING_DELIVERY_ONLY","description":"delivery or notification failure never rolls back student execution, plan, successful run, or immutable snapshot"}；{"strategy":"CREATE_A_NEW_RUN_FOR_NEW_SOURCE_VERSIONS","targets":["future report run","future report snapshot","in-product delivery retry"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| NOTI-F001 | 通知类型 | 多选下拉 | OPT-ENUM-018 | 是 | 由源模块决定 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F002 | 接收范围 | 范围选择 | OPT-COM-015 | 是 | 只含必要接收人 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F003 | 阅读状态 | 分段控件 | OPT-ENUM-019 | 查询必填 | 接收者本人更新 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F004 | 时间范围 | 时间范围选择 | OPT-COM-014 | 否；最近7天 | 按接收时间过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| NOTI-F005 | 源对象 | 对象引用 | OPT-COM-015 | 是 | 通知点击回源模块 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| NOTI-PAGE-INBOX | Notification Inbox and Reminder Creation | WEB / APP | NOTI-OBJ-NOTIFICATION | NOTI-NOTIFICATION-F-ID<br>NOTI-NOTIFICATION-F-SOURCE-EVENT<br>NOTI-NOTIFICATION-F-RECIPIENT<br>NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE<br>NOTI-NOTIFICATION-F-DEEP-LINK<br>NOTI-NOTIFICATION-F-CHANNEL<br>NOTI-NOTIFICATION-F-DELIVERED-AT<br>NOTI-NOTIFICATION-F-READ-AT<br>NOTI-NOTIFICATION-F-HANDLED-AT<br>NOTI-NOTIFICATION-F-FAILURE-CODE<br>NOTI-NOTIFICATION-F-RETRY-COUNT<br>NOTI-NOTIFICATION-F-VERSION | NOTI-ACT-CREATE-REMINDER<br>NOTI-ACT-MARK-READ<br>NOTI-ACT-MARK-HANDLED | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| CREATED | 已创建 |
-| DELIVERED | 已投递 |
-| READ | 已读 |
-| HANDLED | 已处理 |
-| ARCHIVED | 已归档 |
-| FAILED | 投递失败 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| NOTI-ACT-CREATE-REMINDER-SCN-SUCCESS | SUCCESS | NOTI-ACT-CREATE-REMINDER | the actor meets the entry conditions for Create an In-product Learning Reminder | the actor requests Create an In-product Learning Reminder | Create an In-product Learning Reminder returns the accepted versioned result | QUEUED | ALLOW |  |
+| NOTI-ACT-CREATE-REMINDER-SCN-PERMISSION_DENIED | FAILURE | NOTI-ACT-CREATE-REMINDER | PERMISSION_DENIED applies to Create an In-product Learning Reminder | the actor requests Create an In-product Learning Reminder | Create an In-product Learning Reminder returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| NOTI-ACT-CREATE-REMINDER-SCN-VALIDATION_FAILED | FAILURE | NOTI-ACT-CREATE-REMINDER | VALIDATION_FAILED applies to Create an In-product Learning Reminder | the actor requests Create an In-product Learning Reminder | Create an In-product Learning Reminder returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| NOTI-ACT-CREATE-REMINDER-SCN-VERSION_CONFLICT | FAILURE | NOTI-ACT-CREATE-REMINDER | VERSION_CONFLICT applies to Create an In-product Learning Reminder | the actor requests Create an In-product Learning Reminder | Create an In-product Learning Reminder returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| NOTI-ACT-CREATE-REPORT-NOTIFICATION-SCN-SUCCESS | SUCCESS | NOTI-ACT-CREATE-REPORT-NOTIFICATION | the actor meets the entry conditions for Create an In-product Report Notification | the actor requests Create an In-product Report Notification | Create an In-product Report Notification returns the accepted versioned result | QUEUED | ALLOW |  |
+| NOTI-ACT-CREATE-REPORT-NOTIFICATION-SCN-PERMISSION_DENIED | FAILURE | NOTI-ACT-CREATE-REPORT-NOTIFICATION | PERMISSION_DENIED applies to Create an In-product Report Notification | the actor requests Create an In-product Report Notification | Create an In-product Report Notification returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| NOTI-ACT-CREATE-REPORT-NOTIFICATION-SCN-DELIVERY_FAILED | FAILURE | NOTI-ACT-CREATE-REPORT-NOTIFICATION | DELIVERY_FAILED applies to Create an In-product Report Notification | the actor requests Create an In-product Report Notification | Create an In-product Report Notification returns DELIVERY_FAILED without hidden writes | UNCHANGED | DENY | DELIVERY_FAILED |
+| NOTI-ACT-CREATE-REPORT-NOTIFICATION-SCN-VERSION_CONFLICT | FAILURE | NOTI-ACT-CREATE-REPORT-NOTIFICATION | VERSION_CONFLICT applies to Create an In-product Report Notification | the actor requests Create an In-product Report Notification | Create an In-product Report Notification returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| NOTI-ACT-DELIVER-SCN-SUCCESS | SUCCESS | NOTI-ACT-DELIVER | the actor meets the entry conditions for Record an In-product Notification Delivery | the actor requests Record an In-product Notification Delivery | Record an In-product Notification Delivery returns the accepted versioned result | DELIVERED | ALLOW |  |
+| NOTI-ACT-DELIVER-SCN-PERMISSION_DENIED | FAILURE | NOTI-ACT-DELIVER | PERMISSION_DENIED applies to Record an In-product Notification Delivery | the actor requests Record an In-product Notification Delivery | Record an In-product Notification Delivery returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| NOTI-ACT-DELIVER-SCN-VERSION_CONFLICT | FAILURE | NOTI-ACT-DELIVER | VERSION_CONFLICT applies to Record an In-product Notification Delivery | the actor requests Record an In-product Notification Delivery | Record an In-product Notification Delivery returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| NOTI-ACT-FAIL-DELIVERY-SCN-SUCCESS | SUCCESS | NOTI-ACT-FAIL-DELIVERY | the actor meets the entry conditions for Record an In-product Notification Delivery Failure | the actor requests Record an In-product Notification Delivery Failure | Record an In-product Notification Delivery Failure returns the accepted versioned result | FAILED | ALLOW |  |
+| NOTI-ACT-FAIL-DELIVERY-SCN-PERMISSION_DENIED | FAILURE | NOTI-ACT-FAIL-DELIVERY | PERMISSION_DENIED applies to Record an In-product Notification Delivery Failure | the actor requests Record an In-product Notification Delivery Failure | Record an In-product Notification Delivery Failure returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| NOTI-ACT-FAIL-DELIVERY-SCN-VERSION_CONFLICT | FAILURE | NOTI-ACT-FAIL-DELIVERY | VERSION_CONFLICT applies to Record an In-product Notification Delivery Failure | the actor requests Record an In-product Notification Delivery Failure | Record an In-product Notification Delivery Failure returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| NOTI-ACT-RETRY-DELIVERY-SCN-SUCCESS | SUCCESS | NOTI-ACT-RETRY-DELIVERY | the actor meets the entry conditions for Retry an In-product Notification Delivery | the actor requests Retry an In-product Notification Delivery | Retry an In-product Notification Delivery returns the accepted versioned result | QUEUED | ALLOW |  |
+| NOTI-ACT-RETRY-DELIVERY-SCN-PERMISSION_DENIED | FAILURE | NOTI-ACT-RETRY-DELIVERY | PERMISSION_DENIED applies to Retry an In-product Notification Delivery | the actor requests Retry an In-product Notification Delivery | Retry an In-product Notification Delivery returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| NOTI-ACT-RETRY-DELIVERY-SCN-VERSION_CONFLICT | FAILURE | NOTI-ACT-RETRY-DELIVERY | VERSION_CONFLICT applies to Retry an In-product Notification Delivery | the actor requests Retry an In-product Notification Delivery | Retry an In-product Notification Delivery returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| NOTI-ACT-MARK-READ-SCN-SUCCESS | SUCCESS | NOTI-ACT-MARK-READ | the actor meets the entry conditions for Mark an In-product Notification Read | the actor requests Mark an In-product Notification Read | Mark an In-product Notification Read returns the accepted versioned result | READ | ALLOW |  |
+| NOTI-ACT-MARK-READ-SCN-PERMISSION_DENIED | FAILURE | NOTI-ACT-MARK-READ | PERMISSION_DENIED applies to Mark an In-product Notification Read | the actor requests Mark an In-product Notification Read | Mark an In-product Notification Read returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| NOTI-ACT-MARK-READ-SCN-VALIDATION_FAILED | FAILURE | NOTI-ACT-MARK-READ | VALIDATION_FAILED applies to Mark an In-product Notification Read | the actor requests Mark an In-product Notification Read | Mark an In-product Notification Read returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| NOTI-ACT-MARK-READ-SCN-VERSION_CONFLICT | FAILURE | NOTI-ACT-MARK-READ | VERSION_CONFLICT applies to Mark an In-product Notification Read | the actor requests Mark an In-product Notification Read | Mark an In-product Notification Read returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| NOTI-ACT-MARK-HANDLED-SCN-SUCCESS | SUCCESS | NOTI-ACT-MARK-HANDLED | the actor meets the entry conditions for Mark an In-product Notification Handled | the actor requests Mark an In-product Notification Handled | Mark an In-product Notification Handled returns the accepted versioned result | HANDLED | ALLOW |  |
+| NOTI-ACT-MARK-HANDLED-SCN-PERMISSION_DENIED | FAILURE | NOTI-ACT-MARK-HANDLED | PERMISSION_DENIED applies to Mark an In-product Notification Handled | the actor requests Mark an In-product Notification Handled | Mark an In-product Notification Handled returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| NOTI-ACT-MARK-HANDLED-SCN-VALIDATION_FAILED | FAILURE | NOTI-ACT-MARK-HANDLED | VALIDATION_FAILED applies to Mark an In-product Notification Handled | the actor requests Mark an In-product Notification Handled | Mark an In-product Notification Handled returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| NOTI-ACT-MARK-HANDLED-SCN-VERSION_CONFLICT | FAILURE | NOTI-ACT-MARK-HANDLED | VERSION_CONFLICT applies to Mark an In-product Notification Handled | the actor requests Mark an In-product Notification Handled | Mark an In-product Notification Handled returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 源模块触发通知事件并提供摘要和入口。
-2. 通知模块按权限和接收范围生成投递记录。
-3. 接收者查看、处理或归档通知。
-4. 通知状态不改变源业务对象状态。
-
-关联 Flow: `DF-018`、`DF-004`、`DF-008`、`DF-016`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| NOTI-FR-01 | 对象查询与范围筛选 | NOTI-F001、NOTI-F002、NOTI-F003、NOTI-F004、NOTI-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | NOTI-AC-01 |
-| NOTI-FR-02 | 详情查看与版本追踪 | DAT-NOTI-01、DAT-NOTI-02、DAT-NOTI-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | NOTI-AC-02 |
-| NOTI-FR-03 | 创建/修改/确认主动作 | NOTI-F001、NOTI-F002、NOTI-F003、NOTI-F004、NOTI-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | NOTI-AC-03 |
-| NOTI-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | NOTI-AC-04 |
-| NOTI-FR-05 | 审计、通知与下游失效 | DF-018、DF-004、DF-008、DF-016 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | NOTI-AC-05 |
+| AI-TASK-CREATE-REMINDER | Remind this student in the App to finish the correction task tomorrow | REMINDER | NOTI-ACT-CREATE-REMINDER | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | NOTI-NOTIFICATION-F-SOURCE-EVENT<br>NOTI-NOTIFICATION-F-RECIPIENT<br>NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE<br>NOTI-NOTIFICATION-F-DEEP-LINK | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| NOTI-AC-01 | 通知不承载学生敏感明细，只提供摘要和入口。 |
-| NOTI-AC-02 | 第三方渠道作为第二阶段扩展，不在第一阶段发送。 |
-| NOTI-AC-03 | 通知失败不回滚源业务事实。 |
-| NOTI-AC-04 | 接收者无权访问源对象时入口显示权限变化。 |
-| NOTI-AC-05 | 阅读状态按接收者独立保存。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-018`、`DF-004`、`DF-008`、`DF-016`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

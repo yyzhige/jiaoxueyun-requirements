@@ -1,140 +1,176 @@
-# CONTENT-001 题库与教学内容管理 PRD v2.0
+# CONTENT-001 Versioned Question and Content Governance PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 优先级 | P1 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学科负责人、任课教师、学校管理员 |
-| 关联线框 | [23-question-content-management-wireframe.zh-CN.md](../05-wireframe-contracts/23-question-content-management-wireframe.zh-CN.md) |
-
-## 0. 产品评审摘要
-
-管理学校级题目、解析、答案、知识点和授权范围，为作业、备课和 AI 评分提供内容来源。
-
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
-
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-CONTENT-01 | Question Item | 学科负责人 | 题目 | 学科负责人 | 学科负责人 | 学科负责人 | S2 教学业务数据 |
-| DAT-CONTENT-02 | Answer Analysis | 学科负责人 | 答案解析 | 学科负责人 | 学科负责人 | 学科负责人 | S2 教学业务数据 |
-| DAT-CONTENT-03 | Content Collection | 学科负责人 | 内容集合 | 学科负责人 | 学科负责人 | 学科负责人 | S2 教学业务数据 |
-| DAT-CONTENT-04 | Content Permission | 学校管理员 | 内容授权 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-
-## 1. 范围
-
-### 1.1 目标用户与价值
-
-- 目标用户: 学科负责人、任课教师、学校管理员
-- 解决问题: 管理学校级题目、解析、答案、知识点和授权范围，为作业、备课和 AI 评分提供内容来源。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
-
-### 1.2 本模块负责
-
-- DAT-CONTENT-01 Question Item
-- DAT-CONTENT-02 Answer Analysis
-- DAT-CONTENT-03 Content Collection
-- DAT-CONTENT-04 Content Permission
-
-### 1.3 本模块不负责
-
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
-
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
-| --- | --- | --- | --- |
-| 完整业务处理 | 题目编辑、解析维护、知识点标注、授权、版本管理 | 教师移动查看内容、学生查看已开放解析 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
-
-## 3. 字段与选项合同
-
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| CONTENT-F001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 控制题型和知识点 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F002 | 题型 | 单选下拉 | OPT-ENUM-003 | 是 | 决定答案结构 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F003 | 知识点 | 树形多选 | OPT-COM-011 | 是 | 至少一个 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F004 | 授权范围 | 多选选择 | OPT-COM-015 | 是 | 学校/学科组/教师 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CONTENT-F005 | AI 使用等级 | 多选 | OPT-ENUM-016 | 否 | 决定是否可用于草稿或评分建议 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-
-## 4. 状态机
-
-| 状态 | 含义/要求 |
 | --- | --- |
-| DRAFT | 草稿 |
-| REVIEWING | 审核中 |
-| ACTIVE | 生效 |
-| REVISING | 修订中 |
-| DEPRECATED | 停用 |
-| ARCHIVED | 归档 |
+| 阶段 | 1 |
+| 优先级 | P0 |
+| 目标 | Keep question answers analyses knowledge mappings licensing permissions and availability version-complete |
+| 基线决策 | `BASE-003`、`BASE-007` |
+| NFR | `NFR-006`、`NFR-008` |
+| 进入条件 | the subject lead has an authorized subject content-governance context |
+| 退出条件 | published content is traceable to active licensing and permission facts |
 
-状态通用规则：
+## 1. 范围与事实边界
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
+- 本模块权威拥有 3 个对象、8 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-## 5. 权限与责任
+## 2. 权威对象与字段合同
 
-| 角色/职责 | 读权限 | 写权限 | 限制 |
+### CONTENT-OBJ-QUESTION-VERSION Question Version
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| VERSIONED_TEACHING_CONTENT | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | ROLE-ACADEMIC | LIFE-003 | S2 | AUTHORIZED | DRAFT / PUBLISHED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CONTENT-QUESTION-F-ID | Question Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-SCHOOL-ID | Content School | ID | 是 | OPTION_SET: OPT-COM-002 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-SUBJECT-ID | Content Subject | ID | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-COURSE-ID | Content Course | ID | 是 | OPTION_SET: OPT-COM-008 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-STEM | Question Stem | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-ANSWER | Question Answer | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-ANALYSIS | Question Analysis | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-KNOWLEDGE-MAPPINGS | Knowledge Point Mappings | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-VERSION | Question Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-AVAILABILITY | Question Availability | STRING | 是 | OPTION_SET: OPT-EXT-003 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-LICENSE-REF | Pinned Content License | ID | 是 | OBJECT_REF: CONTENT-OBJ-LICENSE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-LICENSE-VERSION | Pinned Content License Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-PERMISSION-REF | Pinned Content Permission | ID | 是 | OBJECT_REF: CONTENT-OBJ-PERMISSION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-QUESTION-F-PERMISSION-VERSION | Pinned Content Permission Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### CONTENT-OBJ-LICENSE Content License Record
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| VERSIONED_TEACHING_CONTENT | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | ROLE-ACADEMIC | LIFE-003 | S2 | AUTHORIZED | DRAFT / ACTIVE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CONTENT-LICENSE-F-ID | Content License Record ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-LICENSE-F-RIGHTSHOLDER | Content Rightsholder | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-LICENSE-F-TERMS | Content License Terms | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-LICENSE-F-STATUS | Content License Status | STRING | 是 | OPTION_SET: OPT-EXT-011 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-LICENSE-F-VERSION | Content License Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### CONTENT-OBJ-PERMISSION Content Permission Grant
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| VERSIONED_TEACHING_CONTENT | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | ROLE-ACADEMIC | LIFE-003 | S3 | AUTHORIZED | DRAFT / ACTIVE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CONTENT-PERMISSION-F-ID | Content Permission Grant ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-SCOPE | Content Permission Scope | STRING | 是 | OPTION_SET: OPT-EXT-010 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-SCHOOL-ID | Authorized School | ID | 否 | OPTION_SET: OPT-COM-002 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-SUBJECT-ID | Authorized Subject | ID | 否 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-COURSE-ID | Authorized Course | ID | 否 | OPTION_SET: OPT-COM-008 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-GRANTEE-ID | Permission Grantee | ID | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-EFFECTIVE-AT | Permission Effective Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-EXPIRES-AT | Permission Expiry Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| CONTENT-PERMISSION-F-VERSION | Content Permission Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| CONTENT-REL-QUESTION-LICENSE | CONTENT-OBJ-QUESTION-VERSION | REQUIRES | CONTENT-OBJ-LICENSE | MANY_TO_ONE | SAME_SUBJECT | block publication and require a new pinned active license version |
+| CONTENT-REL-QUESTION-PERMISSION | CONTENT-OBJ-QUESTION-VERSION | AUTHORIZED_BY | CONTENT-OBJ-PERMISSION | MANY_TO_ONE | SAME_SUBJECT | block publication and require a new pinned active permission version |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CONTENT-ACT-CREATE-QUESTION-VERSION | Create Question Version | CONTENT-OBJ-QUESTION-VERSION | CREATE | CONTENT-QUESTION-F-SCHOOL-ID<br>CONTENT-QUESTION-F-SUBJECT-ID<br>CONTENT-QUESTION-F-COURSE-ID<br>CONTENT-QUESTION-F-STEM<br>CONTENT-QUESTION-F-ANSWER<br>CONTENT-QUESTION-F-ANALYSIS<br>CONTENT-QUESTION-F-KNOWLEDGE-MAPPINGS<br>CONTENT-QUESTION-F-LICENSE-REF<br>CONTENT-QUESTION-F-PERMISSION-REF | CONTENT-QUESTION-F-ID<br>CONTENT-QUESTION-F-VERSION<br>CONTENT-QUESTION-F-AVAILABILITY<br>CONTENT-QUESTION-F-LICENSE-VERSION<br>CONTENT-QUESTION-F-PERMISSION-VERSION | CREATE（成功状态由 CONTENT-ACT-CREATE-QUESTION-VERSION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-CREATE-QUESTION-VERSION:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION | Publish Question Version | CONTENT-OBJ-QUESTION-VERSION | UPDATE | CONTENT-QUESTION-F-LICENSE-REF<br>CONTENT-QUESTION-F-LICENSE-VERSION<br>CONTENT-QUESTION-F-PERMISSION-REF<br>CONTENT-QUESTION-F-PERMISSION-VERSION | CONTENT-QUESTION-F-VERSION<br>CONTENT-QUESTION-F-AVAILABILITY | DRAFT → PUBLISHED | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-PUBLISH-QUESTION-VERSION:school:object-version:request-id | PERMISSION_DENIED / LICENSE_INACTIVE / CONTENT_PERMISSION_INACTIVE / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-LICENSE | Create Content License Record | CONTENT-OBJ-LICENSE | CREATE | CONTENT-LICENSE-F-RIGHTSHOLDER<br>CONTENT-LICENSE-F-TERMS | CONTENT-LICENSE-F-ID<br>CONTENT-LICENSE-F-STATUS<br>CONTENT-LICENSE-F-VERSION | CREATE（成功状态由 CONTENT-ACT-CREATE-LICENSE-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-CREATE-LICENSE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CONTENT-ACT-ACTIVATE-LICENSE | Activate Content License | CONTENT-OBJ-LICENSE | UPDATE |  | CONTENT-LICENSE-F-STATUS<br>CONTENT-LICENSE-F-VERSION | DRAFT → ACTIVE | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-ACTIVATE-LICENSE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-SCHOOL-PERMISSION | Create School Content Permission Grant | CONTENT-OBJ-PERMISSION | CREATE | CONTENT-PERMISSION-F-SCOPE<br>CONTENT-PERMISSION-F-SCHOOL-ID<br>CONTENT-PERMISSION-F-GRANTEE-ID<br>CONTENT-PERMISSION-F-EFFECTIVE-AT<br>CONTENT-PERMISSION-F-EXPIRES-AT | CONTENT-PERMISSION-F-ID<br>CONTENT-PERMISSION-F-VERSION | CREATE（成功状态由 CONTENT-ACT-CREATE-SCHOOL-PERMISSION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-CREATE-SCHOOL-PERMISSION:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-SUBJECT-PERMISSION | Create Subject Content Permission Grant | CONTENT-OBJ-PERMISSION | CREATE | CONTENT-PERMISSION-F-SCOPE<br>CONTENT-PERMISSION-F-SUBJECT-ID<br>CONTENT-PERMISSION-F-GRANTEE-ID<br>CONTENT-PERMISSION-F-EFFECTIVE-AT<br>CONTENT-PERMISSION-F-EXPIRES-AT | CONTENT-PERMISSION-F-ID<br>CONTENT-PERMISSION-F-VERSION | CREATE（成功状态由 CONTENT-ACT-CREATE-SUBJECT-PERMISSION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-CREATE-SUBJECT-PERMISSION:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-COURSE-PERMISSION | Create Course Content Permission Grant | CONTENT-OBJ-PERMISSION | CREATE | CONTENT-PERMISSION-F-SCOPE<br>CONTENT-PERMISSION-F-COURSE-ID<br>CONTENT-PERMISSION-F-GRANTEE-ID<br>CONTENT-PERMISSION-F-EFFECTIVE-AT<br>CONTENT-PERMISSION-F-EXPIRES-AT | CONTENT-PERMISSION-F-ID<br>CONTENT-PERMISSION-F-VERSION | CREATE（成功状态由 CONTENT-ACT-CREATE-COURSE-PERMISSION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-CREATE-COURSE-PERMISSION:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CONTENT-ACT-ACTIVATE-PERMISSION | Activate Content Permission Grant | CONTENT-OBJ-PERMISSION | UPDATE |  | CONTENT-PERMISSION-F-VERSION | DRAFT → ACTIVE | ALLOW:DUTY-SUBJECT-LEAD — the subject lead acts inside the assigned subject content-governance scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | CONTENT-ACT-ACTIVATE-PERMISSION:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+
+## 5. 业务失败因果语义
+
+| Action ID | 失败码 | 因果谓词 | Given | When | Expected Data |
+| --- | --- | --- | --- | --- | --- |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION | LICENSE_INACTIVE | license.state !== ACTIVE \|\| license.version !== pinnedLicenseVersion | the question draft pins a license that is not ACTIVE or no longer matches the pinned license version | the subject lead requests publication of the question version | LICENSE_INACTIVE identifies the blocked license reference and preserves the question version in DRAFT |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION | CONTENT_PERMISSION_INACTIVE | contentPermission.state !== ACTIVE \|\| currentTime >= contentPermission.expiresAt \|\| !contentPermission.covers(questionContext, currentActor) | the pinned content permission is inactive, expired, assigned to another grantee, or does not cover the question school, subject, and course context | the subject lead requests publication of the question version | CONTENT_PERMISSION_INACTIVE identifies the uncovered permission context and preserves the question version in DRAFT |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
+| CONTENT-OBJ-QUESTION-VERSION | DRAFT | CONTENT-ACT-CREATE-QUESTION-VERSION | CONTENT-ACT-PUBLISH-QUESTION-VERSION |
+| CONTENT-OBJ-QUESTION-VERSION | PUBLISHED | CONTENT-ACT-PUBLISH-QUESTION-VERSION |  |
+| CONTENT-OBJ-LICENSE | DRAFT | CONTENT-ACT-CREATE-LICENSE | CONTENT-ACT-ACTIVATE-LICENSE |
+| CONTENT-OBJ-LICENSE | ACTIVE | CONTENT-ACT-ACTIVATE-LICENSE |  |
+| CONTENT-OBJ-PERMISSION | DRAFT | CONTENT-ACT-CREATE-SCHOOL-PERMISSION<br>CONTENT-ACT-CREATE-SUBJECT-PERMISSION<br>CONTENT-ACT-CREATE-COURSE-PERMISSION | CONTENT-ACT-ACTIVATE-PERMISSION |
+| CONTENT-OBJ-PERMISSION | ACTIVE | CONTENT-ACT-ACTIVATE-PERMISSION |  |
 
-## 6. 主流程
+## 7. 参与数据流
 
-1. 学科负责人创建题目和解析。
-2. 维护知识点、题型、评分点和授权范围。
-3. 教师在备课或作业中引用内容版本。
-4. 题目修订生成新版本，不改已发布作业。
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
 
-关联 Flow: `DF-102`、`DF-101`。
+## 8. 页面任务合同
 
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CONTENT-FR-01 | 对象查询与范围筛选 | CONTENT-F001、CONTENT-F002、CONTENT-F003、CONTENT-F004、CONTENT-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P1 | CONTENT-AC-01 |
-| CONTENT-FR-02 | 详情查看与版本追踪 | DAT-CONTENT-01、DAT-CONTENT-02、DAT-CONTENT-03、DAT-CONTENT-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P1 | CONTENT-AC-02 |
-| CONTENT-FR-03 | 创建/修改/确认主动作 | CONTENT-F001、CONTENT-F002、CONTENT-F003、CONTENT-F004、CONTENT-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P1 | CONTENT-AC-03 |
-| CONTENT-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P1 | CONTENT-AC-04 |
-| CONTENT-FR-05 | 审计、通知与下游失效 | DF-102、DF-101 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P1 | CONTENT-AC-05 |
+| CONTENT-PAGE-GOVERNANCE | Question and Content Governance Workspace | WEB / APP | CONTENT-OBJ-QUESTION-VERSION<br>CONTENT-OBJ-LICENSE<br>CONTENT-OBJ-PERMISSION | CONTENT-QUESTION-F-ID<br>CONTENT-QUESTION-F-SCHOOL-ID<br>CONTENT-QUESTION-F-SUBJECT-ID<br>CONTENT-QUESTION-F-COURSE-ID<br>CONTENT-QUESTION-F-STEM<br>CONTENT-QUESTION-F-ANSWER<br>CONTENT-QUESTION-F-ANALYSIS<br>CONTENT-QUESTION-F-KNOWLEDGE-MAPPINGS<br>CONTENT-QUESTION-F-VERSION<br>CONTENT-QUESTION-F-AVAILABILITY<br>CONTENT-QUESTION-F-LICENSE-REF<br>CONTENT-QUESTION-F-LICENSE-VERSION<br>CONTENT-QUESTION-F-PERMISSION-REF<br>CONTENT-QUESTION-F-PERMISSION-VERSION<br>CONTENT-LICENSE-F-ID<br>CONTENT-LICENSE-F-RIGHTSHOLDER<br>CONTENT-LICENSE-F-TERMS<br>CONTENT-LICENSE-F-STATUS<br>CONTENT-LICENSE-F-VERSION<br>CONTENT-PERMISSION-F-ID<br>CONTENT-PERMISSION-F-SCOPE<br>CONTENT-PERMISSION-F-SCHOOL-ID<br>CONTENT-PERMISSION-F-SUBJECT-ID<br>CONTENT-PERMISSION-F-COURSE-ID<br>CONTENT-PERMISSION-F-GRANTEE-ID<br>CONTENT-PERMISSION-F-EFFECTIVE-AT<br>CONTENT-PERMISSION-F-EXPIRES-AT<br>CONTENT-PERMISSION-F-VERSION | CONTENT-ACT-CREATE-QUESTION-VERSION<br>CONTENT-ACT-PUBLISH-QUESTION-VERSION<br>CONTENT-ACT-CREATE-LICENSE<br>CONTENT-ACT-ACTIVATE-LICENSE<br>CONTENT-ACT-CREATE-SCHOOL-PERMISSION<br>CONTENT-ACT-CREATE-SUBJECT-PERMISSION<br>CONTENT-ACT-CREATE-COURSE-PERMISSION<br>CONTENT-ACT-ACTIVATE-PERMISSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 7. 异常、幂等与补偿
+## 9. 验收场景
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CONTENT-ACT-CREATE-QUESTION-VERSION-SCN-SUCCESS | SUCCESS | CONTENT-ACT-CREATE-QUESTION-VERSION | the authorized actor satisfies the task-specific entry conditions for Create Question Version | the actor requests Create Question Version | Create Question Version returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| CONTENT-ACT-CREATE-QUESTION-VERSION-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-CREATE-QUESTION-VERSION | PERMISSION_DENIED blocks Create Question Version | the actor requests Create Question Version | Create Question Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-CREATE-QUESTION-VERSION-SCN-VALIDATION_FAILED | FAILURE | CONTENT-ACT-CREATE-QUESTION-VERSION | VALIDATION_FAILED blocks Create Question Version | the actor requests Create Question Version | Create Question Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| CONTENT-ACT-CREATE-QUESTION-VERSION-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-CREATE-QUESTION-VERSION | VERSION_CONFLICT blocks Create Question Version | the actor requests Create Question Version | Create Question Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION-SCN-SUCCESS | SUCCESS | CONTENT-ACT-PUBLISH-QUESTION-VERSION | the authorized actor satisfies the task-specific entry conditions for Publish Question Version | the actor requests Publish Question Version | Publish Question Version returns the accepted versioned task result without widening scope | PUBLISHED | ALLOW |  |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-PUBLISH-QUESTION-VERSION | PERMISSION_DENIED blocks Publish Question Version | the actor requests Publish Question Version | Publish Question Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION-SCN-LICENSE_INACTIVE | FAILURE | CONTENT-ACT-PUBLISH-QUESTION-VERSION | the question draft pins a license that is not ACTIVE or no longer matches the pinned license version | the subject lead requests publication of the question version | LICENSE_INACTIVE identifies the blocked license reference and preserves the question version in DRAFT | UNCHANGED | DENY | LICENSE_INACTIVE — license.state !== ACTIVE \|\| license.version !== pinnedLicenseVersion |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION-SCN-CONTENT_PERMISSION_INACTIVE | FAILURE | CONTENT-ACT-PUBLISH-QUESTION-VERSION | the pinned content permission is inactive, expired, assigned to another grantee, or does not cover the question school, subject, and course context | the subject lead requests publication of the question version | CONTENT_PERMISSION_INACTIVE identifies the uncovered permission context and preserves the question version in DRAFT | UNCHANGED | DENY | CONTENT_PERMISSION_INACTIVE — contentPermission.state !== ACTIVE \|\| currentTime >= contentPermission.expiresAt \|\| !contentPermission.covers(questionContext, currentActor) |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION-SCN-SOURCE_VERSION_STALE | FAILURE | CONTENT-ACT-PUBLISH-QUESTION-VERSION | SOURCE_VERSION_STALE blocks Publish Question Version | the actor requests Publish Question Version | Publish Question Version returns SOURCE_VERSION_STALE and performs no hidden write | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| CONTENT-ACT-PUBLISH-QUESTION-VERSION-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-PUBLISH-QUESTION-VERSION | VERSION_CONFLICT blocks Publish Question Version | the actor requests Publish Question Version | Publish Question Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-LICENSE-SCN-SUCCESS | SUCCESS | CONTENT-ACT-CREATE-LICENSE | the authorized actor satisfies the task-specific entry conditions for Create Content License Record | the actor requests Create Content License Record | Create Content License Record returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| CONTENT-ACT-CREATE-LICENSE-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-CREATE-LICENSE | PERMISSION_DENIED blocks Create Content License Record | the actor requests Create Content License Record | Create Content License Record returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-CREATE-LICENSE-SCN-VALIDATION_FAILED | FAILURE | CONTENT-ACT-CREATE-LICENSE | VALIDATION_FAILED blocks Create Content License Record | the actor requests Create Content License Record | Create Content License Record returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| CONTENT-ACT-CREATE-LICENSE-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-CREATE-LICENSE | VERSION_CONFLICT blocks Create Content License Record | the actor requests Create Content License Record | Create Content License Record returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| CONTENT-ACT-ACTIVATE-LICENSE-SCN-SUCCESS | SUCCESS | CONTENT-ACT-ACTIVATE-LICENSE | the authorized actor satisfies the task-specific entry conditions for Activate Content License | the actor requests Activate Content License | Activate Content License returns the accepted versioned task result without widening scope | ACTIVE | ALLOW |  |
+| CONTENT-ACT-ACTIVATE-LICENSE-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-ACTIVATE-LICENSE | PERMISSION_DENIED blocks Activate Content License | the actor requests Activate Content License | Activate Content License returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-ACTIVATE-LICENSE-SCN-VALIDATION_FAILED | FAILURE | CONTENT-ACT-ACTIVATE-LICENSE | VALIDATION_FAILED blocks Activate Content License | the actor requests Activate Content License | Activate Content License returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| CONTENT-ACT-ACTIVATE-LICENSE-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-ACTIVATE-LICENSE | VERSION_CONFLICT blocks Activate Content License | the actor requests Activate Content License | Activate Content License returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-SCHOOL-PERMISSION-SCN-SUCCESS | SUCCESS | CONTENT-ACT-CREATE-SCHOOL-PERMISSION | the authorized actor satisfies the task-specific entry conditions for Create School Content Permission Grant | the actor requests Create School Content Permission Grant | Create School Content Permission Grant returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| CONTENT-ACT-CREATE-SCHOOL-PERMISSION-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-CREATE-SCHOOL-PERMISSION | PERMISSION_DENIED blocks Create School Content Permission Grant | the actor requests Create School Content Permission Grant | Create School Content Permission Grant returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-CREATE-SCHOOL-PERMISSION-SCN-VALIDATION_FAILED | FAILURE | CONTENT-ACT-CREATE-SCHOOL-PERMISSION | VALIDATION_FAILED blocks Create School Content Permission Grant | the actor requests Create School Content Permission Grant | Create School Content Permission Grant returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| CONTENT-ACT-CREATE-SCHOOL-PERMISSION-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-CREATE-SCHOOL-PERMISSION | VERSION_CONFLICT blocks Create School Content Permission Grant | the actor requests Create School Content Permission Grant | Create School Content Permission Grant returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-SUBJECT-PERMISSION-SCN-SUCCESS | SUCCESS | CONTENT-ACT-CREATE-SUBJECT-PERMISSION | the authorized actor satisfies the task-specific entry conditions for Create Subject Content Permission Grant | the actor requests Create Subject Content Permission Grant | Create Subject Content Permission Grant returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| CONTENT-ACT-CREATE-SUBJECT-PERMISSION-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-CREATE-SUBJECT-PERMISSION | PERMISSION_DENIED blocks Create Subject Content Permission Grant | the actor requests Create Subject Content Permission Grant | Create Subject Content Permission Grant returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-CREATE-SUBJECT-PERMISSION-SCN-VALIDATION_FAILED | FAILURE | CONTENT-ACT-CREATE-SUBJECT-PERMISSION | VALIDATION_FAILED blocks Create Subject Content Permission Grant | the actor requests Create Subject Content Permission Grant | Create Subject Content Permission Grant returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| CONTENT-ACT-CREATE-SUBJECT-PERMISSION-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-CREATE-SUBJECT-PERMISSION | VERSION_CONFLICT blocks Create Subject Content Permission Grant | the actor requests Create Subject Content Permission Grant | Create Subject Content Permission Grant returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| CONTENT-ACT-CREATE-COURSE-PERMISSION-SCN-SUCCESS | SUCCESS | CONTENT-ACT-CREATE-COURSE-PERMISSION | the authorized actor satisfies the task-specific entry conditions for Create Course Content Permission Grant | the actor requests Create Course Content Permission Grant | Create Course Content Permission Grant returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| CONTENT-ACT-CREATE-COURSE-PERMISSION-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-CREATE-COURSE-PERMISSION | PERMISSION_DENIED blocks Create Course Content Permission Grant | the actor requests Create Course Content Permission Grant | Create Course Content Permission Grant returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-CREATE-COURSE-PERMISSION-SCN-VALIDATION_FAILED | FAILURE | CONTENT-ACT-CREATE-COURSE-PERMISSION | VALIDATION_FAILED blocks Create Course Content Permission Grant | the actor requests Create Course Content Permission Grant | Create Course Content Permission Grant returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| CONTENT-ACT-CREATE-COURSE-PERMISSION-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-CREATE-COURSE-PERMISSION | VERSION_CONFLICT blocks Create Course Content Permission Grant | the actor requests Create Course Content Permission Grant | Create Course Content Permission Grant returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| CONTENT-ACT-ACTIVATE-PERMISSION-SCN-SUCCESS | SUCCESS | CONTENT-ACT-ACTIVATE-PERMISSION | the authorized actor satisfies the task-specific entry conditions for Activate Content Permission Grant | the actor requests Activate Content Permission Grant | Activate Content Permission Grant returns the accepted versioned task result without widening scope | ACTIVE | ALLOW |  |
+| CONTENT-ACT-ACTIVATE-PERMISSION-SCN-PERMISSION_DENIED | FAILURE | CONTENT-ACT-ACTIVATE-PERMISSION | PERMISSION_DENIED blocks Activate Content Permission Grant | the actor requests Activate Content Permission Grant | Activate Content Permission Grant returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| CONTENT-ACT-ACTIVATE-PERMISSION-SCN-VALIDATION_FAILED | FAILURE | CONTENT-ACT-ACTIVATE-PERMISSION | VALIDATION_FAILED blocks Activate Content Permission Grant | the actor requests Activate Content Permission Grant | Activate Content Permission Grant returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| CONTENT-ACT-ACTIVATE-PERMISSION-SCN-VERSION_CONFLICT | FAILURE | CONTENT-ACT-ACTIVATE-PERMISSION | VERSION_CONFLICT blocks Activate Content Permission Grant | the actor requests Activate Content Permission Grant | Activate Content Permission Grant returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
 
-## 8. AI 对话与任务执行
+## 10. AI 任务映射
 
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-## 9. 验收标准
+## 11. 研发与测试就绪门禁
 
-| ID | 验收标准 |
-| --- | --- |
-| CONTENT-AC-01 | 题目必须有学科、题型、知识点和版本。 |
-| CONTENT-AC-02 | 内容授权不等于学生可见。 |
-| CONTENT-AC-03 | 解析开放仍受作业反馈策略控制。 |
-| CONTENT-AC-04 | 已发布作业引用的题目版本不可静默替换。 |
-| CONTENT-AC-05 | 内容可被 AI 使用前必须符合治理策略。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-102`、`DF-101`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

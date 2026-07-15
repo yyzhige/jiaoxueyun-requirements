@@ -1,138 +1,177 @@
-# LPATH-001 长期学习画像与学习路径 PRD v2.0
+# LPATH-001 Cross-term Learning Path PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学生、任课教师、班主任 |
-| 关联线框 | [20-long-term-learning-path-wireframe.zh-CN.md](../05-wireframe-contracts/20-long-term-learning-path-wireframe.zh-CN.md) |
+| 目标 | Retain cross-term fact references and teacher-confirmed interpretation versions without rewriting source learning facts |
+| 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-002`、`NFR-008` |
+| 进入条件 | a published or teacher-confirmed source fact is available with an immutable version |
+| 退出条件 | the path retains an append-only source reference or interpretation version |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-长期跟踪学生跨学科、知识点、作业、订正和提升任务，形成稳定可追踪的学习路径。
+- 本模块权威拥有 2 个对象、11 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-LPATH-01 | Learning Path Timeline | 系统 | 学习路径时间线 | 系统 | 系统 | 系统 | S2 教学业务数据 |
-| DAT-LPATH-02 | Confirmed Learning Interpretation | 任课教师 | 已确认学习解释 | AI/系统 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-LPATH-03 | Learning Path Visibility Rule | 学校管理员 | 学习路径可见规则 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
+### LPATH-OBJ-TIMELINE-ENTRY Cross-term Learning Timeline Entry
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-007 | S3 | AUTHORIZED | RECORDED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| LPATH-ENTRY-F-ID | Learning Timeline Entry ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-STUDENT-REF | Learning Path Student | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-TERM-ID | Timeline Entry Term | ID | 是 | OPTION_SET: OPT-COM-003 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-EVENT-TYPE | Learning Path Event Type | STRING | 是 | OPTION_SET: OPT-ENUM-013 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-PUBLISHED-RESULT-REF | PUBLISHED-RESULT Source Reference | ID | 否 | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION | PUBLISHED-RESULT Source Version | INTEGER | 否 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-EVIDENCE-REF | EVIDENCE Source Reference | ID | 否 | OBJECT_REF: INS-OBJ-EVIDENCE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-EVIDENCE-VERSION | EVIDENCE Source Version | INTEGER | 否 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-CORRECTION-REF | CORRECTION Source Reference | ID | 否 | OBJECT_REF: CORR-OBJ-ATTEMPT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-CORRECTION-VERSION | CORRECTION Source Version | INTEGER | 否 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-PLAN-EXECUTION-REF | PLAN-EXECUTION Source Reference | ID | 否 | OBJECT_REF: APP-OBJ-TODO | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-PLAN-EXECUTION-VERSION | PLAN-EXECUTION Source Version | INTEGER | 否 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-TEACHER-CONFIRMATION-REF | TEACHER-CONFIRMATION Source Reference | ID | 否 | OBJECT_REF: GRD-OBJ-DECISION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-TEACHER-CONFIRMATION-VERSION | TEACHER-CONFIRMATION Source Version | INTEGER | 否 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-RECORDED-AT | Timeline Entry Recorded At | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-ENTRY-F-VERSION | Learning Timeline Entry Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 学生、任课教师、班主任
-- 解决问题: 长期跟踪学生跨学科、知识点、作业、订正和提升任务，形成稳定可追踪的学习路径。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### LPATH-OBJ-INTERPRETATION Teacher-confirmed Learning Path Interpretation Version
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-007 | S3 | NO_DIRECT_READ | CANDIDATE / TEACHER_CONFIRMED / STUDENT_VISIBLE / SUPERSEDED / STALE |
 
-- DAT-LPATH-01 Learning Path Timeline
-- DAT-LPATH-02 Confirmed Learning Interpretation
-- DAT-LPATH-03 Learning Path Visibility Rule
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| LPATH-INTERPRETATION-F-ID | Learning Path Interpretation ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-SUBJECT | Interpretation Subject | ID | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF | Interpretation Knowledge Point | ID | 否 | OBJECT_REF: CURR-OBJ-KNOWLEDGE-POINT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-VERSION | Interpretation Knowledge Point Version | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-EVIDENCE-REFS | Versioned Evidence References | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must contain one or more evidence ID and version pairs | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-EXPLANATION | Teacher-confirmed Explanation | TEXT | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-CONFIDENCE | Explanation Confidence | DECIMAL | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-LIMITATIONS | Explanation Limitations | TEXT | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-TEACHER-CONFIRMER | Corresponding Subject Teacher Confirmer | ID | required after corresponding subject-teacher confirmation；状态=TEACHER_CONFIRMED/STUDENT_VISIBLE；动作=LPATH-ACT-CONFIRM-INTERPRETATION | OBJECT_REF: ORG-OBJ-TEACHER | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-VISIBLE-FROM | Student Visible From | DATETIME | required when the interpretation becomes student visible；状态=STUDENT_VISIBLE；动作=LPATH-ACT-PUBLISH-INTERPRETATION | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF | Superseding Interpretation Reference | ID | required when a prior interpretation is superseded；状态=SUPERSEDED；动作=LPATH-ACT-SUPERSEDE-INTERPRETATION | OBJECT_REF: LPATH-OBJ-INTERPRETATION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION | Superseding Interpretation Version | INTEGER | required when a prior interpretation is superseded；状态=SUPERSEDED；动作=LPATH-ACT-SUPERSEDE-INTERPRETATION | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-STALE-REASON | Interpretation Stale Reason | TEXT | required when a source version makes the interpretation stale；状态=STALE；动作=LPATH-ACT-MARK-INTERPRETATION-STALE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| LPATH-INTERPRETATION-F-VERSION | Learning Path Interpretation Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+## 3. 对象关系
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
 
-## 2. Web/App Capability Matrix
+## 4. 可执行动作合同
 
-| 能力 | Web | App | 差异原则 |
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE | Append a PUBLISHED-RESULT Learning Timeline Entry | LPATH-OBJ-TIMELINE-ENTRY | CREATE |  | LPATH-ENTRY-F-ID<br>LPATH-ENTRY-F-STUDENT-REF<br>LPATH-ENTRY-F-TERM-ID<br>LPATH-ENTRY-F-EVENT-TYPE<br>LPATH-ENTRY-F-RECORDED-AT<br>LPATH-ENTRY-F-VERSION<br>LPATH-ENTRY-F-PUBLISHED-RESULT-REF<br>LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION | CREATE（成功状态由 LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow writes only version-pinned derived records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal Flow action directly | FLOW_INTERNAL | LOW | REQUIRED | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| LPATH-ACT-APPEND-EVIDENCE-TIMELINE | Append a EVIDENCE Learning Timeline Entry | LPATH-OBJ-TIMELINE-ENTRY | CREATE |  | LPATH-ENTRY-F-ID<br>LPATH-ENTRY-F-STUDENT-REF<br>LPATH-ENTRY-F-TERM-ID<br>LPATH-ENTRY-F-EVENT-TYPE<br>LPATH-ENTRY-F-RECORDED-AT<br>LPATH-ENTRY-F-VERSION<br>LPATH-ENTRY-F-EVIDENCE-REF<br>LPATH-ENTRY-F-EVIDENCE-VERSION | CREATE（成功状态由 LPATH-ACT-APPEND-EVIDENCE-TIMELINE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow writes only version-pinned derived records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal Flow action directly | FLOW_INTERNAL | LOW | REQUIRED | LPATH-ACT-APPEND-EVIDENCE-TIMELINE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| LPATH-ACT-APPEND-CORRECTION-TIMELINE | Append a CORRECTION Learning Timeline Entry | LPATH-OBJ-TIMELINE-ENTRY | CREATE |  | LPATH-ENTRY-F-ID<br>LPATH-ENTRY-F-STUDENT-REF<br>LPATH-ENTRY-F-TERM-ID<br>LPATH-ENTRY-F-EVENT-TYPE<br>LPATH-ENTRY-F-RECORDED-AT<br>LPATH-ENTRY-F-VERSION<br>LPATH-ENTRY-F-CORRECTION-REF<br>LPATH-ENTRY-F-CORRECTION-VERSION | CREATE（成功状态由 LPATH-ACT-APPEND-CORRECTION-TIMELINE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow writes only version-pinned derived records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal Flow action directly | FLOW_INTERNAL | LOW | REQUIRED | LPATH-ACT-APPEND-CORRECTION-TIMELINE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE | Append a PLAN-EXECUTION Learning Timeline Entry | LPATH-OBJ-TIMELINE-ENTRY | CREATE |  | LPATH-ENTRY-F-ID<br>LPATH-ENTRY-F-STUDENT-REF<br>LPATH-ENTRY-F-TERM-ID<br>LPATH-ENTRY-F-EVENT-TYPE<br>LPATH-ENTRY-F-RECORDED-AT<br>LPATH-ENTRY-F-VERSION<br>LPATH-ENTRY-F-PLAN-EXECUTION-REF<br>LPATH-ENTRY-F-PLAN-EXECUTION-VERSION | CREATE（成功状态由 LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow writes only version-pinned derived records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal Flow action directly | FLOW_INTERNAL | LOW | REQUIRED | LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE | Append a TEACHER-CONFIRMATION Learning Timeline Entry | LPATH-OBJ-TIMELINE-ENTRY | CREATE |  | LPATH-ENTRY-F-ID<br>LPATH-ENTRY-F-STUDENT-REF<br>LPATH-ENTRY-F-TERM-ID<br>LPATH-ENTRY-F-EVENT-TYPE<br>LPATH-ENTRY-F-RECORDED-AT<br>LPATH-ENTRY-F-VERSION<br>LPATH-ENTRY-F-TEACHER-CONFIRMATION-REF<br>LPATH-ENTRY-F-TEACHER-CONFIRMATION-VERSION | CREATE（成功状态由 LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow writes only version-pinned derived records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal Flow action directly | FLOW_INTERNAL | LOW | REQUIRED | LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | Create a Version-pinned Learning Path Interpretation Candidate | LPATH-OBJ-INTERPRETATION | CREATE |  | LPATH-INTERPRETATION-F-ID<br>LPATH-INTERPRETATION-F-SUBJECT<br>LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF<br>LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-VERSION<br>LPATH-INTERPRETATION-F-EVIDENCE-REFS<br>LPATH-INTERPRETATION-F-VERSION | CREATE（成功状态由 LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow writes only version-pinned derived records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal Flow action directly | FLOW_INTERNAL | LOW | REQUIRED | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| LPATH-ACT-CONFIRM-INTERPRETATION | Confirm a Subject Learning Path Interpretation | LPATH-OBJ-INTERPRETATION | UPDATE | LPATH-INTERPRETATION-F-SUBJECT<br>LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF<br>LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-VERSION<br>LPATH-INTERPRETATION-F-EVIDENCE-REFS<br>LPATH-INTERPRETATION-F-EXPLANATION<br>LPATH-INTERPRETATION-F-CONFIDENCE<br>LPATH-INTERPRETATION-F-LIMITATIONS<br>LPATH-INTERPRETATION-F-TEACHER-CONFIRMER | LPATH-INTERPRETATION-F-EXPLANATION<br>LPATH-INTERPRETATION-F-CONFIDENCE<br>LPATH-INTERPRETATION-F-LIMITATIONS<br>LPATH-INTERPRETATION-F-TEACHER-CONFIRMER<br>LPATH-INTERPRETATION-F-VERSION | CANDIDATE → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms only the assigned subject interpretation<br>DENY:DUTY-HOMEROOM — a homeroom teacher cannot confirm or replace another subject's professional interpretation<br>DENY:AI — AI may propose an explanation but cannot confirm or publish it<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to learning path detail | WEB / APP | HIGH | REQUIRED | LPATH-ACT-CONFIRM-INTERPRETATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| LPATH-ACT-SUPERSEDE-INTERPRETATION | Supersede a Learning Path Interpretation Version | LPATH-OBJ-INTERPRETATION | UPDATE | LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF<br>LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION | LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF<br>LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION<br>LPATH-INTERPRETATION-F-VERSION | TEACHER_CONFIRMED / STUDENT_VISIBLE → SUPERSEDED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms only the assigned subject interpretation<br>DENY:DUTY-HOMEROOM — a homeroom teacher cannot confirm or replace another subject's professional interpretation<br>DENY:AI — AI may propose an explanation but cannot confirm or publish it<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to learning path detail | WEB / APP | HIGH | REQUIRED | LPATH-ACT-SUPERSEDE-INTERPRETATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| LPATH-ACT-MARK-INTERPRETATION-STALE | Mark a Learning Path Interpretation Stale | LPATH-OBJ-INTERPRETATION | UPDATE |  | LPATH-INTERPRETATION-F-STALE-REASON<br>LPATH-INTERPRETATION-F-VERSION | CANDIDATE / TEACHER_CONFIRMED / STUDENT_VISIBLE → STALE | ALLOW:SYSTEM — the verified Flow writes only version-pinned derived records<br>DENY:CURRENT_ACTOR — a user cannot invoke an internal Flow action directly | SYSTEM_EVENT | HIGH | REQUIRED | LPATH-ACT-MARK-INTERPRETATION-STALE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT / AUDIT_FAILED |
+| LPATH-ACT-PUBLISH-INTERPRETATION | Publish a Teacher-confirmed Learning Path Interpretation | LPATH-OBJ-INTERPRETATION | UPDATE | LPATH-INTERPRETATION-F-VISIBLE-FROM | LPATH-INTERPRETATION-F-VISIBLE-FROM<br>LPATH-INTERPRETATION-F-VERSION | TEACHER_CONFIRMED → STUDENT_VISIBLE | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms only the assigned subject interpretation<br>DENY:DUTY-HOMEROOM — a homeroom teacher cannot confirm or replace another subject's professional interpretation<br>DENY:AI — AI may propose an explanation but cannot confirm or publish it<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to learning path detail | WEB / APP | HIGH | REQUIRED | LPATH-ACT-PUBLISH-INTERPRETATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| LPATH-ACT-VIEW-PATH | View the Authorized Cross-term Learning Path | LPATH-OBJ-TIMELINE-ENTRY | READ | LPATH-ENTRY-F-STUDENT-REF | LPATH-ENTRY-F-ID<br>LPATH-ENTRY-F-STUDENT-REF<br>LPATH-ENTRY-F-TERM-ID<br>LPATH-ENTRY-F-EVENT-TYPE<br>LPATH-ENTRY-F-PUBLISHED-RESULT-REF<br>LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION<br>LPATH-ENTRY-F-EVIDENCE-REF<br>LPATH-ENTRY-F-EVIDENCE-VERSION<br>LPATH-ENTRY-F-CORRECTION-REF<br>LPATH-ENTRY-F-CORRECTION-VERSION<br>LPATH-ENTRY-F-PLAN-EXECUTION-REF<br>LPATH-ENTRY-F-PLAN-EXECUTION-VERSION<br>LPATH-ENTRY-F-TEACHER-CONFIRMATION-REF<br>LPATH-ENTRY-F-TEACHER-CONFIRMATION-VERSION<br>LPATH-ENTRY-F-RECORDED-AT<br>LPATH-ENTRY-F-VERSION | UNCHANGED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher reads assigned subject paths<br>ALLOW:DUTY-HOMEROOM — the homeroom teacher reads the assigned class across subjects without professional write permission<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to learning path detail | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 学习路径时间线、知识点趋势、教师确认、班主任全科摘要 | 学生学习路径、进步变化、下一步任务入口、确认解释展示 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| LPATH-OBJ-TIMELINE-ENTRY | RECORDED | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE<br>LPATH-ACT-APPEND-EVIDENCE-TIMELINE<br>LPATH-ACT-APPEND-CORRECTION-TIMELINE<br>LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE<br>LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE |  |
+| LPATH-OBJ-INTERPRETATION | CANDIDATE | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | LPATH-ACT-CONFIRM-INTERPRETATION<br>LPATH-ACT-MARK-INTERPRETATION-STALE |
+| LPATH-OBJ-INTERPRETATION | TEACHER_CONFIRMED | LPATH-ACT-CONFIRM-INTERPRETATION | LPATH-ACT-SUPERSEDE-INTERPRETATION<br>LPATH-ACT-MARK-INTERPRETATION-STALE<br>LPATH-ACT-PUBLISH-INTERPRETATION |
+| LPATH-OBJ-INTERPRETATION | STUDENT_VISIBLE | LPATH-ACT-PUBLISH-INTERPRETATION | LPATH-ACT-SUPERSEDE-INTERPRETATION<br>LPATH-ACT-MARK-INTERPRETATION-STALE |
+| LPATH-OBJ-INTERPRETATION | SUPERSEDED | LPATH-ACT-SUPERSEDE-INTERPRETATION |  |
+| LPATH-OBJ-INTERPRETATION | STALE | LPATH-ACT-MARK-INTERPRETATION-STALE |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-011 | Versioned Learning Facts to Cross-term Learning Path | 1 | PUB-001 / INS-001 / CORR-001 / APP-001 / GRD-001 / LPATH-001 | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE<br>LPATH-ACT-APPEND-EVIDENCE-TIMELINE<br>LPATH-ACT-APPEND-CORRECTION-TIMELINE<br>LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE<br>LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE<br>LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | STUDENT_SOURCE_FACT_VERSION；{"strategy":"REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_ACCEPTED_SOURCE_FACT_AND_RETRY_ONLY_FAILED_DERIVED_OBJECTS","description":"a learning-path failure never rewrites evidence and never removes an accepted timeline entry"}；{"strategy":"SUPERSEDE_OR_MARK_STALE_BY_SOURCE_VERSION","targets":["learning path interpretation version","authorized path read model"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| LPATH-F001 | 学生 | 自动完成 | OPT-COM-010 | 是 | 本人或授权学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F002 | 学科 | 多选下拉 | OPT-COM-007 | 否 | 学生可全科，任课本学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F003 | 知识点 | 树形选择 | OPT-COM-011 | 否 | 按版本过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F004 | 时间范围 | 时间轴选择 | OPT-COM-014 | 否；本学期 | 支持长期跨度但受保留策略限制 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| LPATH-F005 | 掌握状态 | 多选下拉 | OPT-ENUM-011 | 否 | 仅展示已确认或数据不足 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| LPATH-PAGE-PATH | Cross-term Learning Path and Interpretation Review | WEB / APP | LPATH-OBJ-TIMELINE-ENTRY<br>LPATH-OBJ-INTERPRETATION | LPATH-ENTRY-F-ID<br>LPATH-ENTRY-F-STUDENT-REF<br>LPATH-ENTRY-F-TERM-ID<br>LPATH-ENTRY-F-EVENT-TYPE<br>LPATH-ENTRY-F-PUBLISHED-RESULT-REF<br>LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION<br>LPATH-ENTRY-F-EVIDENCE-REF<br>LPATH-ENTRY-F-EVIDENCE-VERSION<br>LPATH-ENTRY-F-CORRECTION-REF<br>LPATH-ENTRY-F-CORRECTION-VERSION<br>LPATH-ENTRY-F-PLAN-EXECUTION-REF<br>LPATH-ENTRY-F-PLAN-EXECUTION-VERSION<br>LPATH-ENTRY-F-TEACHER-CONFIRMATION-REF<br>LPATH-ENTRY-F-TEACHER-CONFIRMATION-VERSION<br>LPATH-ENTRY-F-RECORDED-AT<br>LPATH-ENTRY-F-VERSION<br>LPATH-INTERPRETATION-F-ID<br>LPATH-INTERPRETATION-F-SUBJECT<br>LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-REF<br>LPATH-INTERPRETATION-F-KNOWLEDGE-POINT-VERSION<br>LPATH-INTERPRETATION-F-EVIDENCE-REFS<br>LPATH-INTERPRETATION-F-EXPLANATION<br>LPATH-INTERPRETATION-F-CONFIDENCE<br>LPATH-INTERPRETATION-F-LIMITATIONS<br>LPATH-INTERPRETATION-F-TEACHER-CONFIRMER<br>LPATH-INTERPRETATION-F-VISIBLE-FROM<br>LPATH-INTERPRETATION-F-SUPERSEDED-BY-REF<br>LPATH-INTERPRETATION-F-SUPERSEDED-BY-VERSION<br>LPATH-INTERPRETATION-F-STALE-REASON<br>LPATH-INTERPRETATION-F-VERSION | LPATH-ACT-CONFIRM-INTERPRETATION<br>LPATH-ACT-SUPERSEDE-INTERPRETATION<br>LPATH-ACT-PUBLISH-INTERPRETATION<br>LPATH-ACT-VIEW-PATH | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| FACT_COLLECTED | 事实已进入 |
-| INTERPRETATION_CANDIDATE | 解释候选 |
-| TEACHER_CONFIRMED | 教师确认 |
-| STUDENT_VISIBLE | 学生可见 |
-| STALE | 已失效 |
-| ARCHIVED | 归档 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE-SCN-SUCCESS | SUCCESS | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE | the actor meets the entry conditions for Append a PUBLISHED-RESULT Learning Timeline Entry | the actor requests Append a PUBLISHED-RESULT Learning Timeline Entry | Append a PUBLISHED-RESULT Learning Timeline Entry returns the accepted versioned result | RECORDED | ALLOW |  |
+| LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE | PERMISSION_DENIED applies to Append a PUBLISHED-RESULT Learning Timeline Entry | the actor requests Append a PUBLISHED-RESULT Learning Timeline Entry | Append a PUBLISHED-RESULT Learning Timeline Entry returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE-SCN-SOURCE_VERSION_STALE | FAILURE | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE | SOURCE_VERSION_STALE applies to Append a PUBLISHED-RESULT Learning Timeline Entry | the actor requests Append a PUBLISHED-RESULT Learning Timeline Entry | Append a PUBLISHED-RESULT Learning Timeline Entry returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE | VERSION_CONFLICT applies to Append a PUBLISHED-RESULT Learning Timeline Entry | the actor requests Append a PUBLISHED-RESULT Learning Timeline Entry | Append a PUBLISHED-RESULT Learning Timeline Entry returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-APPEND-EVIDENCE-TIMELINE-SCN-SUCCESS | SUCCESS | LPATH-ACT-APPEND-EVIDENCE-TIMELINE | the actor meets the entry conditions for Append a EVIDENCE Learning Timeline Entry | the actor requests Append a EVIDENCE Learning Timeline Entry | Append a EVIDENCE Learning Timeline Entry returns the accepted versioned result | RECORDED | ALLOW |  |
+| LPATH-ACT-APPEND-EVIDENCE-TIMELINE-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-APPEND-EVIDENCE-TIMELINE | PERMISSION_DENIED applies to Append a EVIDENCE Learning Timeline Entry | the actor requests Append a EVIDENCE Learning Timeline Entry | Append a EVIDENCE Learning Timeline Entry returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-APPEND-EVIDENCE-TIMELINE-SCN-SOURCE_VERSION_STALE | FAILURE | LPATH-ACT-APPEND-EVIDENCE-TIMELINE | SOURCE_VERSION_STALE applies to Append a EVIDENCE Learning Timeline Entry | the actor requests Append a EVIDENCE Learning Timeline Entry | Append a EVIDENCE Learning Timeline Entry returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| LPATH-ACT-APPEND-EVIDENCE-TIMELINE-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-APPEND-EVIDENCE-TIMELINE | VERSION_CONFLICT applies to Append a EVIDENCE Learning Timeline Entry | the actor requests Append a EVIDENCE Learning Timeline Entry | Append a EVIDENCE Learning Timeline Entry returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-APPEND-CORRECTION-TIMELINE-SCN-SUCCESS | SUCCESS | LPATH-ACT-APPEND-CORRECTION-TIMELINE | the actor meets the entry conditions for Append a CORRECTION Learning Timeline Entry | the actor requests Append a CORRECTION Learning Timeline Entry | Append a CORRECTION Learning Timeline Entry returns the accepted versioned result | RECORDED | ALLOW |  |
+| LPATH-ACT-APPEND-CORRECTION-TIMELINE-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-APPEND-CORRECTION-TIMELINE | PERMISSION_DENIED applies to Append a CORRECTION Learning Timeline Entry | the actor requests Append a CORRECTION Learning Timeline Entry | Append a CORRECTION Learning Timeline Entry returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-APPEND-CORRECTION-TIMELINE-SCN-SOURCE_VERSION_STALE | FAILURE | LPATH-ACT-APPEND-CORRECTION-TIMELINE | SOURCE_VERSION_STALE applies to Append a CORRECTION Learning Timeline Entry | the actor requests Append a CORRECTION Learning Timeline Entry | Append a CORRECTION Learning Timeline Entry returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| LPATH-ACT-APPEND-CORRECTION-TIMELINE-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-APPEND-CORRECTION-TIMELINE | VERSION_CONFLICT applies to Append a CORRECTION Learning Timeline Entry | the actor requests Append a CORRECTION Learning Timeline Entry | Append a CORRECTION Learning Timeline Entry returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE-SCN-SUCCESS | SUCCESS | LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE | the actor meets the entry conditions for Append a PLAN-EXECUTION Learning Timeline Entry | the actor requests Append a PLAN-EXECUTION Learning Timeline Entry | Append a PLAN-EXECUTION Learning Timeline Entry returns the accepted versioned result | RECORDED | ALLOW |  |
+| LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE | PERMISSION_DENIED applies to Append a PLAN-EXECUTION Learning Timeline Entry | the actor requests Append a PLAN-EXECUTION Learning Timeline Entry | Append a PLAN-EXECUTION Learning Timeline Entry returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE-SCN-SOURCE_VERSION_STALE | FAILURE | LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE | SOURCE_VERSION_STALE applies to Append a PLAN-EXECUTION Learning Timeline Entry | the actor requests Append a PLAN-EXECUTION Learning Timeline Entry | Append a PLAN-EXECUTION Learning Timeline Entry returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE | VERSION_CONFLICT applies to Append a PLAN-EXECUTION Learning Timeline Entry | the actor requests Append a PLAN-EXECUTION Learning Timeline Entry | Append a PLAN-EXECUTION Learning Timeline Entry returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE-SCN-SUCCESS | SUCCESS | LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE | the actor meets the entry conditions for Append a TEACHER-CONFIRMATION Learning Timeline Entry | the actor requests Append a TEACHER-CONFIRMATION Learning Timeline Entry | Append a TEACHER-CONFIRMATION Learning Timeline Entry returns the accepted versioned result | RECORDED | ALLOW |  |
+| LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE | PERMISSION_DENIED applies to Append a TEACHER-CONFIRMATION Learning Timeline Entry | the actor requests Append a TEACHER-CONFIRMATION Learning Timeline Entry | Append a TEACHER-CONFIRMATION Learning Timeline Entry returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE-SCN-SOURCE_VERSION_STALE | FAILURE | LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE | SOURCE_VERSION_STALE applies to Append a TEACHER-CONFIRMATION Learning Timeline Entry | the actor requests Append a TEACHER-CONFIRMATION Learning Timeline Entry | Append a TEACHER-CONFIRMATION Learning Timeline Entry returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE | VERSION_CONFLICT applies to Append a TEACHER-CONFIRMATION Learning Timeline Entry | the actor requests Append a TEACHER-CONFIRMATION Learning Timeline Entry | Append a TEACHER-CONFIRMATION Learning Timeline Entry returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE-SCN-SUCCESS | SUCCESS | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | the actor meets the entry conditions for Create a Version-pinned Learning Path Interpretation Candidate | the actor requests Create a Version-pinned Learning Path Interpretation Candidate | Create a Version-pinned Learning Path Interpretation Candidate returns the accepted versioned result | CANDIDATE | ALLOW |  |
+| LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | PERMISSION_DENIED applies to Create a Version-pinned Learning Path Interpretation Candidate | the actor requests Create a Version-pinned Learning Path Interpretation Candidate | Create a Version-pinned Learning Path Interpretation Candidate returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE-SCN-SOURCE_VERSION_STALE | FAILURE | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | SOURCE_VERSION_STALE applies to Create a Version-pinned Learning Path Interpretation Candidate | the actor requests Create a Version-pinned Learning Path Interpretation Candidate | Create a Version-pinned Learning Path Interpretation Candidate returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | VERSION_CONFLICT applies to Create a Version-pinned Learning Path Interpretation Candidate | the actor requests Create a Version-pinned Learning Path Interpretation Candidate | Create a Version-pinned Learning Path Interpretation Candidate returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-CONFIRM-INTERPRETATION-SCN-SUCCESS | SUCCESS | LPATH-ACT-CONFIRM-INTERPRETATION | the actor meets the entry conditions for Confirm a Subject Learning Path Interpretation | the actor requests Confirm a Subject Learning Path Interpretation | Confirm a Subject Learning Path Interpretation returns the accepted versioned result | TEACHER_CONFIRMED | ALLOW |  |
+| LPATH-ACT-CONFIRM-INTERPRETATION-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-CONFIRM-INTERPRETATION | PERMISSION_DENIED applies to Confirm a Subject Learning Path Interpretation | the actor requests Confirm a Subject Learning Path Interpretation | Confirm a Subject Learning Path Interpretation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-CONFIRM-INTERPRETATION-SCN-VALIDATION_FAILED | FAILURE | LPATH-ACT-CONFIRM-INTERPRETATION | VALIDATION_FAILED applies to Confirm a Subject Learning Path Interpretation | the actor requests Confirm a Subject Learning Path Interpretation | Confirm a Subject Learning Path Interpretation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| LPATH-ACT-CONFIRM-INTERPRETATION-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-CONFIRM-INTERPRETATION | VERSION_CONFLICT applies to Confirm a Subject Learning Path Interpretation | the actor requests Confirm a Subject Learning Path Interpretation | Confirm a Subject Learning Path Interpretation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-CONFIRM-INTERPRETATION-SCN-AUDIT_FAILED | FAILURE | LPATH-ACT-CONFIRM-INTERPRETATION | AUDIT_FAILED applies to Confirm a Subject Learning Path Interpretation | the actor requests Confirm a Subject Learning Path Interpretation | Confirm a Subject Learning Path Interpretation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| LPATH-ACT-SUPERSEDE-INTERPRETATION-SCN-SUCCESS | SUCCESS | LPATH-ACT-SUPERSEDE-INTERPRETATION | the actor meets the entry conditions for Supersede a Learning Path Interpretation Version | the actor requests Supersede a Learning Path Interpretation Version | Supersede a Learning Path Interpretation Version returns the accepted versioned result | SUPERSEDED | ALLOW |  |
+| LPATH-ACT-SUPERSEDE-INTERPRETATION-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-SUPERSEDE-INTERPRETATION | PERMISSION_DENIED applies to Supersede a Learning Path Interpretation Version | the actor requests Supersede a Learning Path Interpretation Version | Supersede a Learning Path Interpretation Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-SUPERSEDE-INTERPRETATION-SCN-VALIDATION_FAILED | FAILURE | LPATH-ACT-SUPERSEDE-INTERPRETATION | VALIDATION_FAILED applies to Supersede a Learning Path Interpretation Version | the actor requests Supersede a Learning Path Interpretation Version | Supersede a Learning Path Interpretation Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| LPATH-ACT-SUPERSEDE-INTERPRETATION-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-SUPERSEDE-INTERPRETATION | VERSION_CONFLICT applies to Supersede a Learning Path Interpretation Version | the actor requests Supersede a Learning Path Interpretation Version | Supersede a Learning Path Interpretation Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-SUPERSEDE-INTERPRETATION-SCN-AUDIT_FAILED | FAILURE | LPATH-ACT-SUPERSEDE-INTERPRETATION | AUDIT_FAILED applies to Supersede a Learning Path Interpretation Version | the actor requests Supersede a Learning Path Interpretation Version | Supersede a Learning Path Interpretation Version returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| LPATH-ACT-MARK-INTERPRETATION-STALE-SCN-SUCCESS | SUCCESS | LPATH-ACT-MARK-INTERPRETATION-STALE | the actor meets the entry conditions for Mark a Learning Path Interpretation Stale | the actor requests Mark a Learning Path Interpretation Stale | Mark a Learning Path Interpretation Stale returns the accepted versioned result | STALE | ALLOW |  |
+| LPATH-ACT-MARK-INTERPRETATION-STALE-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-MARK-INTERPRETATION-STALE | PERMISSION_DENIED applies to Mark a Learning Path Interpretation Stale | the actor requests Mark a Learning Path Interpretation Stale | Mark a Learning Path Interpretation Stale returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-MARK-INTERPRETATION-STALE-SCN-SOURCE_VERSION_STALE | FAILURE | LPATH-ACT-MARK-INTERPRETATION-STALE | SOURCE_VERSION_STALE applies to Mark a Learning Path Interpretation Stale | the actor requests Mark a Learning Path Interpretation Stale | Mark a Learning Path Interpretation Stale returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| LPATH-ACT-MARK-INTERPRETATION-STALE-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-MARK-INTERPRETATION-STALE | VERSION_CONFLICT applies to Mark a Learning Path Interpretation Stale | the actor requests Mark a Learning Path Interpretation Stale | Mark a Learning Path Interpretation Stale returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-MARK-INTERPRETATION-STALE-SCN-AUDIT_FAILED | FAILURE | LPATH-ACT-MARK-INTERPRETATION-STALE | AUDIT_FAILED applies to Mark a Learning Path Interpretation Stale | the actor requests Mark a Learning Path Interpretation Stale | Mark a Learning Path Interpretation Stale returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| LPATH-ACT-PUBLISH-INTERPRETATION-SCN-SUCCESS | SUCCESS | LPATH-ACT-PUBLISH-INTERPRETATION | the actor meets the entry conditions for Publish a Teacher-confirmed Learning Path Interpretation | the actor requests Publish a Teacher-confirmed Learning Path Interpretation | Publish a Teacher-confirmed Learning Path Interpretation returns the accepted versioned result | STUDENT_VISIBLE | ALLOW |  |
+| LPATH-ACT-PUBLISH-INTERPRETATION-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-PUBLISH-INTERPRETATION | PERMISSION_DENIED applies to Publish a Teacher-confirmed Learning Path Interpretation | the actor requests Publish a Teacher-confirmed Learning Path Interpretation | Publish a Teacher-confirmed Learning Path Interpretation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-PUBLISH-INTERPRETATION-SCN-VALIDATION_FAILED | FAILURE | LPATH-ACT-PUBLISH-INTERPRETATION | VALIDATION_FAILED applies to Publish a Teacher-confirmed Learning Path Interpretation | the actor requests Publish a Teacher-confirmed Learning Path Interpretation | Publish a Teacher-confirmed Learning Path Interpretation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| LPATH-ACT-PUBLISH-INTERPRETATION-SCN-VERSION_CONFLICT | FAILURE | LPATH-ACT-PUBLISH-INTERPRETATION | VERSION_CONFLICT applies to Publish a Teacher-confirmed Learning Path Interpretation | the actor requests Publish a Teacher-confirmed Learning Path Interpretation | Publish a Teacher-confirmed Learning Path Interpretation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| LPATH-ACT-PUBLISH-INTERPRETATION-SCN-AUDIT_FAILED | FAILURE | LPATH-ACT-PUBLISH-INTERPRETATION | AUDIT_FAILED applies to Publish a Teacher-confirmed Learning Path Interpretation | the actor requests Publish a Teacher-confirmed Learning Path Interpretation | Publish a Teacher-confirmed Learning Path Interpretation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| LPATH-ACT-VIEW-PATH-SCN-SUCCESS | SUCCESS | LPATH-ACT-VIEW-PATH | the actor meets the entry conditions for View the Authorized Cross-term Learning Path | the actor requests View the Authorized Cross-term Learning Path | View the Authorized Cross-term Learning Path returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| LPATH-ACT-VIEW-PATH-SCN-PERMISSION_DENIED | FAILURE | LPATH-ACT-VIEW-PATH | PERMISSION_DENIED applies to View the Authorized Cross-term Learning Path | the actor requests View the Authorized Cross-term Learning Path | View the Authorized Cross-term Learning Path returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| LPATH-ACT-VIEW-PATH-SCN-NOT_FOUND | FAILURE | LPATH-ACT-VIEW-PATH | NOT_FOUND applies to View the Authorized Cross-term Learning Path | the actor requests View the Authorized Cross-term Learning Path | View the Authorized Cross-term Learning Path returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 系统自动收集已发布成绩、作业完成、订正、计划执行和教师确认记录。
-2. AI 生成知识点归因、错误模式和能力趋势候选。
-3. 对应任课教师确认解释后进入学生可见路径。
-4. 班主任查看本班跨学科摘要并协调节奏。
-
-关联 Flow: `DF-017`、`DF-011`、`DF-012`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| LPATH-FR-01 | 对象查询与范围筛选 | LPATH-F001、LPATH-F002、LPATH-F003、LPATH-F004、LPATH-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | LPATH-AC-01 |
-| LPATH-FR-02 | 详情查看与版本追踪 | DAT-LPATH-01、DAT-LPATH-02、DAT-LPATH-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | LPATH-AC-02 |
-| LPATH-FR-03 | 创建/修改/确认主动作 | LPATH-F001、LPATH-F002、LPATH-F003、LPATH-F004、LPATH-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | LPATH-AC-03 |
-| LPATH-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | LPATH-AC-04 |
-| LPATH-FR-05 | 审计、通知与下游失效 | DF-017、DF-011、DF-012 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | LPATH-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| LPATH-AC-01 | 事实自动进入，解释性结论必须经对应任课教师确认。 |
-| LPATH-AC-02 | 班主任可查看本班跨学科路径摘要。 |
-| LPATH-AC-03 | 路径不复制或改写源成绩、证据、计划事实。 |
-| LPATH-AC-04 | 成绩修正后相关解释标记失效。 |
-| LPATH-AC-05 | 学生只看到本人且已确认可见的路径内容。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-017`、`DF-011`、`DF-012`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

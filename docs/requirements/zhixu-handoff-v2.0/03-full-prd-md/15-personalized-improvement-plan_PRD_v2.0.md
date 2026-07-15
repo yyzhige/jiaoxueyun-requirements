@@ -1,143 +1,196 @@
-# PLN-001 个性化提升与全科协调 PRD v2.0
+# PLN-001 Improvement Plans and Explicit Coordination Outputs PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师、班主任、学生 |
-| 关联线框 | [15-personalized-improvement-plan-wireframe.zh-CN.md](../05-wireframe-contracts/15-personalized-improvement-plan-wireframe.zh-CN.md) |
+| 目标 | Keep plan content under the corresponding subject teacher while producing explicit subject and homeroom coordination outputs |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-006`、`NFR-008` |
+| 进入条件 | a teacher-confirmed evidence version supports an improvement candidate |
+| 退出条件 | the subject teacher confirms, adjusts, or closes the plan and the Flow records distinct synchronization outputs |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-根据成绩、作业、证据和教师目标生成可执行、可跟踪、可再验证的学科提升计划，并同步给对应教师和班主任。
+- 本模块权威拥有 3 个对象、8 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-PLN-01 | Improvement Candidate | 任课教师 | 提升候选 | AI/系统/教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PLN-02 | Subject Improvement Plan | 任课教师 | 学科提升计划 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PLN-03 | Improvement Task | 任课教师 | 提升任务 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PLN-04 | Cross-subject Coordination View | 班主任 | 全科协调视图 | 系统 | 班主任 | 班主任 | S2 教学业务数据 |
+### PLN-OBJ-PLAN Subject Improvement Plan Version
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_IMPROVEMENT_PLAN | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S3 | NO_DIRECT_READ | CANDIDATE / ACTIVE / CLOSED / PENDING_RECONFIRM |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLN-PLAN-F-ID | Improvement Plan ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-STUDENT-REF | Plan Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-SOURCE-DATA-ID | Source Evidence Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-SOURCE-EVIDENCE-REF | Source Evidence Reference | ID | 是 | OBJECT_REF: INS-OBJ-EVIDENCE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-SOURCE-EVIDENCE-VERSION | Source Evidence Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-GOAL-CANDIDATE | Improvement Goal Candidate | TEXT | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-TASK-CONTENT-CANDIDATE | Improvement Task Content Candidate | TEXT | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-WORKLOAD-CANDIDATE | Planned Workload Candidate | DECIMAL | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-DUE-AT-CANDIDATE | Plan Due Time Candidate | DATETIME | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-SUCCESS-CONDITION-CANDIDATE | Plan Success Condition Candidate | TEXT | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-EVIDENCE-REQUIREMENT-CANDIDATE | Completion Evidence Requirement Candidate | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-REVALIDATION-METHOD-CANDIDATE | Plan Revalidation Method Candidate | TEXT | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-GOAL | Improvement Goal | TEXT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-SUBJECT | Improvement Subject | ID | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-KNOWLEDGE-POINT-REF | Plan Knowledge Point Reference | ID | 是 | OBJECT_REF: CURR-OBJ-KNOWLEDGE-POINT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-KNOWLEDGE-POINT-VERSION | Plan Knowledge Point Version | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-PRIORITY | Improvement Priority | STRING | 是 | OPTION_SET: OPT-ENUM-012 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-TASK-CONTENT | Improvement Task Content | TEXT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-WORKLOAD | Planned Workload | DECIMAL | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-DUE-AT | Plan Due Time | DATETIME | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-SUCCESS-CONDITION | Plan Success Condition | TEXT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-EVIDENCE-REQUIREMENT | Completion Evidence Requirement | STRING | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | OPTION_SET: OPT-ENUM-034 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-REVALIDATION-METHOD | Plan Revalidation Method | TEXT | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-TEACHER-CONFIRMER-REF | Plan Teacher Confirmer Reference | ID | required when a candidate becomes an ACTIVE plan；状态=ACTIVE | OBJECT_REF: ORG-OBJ-TEACHER | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF | Student Difficulty Feedback Reference | ID | required when a student difficulty report changes the plan；状态=ACTIVE；动作=PLN-ACT-ADJUST-PLAN | OBJECT_REF: APP-OBJ-TODO | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION | Student Difficulty Feedback Version | INTEGER | required when a student difficulty report changes the plan；状态=ACTIVE；动作=PLN-ACT-ADJUST-PLAN | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-ADJUSTMENT-REASON | Plan Adjustment Reason | TEXT | required when plan content or workload changes；状态=ACTIVE；动作=PLN-ACT-ADJUST-PLAN | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-CLOSE-REASON | Plan Close Reason | TEXT | required when the plan closes；状态=CLOSED；动作=PLN-ACT-CLOSE-PLAN | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-INVALIDATION-REF | Plan Evaluation Invalidation Reference | ID | required when the plan evaluation enters pending reconfirmation；状态=PENDING_RECONFIRM | OBJECT_REF: CORR-OBJ-INVALIDATION | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-INVALIDATION-VERSION | Plan Evaluation Invalidation Version | INTEGER | required when the plan evaluation enters pending reconfirmation；状态=PENDING_RECONFIRM | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-EVALUATION-STATE | Plan Evaluation State | STRING | required when an ACTIVE plan enters evaluation；状态=PENDING_RECONFIRM | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-EVALUATION-VERSION | Plan Evaluation Version | INTEGER | required when an ACTIVE plan enters evaluation；状态=PENDING_RECONFIRM | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-PLAN-F-PLAN-VERSION | Improvement Plan Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 任课教师、班主任、学生
-- 解决问题: 根据成绩、作业、证据和教师目标生成可执行、可跟踪、可再验证的学科提升计划，并同步给对应教师和班主任。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### PLN-OBJ-SUBJECT-SYNC Subject Teacher Plan Sync Output
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_PLAN_SYNC | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S3 | NO_DIRECT_READ | DELIVERED |
 
-- DAT-PLN-01 Improvement Candidate
-- DAT-PLN-02 Subject Improvement Plan
-- DAT-PLN-03 Improvement Task
-- DAT-PLN-04 Cross-subject Coordination View
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLN-SUBJECT-SYNC-F-ID | Subject Teacher Sync Output ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-SUBJECT-SYNC-F-PLAN-REF | Synced Plan Reference | ID | 是 | OBJECT_REF: PLN-OBJ-PLAN | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-SUBJECT-SYNC-F-PLAN-VERSION | Synced Plan Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-SUBJECT-SYNC-F-SUBJECT | Synced Subject | ID | 是 | OPTION_SET: OPT-COM-007 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-SUBJECT-SYNC-F-TEACHER-CONFIRMER-REF | Confirmed Subject Teacher Reference | ID | 是 | OBJECT_REF: ORG-OBJ-TEACHER | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-SUBJECT-SYNC-F-STATUS | Subject Teacher Sync Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-SUBJECT-SYNC-F-OUTPUT-VERSION | Subject Teacher Sync Output Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### PLN-OBJ-HOMEROOM-COORDINATION Homeroom Cross-subject Coordination Output
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HOMEROOM_PLAN_COORDINATION | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | AVAILABLE |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLN-HOMEROOM-F-ID | Homeroom Coordination Output ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-HOMEROOM-F-PLAN-REF | Coordinated Plan Reference | ID | 是 | OBJECT_REF: PLN-OBJ-PLAN | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-HOMEROOM-F-PLAN-VERSION | Coordinated Plan Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-HOMEROOM-F-CLASS-SCOPE | Homeroom Class Scope | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-HOMEROOM-F-LOAD-SUMMARY | Read-only Cross-subject Coordination Load | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-HOMEROOM-F-STATUS | Homeroom Coordination Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| PLN-HOMEROOM-F-OUTPUT-VERSION | Homeroom Coordination Output Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| PLN-REL-SUBJECT-SYNC-PLAN | PLN-OBJ-SUBJECT-SYNC | DERIVED_FROM | PLN-OBJ-PLAN | MANY_TO_ONE | SAME_SUBJECT | mark the sync output stale and retain its referenced plan version |
+| PLN-REL-HOMEROOM-PLAN | PLN-OBJ-HOMEROOM-COORDINATION | APPEARS_IN | PLN-OBJ-PLAN | MANY_TO_ONE | SAME_CONTEXT | mark only the coordination output stale without granting plan mutation |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLN-ACT-CREATE-CANDIDATE | Create an Improvement Plan Candidate | PLN-OBJ-PLAN | CREATE |  | PLN-PLAN-F-ID<br>PLN-PLAN-F-STUDENT-REF<br>PLN-PLAN-F-SOURCE-DATA-ID<br>PLN-PLAN-F-SOURCE-EVIDENCE-REF<br>PLN-PLAN-F-SOURCE-EVIDENCE-VERSION<br>PLN-PLAN-F-GOAL-CANDIDATE<br>PLN-PLAN-F-TASK-CONTENT-CANDIDATE<br>PLN-PLAN-F-WORKLOAD-CANDIDATE<br>PLN-PLAN-F-DUE-AT-CANDIDATE<br>PLN-PLAN-F-SUCCESS-CONDITION-CANDIDATE<br>PLN-PLAN-F-EVIDENCE-REQUIREMENT-CANDIDATE<br>PLN-PLAN-F-REVALIDATION-METHOD-CANDIDATE<br>PLN-PLAN-F-SUBJECT<br>PLN-PLAN-F-KNOWLEDGE-POINT-REF<br>PLN-PLAN-F-KNOWLEDGE-POINT-VERSION<br>PLN-PLAN-F-PRIORITY<br>PLN-PLAN-F-PLAN-VERSION | CREATE（成功状态由 PLN-ACT-CREATE-CANDIDATE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified improvement Flow creates the candidate and explicit synchronization outputs<br>DENY:CURRENT_ACTOR — a user cannot invoke internal plan materialization or synchronization directly | FLOW_INTERNAL | LOW | REQUIRED | PLN-ACT-CREATE-CANDIDATE:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| PLN-ACT-CONFIRM-PLAN | Confirm the Subject Improvement Plan | PLN-OBJ-PLAN | UPDATE | PLN-PLAN-F-GOAL<br>PLN-PLAN-F-SUBJECT<br>PLN-PLAN-F-KNOWLEDGE-POINT-REF<br>PLN-PLAN-F-KNOWLEDGE-POINT-VERSION<br>PLN-PLAN-F-PRIORITY<br>PLN-PLAN-F-TASK-CONTENT<br>PLN-PLAN-F-WORKLOAD<br>PLN-PLAN-F-DUE-AT<br>PLN-PLAN-F-SUCCESS-CONDITION<br>PLN-PLAN-F-EVIDENCE-REQUIREMENT<br>PLN-PLAN-F-REVALIDATION-METHOD<br>PLN-PLAN-F-TEACHER-CONFIRMER-REF | PLN-PLAN-F-TEACHER-CONFIRMER-REF<br>PLN-PLAN-F-PLAN-VERSION | CANDIDATE → ACTIVE | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | HIGH | REQUIRED | PLN-ACT-CONFIRM-PLAN:school:object:source-version:request-id | PERMISSION_DENIED / MISSING_SUCCESS_CONDITION / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| PLN-ACT-SYNC-SUBJECT-TEACHER | Create the Subject Teacher Plan Sync Output | PLN-OBJ-SUBJECT-SYNC | CREATE |  | PLN-SUBJECT-SYNC-F-ID<br>PLN-SUBJECT-SYNC-F-PLAN-REF<br>PLN-SUBJECT-SYNC-F-PLAN-VERSION<br>PLN-SUBJECT-SYNC-F-SUBJECT<br>PLN-SUBJECT-SYNC-F-TEACHER-CONFIRMER-REF<br>PLN-SUBJECT-SYNC-F-STATUS<br>PLN-SUBJECT-SYNC-F-OUTPUT-VERSION | CREATE（成功状态由 PLN-ACT-SYNC-SUBJECT-TEACHER-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified improvement Flow creates the candidate and explicit synchronization outputs<br>DENY:CURRENT_ACTOR — a user cannot invoke internal plan materialization or synchronization directly | FLOW_INTERNAL | LOW | REQUIRED | PLN-ACT-SYNC-SUBJECT-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / SYNC_DELIVERY_FAILED / VERSION_CONFLICT |
+| PLN-ACT-SYNC-HOMEROOM-COORDINATION | Create the Homeroom Read-only Coordination Output | PLN-OBJ-HOMEROOM-COORDINATION | CREATE |  | PLN-HOMEROOM-F-ID<br>PLN-HOMEROOM-F-PLAN-REF<br>PLN-HOMEROOM-F-PLAN-VERSION<br>PLN-HOMEROOM-F-CLASS-SCOPE<br>PLN-HOMEROOM-F-LOAD-SUMMARY<br>PLN-HOMEROOM-F-STATUS<br>PLN-HOMEROOM-F-OUTPUT-VERSION | CREATE（成功状态由 PLN-ACT-SYNC-HOMEROOM-COORDINATION-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified improvement Flow creates the candidate and explicit synchronization outputs<br>DENY:CURRENT_ACTOR — a user cannot invoke internal plan materialization or synchronization directly | FLOW_INTERNAL | LOW | REQUIRED | PLN-ACT-SYNC-HOMEROOM-COORDINATION:school:object:source-version:request-id | PERMISSION_DENIED / SYNC_DELIVERY_FAILED / VERSION_CONFLICT |
+| PLN-ACT-ADJUST-PLAN | Adjust an Active Subject Improvement Plan | PLN-OBJ-PLAN | UPDATE | PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF<br>PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION<br>PLN-PLAN-F-TASK-CONTENT<br>PLN-PLAN-F-WORKLOAD<br>PLN-PLAN-F-DUE-AT<br>PLN-PLAN-F-ADJUSTMENT-REASON | PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF<br>PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION<br>PLN-PLAN-F-ADJUSTMENT-REASON<br>PLN-PLAN-F-PLAN-VERSION | ACTIVE → ACTIVE | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | HIGH | REQUIRED | PLN-ACT-ADJUST-PLAN:school:object:source-version:request-id | PERMISSION_DENIED / ADJUSTMENT_REASON_REQUIRED / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| PLN-ACT-CLOSE-PLAN | Close an Improvement Plan | PLN-OBJ-PLAN | UPDATE | PLN-PLAN-F-CLOSE-REASON | PLN-PLAN-F-CLOSE-REASON<br>PLN-PLAN-F-PLAN-VERSION | ACTIVE → CLOSED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | HIGH | REQUIRED | PLN-ACT-CLOSE-PLAN:school:object:source-version:request-id | PERMISSION_DENIED / CLOSE_REASON_REQUIRED / VERSION_CONFLICT / AUDIT_FAILED |
+| PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | Mark Plan Evaluation Pending Reconfirmation | PLN-OBJ-PLAN | UPDATE |  | PLN-PLAN-F-INVALIDATION-REF<br>PLN-PLAN-F-INVALIDATION-VERSION<br>PLN-PLAN-F-EVALUATION-STATE<br>PLN-PLAN-F-EVALUATION-VERSION<br>PLN-PLAN-F-PLAN-VERSION | ACTIVE → PENDING_RECONFIRM | ALLOW:SYSTEM — the verified improvement Flow creates the candidate and explicit synchronization outputs<br>DENY:CURRENT_ACTOR — a user cannot invoke internal plan materialization or synchronization directly | FLOW_INTERNAL | LOW | REQUIRED | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| PLN-ACT-VIEW-HOMEROOM-COORDINATION | View the Read-only Homeroom Plan Coordination | PLN-OBJ-HOMEROOM-COORDINATION | READ | PLN-HOMEROOM-F-ID | PLN-HOMEROOM-F-ID<br>PLN-HOMEROOM-F-PLAN-REF<br>PLN-HOMEROOM-F-PLAN-VERSION<br>PLN-HOMEROOM-F-CLASS-SCOPE<br>PLN-HOMEROOM-F-LOAD-SUMMARY<br>PLN-HOMEROOM-F-STATUS<br>PLN-HOMEROOM-F-OUTPUT-VERSION | UNCHANGED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher reads only the assigned subject, class, and student scope<br>ALLOW:DUTY-HOMEROOM — the homeroom teacher reads the assigned class across subjects for read-only coordination<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator has no default permission to read student learning detail<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default permission to read student learning detail | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 候选审阅、计划编辑、任务分配、全科负担协调、效果评估 | 学生今日提升任务、困难反馈、完成提交、教师/班主任摘要 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| PLN-OBJ-PLAN | CANDIDATE | PLN-ACT-CREATE-CANDIDATE | PLN-ACT-CONFIRM-PLAN |
+| PLN-OBJ-PLAN | ACTIVE | PLN-ACT-CONFIRM-PLAN<br>PLN-ACT-ADJUST-PLAN | PLN-ACT-ADJUST-PLAN<br>PLN-ACT-CLOSE-PLAN<br>PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM |
+| PLN-OBJ-PLAN | CLOSED | PLN-ACT-CLOSE-PLAN |  |
+| PLN-OBJ-PLAN | PENDING_RECONFIRM | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM |  |
+| PLN-OBJ-SUBJECT-SYNC | DELIVERED | PLN-ACT-SYNC-SUBJECT-TEACHER |  |
+| PLN-OBJ-HOMEROOM-COORDINATION | AVAILABLE | PLN-ACT-SYNC-HOMEROOM-COORDINATION |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-009 | Published Result Correction | 1 | GRD-001 / PUB-001 / INS-001 / PLN-001 / CORR-001 | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | PUBLISHED_STUDENT_RESULT_AND_DEPENDENT_INTERPRETATION_OBJECT；{"strategy":"REFRESH_RESULT_DECISION_EVIDENCE_AND_PLAN_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["STALE_DECISION_VERSION","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_RESULT_AND_DEPENDENT_VERSIONS_UNTIL_OBJECT_OUTCOMES_COMMIT","description":"a failed correction leaves prior result, evidence, mastery, plan evaluation, report, and learning-path history intact and retries only failed objects"}；{"strategy":"VERSION_AND_REQUIRE_RECONFIRMATION_FOR_EVERY_DEPENDENT_TARGET_KIND","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-010 | Correction Submission Judgment and New Evidence | 1 | PUB-001 / INS-001 / PLN-001 / CORR-001 | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | CORRECTION_AND_DEPENDENT_EVIDENCE_OBJECT；{"strategy":"REFRESH_RESULT_EVIDENCE_AND_CORRECTION_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_VISIBLE_RESULT_AND_EVIDENCE_HISTORY","description":"a failed correction or invalidation leaves prior visible versions intact and retries only failed dependent objects"}；{"strategy":"VERSION_AND_RECONFIRM_EVERY_DEPENDENT_INTERPRETATION","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-012 | Improvement Candidate to Subject Plan and Cross-subject Coordination | 1 | INS-001 / PLN-001 / APP-001 | PLN-ACT-CREATE-CANDIDATE<br>PLN-ACT-CONFIRM-PLAN<br>PLN-ACT-SYNC-SUBJECT-TEACHER<br>PLN-ACT-SYNC-HOMEROOM-COORDINATION | STUDENT_SUBJECT_PLAN_AND_SYNC_OUTPUT_OBJECT；{"strategy":"RETRY_FAILED_SYNC_OR_TODO_OUTPUT_AFTER_SOURCE_VERSION_REFRESH","maxAttempts":4,"retryableFailureResults":["SYNC_DELIVERY_FAILED","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_CONFIRMED_PLAN_AND_RETRY_ONLY_FAILED_OUTPUTS","description":"a sync failure never rolls back the teacher-confirmed plan and never grants homeroom plan-content mutation"}；{"strategy":"INVALIDATE_STALE_PLAN_OUTPUTS_BY_OBJECT_VERSION","targets":["subject teacher sync output","homeroom coordination output","student todo deep link"]} |
+| DF-014 | Student Management Profile Aggregation | 1 | SCO-001 / INS-001 / PLN-001 / APP-001 / STU-001 | PLN-ACT-VIEW-HOMEROOM-COORDINATION | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PROFILE_AND_TODO_VIEW_VERSIONS","description":"a failed aggregation preserves the prior view definitions and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_AND_TODO_PROJECTIONS","targets":["gradebook view definition","student profile view definition","student todo aggregation"]} |
+| DF-013 | Student Plan Execution to Report Snapshot and In-product Delivery | 1 | APP-001 / PLN-001 / RPT-001 / NOTI-001 | PLN-ACT-VIEW-HOMEROOM-COORDINATION | REPORT_RUN_SNAPSHOT_DELIVERY_AND_NOTIFICATION_OBJECT；{"strategy":"RECHECK_PERMISSION_REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_OUTPUTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","DELIVERY_FAILED","VERSION_CONFLICT"]}；{"strategy":"KEEP_SOURCE_EXECUTION_RUN_AND_SNAPSHOT_WHILE_RETRYING_DELIVERY_ONLY","description":"delivery or notification failure never rolls back student execution, plan, successful run, or immutable snapshot"}；{"strategy":"CREATE_A_NEW_RUN_FOR_NEW_SOURCE_VERSIONS","targets":["future report run","future report snapshot","in-product delivery retry"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PLN-F001 | 学生 | 自动完成 | OPT-COM-010 | 是 | 按授权范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F002 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 对应任课教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F003 | 知识点 | 树形选择 | OPT-COM-011 | 是 | 引用掌握证据 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F004 | 提升优先级 | 单选下拉 | OPT-ENUM-012 | 是 | AI 可建议，教师确认 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F005 | 任务类型 | 单选下拉 | OPT-ENUM-013 | 是 | 成功条件另填 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F006 | 可引用证据 | 多选列表 | OPT-RUN-006 | 候选必填 | 必须引用具体证据 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLN-F007 | 报告接收范围 | 多选下拉 | OPT-ENUM-015 | 同步必填 | 对应任课教师和班主任同步 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| PLN-PAGE-PLAN | Subject Improvement Plan Workspace | WEB / APP | PLN-OBJ-PLAN | PLN-PLAN-F-ID<br>PLN-PLAN-F-STUDENT-REF<br>PLN-PLAN-F-SOURCE-DATA-ID<br>PLN-PLAN-F-SOURCE-EVIDENCE-REF<br>PLN-PLAN-F-SOURCE-EVIDENCE-VERSION<br>PLN-PLAN-F-GOAL-CANDIDATE<br>PLN-PLAN-F-TASK-CONTENT-CANDIDATE<br>PLN-PLAN-F-WORKLOAD-CANDIDATE<br>PLN-PLAN-F-DUE-AT-CANDIDATE<br>PLN-PLAN-F-SUCCESS-CONDITION-CANDIDATE<br>PLN-PLAN-F-EVIDENCE-REQUIREMENT-CANDIDATE<br>PLN-PLAN-F-REVALIDATION-METHOD-CANDIDATE<br>PLN-PLAN-F-GOAL<br>PLN-PLAN-F-SUBJECT<br>PLN-PLAN-F-KNOWLEDGE-POINT-REF<br>PLN-PLAN-F-KNOWLEDGE-POINT-VERSION<br>PLN-PLAN-F-PRIORITY<br>PLN-PLAN-F-TASK-CONTENT<br>PLN-PLAN-F-WORKLOAD<br>PLN-PLAN-F-DUE-AT<br>PLN-PLAN-F-SUCCESS-CONDITION<br>PLN-PLAN-F-EVIDENCE-REQUIREMENT<br>PLN-PLAN-F-REVALIDATION-METHOD<br>PLN-PLAN-F-TEACHER-CONFIRMER-REF<br>PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-REF<br>PLN-PLAN-F-STUDENT-DIFFICULTY-FEEDBACK-VERSION<br>PLN-PLAN-F-ADJUSTMENT-REASON<br>PLN-PLAN-F-CLOSE-REASON<br>PLN-PLAN-F-INVALIDATION-REF<br>PLN-PLAN-F-INVALIDATION-VERSION<br>PLN-PLAN-F-EVALUATION-STATE<br>PLN-PLAN-F-EVALUATION-VERSION<br>PLN-PLAN-F-PLAN-VERSION | PLN-ACT-CONFIRM-PLAN<br>PLN-ACT-ADJUST-PLAN<br>PLN-ACT-CLOSE-PLAN | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| PLN-PAGE-HOMEROOM | Read-only Homeroom Plan Coordination | WEB / APP | PLN-OBJ-HOMEROOM-COORDINATION | PLN-HOMEROOM-F-ID<br>PLN-HOMEROOM-F-PLAN-REF<br>PLN-HOMEROOM-F-PLAN-VERSION<br>PLN-HOMEROOM-F-CLASS-SCOPE<br>PLN-HOMEROOM-F-LOAD-SUMMARY<br>PLN-HOMEROOM-F-STATUS<br>PLN-HOMEROOM-F-OUTPUT-VERSION | PLN-ACT-VIEW-HOMEROOM-COORDINATION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| CANDIDATE | 候选 |
-| TEACHER_CONFIRMED | 教师确认 |
-| ASSIGNED | 已分配 |
-| IN_PROGRESS | 执行中 |
-| COMPLETED | 已完成 |
-| ADJUSTING | 调整中 |
-| CLOSED | 已关闭 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLN-ACT-CREATE-CANDIDATE-SCN-SUCCESS | SUCCESS | PLN-ACT-CREATE-CANDIDATE | the actor meets the entry conditions for Create an Improvement Plan Candidate | the actor requests Create an Improvement Plan Candidate | creates a candidate from the teacher-confirmed evidence version without making the generated content official | CANDIDATE | ALLOW |  |
+| PLN-ACT-CREATE-CANDIDATE-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-CREATE-CANDIDATE | PERMISSION_DENIED applies to Create an Improvement Plan Candidate | the actor requests Create an Improvement Plan Candidate | Create an Improvement Plan Candidate returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-CREATE-CANDIDATE-SCN-SOURCE_VERSION_STALE | FAILURE | PLN-ACT-CREATE-CANDIDATE | SOURCE_VERSION_STALE applies to Create an Improvement Plan Candidate | the actor requests Create an Improvement Plan Candidate | Create an Improvement Plan Candidate returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| PLN-ACT-CREATE-CANDIDATE-SCN-VERSION_CONFLICT | FAILURE | PLN-ACT-CREATE-CANDIDATE | VERSION_CONFLICT applies to Create an Improvement Plan Candidate | the actor requests Create an Improvement Plan Candidate | Create an Improvement Plan Candidate returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLN-ACT-CONFIRM-PLAN-SCN-SUCCESS | SUCCESS | PLN-ACT-CONFIRM-PLAN | the actor meets the entry conditions for Confirm the Subject Improvement Plan | the actor requests Confirm the Subject Improvement Plan | the corresponding subject teacher confirms the goal, task, workload, due time, evidence requirement, and revalidation method | ACTIVE | ALLOW |  |
+| PLN-ACT-CONFIRM-PLAN-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-CONFIRM-PLAN | PERMISSION_DENIED applies to Confirm the Subject Improvement Plan | the actor requests Confirm the Subject Improvement Plan | Confirm the Subject Improvement Plan returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-CONFIRM-PLAN-SCN-MISSING_SUCCESS_CONDITION | FAILURE | PLN-ACT-CONFIRM-PLAN | MISSING_SUCCESS_CONDITION applies to Confirm the Subject Improvement Plan | the actor requests Confirm the Subject Improvement Plan | Confirm the Subject Improvement Plan returns MISSING_SUCCESS_CONDITION without hidden writes | UNCHANGED | DENY | MISSING_SUCCESS_CONDITION |
+| PLN-ACT-CONFIRM-PLAN-SCN-STALE_INPUT_VERSION | FAILURE | PLN-ACT-CONFIRM-PLAN | STALE_INPUT_VERSION applies to Confirm the Subject Improvement Plan | the actor requests Confirm the Subject Improvement Plan | Confirm the Subject Improvement Plan returns STALE_INPUT_VERSION without hidden writes | UNCHANGED | DENY | STALE_INPUT_VERSION |
+| PLN-ACT-CONFIRM-PLAN-SCN-VERSION_CONFLICT | FAILURE | PLN-ACT-CONFIRM-PLAN | VERSION_CONFLICT applies to Confirm the Subject Improvement Plan | the actor requests Confirm the Subject Improvement Plan | Confirm the Subject Improvement Plan returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLN-ACT-CONFIRM-PLAN-SCN-AUDIT_FAILED | FAILURE | PLN-ACT-CONFIRM-PLAN | AUDIT_FAILED applies to Confirm the Subject Improvement Plan | the actor requests Confirm the Subject Improvement Plan | Confirm the Subject Improvement Plan returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PLN-ACT-SYNC-SUBJECT-TEACHER-SCN-SUCCESS | SUCCESS | PLN-ACT-SYNC-SUBJECT-TEACHER | the actor meets the entry conditions for Create the Subject Teacher Plan Sync Output | the actor requests Create the Subject Teacher Plan Sync Output | Create the Subject Teacher Plan Sync Output returns the accepted versioned result | DELIVERED | ALLOW |  |
+| PLN-ACT-SYNC-SUBJECT-TEACHER-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-SYNC-SUBJECT-TEACHER | PERMISSION_DENIED applies to Create the Subject Teacher Plan Sync Output | the actor requests Create the Subject Teacher Plan Sync Output | Create the Subject Teacher Plan Sync Output returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-SYNC-SUBJECT-TEACHER-SCN-SYNC_DELIVERY_FAILED | FAILURE | PLN-ACT-SYNC-SUBJECT-TEACHER | SYNC_DELIVERY_FAILED applies to Create the Subject Teacher Plan Sync Output | the actor requests Create the Subject Teacher Plan Sync Output | Create the Subject Teacher Plan Sync Output returns SYNC_DELIVERY_FAILED without hidden writes | UNCHANGED | DENY | SYNC_DELIVERY_FAILED |
+| PLN-ACT-SYNC-SUBJECT-TEACHER-SCN-VERSION_CONFLICT | FAILURE | PLN-ACT-SYNC-SUBJECT-TEACHER | VERSION_CONFLICT applies to Create the Subject Teacher Plan Sync Output | the actor requests Create the Subject Teacher Plan Sync Output | Create the Subject Teacher Plan Sync Output returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLN-ACT-SYNC-HOMEROOM-COORDINATION-SCN-SUCCESS | SUCCESS | PLN-ACT-SYNC-HOMEROOM-COORDINATION | the actor meets the entry conditions for Create the Homeroom Read-only Coordination Output | the actor requests Create the Homeroom Read-only Coordination Output | creates a distinct class-level read-only coordination output without granting plan-content mutation | AVAILABLE | ALLOW |  |
+| PLN-ACT-SYNC-HOMEROOM-COORDINATION-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-SYNC-HOMEROOM-COORDINATION | PERMISSION_DENIED applies to Create the Homeroom Read-only Coordination Output | the actor requests Create the Homeroom Read-only Coordination Output | Create the Homeroom Read-only Coordination Output returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-SYNC-HOMEROOM-COORDINATION-SCN-SYNC_DELIVERY_FAILED | FAILURE | PLN-ACT-SYNC-HOMEROOM-COORDINATION | SYNC_DELIVERY_FAILED applies to Create the Homeroom Read-only Coordination Output | the actor requests Create the Homeroom Read-only Coordination Output | Create the Homeroom Read-only Coordination Output returns SYNC_DELIVERY_FAILED without hidden writes | UNCHANGED | DENY | SYNC_DELIVERY_FAILED |
+| PLN-ACT-SYNC-HOMEROOM-COORDINATION-SCN-VERSION_CONFLICT | FAILURE | PLN-ACT-SYNC-HOMEROOM-COORDINATION | VERSION_CONFLICT applies to Create the Homeroom Read-only Coordination Output | the actor requests Create the Homeroom Read-only Coordination Output | Create the Homeroom Read-only Coordination Output returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLN-ACT-ADJUST-PLAN-SCN-SUCCESS | SUCCESS | PLN-ACT-ADJUST-PLAN | the actor meets the entry conditions for Adjust an Active Subject Improvement Plan | the actor requests Adjust an Active Subject Improvement Plan | Adjust an Active Subject Improvement Plan returns the accepted versioned result | ACTIVE | ALLOW |  |
+| PLN-ACT-ADJUST-PLAN-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-ADJUST-PLAN | PERMISSION_DENIED applies to Adjust an Active Subject Improvement Plan | the actor requests Adjust an Active Subject Improvement Plan | Adjust an Active Subject Improvement Plan returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-ADJUST-PLAN-SCN-ADJUSTMENT_REASON_REQUIRED | FAILURE | PLN-ACT-ADJUST-PLAN | ADJUSTMENT_REASON_REQUIRED applies to Adjust an Active Subject Improvement Plan | the actor requests Adjust an Active Subject Improvement Plan | Adjust an Active Subject Improvement Plan returns ADJUSTMENT_REASON_REQUIRED without hidden writes | UNCHANGED | DENY | ADJUSTMENT_REASON_REQUIRED |
+| PLN-ACT-ADJUST-PLAN-SCN-STALE_INPUT_VERSION | FAILURE | PLN-ACT-ADJUST-PLAN | STALE_INPUT_VERSION applies to Adjust an Active Subject Improvement Plan | the actor requests Adjust an Active Subject Improvement Plan | Adjust an Active Subject Improvement Plan returns STALE_INPUT_VERSION without hidden writes | UNCHANGED | DENY | STALE_INPUT_VERSION |
+| PLN-ACT-ADJUST-PLAN-SCN-VERSION_CONFLICT | FAILURE | PLN-ACT-ADJUST-PLAN | VERSION_CONFLICT applies to Adjust an Active Subject Improvement Plan | the actor requests Adjust an Active Subject Improvement Plan | Adjust an Active Subject Improvement Plan returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLN-ACT-ADJUST-PLAN-SCN-AUDIT_FAILED | FAILURE | PLN-ACT-ADJUST-PLAN | AUDIT_FAILED applies to Adjust an Active Subject Improvement Plan | the actor requests Adjust an Active Subject Improvement Plan | Adjust an Active Subject Improvement Plan returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PLN-ACT-CLOSE-PLAN-SCN-SUCCESS | SUCCESS | PLN-ACT-CLOSE-PLAN | the actor meets the entry conditions for Close an Improvement Plan | the actor requests Close an Improvement Plan | Close an Improvement Plan returns the accepted versioned result | CLOSED | ALLOW |  |
+| PLN-ACT-CLOSE-PLAN-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-CLOSE-PLAN | PERMISSION_DENIED applies to Close an Improvement Plan | the actor requests Close an Improvement Plan | Close an Improvement Plan returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-CLOSE-PLAN-SCN-CLOSE_REASON_REQUIRED | FAILURE | PLN-ACT-CLOSE-PLAN | CLOSE_REASON_REQUIRED applies to Close an Improvement Plan | the actor requests Close an Improvement Plan | Close an Improvement Plan returns CLOSE_REASON_REQUIRED without hidden writes | UNCHANGED | DENY | CLOSE_REASON_REQUIRED |
+| PLN-ACT-CLOSE-PLAN-SCN-VERSION_CONFLICT | FAILURE | PLN-ACT-CLOSE-PLAN | VERSION_CONFLICT applies to Close an Improvement Plan | the actor requests Close an Improvement Plan | Close an Improvement Plan returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLN-ACT-CLOSE-PLAN-SCN-AUDIT_FAILED | FAILURE | PLN-ACT-CLOSE-PLAN | AUDIT_FAILED applies to Close an Improvement Plan | the actor requests Close an Improvement Plan | Close an Improvement Plan returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM-SCN-SUCCESS | SUCCESS | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | the actor meets the entry conditions for Mark Plan Evaluation Pending Reconfirmation | the actor requests Mark Plan Evaluation Pending Reconfirmation | records the CORR invalidation version and moves only the dependent plan evaluation to pending reconfirmation while preserving the active plan history | PENDING_RECONFIRM | ALLOW |  |
+| PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | PERMISSION_DENIED applies to Mark Plan Evaluation Pending Reconfirmation | the actor requests Mark Plan Evaluation Pending Reconfirmation | Mark Plan Evaluation Pending Reconfirmation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM-SCN-SOURCE_VERSION_STALE | FAILURE | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | SOURCE_VERSION_STALE applies to Mark Plan Evaluation Pending Reconfirmation | the actor requests Mark Plan Evaluation Pending Reconfirmation | Mark Plan Evaluation Pending Reconfirmation returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM-SCN-VERSION_CONFLICT | FAILURE | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | VERSION_CONFLICT applies to Mark Plan Evaluation Pending Reconfirmation | the actor requests Mark Plan Evaluation Pending Reconfirmation | Mark Plan Evaluation Pending Reconfirmation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLN-ACT-VIEW-HOMEROOM-COORDINATION-SCN-SUCCESS | SUCCESS | PLN-ACT-VIEW-HOMEROOM-COORDINATION | the actor meets the entry conditions for View the Read-only Homeroom Plan Coordination | the actor requests View the Read-only Homeroom Plan Coordination | View the Read-only Homeroom Plan Coordination returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| PLN-ACT-VIEW-HOMEROOM-COORDINATION-SCN-PERMISSION_DENIED | FAILURE | PLN-ACT-VIEW-HOMEROOM-COORDINATION | PERMISSION_DENIED applies to View the Read-only Homeroom Plan Coordination | the actor requests View the Read-only Homeroom Plan Coordination | View the Read-only Homeroom Plan Coordination returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLN-ACT-VIEW-HOMEROOM-COORDINATION-SCN-NOT_FOUND | FAILURE | PLN-ACT-VIEW-HOMEROOM-COORDINATION | NOT_FOUND applies to View the Read-only Homeroom Plan Coordination | the actor requests View the Read-only Homeroom Plan Coordination | View the Read-only Homeroom Plan Coordination returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 系统基于证据生成提升候选。
-2. 对应任课教师确认知识点、目标、任务和成功条件。
-3. 学生在 App/Web 执行任务并反馈困难。
-4. 班主任查看本班全科计划负担并协调节奏。
-
-关联 Flow: `DF-012`、`DF-013`、`DF-016`、`DF-017`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PLN-FR-01 | 对象查询与范围筛选 | PLN-F001、PLN-F002、PLN-F003、PLN-F004、PLN-F005、PLN-F006、PLN-F007 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | PLN-AC-01 |
-| PLN-FR-02 | 详情查看与版本追踪 | DAT-PLN-01、DAT-PLN-02、DAT-PLN-03、DAT-PLN-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | PLN-AC-02 |
-| PLN-FR-03 | 创建/修改/确认主动作 | PLN-F001、PLN-F002、PLN-F003、PLN-F004、PLN-F005、PLN-F006、PLN-F007 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | PLN-AC-03 |
-| PLN-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | PLN-AC-04 |
-| PLN-FR-05 | 审计、通知与下游失效 | DF-012、DF-013、DF-016、DF-017 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | PLN-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| PLN-AC-01 | 每个学科提升点必须同步给对应任课教师。 |
-| PLN-AC-02 | 班主任享有本班全学科查看权限。 |
-| PLN-AC-03 | 班主任不能修改他科计划内容，除非同时具备对应任课权限。 |
-| PLN-AC-04 | AI 计划草稿未经教师确认不能分配给学生。 |
-| PLN-AC-05 | 计划完成必须有执行证据或教师关闭原因。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-012`、`DF-013`、`DF-016`、`DF-017`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

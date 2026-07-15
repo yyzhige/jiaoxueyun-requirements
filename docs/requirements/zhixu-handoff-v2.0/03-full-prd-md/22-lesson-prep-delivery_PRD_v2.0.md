@@ -1,138 +1,187 @@
-# PREP-001 教师备课与课堂授课 PRD v2.0
+# PREP-001 Lesson Preparation and Classroom Activity PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 优先级 | P1 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师 |
-| 关联线框 | [22-lesson-prep-delivery-wireframe.zh-CN.md](../05-wireframe-contracts/22-lesson-prep-delivery-wireframe.zh-CN.md) |
-
-## 0. 产品评审摘要
-
-围绕课程、章节、知识点组织备课材料，并把课堂活动、作业草稿和形成性证据连接到主闭环。
-
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
-
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-PREP-01 | Lesson Plan | 任课教师 | 备课方案 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PREP-02 | Teaching Material Reference | 任课教师 | 教学材料引用 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-PREP-03 | Classroom Activity Record | 任课教师 | 课堂活动记录 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-
-## 1. 范围
-
-### 1.1 目标用户与价值
-
-- 目标用户: 任课教师
-- 解决问题: 围绕课程、章节、知识点组织备课材料，并把课堂活动、作业草稿和形成性证据连接到主闭环。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
-
-### 1.2 本模块负责
-
-- DAT-PREP-01 Lesson Plan
-- DAT-PREP-02 Teaching Material Reference
-- DAT-PREP-03 Classroom Activity Record
-
-### 1.3 本模块不负责
-
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
-
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
-| --- | --- | --- | --- |
-| 完整业务处理 | 备课列表、课程章节、材料引用、课堂活动、生成作业草稿 | 课堂查看、移动记录形成性证据、课后提醒 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
-
-## 3. 字段与选项合同
-
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| PREP-F001 | 年级 | 单选下拉 | OPT-COM-005 | 是 | 控制课程 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F002 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F003 | 课程 | 单选下拉 | OPT-COM-008 | 是 | 依赖年级学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F004 | 知识点 | 树形选择 | OPT-COM-011 | 否 | 用于生成作业草稿 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PREP-F005 | 共享范围 | 多选选择 | OPT-COM-015 | 否 | 只能选学校允许范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-
-## 4. 状态机
-
-| 状态 | 含义/要求 |
 | --- | --- |
-| DRAFT | 草稿 |
-| READY | 可授课 |
-| IN_CLASS | 授课中 |
-| COMPLETED | 已完成 |
-| SHARED | 已共享 |
-| ARCHIVED | 归档 |
+| 阶段 | 1 |
+| 优先级 | P0 |
+| 目标 | Version lesson preparation facts and generate only a teacher-confirmed handoff draft for formal assignment creation |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-010` |
+| NFR | `NFR-003`、`NFR-006`、`NFR-008` |
+| 进入条件 | the subject teacher has an active authorized course and class context |
+| 退出条件 | lesson preparation versions and draft-only assignment handoff evidence are retained |
 
-状态通用规则：
+## 1. 范围与事实边界
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
+- 本模块权威拥有 4 个对象、9 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-## 5. 权限与责任
+## 2. 权威对象与字段合同
 
-| 角色/职责 | 读权限 | 写权限 | 限制 |
+### PREP-OBJ-LESSON-PLAN Lesson Plan Version
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_PREPARATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S2 | AUTHORIZED | DRAFT / CONFIRMED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PREP-LESSON-F-ID | Lesson Plan Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-LESSON-F-SUBJECT | Subject | ID | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-LESSON-F-COURSE | Course | ID | 是 | OPTION_SET: OPT-COM-008 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-LESSON-F-TITLE | Lesson Plan Title | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-LESSON-F-RUBRIC-VERSION | Lesson Rubric Version | ID | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-LESSON-F-KNOWLEDGE-POINT-IDS | Lesson Knowledge Points | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-011 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-LESSON-F-VERSION | Lesson Plan Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-LESSON-F-STATUS | Lesson Plan Status | STRING | 是 | OPTION_SET: OPT-EXT-001 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### PREP-OBJ-MATERIAL-REF Teaching Material Reference
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_PREPARATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S2 | AUTHORIZED | PENDING / VERIFIED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PREP-MATERIAL-F-ID | Teaching Material Reference ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-MATERIAL-F-REFERENCE | Teaching Material Reference | FILE_REFERENCE | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-MATERIAL-F-USAGE-PURPOSE | Material Usage Purpose | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-MATERIAL-F-LICENSE-STATUS | Material License Status | STRING | 是 | OPTION_SET: OPT-EXT-002 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### PREP-OBJ-CLASSROOM-ACTIVITY Classroom Activity Record
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_PREPARATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S2 | AUTHORIZED | PLANNED / RECORDED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PREP-ACTIVITY-F-ID | Classroom Activity Record ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-ACTIVITY-F-INSTRUCTIONS | Classroom Activity Instructions | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-ACTIVITY-F-EVIDENCE | Classroom Activity Evidence | JSON | required only when classroom activity completion is recorded；状态=RECORDED；动作=PREP-ACT-RECORD-CLASSROOM-ACTIVITY | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-ACTIVITY-F-STATUS | Classroom Activity Status | STRING | 是 | OPTION_SET: OPT-EXT-012 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### PREP-OBJ-ASSIGNMENT-DRAFT Generated Assignment Draft
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_PREPARATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-005 | S2 | AUTHORIZED | DRAFT / READY_FOR_HANDOFF |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PREP-DRAFT-F-ID | Generated Assignment Draft ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-DRAFT-F-CONTENT | Generated and Teacher-completed Assignment Draft Content | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-DRAFT-F-SOURCE-LESSON-REF | Pinned Confirmed Lesson Plan | ID | 是 | OBJECT_REF: PREP-OBJ-LESSON-PLAN | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-DRAFT-F-SOURCE-LESSON-VERSION | Source Lesson Plan Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PREP-DRAFT-F-STATUS | Assignment Draft Status | STRING | 是 | OPTION_SET: OPT-EXT-013 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| PREP-REL-DRAFT-LESSON | PREP-OBJ-ASSIGNMENT-DRAFT | DERIVED_FROM | PREP-OBJ-LESSON-PLAN | MANY_TO_ONE | SAME_SUBJECT | invalidate the generated draft and require a new confirmed lesson version |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PREP-ACT-CREATE-LESSON-PLAN | Create Lesson Plan Version | PREP-OBJ-LESSON-PLAN | CREATE | PREP-LESSON-F-SUBJECT<br>PREP-LESSON-F-COURSE<br>PREP-LESSON-F-TITLE<br>PREP-LESSON-F-RUBRIC-VERSION<br>PREP-LESSON-F-KNOWLEDGE-POINT-IDS | PREP-LESSON-F-ID<br>PREP-LESSON-F-VERSION<br>PREP-LESSON-F-STATUS | CREATE（成功状态由 PREP-ACT-CREATE-LESSON-PLAN-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-CREATE-LESSON-PLAN:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-CONFIRM-LESSON-PLAN | Confirm Lesson Plan Version | PREP-OBJ-LESSON-PLAN | UPDATE |  | PREP-LESSON-F-VERSION<br>PREP-LESSON-F-STATUS | DRAFT → CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-CONFIRM-LESSON-PLAN:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-REFERENCE-MATERIAL | Reference Teaching Material | PREP-OBJ-MATERIAL-REF | CREATE | PREP-MATERIAL-F-REFERENCE<br>PREP-MATERIAL-F-USAGE-PURPOSE | PREP-MATERIAL-F-ID<br>PREP-MATERIAL-F-LICENSE-STATUS | CREATE（成功状态由 PREP-ACT-REFERENCE-MATERIAL-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-REFERENCE-MATERIAL:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-VERIFY-MATERIAL-LICENSE | Verify Teaching Material License | PREP-OBJ-MATERIAL-REF | UPDATE |  | PREP-MATERIAL-F-LICENSE-STATUS | PENDING → VERIFIED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-VERIFY-MATERIAL-LICENSE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-PLAN-CLASSROOM-ACTIVITY | Plan Classroom Activity | PREP-OBJ-CLASSROOM-ACTIVITY | CREATE | PREP-ACTIVITY-F-INSTRUCTIONS | PREP-ACTIVITY-F-ID<br>PREP-ACTIVITY-F-STATUS | CREATE（成功状态由 PREP-ACT-PLAN-CLASSROOM-ACTIVITY-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-PLAN-CLASSROOM-ACTIVITY:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-RECORD-CLASSROOM-ACTIVITY | Record Classroom Activity Completion | PREP-OBJ-CLASSROOM-ACTIVITY | UPDATE | PREP-ACTIVITY-F-EVIDENCE | PREP-ACTIVITY-F-EVIDENCE<br>PREP-ACTIVITY-F-STATUS | PLANNED → RECORDED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | APP | LOW | REQUIRED | PREP-ACT-RECORD-CLASSROOM-ACTIVITY:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | Generate Assignment Draft for Teacher Confirmation | PREP-OBJ-ASSIGNMENT-DRAFT | CREATE | PREP-DRAFT-F-SOURCE-LESSON-REF | PREP-DRAFT-F-ID<br>PREP-DRAFT-F-CONTENT<br>PREP-DRAFT-F-SOURCE-LESSON-VERSION<br>PREP-DRAFT-F-STATUS | CREATE（成功状态由 PREP-ACT-GENERATE-ASSIGNMENT-DRAFT-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT:school:object-version:request-id | PERMISSION_DENIED / LESSON_STALE / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | Complete Teacher-required Assignment Draft Fields | PREP-OBJ-ASSIGNMENT-DRAFT | UPDATE | PREP-DRAFT-F-CONTENT | PREP-DRAFT-F-CONTENT<br>PREP-DRAFT-F-STATUS | DRAFT → DRAFT | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | Confirm Complete Draft for Formal HW Creation | PREP-OBJ-ASSIGNMENT-DRAFT | UPDATE | PREP-DRAFT-F-SOURCE-LESSON-REF<br>PREP-DRAFT-F-SOURCE-LESSON-VERSION | PREP-DRAFT-F-STATUS | DRAFT → READY_FOR_HANDOFF | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF:school:object-version:request-id | PERMISSION_DENIED / LESSON_STALE / HANDOFF_INCOMPLETE / VALIDATION_FAILED / VERSION_CONFLICT |
+
+## 5. 业务失败因果语义
+
+| Action ID | 失败码 | 因果谓词 | Given | When | Expected Data |
+| --- | --- | --- | --- | --- | --- |
+| PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | LESSON_STALE | lessonPlan.state !== CONFIRMED \|\| sourceLessonVersionCapture !== lessonPlan.version | the selected lesson plan is not CONFIRMED or changes while its source version is being pinned | the subject teacher generates an assignment handoff draft | LESSON_STALE creates no assignment handoff draft and returns the current lesson-plan version |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | LESSON_STALE | draft.sourceLessonVersion !== lessonPlan.version \|\| lessonPlan.state !== CONFIRMED | the draft's pinned lesson version no longer matches a CONFIRMED lesson plan | the subject teacher confirms the completed assignment handoff | LESSON_STALE preserves the handoff in DRAFT and returns the current lesson-plan version |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | HANDOFF_INCOMPLETE | completedBindingCount !== 15 \|\| missingTeacherRequiredPayloadPaths.length > 0 \|\| unknownPayloadPaths.length > 0 | one or more formal HW inputs lack a binding, a teacher-required payload value is missing, or the payload contains an undeclared field | the subject teacher confirms the completed assignment handoff | HANDOFF_INCOMPLETE returns the missing or unknown payload paths and preserves the handoff in DRAFT |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
+| PREP-OBJ-LESSON-PLAN | DRAFT | PREP-ACT-CREATE-LESSON-PLAN | PREP-ACT-CONFIRM-LESSON-PLAN |
+| PREP-OBJ-LESSON-PLAN | CONFIRMED | PREP-ACT-CONFIRM-LESSON-PLAN |  |
+| PREP-OBJ-MATERIAL-REF | PENDING | PREP-ACT-REFERENCE-MATERIAL | PREP-ACT-VERIFY-MATERIAL-LICENSE |
+| PREP-OBJ-MATERIAL-REF | VERIFIED | PREP-ACT-VERIFY-MATERIAL-LICENSE |  |
+| PREP-OBJ-CLASSROOM-ACTIVITY | PLANNED | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | PREP-ACT-RECORD-CLASSROOM-ACTIVITY |
+| PREP-OBJ-CLASSROOM-ACTIVITY | RECORDED | PREP-ACT-RECORD-CLASSROOM-ACTIVITY |  |
+| PREP-OBJ-ASSIGNMENT-DRAFT | DRAFT | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT<br>PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT<br>PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF |
+| PREP-OBJ-ASSIGNMENT-DRAFT | READY_FOR_HANDOFF | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF |  |
 
-## 6. 主流程
+## 7. 参与数据流
 
-1. 教师按课程和知识点创建备课方案。
-2. 引用题库或自有材料，配置课堂活动。
-3. 授课后记录形成性证据或生成作业草稿。
-4. 证据进入 INS-001，作业草稿进入 HW-001。
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
 
-关联 Flow: `DF-101`、`DF-102`。
+## 8. 页面任务合同
 
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PREP-FR-01 | 对象查询与范围筛选 | PREP-F001、PREP-F002、PREP-F003、PREP-F004、PREP-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P1 | PREP-AC-01 |
-| PREP-FR-02 | 详情查看与版本追踪 | DAT-PREP-01、DAT-PREP-02、DAT-PREP-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P1 | PREP-AC-02 |
-| PREP-FR-03 | 创建/修改/确认主动作 | PREP-F001、PREP-F002、PREP-F003、PREP-F004、PREP-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P1 | PREP-AC-03 |
-| PREP-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P1 | PREP-AC-04 |
-| PREP-FR-05 | 审计、通知与下游失效 | DF-101、DF-102 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P1 | PREP-AC-05 |
+| PREP-PAGE-LESSON-WORKSPACE | Web Lesson Preparation Workspace | WEB | PREP-OBJ-LESSON-PLAN<br>PREP-OBJ-MATERIAL-REF<br>PREP-OBJ-CLASSROOM-ACTIVITY<br>PREP-OBJ-ASSIGNMENT-DRAFT | PREP-LESSON-F-ID<br>PREP-LESSON-F-SUBJECT<br>PREP-LESSON-F-COURSE<br>PREP-LESSON-F-TITLE<br>PREP-LESSON-F-RUBRIC-VERSION<br>PREP-LESSON-F-KNOWLEDGE-POINT-IDS<br>PREP-LESSON-F-VERSION<br>PREP-LESSON-F-STATUS<br>PREP-MATERIAL-F-ID<br>PREP-MATERIAL-F-REFERENCE<br>PREP-MATERIAL-F-USAGE-PURPOSE<br>PREP-MATERIAL-F-LICENSE-STATUS<br>PREP-ACTIVITY-F-ID<br>PREP-ACTIVITY-F-INSTRUCTIONS<br>PREP-ACTIVITY-F-EVIDENCE<br>PREP-ACTIVITY-F-STATUS<br>PREP-DRAFT-F-ID<br>PREP-DRAFT-F-CONTENT<br>PREP-DRAFT-F-SOURCE-LESSON-REF<br>PREP-DRAFT-F-SOURCE-LESSON-VERSION<br>PREP-DRAFT-F-STATUS | PREP-ACT-CREATE-LESSON-PLAN<br>PREP-ACT-CONFIRM-LESSON-PLAN<br>PREP-ACT-REFERENCE-MATERIAL<br>PREP-ACT-VERIFY-MATERIAL-LICENSE<br>PREP-ACT-PLAN-CLASSROOM-ACTIVITY<br>PREP-ACT-GENERATE-ASSIGNMENT-DRAFT<br>PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT<br>PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| PREP-PAGE-MOBILE-CLASSROOM | Mobile Classroom Activity Workspace | APP | PREP-OBJ-LESSON-PLAN<br>PREP-OBJ-MATERIAL-REF<br>PREP-OBJ-CLASSROOM-ACTIVITY<br>PREP-OBJ-ASSIGNMENT-DRAFT | PREP-LESSON-F-ID<br>PREP-LESSON-F-SUBJECT<br>PREP-LESSON-F-COURSE<br>PREP-LESSON-F-TITLE<br>PREP-LESSON-F-RUBRIC-VERSION<br>PREP-LESSON-F-KNOWLEDGE-POINT-IDS<br>PREP-LESSON-F-VERSION<br>PREP-LESSON-F-STATUS<br>PREP-MATERIAL-F-ID<br>PREP-MATERIAL-F-REFERENCE<br>PREP-MATERIAL-F-USAGE-PURPOSE<br>PREP-MATERIAL-F-LICENSE-STATUS<br>PREP-ACTIVITY-F-ID<br>PREP-ACTIVITY-F-INSTRUCTIONS<br>PREP-ACTIVITY-F-EVIDENCE<br>PREP-ACTIVITY-F-STATUS<br>PREP-DRAFT-F-ID<br>PREP-DRAFT-F-CONTENT<br>PREP-DRAFT-F-SOURCE-LESSON-REF<br>PREP-DRAFT-F-SOURCE-LESSON-VERSION<br>PREP-DRAFT-F-STATUS | PREP-ACT-CREATE-LESSON-PLAN<br>PREP-ACT-CONFIRM-LESSON-PLAN<br>PREP-ACT-REFERENCE-MATERIAL<br>PREP-ACT-VERIFY-MATERIAL-LICENSE<br>PREP-ACT-PLAN-CLASSROOM-ACTIVITY<br>PREP-ACT-RECORD-CLASSROOM-ACTIVITY<br>PREP-ACT-GENERATE-ASSIGNMENT-DRAFT<br>PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT<br>PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 7. 异常、幂等与补偿
+## 9. 验收场景
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PREP-ACT-CREATE-LESSON-PLAN-SCN-SUCCESS | SUCCESS | PREP-ACT-CREATE-LESSON-PLAN | the authorized actor satisfies the task-specific entry conditions for Create Lesson Plan Version | the actor requests Create Lesson Plan Version | Create Lesson Plan Version returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| PREP-ACT-CREATE-LESSON-PLAN-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-CREATE-LESSON-PLAN | PERMISSION_DENIED blocks Create Lesson Plan Version | the actor requests Create Lesson Plan Version | Create Lesson Plan Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-CREATE-LESSON-PLAN-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-CREATE-LESSON-PLAN | VALIDATION_FAILED blocks Create Lesson Plan Version | the actor requests Create Lesson Plan Version | Create Lesson Plan Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-CREATE-LESSON-PLAN-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-CREATE-LESSON-PLAN | VERSION_CONFLICT blocks Create Lesson Plan Version | the actor requests Create Lesson Plan Version | Create Lesson Plan Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-CONFIRM-LESSON-PLAN-SCN-SUCCESS | SUCCESS | PREP-ACT-CONFIRM-LESSON-PLAN | the authorized actor satisfies the task-specific entry conditions for Confirm Lesson Plan Version | the actor requests Confirm Lesson Plan Version | Confirm Lesson Plan Version returns the accepted versioned task result without widening scope | CONFIRMED | ALLOW |  |
+| PREP-ACT-CONFIRM-LESSON-PLAN-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-CONFIRM-LESSON-PLAN | PERMISSION_DENIED blocks Confirm Lesson Plan Version | the actor requests Confirm Lesson Plan Version | Confirm Lesson Plan Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-CONFIRM-LESSON-PLAN-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-CONFIRM-LESSON-PLAN | VALIDATION_FAILED blocks Confirm Lesson Plan Version | the actor requests Confirm Lesson Plan Version | Confirm Lesson Plan Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-CONFIRM-LESSON-PLAN-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-CONFIRM-LESSON-PLAN | VERSION_CONFLICT blocks Confirm Lesson Plan Version | the actor requests Confirm Lesson Plan Version | Confirm Lesson Plan Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-REFERENCE-MATERIAL-SCN-SUCCESS | SUCCESS | PREP-ACT-REFERENCE-MATERIAL | the authorized actor satisfies the task-specific entry conditions for Reference Teaching Material | the actor requests Reference Teaching Material | Reference Teaching Material returns the accepted versioned task result without widening scope | PENDING | ALLOW |  |
+| PREP-ACT-REFERENCE-MATERIAL-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-REFERENCE-MATERIAL | PERMISSION_DENIED blocks Reference Teaching Material | the actor requests Reference Teaching Material | Reference Teaching Material returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-REFERENCE-MATERIAL-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-REFERENCE-MATERIAL | VALIDATION_FAILED blocks Reference Teaching Material | the actor requests Reference Teaching Material | Reference Teaching Material returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-REFERENCE-MATERIAL-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-REFERENCE-MATERIAL | VERSION_CONFLICT blocks Reference Teaching Material | the actor requests Reference Teaching Material | Reference Teaching Material returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-VERIFY-MATERIAL-LICENSE-SCN-SUCCESS | SUCCESS | PREP-ACT-VERIFY-MATERIAL-LICENSE | the authorized actor satisfies the task-specific entry conditions for Verify Teaching Material License | the actor requests Verify Teaching Material License | Verify Teaching Material License returns the accepted versioned task result without widening scope | VERIFIED | ALLOW |  |
+| PREP-ACT-VERIFY-MATERIAL-LICENSE-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-VERIFY-MATERIAL-LICENSE | PERMISSION_DENIED blocks Verify Teaching Material License | the actor requests Verify Teaching Material License | Verify Teaching Material License returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-VERIFY-MATERIAL-LICENSE-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-VERIFY-MATERIAL-LICENSE | VALIDATION_FAILED blocks Verify Teaching Material License | the actor requests Verify Teaching Material License | Verify Teaching Material License returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-VERIFY-MATERIAL-LICENSE-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-VERIFY-MATERIAL-LICENSE | VERSION_CONFLICT blocks Verify Teaching Material License | the actor requests Verify Teaching Material License | Verify Teaching Material License returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-PLAN-CLASSROOM-ACTIVITY-SCN-SUCCESS | SUCCESS | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | the authorized actor satisfies the task-specific entry conditions for Plan Classroom Activity | the actor requests Plan Classroom Activity | Plan Classroom Activity returns the accepted versioned task result without widening scope | PLANNED | ALLOW |  |
+| PREP-ACT-PLAN-CLASSROOM-ACTIVITY-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | PERMISSION_DENIED blocks Plan Classroom Activity | the actor requests Plan Classroom Activity | Plan Classroom Activity returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-PLAN-CLASSROOM-ACTIVITY-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | VALIDATION_FAILED blocks Plan Classroom Activity | the actor requests Plan Classroom Activity | Plan Classroom Activity returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-PLAN-CLASSROOM-ACTIVITY-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | VERSION_CONFLICT blocks Plan Classroom Activity | the actor requests Plan Classroom Activity | Plan Classroom Activity returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-RECORD-CLASSROOM-ACTIVITY-SCN-SUCCESS | SUCCESS | PREP-ACT-RECORD-CLASSROOM-ACTIVITY | the authorized actor satisfies the task-specific entry conditions for Record Classroom Activity Completion | the actor requests Record Classroom Activity Completion | Record Classroom Activity Completion returns the accepted versioned task result without widening scope | RECORDED | ALLOW |  |
+| PREP-ACT-RECORD-CLASSROOM-ACTIVITY-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-RECORD-CLASSROOM-ACTIVITY | PERMISSION_DENIED blocks Record Classroom Activity Completion | the actor requests Record Classroom Activity Completion | Record Classroom Activity Completion returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-RECORD-CLASSROOM-ACTIVITY-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-RECORD-CLASSROOM-ACTIVITY | VALIDATION_FAILED blocks Record Classroom Activity Completion | the actor requests Record Classroom Activity Completion | Record Classroom Activity Completion returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-RECORD-CLASSROOM-ACTIVITY-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-RECORD-CLASSROOM-ACTIVITY | VERSION_CONFLICT blocks Record Classroom Activity Completion | the actor requests Record Classroom Activity Completion | Record Classroom Activity Completion returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-GENERATE-ASSIGNMENT-DRAFT-SCN-SUCCESS | SUCCESS | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | the authorized actor satisfies the task-specific entry conditions for Generate Assignment Draft for Teacher Confirmation | the actor requests Generate Assignment Draft for Teacher Confirmation | Generate Assignment Draft for Teacher Confirmation returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| PREP-ACT-GENERATE-ASSIGNMENT-DRAFT-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | PERMISSION_DENIED blocks Generate Assignment Draft for Teacher Confirmation | the actor requests Generate Assignment Draft for Teacher Confirmation | Generate Assignment Draft for Teacher Confirmation returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-GENERATE-ASSIGNMENT-DRAFT-SCN-LESSON_STALE | FAILURE | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | the selected lesson plan is not CONFIRMED or changes while its source version is being pinned | the subject teacher generates an assignment handoff draft | LESSON_STALE creates no assignment handoff draft and returns the current lesson-plan version | UNCHANGED | DENY | LESSON_STALE — lessonPlan.state !== CONFIRMED \|\| sourceLessonVersionCapture !== lessonPlan.version |
+| PREP-ACT-GENERATE-ASSIGNMENT-DRAFT-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | VALIDATION_FAILED blocks Generate Assignment Draft for Teacher Confirmation | the actor requests Generate Assignment Draft for Teacher Confirmation | Generate Assignment Draft for Teacher Confirmation returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-GENERATE-ASSIGNMENT-DRAFT-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | VERSION_CONFLICT blocks Generate Assignment Draft for Teacher Confirmation | the actor requests Generate Assignment Draft for Teacher Confirmation | Generate Assignment Draft for Teacher Confirmation returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT-SCN-SUCCESS | SUCCESS | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | the authorized actor satisfies the task-specific entry conditions for Complete Teacher-required Assignment Draft Fields | the actor requests Complete Teacher-required Assignment Draft Fields | Complete Teacher-required Assignment Draft Fields returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | PERMISSION_DENIED blocks Complete Teacher-required Assignment Draft Fields | the actor requests Complete Teacher-required Assignment Draft Fields | Complete Teacher-required Assignment Draft Fields returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | VALIDATION_FAILED blocks Complete Teacher-required Assignment Draft Fields | the actor requests Complete Teacher-required Assignment Draft Fields | Complete Teacher-required Assignment Draft Fields returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | VERSION_CONFLICT blocks Complete Teacher-required Assignment Draft Fields | the actor requests Complete Teacher-required Assignment Draft Fields | Complete Teacher-required Assignment Draft Fields returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF-SCN-SUCCESS | SUCCESS | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | the authorized actor satisfies the task-specific entry conditions for Confirm Complete Draft for Formal HW Creation | the actor requests Confirm Complete Draft for Formal HW Creation | Confirm Complete Draft for Formal HW Creation returns the accepted versioned task result without widening scope | READY_FOR_HANDOFF | ALLOW |  |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF-SCN-PERMISSION_DENIED | FAILURE | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | PERMISSION_DENIED blocks Confirm Complete Draft for Formal HW Creation | the actor requests Confirm Complete Draft for Formal HW Creation | Confirm Complete Draft for Formal HW Creation returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF-SCN-LESSON_STALE | FAILURE | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | the draft's pinned lesson version no longer matches a CONFIRMED lesson plan | the subject teacher confirms the completed assignment handoff | LESSON_STALE preserves the handoff in DRAFT and returns the current lesson-plan version | UNCHANGED | DENY | LESSON_STALE — draft.sourceLessonVersion !== lessonPlan.version \|\| lessonPlan.state !== CONFIRMED |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF-SCN-HANDOFF_INCOMPLETE | FAILURE | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | one or more formal HW inputs lack a binding, a teacher-required payload value is missing, or the payload contains an undeclared field | the subject teacher confirms the completed assignment handoff | HANDOFF_INCOMPLETE returns the missing or unknown payload paths and preserves the handoff in DRAFT | UNCHANGED | DENY | HANDOFF_INCOMPLETE — completedBindingCount !== 15 \|\| missingTeacherRequiredPayloadPaths.length > 0 \|\| unknownPayloadPaths.length > 0 |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF-SCN-VALIDATION_FAILED | FAILURE | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | VALIDATION_FAILED blocks Confirm Complete Draft for Formal HW Creation | the actor requests Confirm Complete Draft for Formal HW Creation | Confirm Complete Draft for Formal HW Creation returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF-SCN-VERSION_CONFLICT | FAILURE | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | VERSION_CONFLICT blocks Confirm Complete Draft for Formal HW Creation | the actor requests Confirm Complete Draft for Formal HW Creation | Confirm Complete Draft for Formal HW Creation returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
 
-## 8. AI 对话与任务执行
+## 10. AI 任务映射
 
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-## 9. 验收标准
+## 11. 研发与测试就绪门禁
 
-| ID | 验收标准 |
-| --- | --- |
-| PREP-AC-01 | 备课材料引用不复制题库授权。 |
-| PREP-AC-02 | 课堂证据必须绑定班级、学生或小组和知识点。 |
-| PREP-AC-03 | 生成作业草稿需教师再次确认发布。 |
-| PREP-AC-04 | 共享撤回不删除历史引用。 |
-| PREP-AC-05 | P1 完整文档完成但不阻断 P0 主闭环。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-101`、`DF-102`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

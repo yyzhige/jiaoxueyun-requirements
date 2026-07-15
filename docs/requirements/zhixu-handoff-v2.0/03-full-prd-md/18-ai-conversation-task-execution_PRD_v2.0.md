@@ -1,144 +1,100 @@
-# AIX-001 AI 对话、可视化命令与任务执行 PRD v2.0
+# AIX-001 AI Conversation and Controlled Task Preview PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 全角色 |
-| 关联线框 | [18-ai-conversation-task-execution-wireframe.zh-CN.md](../05-wireframe-contracts/18-ai-conversation-task-execution-wireframe.zh-CN.md) |
+| 目标 | Resolve registered Web and App AI tasks into authorized structured previews without creating a second business fact |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-009` |
+| NFR | `NFR-006`、`NFR-008` |
+| 进入条件 | the user selects an active school, term, role, and authorized AI task |
+| 退出条件 | the preview names one target Action and retains permission and source-version results |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-在 Web/App 内通过一句话查询、分析、生成草稿、临时报表和受控执行任务，不建设终端命令行产品形态。
+- 本模块权威拥有 1 个对象、3 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-AIX-01 | AI Conversation | 当前用户 | AI 对话会话 | 当前用户 | 当前用户 | 系统 | S2 教学业务数据 |
-| DAT-AIX-02 | AI Intent Resolution | 系统 | 意图解析结果 | AI | 系统 | 系统 | S2 教学业务数据 |
-| DAT-AIX-03 | AI Execution Preview | 当前用户 | 执行预览 | AI | 当前用户 | 系统 | S2 教学业务数据 |
-| DAT-AIX-04 | AI Task Run | 当前用户 | AI 任务运行 | 系统 | 当前用户 | 系统 | S2 教学业务数据 |
+### AIX-OBJ-TASK-PREVIEW Temporary Registered AI Task Preview
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-005 | S3 | NO_DIRECT_READ | PREVIEW_READY |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AIX-PREVIEW-F-ID | AI Task Preview ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-TASK-ID | Registered AI Task ID | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-TARGET-ACTION-ID | Target Action ID | ID | 是 | OPTION_SET: OPT-COM-016 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-PARAMETERS | Resolved Parameters | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-PERMISSION-RESULT | Permission Result | STRING | 是 | SYSTEM | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-SOURCE-VERSIONS | Source Versions | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-PAYLOAD | Structured Preview Payload | JSON | 是 | SYSTEM | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-EXPIRES-AT | Preview Expiry Time | DATETIME | 是 | SYSTEM | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AIX-PREVIEW-F-VERSION | AI Task Preview Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 全角色
-- 解决问题: 在 Web/App 内通过一句话查询、分析、生成草稿、临时报表和受控执行任务，不建设终端命令行产品形态。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+## 3. 对象关系
 
-### 1.2 本模块负责
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
 
-- DAT-AIX-01 AI Conversation
-- DAT-AIX-02 AI Intent Resolution
-- DAT-AIX-03 AI Execution Preview
-- DAT-AIX-04 AI Task Run
+## 4. 可执行动作合同
 
-### 1.3 本模块不负责
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AIX-ACT-PREPARE-TASK-PREVIEW | Prepare a Registered AI Task Preview | AIX-OBJ-TASK-PREVIEW | CREATE | AIX-PREVIEW-F-TASK-ID<br>AIX-PREVIEW-F-TARGET-ACTION-ID<br>AIX-PREVIEW-F-PARAMETERS | AIX-PREVIEW-F-ID<br>AIX-PREVIEW-F-PERMISSION-RESULT<br>AIX-PREVIEW-F-SOURCE-VERSIONS<br>AIX-PREVIEW-F-PAYLOAD<br>AIX-PREVIEW-F-EXPIRES-AT<br>AIX-PREVIEW-F-VERSION | CREATE（成功状态由 AIX-ACT-PREPARE-TASK-PREVIEW-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned subject, class, and student scope<br>DENY:ROLE-STUDENT — a student attempts to create or manage a teacher-owned definition or reminder<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | LOW | REQUIRED | AIX-ACT-PREPARE-TASK-PREVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | Create a Temporary AI Feedback Draft Preview | AIX-OBJ-TASK-PREVIEW | CREATE | AIX-PREVIEW-F-TASK-ID<br>AIX-PREVIEW-F-TARGET-ACTION-ID<br>AIX-PREVIEW-F-PARAMETERS | AIX-PREVIEW-F-ID<br>AIX-PREVIEW-F-PERMISSION-RESULT<br>AIX-PREVIEW-F-SOURCE-VERSIONS<br>AIX-PREVIEW-F-PAYLOAD<br>AIX-PREVIEW-F-EXPIRES-AT<br>AIX-PREVIEW-F-VERSION | CREATE（成功状态由 AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned subject, class, and student scope<br>DENY:ROLE-STUDENT — a student attempts to create or manage a teacher-owned definition or reminder<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | LOW | REQUIRED | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | Create a Temporary AI Improvement-plan Draft Preview | AIX-OBJ-TASK-PREVIEW | CREATE | AIX-PREVIEW-F-TASK-ID<br>AIX-PREVIEW-F-TARGET-ACTION-ID<br>AIX-PREVIEW-F-PARAMETERS | AIX-PREVIEW-F-ID<br>AIX-PREVIEW-F-PERMISSION-RESULT<br>AIX-PREVIEW-F-SOURCE-VERSIONS<br>AIX-PREVIEW-F-PAYLOAD<br>AIX-PREVIEW-F-EXPIRES-AT<br>AIX-PREVIEW-F-VERSION | CREATE（成功状态由 AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned subject, class, and student scope<br>DENY:ROLE-STUDENT — a student attempts to create or manage a teacher-owned definition or reminder<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail | WEB / APP | LOW | REQUIRED | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+## 6. 状态可达性
 
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 全局 AI 入口、结构化结果、报表生成、草稿编辑、执行预览、任务历史 | 一句话查询、移动确认、学生学习助手、报告摘要、待办执行 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| AIX-OBJ-TASK-PREVIEW | PREVIEW_READY | AIX-ACT-PREPARE-TASK-PREVIEW<br>AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW<br>AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| AIX-F001 | AI 能力等级 | 只读分级 | OPT-ENUM-016 | 系统生成 | 由意图和目标动作派生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F002 | AI 操作状态 | 状态机 | OPT-ENUM-017 | 系统生成 | 驱动确认与执行按钮 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F003 | 报告数据范围 | 范围选择器 | OPT-RUN-008 | 报表/查询必填 | 按当前权限预览 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F004 | 可执行 AI 任务 | 命令列表 | OPT-RUN-007 | 执行前必选 | 只返回可校验任务 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AIX-F005 | 确认执行 | 确认对话 | OPT-ENUM-001 | 写入必填 | 默认取消，确认前重校验 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| AIX-PAGE-CONVERSATION | AI Conversation and Structured Confirmation | WEB / APP | AIX-OBJ-TASK-PREVIEW | AIX-PREVIEW-F-ID<br>AIX-PREVIEW-F-TASK-ID<br>AIX-PREVIEW-F-TARGET-ACTION-ID<br>AIX-PREVIEW-F-PARAMETERS<br>AIX-PREVIEW-F-PERMISSION-RESULT<br>AIX-PREVIEW-F-SOURCE-VERSIONS<br>AIX-PREVIEW-F-PAYLOAD<br>AIX-PREVIEW-F-EXPIRES-AT<br>AIX-PREVIEW-F-VERSION | AIX-ACT-PREPARE-TASK-PREVIEW<br>AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW<br>AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| UNDERSTANDING | 理解中 |
-| NEED_CLARIFICATION | 待澄清 |
-| QUERY_COMPLETE | 查询完成 |
-| DRAFT_CREATED | 草稿已生成 |
-| AWAITING_CONFIRMATION | 待确认 |
-| EXECUTING | 执行中 |
-| SUCCESS | 成功 |
-| PARTIAL_SUCCESS | 部分成功 |
-| FAILED | 失败 |
-| CONTEXT_INVALID | 上下文失效 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AIX-ACT-PREPARE-TASK-PREVIEW-SCN-SUCCESS | SUCCESS | AIX-ACT-PREPARE-TASK-PREVIEW | the actor meets the entry conditions for Prepare a Registered AI Task Preview | the actor requests Prepare a Registered AI Task Preview | Prepare a Registered AI Task Preview returns the accepted versioned result | PREVIEW_READY | ALLOW |  |
+| AIX-ACT-PREPARE-TASK-PREVIEW-SCN-PERMISSION_DENIED | FAILURE | AIX-ACT-PREPARE-TASK-PREVIEW | PERMISSION_DENIED applies to Prepare a Registered AI Task Preview | the actor requests Prepare a Registered AI Task Preview | Prepare a Registered AI Task Preview returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AIX-ACT-PREPARE-TASK-PREVIEW-SCN-VALIDATION_FAILED | FAILURE | AIX-ACT-PREPARE-TASK-PREVIEW | VALIDATION_FAILED applies to Prepare a Registered AI Task Preview | the actor requests Prepare a Registered AI Task Preview | Prepare a Registered AI Task Preview returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AIX-ACT-PREPARE-TASK-PREVIEW-SCN-VERSION_CONFLICT | FAILURE | AIX-ACT-PREPARE-TASK-PREVIEW | VERSION_CONFLICT applies to Prepare a Registered AI Task Preview | the actor requests Prepare a Registered AI Task Preview | Prepare a Registered AI Task Preview returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW-SCN-SUCCESS | SUCCESS | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | the actor meets the entry conditions for Create a Temporary AI Feedback Draft Preview | the actor requests Create a Temporary AI Feedback Draft Preview | Create a Temporary AI Feedback Draft Preview returns the accepted versioned result | PREVIEW_READY | ALLOW |  |
+| AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW-SCN-PERMISSION_DENIED | FAILURE | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | PERMISSION_DENIED applies to Create a Temporary AI Feedback Draft Preview | the actor requests Create a Temporary AI Feedback Draft Preview | Create a Temporary AI Feedback Draft Preview returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW-SCN-VALIDATION_FAILED | FAILURE | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | VALIDATION_FAILED applies to Create a Temporary AI Feedback Draft Preview | the actor requests Create a Temporary AI Feedback Draft Preview | Create a Temporary AI Feedback Draft Preview returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW-SCN-VERSION_CONFLICT | FAILURE | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | VERSION_CONFLICT applies to Create a Temporary AI Feedback Draft Preview | the actor requests Create a Temporary AI Feedback Draft Preview | Create a Temporary AI Feedback Draft Preview returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW-SCN-SUCCESS | SUCCESS | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | the actor meets the entry conditions for Create a Temporary AI Improvement-plan Draft Preview | the actor requests Create a Temporary AI Improvement-plan Draft Preview | Create a Temporary AI Improvement-plan Draft Preview returns the accepted versioned result | PREVIEW_READY | ALLOW |  |
+| AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW-SCN-PERMISSION_DENIED | FAILURE | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | PERMISSION_DENIED applies to Create a Temporary AI Improvement-plan Draft Preview | the actor requests Create a Temporary AI Improvement-plan Draft Preview | Create a Temporary AI Improvement-plan Draft Preview returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW-SCN-VALIDATION_FAILED | FAILURE | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | VALIDATION_FAILED applies to Create a Temporary AI Improvement-plan Draft Preview | the actor requests Create a Temporary AI Improvement-plan Draft Preview | Create a Temporary AI Improvement-plan Draft Preview returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW-SCN-VERSION_CONFLICT | FAILURE | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | VERSION_CONFLICT applies to Create a Temporary AI Improvement-plan Draft Preview | the actor requests Create a Temporary AI Improvement-plan Draft Preview | Create a Temporary AI Improvement-plan Draft Preview returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 用户在 Web/App 输入自然语言。
-2. 系统绑定当前学校、身份、学期和权限范围解析意图。
-3. 查询和分析直接返回有来源的结果；写入类生成结构化预览。
-4. 用户确认后执行目标模块动作，并写入审计和任务结果。
-
-关联 Flow: `DF-015`、`DF-016`、`DF-019`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| AIX-FR-01 | 对象查询与范围筛选 | AIX-F001、AIX-F002、AIX-F003、AIX-F004、AIX-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | AIX-AC-01 |
-| AIX-FR-02 | 详情查看与版本追踪 | DAT-AIX-01、DAT-AIX-02、DAT-AIX-03、DAT-AIX-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | AIX-AC-02 |
-| AIX-FR-03 | 创建/修改/确认主动作 | AIX-F001、AIX-F002、AIX-F003、AIX-F004、AIX-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | AIX-AC-03 |
-| AIX-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | AIX-AC-04 |
-| AIX-FR-05 | 审计、通知与下游失效 | DF-015、DF-016、DF-019 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | AIX-AC-05 |
+| AI-TASK-FEEDBACK-DRAFT | Draft feedback for this reviewed submission | DRAFT | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | AIX-PREVIEW-F-TASK-ID<br>AIX-PREVIEW-F-TARGET-ACTION-ID<br>AIX-PREVIEW-F-PARAMETERS | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-IMPROVEMENT-PLAN-DRAFT | Draft a two-week improvement plan from the confirmed evidence | DRAFT | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | AIX-PREVIEW-F-TASK-ID<br>AIX-PREVIEW-F-TARGET-ACTION-ID<br>AIX-PREVIEW-F-PARAMETERS | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| AIX-AC-01 | 不提供面向教师学生的终端命令行入口。 |
-| AIX-AC-02 | AI 不建立第二套业务事实，只引用源 Data ID 和版本。 |
-| AIX-AC-03 | 写入类任务必须预览、二次确认、幂等和审计。 |
-| AIX-AC-04 | 上下文变化后未执行任务全部失效。 |
-| AIX-AC-05 | 学生 AI 必须遵守答案/解析开放策略。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-015`、`DF-016`、`DF-019`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

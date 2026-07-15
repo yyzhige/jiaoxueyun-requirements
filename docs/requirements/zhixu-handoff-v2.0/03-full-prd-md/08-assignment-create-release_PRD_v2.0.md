@@ -1,145 +1,246 @@
-# HW-001 作业创建与发布 PRD v2.0
+# HW-001 Assignment Authoring and Publication PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师 |
-| 关联线框 | [08-assignment-create-release-wireframe.zh-CN.md](../05-wireframe-contracts/08-assignment-create-release-wireframe.zh-CN.md) |
+| 目标 | Create, validate, publish, close, and revise versioned all-subject assignments |
+| 基线决策 | `BASE-003`、`BASE-004`、`BASE-005`、`BASE-007` |
+| NFR | `NFR-002`、`NFR-008` |
+| 进入条件 | the corresponding subject teacher has an active school, term, course, and class context |
+| 退出条件 | a validated assignment is published or scheduled with an immutable publication version |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-让教师按班级、学科、课程、知识点创建作业，并以版本化发布规则驱动学生提交、批改和反馈。
+- 本模块权威拥有 3 个对象、18 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-HW-01 | Assignment Draft | 任课教师 | 作业草稿 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-HW-02 | Assignment Item | 任课教师 | 题目项 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-HW-03 | Rubric Version | 任课教师 | 评分规则 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-HW-04 | Feedback Policy | 任课教师 | 反馈开放策略 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-HW-05 | Assignment Release | 任课教师 | 作业发布版本 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
+### HW-OBJ-ASSIGNMENT Assignment Version
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_ASSIGNMENT | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S2 | AUTHORIZED | DRAFT / VALIDATED / SCHEDULED / PUBLISHED / CLOSED / REVISION_DRAFT |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-ASSIGNMENT-F-ID | Assignment ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-TITLE | Assignment Title | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-INSTRUCTIONS | Assignment Instructions | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-SUBJECT-ID | Subject | ID | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-COURSE-ID | Course | ID | 是 | OPTION_SET: OPT-COM-008 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-CLASS-SCOPE-IDS | Class Scope | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS | Published Student Fanout Set | STRING_ARRAY | required when the assignment reaches PUBLISHED；状态=PUBLISHED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | FANOUT_SET | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-OPEN-AT | Open Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-DUE-AT | Due Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-LATE-POLICY | Late Policy | STRING | 是 | OPTION_SET: OPT-ENUM-032 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-RESUBMISSION-POLICY | Resubmission Policy | STRING | 是 | OPTION_SET: OPT-ENUM-033 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-ASSIGNMENT-TYPE | Assignment Type | STRING | 是 | OPTION_SET: OPT-ENUM-002 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-QUESTION-ORDER | Question Order | STRING | 是 | OPTION_SET: OPT-TL-001 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-RUBRIC-VERSION | Assignment Rubric Version | ID | 是 | RUNTIME_QUERY: QUERY-AUTHORIZED-RUBRIC-VERSIONS | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS | Assignment Knowledge Points | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-011 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-FEEDBACK-POLICY | Feedback Policy | STRING | 是 | OPTION_SET: OPT-ENUM-004 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-NOTIFICATION-POLICY | Notification Policy | STRING | 是 | OPTION_SET: OPT-TL-002 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-PUBLICATION-VERSION | Publication Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ASSIGNMENT-F-REVISION-REASON | Revision Reason | TEXT | required when revising a published assignment；状态=REVISION_DRAFT；动作=HW-ACT-REVISE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 任课教师
-- 解决问题: 让教师按班级、学科、课程、知识点创建作业，并以版本化发布规则驱动学生提交、批改和反馈。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### HW-OBJ-ITEM Assignment Item Version
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_ASSIGNMENT | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S2 | AUTHORIZED | DRAFT / VALIDATED / PUBLISHED / REVISION_DRAFT |
 
-- DAT-HW-01 Assignment Draft
-- DAT-HW-02 Assignment Item
-- DAT-HW-03 Rubric Version
-- DAT-HW-04 Feedback Policy
-- DAT-HW-05 Assignment Release
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-ITEM-F-ID | Assignment Item ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-ITEM-VERSION | Item Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-QUESTION-TYPE | Question Type | STRING | 是 | OPTION_SET: OPT-ENUM-003 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-ORDER | Item Order | INTEGER | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-PROMPT | Question Prompt | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-ANSWER-KEY | Answer Key | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-POINTS | Item Points | DECIMAL | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-RUBRIC-VERSION | Item Rubric Version | ID | 是 | RUNTIME_QUERY: QUERY-AUTHORIZED-RUBRIC-VERSIONS | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-RUBRIC-REF | Item Rubric Reference | ID | 是 | OBJECT_REF: HW-OBJ-RUBRIC | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-ITEM-F-KNOWLEDGE-POINT-IDS | Item Knowledge Points | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-011 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### HW-OBJ-RUBRIC Published Rubric Version
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_ASSIGNMENT | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S2 | NO_DIRECT_READ | PUBLISHED / DEPRECATED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-RUBRIC-F-ID | Rubric ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-RUBRIC-F-RUBRIC-VERSION | Rubric Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-RUBRIC-F-SOURCE-REF | Rubric Source Reference | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-RUBRIC-F-SOURCE-VERSION | Rubric Source Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| HW-RUBRIC-F-CRITERIA | Rubric Criteria | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| HW-REL-ASSIGNMENT-ITEM | HW-OBJ-ASSIGNMENT | CONTAINS | HW-OBJ-ITEM | ONE_TO_MANY | SAME_SUBJECT | retain immutable published item versions and invalidate only unconfirmed revision drafts |
+| HW-REL-ITEM-RUBRIC | HW-OBJ-ITEM | REFERENCES | HW-OBJ-RUBRIC | MANY_TO_ONE | SAME_SUBJECT | retain the published Rubric version referenced by each immutable item version |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-ACT-SYNC-RUBRIC | Sync a Versioned Rubric Snapshot | HW-OBJ-RUBRIC | CREATE | HW-RUBRIC-F-SOURCE-REF<br>HW-RUBRIC-F-SOURCE-VERSION<br>HW-RUBRIC-F-CRITERIA | HW-RUBRIC-F-ID<br>HW-RUBRIC-F-RUBRIC-VERSION<br>HW-RUBRIC-F-SOURCE-REF<br>HW-RUBRIC-F-SOURCE-VERSION<br>HW-RUBRIC-F-CRITERIA | CREATE（成功状态由  定义） | ALLOW:SYSTEM — the system accepts only a registered versioned subject-rubric snapshot<br>DENY:CURRENT_ACTOR — a user cannot synthesize or replace a published rubric snapshot | SYSTEM_EVENT | HIGH | REQUIRED | HW-ACT-SYNC-RUBRIC:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-CREATE-DRAFT | Create Assignment Draft | HW-OBJ-ASSIGNMENT | CREATE | HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-SUBJECT-ID<br>HW-ASSIGNMENT-F-COURSE-ID<br>HW-ASSIGNMENT-F-CLASS-SCOPE-IDS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-LATE-POLICY<br>HW-ASSIGNMENT-F-RESUBMISSION-POLICY<br>HW-ASSIGNMENT-F-ASSIGNMENT-TYPE<br>HW-ASSIGNMENT-F-QUESTION-ORDER<br>HW-ASSIGNMENT-F-RUBRIC-VERSION<br>HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS<br>HW-ASSIGNMENT-F-FEEDBACK-POLICY<br>HW-ASSIGNMENT-F-NOTIFICATION-POLICY | HW-ASSIGNMENT-F-ID<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | CREATE（成功状态由 HW-ACT-CREATE-DRAFT-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | LOW | REQUIRED | HW-ACT-CREATE-DRAFT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| HW-ACT-CREATE-ITEM | Create Assignment Item | HW-OBJ-ITEM | CREATE | HW-ITEM-F-QUESTION-TYPE<br>HW-ITEM-F-ORDER<br>HW-ITEM-F-PROMPT<br>HW-ITEM-F-ANSWER-KEY<br>HW-ITEM-F-POINTS<br>HW-ITEM-F-RUBRIC-VERSION<br>HW-ITEM-F-KNOWLEDGE-POINT-IDS<br>HW-ITEM-F-RUBRIC-REF | HW-ITEM-F-ID<br>HW-ITEM-F-ITEM-VERSION | CREATE（成功状态由 HW-ACT-CREATE-ITEM-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | LOW | REQUIRED | HW-ACT-CREATE-ITEM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| HW-ACT-EDIT-ITEM | Edit Assignment Item | HW-OBJ-ITEM | UPDATE | HW-ITEM-F-QUESTION-TYPE<br>HW-ITEM-F-ORDER<br>HW-ITEM-F-PROMPT<br>HW-ITEM-F-ANSWER-KEY<br>HW-ITEM-F-POINTS<br>HW-ITEM-F-RUBRIC-VERSION<br>HW-ITEM-F-KNOWLEDGE-POINT-IDS | HW-ITEM-F-ITEM-VERSION | DRAFT → DRAFT | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | LOW | REQUIRED | HW-ACT-EDIT-ITEM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| HW-ACT-VALIDATE-ITEM | Validate Assignment Item Version | HW-OBJ-ITEM | UPDATE |  | HW-ITEM-F-ITEM-VERSION | DRAFT → VALIDATED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | LOW | REQUIRED | HW-ACT-VALIDATE-ITEM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-VALIDATE | Validate Assignment Version | HW-OBJ-ASSIGNMENT | UPDATE |  | HW-ASSIGNMENT-F-PUBLICATION-VERSION | DRAFT → VALIDATED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | LOW | REQUIRED | HW-ACT-VALIDATE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-REVALIDATE-ITEM | Revalidate Revised Assignment Item | HW-OBJ-ITEM | UPDATE |  | HW-ITEM-F-ITEM-VERSION | REVISION_DRAFT → VALIDATED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | LOW | REQUIRED | HW-ACT-REVALIDATE-ITEM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-REVALIDATE-REVISION | Revalidate Assignment Revision | HW-OBJ-ASSIGNMENT | UPDATE |  | HW-ASSIGNMENT-F-PUBLICATION-VERSION | REVISION_DRAFT → VALIDATED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | LOW | REQUIRED | HW-ACT-REVALIDATE-REVISION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-PREVIEW | Preview Assignment as Student | HW-OBJ-ASSIGNMENT | READ |  | HW-ASSIGNMENT-F-ID<br>HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-SUBJECT-ID<br>HW-ASSIGNMENT-F-COURSE-ID<br>HW-ASSIGNMENT-F-CLASS-SCOPE-IDS<br>HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-LATE-POLICY<br>HW-ASSIGNMENT-F-RESUBMISSION-POLICY<br>HW-ASSIGNMENT-F-ASSIGNMENT-TYPE<br>HW-ASSIGNMENT-F-QUESTION-ORDER<br>HW-ASSIGNMENT-F-RUBRIC-VERSION<br>HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS<br>HW-ASSIGNMENT-F-FEEDBACK-POLICY<br>HW-ASSIGNMENT-F-NOTIFICATION-POLICY<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION<br>HW-ASSIGNMENT-F-REVISION-REASON | UNCHANGED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+| HW-ACT-PUBLISH-ITEM | Publish Validated Assignment Item | HW-OBJ-ITEM | UPDATE |  | HW-ITEM-F-ITEM-VERSION | VALIDATED → PUBLISHED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | HIGH | REQUIRED | HW-ACT-PUBLISH-ITEM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-PUBLISH-NOW | Publish Assignment Immediately | HW-OBJ-ASSIGNMENT | UPDATE |  | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | VALIDATED → PUBLISHED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | HIGH | REQUIRED | HW-ACT-PUBLISH-NOW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-SCHEDULE-PUBLISH | Schedule Assignment Publication | HW-OBJ-ASSIGNMENT | UPDATE | HW-ASSIGNMENT-F-OPEN-AT | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | VALIDATED → SCHEDULED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | HIGH | REQUIRED | HW-ACT-SCHEDULE-PUBLISH:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-PUBLISH-SCHEDULED | Publish Scheduled Assignment at Open Time | HW-OBJ-ASSIGNMENT | UPDATE | HW-ASSIGNMENT-F-OPEN-AT | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | SCHEDULED → PUBLISHED | ALLOW:SYSTEM — the system publishes only the validated scheduled version at its configured open time<br>DENY:CURRENT_ACTOR — a user cannot bypass the scheduled publication time | SYSTEM_EVENT | HIGH | REQUIRED | HW-ACT-PUBLISH-SCHEDULED:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-CLOSE | Close Assignment | HW-OBJ-ASSIGNMENT | UPDATE |  | HW-ASSIGNMENT-F-PUBLICATION-VERSION | PUBLISHED → CLOSED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | HIGH | REQUIRED | HW-ACT-CLOSE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-REVISE | Revise Published Assignment | HW-OBJ-ASSIGNMENT | UPDATE | HW-ASSIGNMENT-F-REVISION-REASON | HW-ASSIGNMENT-F-REVISION-REASON<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | PUBLISHED → REVISION_DRAFT | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | HIGH | REQUIRED | HW-ACT-REVISE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-REVISE-ITEM | Revise Published Assignment Item | HW-OBJ-ITEM | UPDATE | HW-ITEM-F-QUESTION-TYPE<br>HW-ITEM-F-ORDER<br>HW-ITEM-F-PROMPT<br>HW-ITEM-F-ANSWER-KEY<br>HW-ITEM-F-POINTS<br>HW-ITEM-F-RUBRIC-VERSION<br>HW-ITEM-F-KNOWLEDGE-POINT-IDS | HW-ITEM-F-ITEM-VERSION | PUBLISHED → REVISION_DRAFT | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts inside assigned course and class scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to change another subject's professional assignment facts<br>DENY:ROLE-STUDENT — a student attempts to create, revise, publish, or close an assignment | WEB / APP | HIGH | REQUIRED | HW-ACT-REVISE-ITEM:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-OPEN-PUBLISHED | Open Published Assignment | HW-OBJ-ASSIGNMENT | READ |  | HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | UNCHANGED | ALLOW:ROLE-STUDENT — the student belongs to the published assignment class scope after the open time<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student assignment content | WEB / APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND / NOT_OPEN_YET |
+| HW-ACT-RESOLVE-GRADING-SNAPSHOT | Resolve Published Item Grading Snapshot | HW-OBJ-ITEM | READ |  | HW-ITEM-F-ITEM-VERSION<br>HW-ITEM-F-RUBRIC-REF<br>HW-ITEM-F-RUBRIC-VERSION | UNCHANGED | ALLOW:SYSTEM — DF-006 resolves the immutable published item and Rubric versions<br>DENY:CURRENT_ACTOR — users cannot invoke the internal grading snapshot handoff | FLOW_INTERNAL | READ | NOT_REQUIRED | — | PERMISSION_DENIED / NOT_FOUND |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 作业列表、题目编辑、评分规则、发布预览、批量发布、版本查看 | 移动查看作业、轻量创建学习任务、发布结果提醒 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| HW-OBJ-ASSIGNMENT | DRAFT | HW-ACT-CREATE-DRAFT | HW-ACT-VALIDATE |
+| HW-OBJ-ASSIGNMENT | VALIDATED | HW-ACT-VALIDATE<br>HW-ACT-REVALIDATE-REVISION | HW-ACT-PUBLISH-NOW<br>HW-ACT-SCHEDULE-PUBLISH |
+| HW-OBJ-ASSIGNMENT | SCHEDULED | HW-ACT-SCHEDULE-PUBLISH | HW-ACT-PUBLISH-SCHEDULED |
+| HW-OBJ-ASSIGNMENT | PUBLISHED | HW-ACT-PUBLISH-NOW<br>HW-ACT-PUBLISH-SCHEDULED | HW-ACT-CLOSE<br>HW-ACT-REVISE |
+| HW-OBJ-ASSIGNMENT | CLOSED | HW-ACT-CLOSE |  |
+| HW-OBJ-ASSIGNMENT | REVISION_DRAFT | HW-ACT-REVISE | HW-ACT-REVALIDATE-REVISION |
+| HW-OBJ-ITEM | DRAFT | HW-ACT-CREATE-ITEM<br>HW-ACT-EDIT-ITEM | HW-ACT-EDIT-ITEM<br>HW-ACT-VALIDATE-ITEM |
+| HW-OBJ-ITEM | VALIDATED | HW-ACT-VALIDATE-ITEM<br>HW-ACT-REVALIDATE-ITEM | HW-ACT-PUBLISH-ITEM |
+| HW-OBJ-ITEM | PUBLISHED | HW-ACT-PUBLISH-ITEM | HW-ACT-REVISE-ITEM |
+| HW-OBJ-ITEM | REVISION_DRAFT | HW-ACT-REVISE-ITEM | HW-ACT-REVALIDATE-ITEM |
+| HW-OBJ-RUBRIC | PUBLISHED | HW-ACT-SYNC-RUBRIC |  |
+| HW-OBJ-RUBRIC | DEPRECATED | HW-ACT-SYNC-RUBRIC |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-004 | Assignment Validation and Publication | 1 | HW-001 / APP-001 | HW-ACT-VALIDATE-ITEM<br>HW-ACT-REVALIDATE-ITEM<br>HW-ACT-VALIDATE<br>HW-ACT-REVALIDATE-REVISION<br>HW-ACT-PREVIEW<br>HW-ACT-PUBLISH-ITEM<br>HW-ACT-PUBLISH-NOW<br>HW-ACT-SCHEDULE-PUBLISH | ASSIGNMENT_OBJECT_VERSION_WITH_NO_PARTIAL_ITEM_PUBLICATION；{"strategy":"REVALIDATE_STALE_ASSIGNMENT_THEN_RETRY","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PUBLICATION_VERSION","description":"a failed immediate or scheduled publication leaves the prior published version active"}；{"strategy":"INVALIDATE_NEW_STUDENT_ASSIGNMENT_READS_ONLY","targets":["student assignment list","submission eligibility cache","assignment notification preview"]} |
+| DF-005 | Published Assignment Student Submission | 1 | HW-001 / SUB-001 | HW-ACT-OPEN-PUBLISHED | STUDENT_SUBMISSION_OBJECT_AND_MEDIA_CHUNK；{"strategy":"RETRY_FAILED_CHUNKS_OR_UNRECEIPTED_SUBMISSION","maxAttempts":5,"retryableFailureResults":["TRANSIENT_FAILURE","CHUNK_REJECTED","SERVER_RECEIPT_NOT_ISSUED"]}；{"strategy":"PRESERVE_DRAFT_AND_ACCEPTED_CHUNKS","description":"never roll back accepted chunks and never create a final submission without a server receipt"}；{"strategy":"INVALIDATE_STALE_SUBMISSION_DERIVATIONS","targets":["submission status","grading queue eligibility","late and resubmission projections"]} |
+| DF-006 | Submission Grading Routing | 1 | HW-001 / SUB-001 / GRD-001 | HW-ACT-RESOLVE-GRADING-SNAPSHOT | SUBMISSION_ITEM_OBJECT_WITH_INDEPENDENT_MANUAL_ROUTE；{"strategy":"RETRY_QUEUE_AND_PROCESSING_WITH_MANUAL_CUTOFF","maxAttempts":3,"retryableFailureResults":["AI_UNAVAILABLE","VERSION_CONFLICT"]}；{"strategy":"ROUTE_MANUAL_WITHOUT_ROLLING_BACK_SUBMISSION","description":"an AI failure preserves the accepted submission and creates or keeps a manual grading route"}；{"strategy":"INVALIDATE_STALE_GRADING_QUEUE_VIEWS","targets":["subject teacher grading queue","AI suggestion preview","batch confirmation eligibility"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| HW-F001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 决定课程、知识点和任课班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F002 | 课程 | 单选下拉 | OPT-COM-008 | 是 | 依赖年级、学科、学期 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F003 | 发布班级 | 多选下拉 | OPT-COM-006 | 是；不默认全选 | 只含当前任课班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F004 | 作业类型 | 单选卡片 | OPT-ENUM-002 | 是 | 类型变化重校验提交方式 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F005 | 题型 | 单选下拉 | OPT-ENUM-003 | 每题必填 | 决定答案、评分和 AI 能力提示 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F006 | 知识点 | 树形多选 | OPT-COM-011 | 每题至少一个 | 保存版本快照 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F007 | 反馈开放策略 | 单选下拉 | OPT-ENUM-004 | 是 | 不得早于成绩发布 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| HW-F008 | 发布通知 | 开关 | OPT-ENUM-001 | 否；默认 YES | 范围等于发布学生 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| HW-PAGE-AUTHORING | Assignment Authoring Workspace | WEB / APP | HW-OBJ-ASSIGNMENT<br>HW-OBJ-ITEM | HW-ASSIGNMENT-F-ID<br>HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-SUBJECT-ID<br>HW-ASSIGNMENT-F-COURSE-ID<br>HW-ASSIGNMENT-F-CLASS-SCOPE-IDS<br>HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-LATE-POLICY<br>HW-ASSIGNMENT-F-RESUBMISSION-POLICY<br>HW-ASSIGNMENT-F-ASSIGNMENT-TYPE<br>HW-ASSIGNMENT-F-QUESTION-ORDER<br>HW-ASSIGNMENT-F-RUBRIC-VERSION<br>HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS<br>HW-ASSIGNMENT-F-FEEDBACK-POLICY<br>HW-ASSIGNMENT-F-NOTIFICATION-POLICY<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION<br>HW-ASSIGNMENT-F-REVISION-REASON<br>HW-ITEM-F-ID<br>HW-ITEM-F-ITEM-VERSION<br>HW-ITEM-F-QUESTION-TYPE<br>HW-ITEM-F-ORDER<br>HW-ITEM-F-PROMPT<br>HW-ITEM-F-ANSWER-KEY<br>HW-ITEM-F-POINTS<br>HW-ITEM-F-RUBRIC-VERSION<br>HW-ITEM-F-RUBRIC-REF<br>HW-ITEM-F-KNOWLEDGE-POINT-IDS | HW-ACT-CREATE-DRAFT<br>HW-ACT-CREATE-ITEM<br>HW-ACT-EDIT-ITEM<br>HW-ACT-VALIDATE-ITEM<br>HW-ACT-VALIDATE<br>HW-ACT-REVALIDATE-ITEM<br>HW-ACT-REVALIDATE-REVISION<br>HW-ACT-PREVIEW<br>HW-ACT-PUBLISH-ITEM<br>HW-ACT-PUBLISH-NOW<br>HW-ACT-SCHEDULE-PUBLISH<br>HW-ACT-CLOSE<br>HW-ACT-REVISE<br>HW-ACT-REVISE-ITEM | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| HW-PAGE-STUDENT | Published Assignment Reader | WEB / APP | HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | HW-ACT-OPEN-PUBLISHED | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| DRAFT | 草稿 |
-| READY | 可发布 |
-| SCHEDULED | 待发布时间 |
-| RELEASED | 已发布 |
-| CLOSED | 已截止 |
-| ARCHIVED | 已归档 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-ACT-SYNC-RUBRIC-SCN-SUCCESS-PUBLISHED | SUCCESS | HW-ACT-SYNC-RUBRIC | the actor meets the entry conditions for Sync a Versioned Rubric Snapshot | the actor requests Sync a Versioned Rubric Snapshot | Sync a Versioned Rubric Snapshot returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| HW-ACT-SYNC-RUBRIC-SCN-SUCCESS-DEPRECATED | SUCCESS | HW-ACT-SYNC-RUBRIC | the actor meets the entry conditions for Sync a Versioned Rubric Snapshot | the actor requests Sync a Versioned Rubric Snapshot | Sync a Versioned Rubric Snapshot returns the accepted versioned result | DEPRECATED | ALLOW |  |
+| HW-ACT-SYNC-RUBRIC-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-SYNC-RUBRIC | PERMISSION_DENIED applies to Sync a Versioned Rubric Snapshot | the actor requests Sync a Versioned Rubric Snapshot | Sync a Versioned Rubric Snapshot returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-SYNC-RUBRIC-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-SYNC-RUBRIC | VALIDATION_FAILED applies to Sync a Versioned Rubric Snapshot | the actor requests Sync a Versioned Rubric Snapshot | Sync a Versioned Rubric Snapshot returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-SYNC-RUBRIC-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-SYNC-RUBRIC | VERSION_CONFLICT applies to Sync a Versioned Rubric Snapshot | the actor requests Sync a Versioned Rubric Snapshot | Sync a Versioned Rubric Snapshot returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-SYNC-RUBRIC-SCN-AUDIT_FAILED | FAILURE | HW-ACT-SYNC-RUBRIC | AUDIT_FAILED applies to Sync a Versioned Rubric Snapshot | the actor requests Sync a Versioned Rubric Snapshot | Sync a Versioned Rubric Snapshot returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-CREATE-DRAFT-SCN-SUCCESS | SUCCESS | HW-ACT-CREATE-DRAFT | the actor meets the entry conditions for Create Assignment Draft | the actor requests Create Assignment Draft | Create Assignment Draft returns the accepted versioned result | DRAFT | ALLOW |  |
+| HW-ACT-CREATE-DRAFT-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-CREATE-DRAFT | PERMISSION_DENIED applies to Create Assignment Draft | the actor requests Create Assignment Draft | Create Assignment Draft returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-CREATE-DRAFT-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-CREATE-DRAFT | VALIDATION_FAILED applies to Create Assignment Draft | the actor requests Create Assignment Draft | Create Assignment Draft returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-CREATE-DRAFT-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-CREATE-DRAFT | VERSION_CONFLICT applies to Create Assignment Draft | the actor requests Create Assignment Draft | Create Assignment Draft returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-CREATE-ITEM-SCN-SUCCESS | SUCCESS | HW-ACT-CREATE-ITEM | the actor meets the entry conditions for Create Assignment Item | the actor requests Create Assignment Item | Create Assignment Item returns the accepted versioned result | DRAFT | ALLOW |  |
+| HW-ACT-CREATE-ITEM-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-CREATE-ITEM | PERMISSION_DENIED applies to Create Assignment Item | the actor requests Create Assignment Item | Create Assignment Item returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-CREATE-ITEM-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-CREATE-ITEM | VALIDATION_FAILED applies to Create Assignment Item | the actor requests Create Assignment Item | Create Assignment Item returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-CREATE-ITEM-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-CREATE-ITEM | VERSION_CONFLICT applies to Create Assignment Item | the actor requests Create Assignment Item | Create Assignment Item returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-EDIT-ITEM-SCN-SUCCESS | SUCCESS | HW-ACT-EDIT-ITEM | the actor meets the entry conditions for Edit Assignment Item | the actor requests Edit Assignment Item | Edit Assignment Item returns the accepted versioned result | DRAFT | ALLOW |  |
+| HW-ACT-EDIT-ITEM-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-EDIT-ITEM | PERMISSION_DENIED applies to Edit Assignment Item | the actor requests Edit Assignment Item | Edit Assignment Item returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-EDIT-ITEM-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-EDIT-ITEM | VALIDATION_FAILED applies to Edit Assignment Item | the actor requests Edit Assignment Item | Edit Assignment Item returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-EDIT-ITEM-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-EDIT-ITEM | VERSION_CONFLICT applies to Edit Assignment Item | the actor requests Edit Assignment Item | Edit Assignment Item returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-VALIDATE-ITEM-SCN-SUCCESS | SUCCESS | HW-ACT-VALIDATE-ITEM | the actor meets the entry conditions for Validate Assignment Item Version | the actor requests Validate Assignment Item Version | Validate Assignment Item Version returns the accepted versioned result | VALIDATED | ALLOW |  |
+| HW-ACT-VALIDATE-ITEM-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-VALIDATE-ITEM | PERMISSION_DENIED applies to Validate Assignment Item Version | the actor requests Validate Assignment Item Version | Validate Assignment Item Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-VALIDATE-ITEM-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-VALIDATE-ITEM | VALIDATION_FAILED applies to Validate Assignment Item Version | the actor requests Validate Assignment Item Version | Validate Assignment Item Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-VALIDATE-ITEM-SCN-INCOMPLETE_ITEM | FAILURE | HW-ACT-VALIDATE-ITEM | INCOMPLETE_ITEM applies to Validate Assignment Item Version | the actor requests Validate Assignment Item Version | Validate Assignment Item Version returns INCOMPLETE_ITEM without hidden writes | UNCHANGED | DENY | INCOMPLETE_ITEM |
+| HW-ACT-VALIDATE-ITEM-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-VALIDATE-ITEM | VERSION_CONFLICT applies to Validate Assignment Item Version | the actor requests Validate Assignment Item Version | Validate Assignment Item Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-VALIDATE-SCN-SUCCESS | SUCCESS | HW-ACT-VALIDATE | the actor meets the entry conditions for Validate Assignment Version | the actor requests Validate Assignment Version | Validate Assignment Version returns the accepted versioned result | VALIDATED | ALLOW |  |
+| HW-ACT-VALIDATE-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-VALIDATE | PERMISSION_DENIED applies to Validate Assignment Version | the actor requests Validate Assignment Version | Validate Assignment Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-VALIDATE-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-VALIDATE | VALIDATION_FAILED applies to Validate Assignment Version | the actor requests Validate Assignment Version | Validate Assignment Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-VALIDATE-SCN-INCOMPLETE_ITEM | FAILURE | HW-ACT-VALIDATE | INCOMPLETE_ITEM applies to Validate Assignment Version | the actor requests Validate Assignment Version | Validate Assignment Version returns INCOMPLETE_ITEM without hidden writes | UNCHANGED | DENY | INCOMPLETE_ITEM |
+| HW-ACT-VALIDATE-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-VALIDATE | VERSION_CONFLICT applies to Validate Assignment Version | the actor requests Validate Assignment Version | Validate Assignment Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-REVALIDATE-ITEM-SCN-SUCCESS | SUCCESS | HW-ACT-REVALIDATE-ITEM | the actor meets the entry conditions for Revalidate Revised Assignment Item | the actor requests Revalidate Revised Assignment Item | Revalidate Revised Assignment Item returns the accepted versioned result | VALIDATED | ALLOW |  |
+| HW-ACT-REVALIDATE-ITEM-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-REVALIDATE-ITEM | PERMISSION_DENIED applies to Revalidate Revised Assignment Item | the actor requests Revalidate Revised Assignment Item | Revalidate Revised Assignment Item returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-REVALIDATE-ITEM-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-REVALIDATE-ITEM | VALIDATION_FAILED applies to Revalidate Revised Assignment Item | the actor requests Revalidate Revised Assignment Item | Revalidate Revised Assignment Item returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-REVALIDATE-ITEM-SCN-INCOMPLETE_ITEM | FAILURE | HW-ACT-REVALIDATE-ITEM | INCOMPLETE_ITEM applies to Revalidate Revised Assignment Item | the actor requests Revalidate Revised Assignment Item | Revalidate Revised Assignment Item returns INCOMPLETE_ITEM without hidden writes | UNCHANGED | DENY | INCOMPLETE_ITEM |
+| HW-ACT-REVALIDATE-ITEM-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-REVALIDATE-ITEM | VERSION_CONFLICT applies to Revalidate Revised Assignment Item | the actor requests Revalidate Revised Assignment Item | Revalidate Revised Assignment Item returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-REVALIDATE-REVISION-SCN-SUCCESS | SUCCESS | HW-ACT-REVALIDATE-REVISION | the actor meets the entry conditions for Revalidate Assignment Revision | the actor requests Revalidate Assignment Revision | Revalidate Assignment Revision returns the accepted versioned result | VALIDATED | ALLOW |  |
+| HW-ACT-REVALIDATE-REVISION-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-REVALIDATE-REVISION | PERMISSION_DENIED applies to Revalidate Assignment Revision | the actor requests Revalidate Assignment Revision | Revalidate Assignment Revision returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-REVALIDATE-REVISION-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-REVALIDATE-REVISION | VALIDATION_FAILED applies to Revalidate Assignment Revision | the actor requests Revalidate Assignment Revision | Revalidate Assignment Revision returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-REVALIDATE-REVISION-SCN-INCOMPLETE_ITEM | FAILURE | HW-ACT-REVALIDATE-REVISION | INCOMPLETE_ITEM applies to Revalidate Assignment Revision | the actor requests Revalidate Assignment Revision | Revalidate Assignment Revision returns INCOMPLETE_ITEM without hidden writes | UNCHANGED | DENY | INCOMPLETE_ITEM |
+| HW-ACT-REVALIDATE-REVISION-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-REVALIDATE-REVISION | VERSION_CONFLICT applies to Revalidate Assignment Revision | the actor requests Revalidate Assignment Revision | Revalidate Assignment Revision returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-PREVIEW-SCN-SUCCESS | SUCCESS | HW-ACT-PREVIEW | the actor meets the entry conditions for Preview Assignment as Student | the actor requests Preview Assignment as Student | returns the exact student-visible assignment preview without publishing | UNCHANGED | ALLOW |  |
+| HW-ACT-PREVIEW-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-PREVIEW | PERMISSION_DENIED applies to Preview Assignment as Student | the actor requests Preview Assignment as Student | Preview Assignment as Student returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-PREVIEW-SCN-NOT_FOUND | FAILURE | HW-ACT-PREVIEW | NOT_FOUND applies to Preview Assignment as Student | the actor requests Preview Assignment as Student | Preview Assignment as Student returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| HW-ACT-PUBLISH-ITEM-SCN-SUCCESS | SUCCESS | HW-ACT-PUBLISH-ITEM | the actor meets the entry conditions for Publish Validated Assignment Item | the actor requests Publish Validated Assignment Item | Publish Validated Assignment Item returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| HW-ACT-PUBLISH-ITEM-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-PUBLISH-ITEM | PERMISSION_DENIED applies to Publish Validated Assignment Item | the actor requests Publish Validated Assignment Item | Publish Validated Assignment Item returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-PUBLISH-ITEM-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-PUBLISH-ITEM | VALIDATION_FAILED applies to Publish Validated Assignment Item | the actor requests Publish Validated Assignment Item | Publish Validated Assignment Item returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-PUBLISH-ITEM-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-PUBLISH-ITEM | VERSION_CONFLICT applies to Publish Validated Assignment Item | the actor requests Publish Validated Assignment Item | Publish Validated Assignment Item returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-PUBLISH-ITEM-SCN-AUDIT_FAILED | FAILURE | HW-ACT-PUBLISH-ITEM | AUDIT_FAILED applies to Publish Validated Assignment Item | the actor requests Publish Validated Assignment Item | Publish Validated Assignment Item returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-PUBLISH-NOW-SCN-SUCCESS | SUCCESS | HW-ACT-PUBLISH-NOW | the actor meets the entry conditions for Publish Assignment Immediately | the actor requests Publish Assignment Immediately | Publish Assignment Immediately returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| HW-ACT-PUBLISH-NOW-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-PUBLISH-NOW | PERMISSION_DENIED applies to Publish Assignment Immediately | the actor requests Publish Assignment Immediately | Publish Assignment Immediately returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-PUBLISH-NOW-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-PUBLISH-NOW | VALIDATION_FAILED applies to Publish Assignment Immediately | the actor requests Publish Assignment Immediately | Publish Assignment Immediately returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-PUBLISH-NOW-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-PUBLISH-NOW | VERSION_CONFLICT applies to Publish Assignment Immediately | the actor requests Publish Assignment Immediately | Publish Assignment Immediately returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-PUBLISH-NOW-SCN-AUDIT_FAILED | FAILURE | HW-ACT-PUBLISH-NOW | AUDIT_FAILED applies to Publish Assignment Immediately | the actor requests Publish Assignment Immediately | Publish Assignment Immediately returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-SCHEDULE-PUBLISH-SCN-SUCCESS | SUCCESS | HW-ACT-SCHEDULE-PUBLISH | the actor meets the entry conditions for Schedule Assignment Publication | the actor requests Schedule Assignment Publication | Schedule Assignment Publication returns the accepted versioned result | SCHEDULED | ALLOW |  |
+| HW-ACT-SCHEDULE-PUBLISH-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-SCHEDULE-PUBLISH | PERMISSION_DENIED applies to Schedule Assignment Publication | the actor requests Schedule Assignment Publication | Schedule Assignment Publication returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-SCHEDULE-PUBLISH-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-SCHEDULE-PUBLISH | VALIDATION_FAILED applies to Schedule Assignment Publication | the actor requests Schedule Assignment Publication | Schedule Assignment Publication returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-SCHEDULE-PUBLISH-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-SCHEDULE-PUBLISH | VERSION_CONFLICT applies to Schedule Assignment Publication | the actor requests Schedule Assignment Publication | Schedule Assignment Publication returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-SCHEDULE-PUBLISH-SCN-AUDIT_FAILED | FAILURE | HW-ACT-SCHEDULE-PUBLISH | AUDIT_FAILED applies to Schedule Assignment Publication | the actor requests Schedule Assignment Publication | Schedule Assignment Publication returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-PUBLISH-SCHEDULED-SCN-SUCCESS | SUCCESS | HW-ACT-PUBLISH-SCHEDULED | the actor meets the entry conditions for Publish Scheduled Assignment at Open Time | the actor requests Publish Scheduled Assignment at Open Time | Publish Scheduled Assignment at Open Time returns the accepted versioned result | PUBLISHED | ALLOW |  |
+| HW-ACT-PUBLISH-SCHEDULED-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-PUBLISH-SCHEDULED | PERMISSION_DENIED applies to Publish Scheduled Assignment at Open Time | the actor requests Publish Scheduled Assignment at Open Time | Publish Scheduled Assignment at Open Time returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-PUBLISH-SCHEDULED-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-PUBLISH-SCHEDULED | VALIDATION_FAILED applies to Publish Scheduled Assignment at Open Time | the actor requests Publish Scheduled Assignment at Open Time | Publish Scheduled Assignment at Open Time returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-PUBLISH-SCHEDULED-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-PUBLISH-SCHEDULED | VERSION_CONFLICT applies to Publish Scheduled Assignment at Open Time | the actor requests Publish Scheduled Assignment at Open Time | Publish Scheduled Assignment at Open Time returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-PUBLISH-SCHEDULED-SCN-AUDIT_FAILED | FAILURE | HW-ACT-PUBLISH-SCHEDULED | AUDIT_FAILED applies to Publish Scheduled Assignment at Open Time | the actor requests Publish Scheduled Assignment at Open Time | Publish Scheduled Assignment at Open Time returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-CLOSE-SCN-SUCCESS | SUCCESS | HW-ACT-CLOSE | the actor meets the entry conditions for Close Assignment | the actor requests Close Assignment | Close Assignment returns the accepted versioned result | CLOSED | ALLOW |  |
+| HW-ACT-CLOSE-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-CLOSE | PERMISSION_DENIED applies to Close Assignment | the actor requests Close Assignment | Close Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-CLOSE-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-CLOSE | VALIDATION_FAILED applies to Close Assignment | the actor requests Close Assignment | Close Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-CLOSE-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-CLOSE | VERSION_CONFLICT applies to Close Assignment | the actor requests Close Assignment | Close Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-CLOSE-SCN-AUDIT_FAILED | FAILURE | HW-ACT-CLOSE | AUDIT_FAILED applies to Close Assignment | the actor requests Close Assignment | Close Assignment returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-REVISE-SCN-SUCCESS | SUCCESS | HW-ACT-REVISE | the actor meets the entry conditions for Revise Published Assignment | the actor requests Revise Published Assignment | creates a new revision draft linked to the immutable published version and reason | REVISION_DRAFT | ALLOW |  |
+| HW-ACT-REVISE-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-REVISE | PERMISSION_DENIED applies to Revise Published Assignment | the actor requests Revise Published Assignment | Revise Published Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-REVISE-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-REVISE | VALIDATION_FAILED applies to Revise Published Assignment | the actor requests Revise Published Assignment | Revise Published Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-REVISE-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-REVISE | VERSION_CONFLICT applies to Revise Published Assignment | the actor requests Revise Published Assignment | Revise Published Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-REVISE-SCN-AUDIT_FAILED | FAILURE | HW-ACT-REVISE | AUDIT_FAILED applies to Revise Published Assignment | the actor requests Revise Published Assignment | Revise Published Assignment returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-REVISE-ITEM-SCN-SUCCESS | SUCCESS | HW-ACT-REVISE-ITEM | the actor meets the entry conditions for Revise Published Assignment Item | the actor requests Revise Published Assignment Item | creates a revision draft while retaining the immutable published item version | REVISION_DRAFT | ALLOW |  |
+| HW-ACT-REVISE-ITEM-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-REVISE-ITEM | PERMISSION_DENIED applies to Revise Published Assignment Item | the actor requests Revise Published Assignment Item | Revise Published Assignment Item returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-REVISE-ITEM-SCN-VALIDATION_FAILED | FAILURE | HW-ACT-REVISE-ITEM | VALIDATION_FAILED applies to Revise Published Assignment Item | the actor requests Revise Published Assignment Item | Revise Published Assignment Item returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| HW-ACT-REVISE-ITEM-SCN-VERSION_CONFLICT | FAILURE | HW-ACT-REVISE-ITEM | VERSION_CONFLICT applies to Revise Published Assignment Item | the actor requests Revise Published Assignment Item | Revise Published Assignment Item returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| HW-ACT-REVISE-ITEM-SCN-AUDIT_FAILED | FAILURE | HW-ACT-REVISE-ITEM | AUDIT_FAILED applies to Revise Published Assignment Item | the actor requests Revise Published Assignment Item | Revise Published Assignment Item returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| HW-ACT-OPEN-PUBLISHED-SCN-SUCCESS | SUCCESS | HW-ACT-OPEN-PUBLISHED | the actor meets the entry conditions for Open Published Assignment | the actor requests Open Published Assignment | Open Published Assignment returns the accepted versioned result | UNCHANGED | ALLOW |  |
+| HW-ACT-OPEN-PUBLISHED-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-OPEN-PUBLISHED | PERMISSION_DENIED applies to Open Published Assignment | the actor requests Open Published Assignment | Open Published Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-OPEN-PUBLISHED-SCN-NOT_FOUND | FAILURE | HW-ACT-OPEN-PUBLISHED | NOT_FOUND applies to Open Published Assignment | the actor requests Open Published Assignment | Open Published Assignment returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
+| HW-ACT-OPEN-PUBLISHED-SCN-NOT_OPEN_YET | FAILURE | HW-ACT-OPEN-PUBLISHED | NOT_OPEN_YET applies to Open Published Assignment | the actor requests Open Published Assignment | Open Published Assignment returns NOT_OPEN_YET without hidden writes | UNCHANGED | DENY | NOT_OPEN_YET |
+| HW-ACT-RESOLVE-GRADING-SNAPSHOT-SCN-SUCCESS | SUCCESS | HW-ACT-RESOLVE-GRADING-SNAPSHOT | the actor meets the entry conditions for Resolve Published Item Grading Snapshot | the actor requests Resolve Published Item Grading Snapshot | returns the immutable item and Rubric versions referenced by the submitted assignment | UNCHANGED | ALLOW |  |
+| HW-ACT-RESOLVE-GRADING-SNAPSHOT-SCN-PERMISSION_DENIED | FAILURE | HW-ACT-RESOLVE-GRADING-SNAPSHOT | PERMISSION_DENIED applies to Resolve Published Item Grading Snapshot | the actor requests Resolve Published Item Grading Snapshot | Resolve Published Item Grading Snapshot returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| HW-ACT-RESOLVE-GRADING-SNAPSHOT-SCN-NOT_FOUND | FAILURE | HW-ACT-RESOLVE-GRADING-SNAPSHOT | NOT_FOUND applies to Resolve Published Item Grading Snapshot | the actor requests Resolve Published Item Grading Snapshot | Resolve Published Item Grading Snapshot returns NOT_FOUND without hidden writes | UNCHANGED | DENY | NOT_FOUND |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 教师选择学科、课程、班级和作业类型。
-2. 维护题目、答案、评分规则、知识点和反馈策略。
-3. 发布前预览学生范围、截止规则、AI 支持等级和通知。
-4. 确认后生成不可静默覆盖的 Assignment Release。
-
-关联 Flow: `DF-003`、`DF-004`、`DF-006`、`DF-102`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| HW-FR-01 | 对象查询与范围筛选 | HW-F001、HW-F002、HW-F003、HW-F004、HW-F005、HW-F006、HW-F007、HW-F008 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | HW-AC-01 |
-| HW-FR-02 | 详情查看与版本追踪 | DAT-HW-01、DAT-HW-02、DAT-HW-03、DAT-HW-04、DAT-HW-05 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | HW-AC-02 |
-| HW-FR-03 | 创建/修改/确认主动作 | HW-F001、HW-F002、HW-F003、HW-F004、HW-F005、HW-F006、HW-F007、HW-F008 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | HW-AC-03 |
-| HW-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | HW-AC-04 |
-| HW-FR-05 | 审计、通知与下游失效 | DF-003、DF-004、DF-006、DF-102 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | HW-AC-05 |
+| AI-TASK-ASSIGNMENT-DRAFT | Draft a mathematics assignment for class two due Friday | DRAFT | HW-ACT-CREATE-DRAFT | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-SUBJECT-ID<br>HW-ASSIGNMENT-F-COURSE-ID<br>HW-ASSIGNMENT-F-CLASS-SCOPE-IDS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-LATE-POLICY<br>HW-ASSIGNMENT-F-RESUBMISSION-POLICY<br>HW-ASSIGNMENT-F-ASSIGNMENT-TYPE<br>HW-ASSIGNMENT-F-QUESTION-ORDER<br>HW-ASSIGNMENT-F-RUBRIC-VERSION<br>HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS<br>HW-ASSIGNMENT-F-FEEDBACK-POLICY<br>HW-ASSIGNMENT-F-NOTIFICATION-POLICY | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
+| AI-TASK-PUBLISH-ASSIGNMENT | Publish this validated assignment now | CONTROLLED_ACTION | HW-ACT-PUBLISH-NOW | DUTY-SUBJECT-TEACHER | {"mode":"DUTY","dutyRef":"DUTY-SUBJECT-TEACHER"} | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | {"mode":"FAIL_CLOSED","preservesBusinessFacts":true,"manualFallback":"continue through the target module's manual Web or App path"} |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| HW-AC-01 | 无任课关系不能向班级发布作业。 |
-| HW-AC-02 | 发布前每题必须有题型、分值、知识点和评分规则。 |
-| HW-AC-03 | 已发布作业关键规则变化必须生成新版本。 |
-| HW-AC-04 | 学生只能看到已到发布时间且属于本人范围的作业。 |
-| HW-AC-05 | 全科可创建作业，但 AI 自动判分按题型分级提示。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-003`、`DF-004`、`DF-006`、`DF-102`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

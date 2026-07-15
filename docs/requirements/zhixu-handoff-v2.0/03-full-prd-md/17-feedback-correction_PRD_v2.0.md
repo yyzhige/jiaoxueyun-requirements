@@ -1,139 +1,198 @@
-# CORR-001 反馈、错题与订正 PRD v2.0
+# CORR-001 Student Correction and Versioned Invalidation PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学生、任课教师 |
-| 关联线框 | [17-feedback-correction-wireframe.zh-CN.md](../05-wireframe-contracts/17-feedback-correction-wireframe.zh-CN.md) |
+| 目标 | Keep correction answers student-submitted, judgments teacher-confirmed, and every dependent invalidation versioned with history preserved |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-008`、`BASE-010` |
+| NFR | `NFR-006`、`NFR-008` |
+| 进入条件 | the student can reference a visible published result version |
+| 退出条件 | the correction has a formal teacher judgment and every dependency has an object-level invalidation outcome |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-让学生从反馈进入错题订正，教师确认订正结果，并把订正形成新的学习证据。
+- 本模块权威拥有 3 个对象、12 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-CORR-01 | Correction Task | 任课教师 | 订正任务 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-CORR-02 | Correction Submission | 学生 | 订正提交 | 学生 | 学生 | 任课教师 | S2 教学业务数据 |
-| DAT-CORR-03 | Correction Decision | 任课教师 | 订正判定 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
+### CORR-OBJ-TASK Teacher Correction Task
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_CORRECTION_TASK | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S3 | NO_DIRECT_READ | OPEN / OVERDUE / AWAITING_RETRY / COMPLETED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CORR-TASK-F-ID | Correction Task ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-TASK-F-STUDENT-REF | Correction Task Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-TASK-F-SOURCE-DATA-ID | Correction Task Source Result Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-TASK-F-SOURCE-RESULT-REF | Correction Task Source Result Reference | ID | 是 | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-TASK-F-SOURCE-RESULT-VERSION | Correction Task Source Result Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-TASK-F-DUE-AT | Correction Task Due Time | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-TASK-F-OVERDUE-HANDLING | Correction Task Overdue Handling | TEXT | required when the correction task reaches OVERDUE；状态=OVERDUE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-TASK-F-TASK-VERSION | Correction Task Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 学生、任课教师
-- 解决问题: 让学生从反馈进入错题订正，教师确认订正结果，并把订正形成新的学习证据。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### CORR-OBJ-ATTEMPT Student Correction Attempt Version
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_CORRECTION_ANSWER | SCHOOL | ROLE-STUDENT | ROLE-STUDENT | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | LIFE-003 | S3 | NO_DIRECT_READ | SUBMITTED / JUDGED / NEEDS_RETRY |
 
-- DAT-CORR-01 Correction Task
-- DAT-CORR-02 Correction Submission
-- DAT-CORR-03 Correction Decision
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CORR-ATTEMPT-F-ID | Correction Attempt ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-STUDENT-REF | Correction Attempt Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-TASK-REF | Correction Task Reference | ID | 是 | OBJECT_REF: CORR-OBJ-TASK | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-TASK-VERSION | Correction Task Version at Submission | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF | Prior Correction Attempt Reference | ID | required for a resubmission and absent for the first accepted submission；状态=SUBMITTED；动作=CORR-ACT-RESUBMIT | OBJECT_REF: CORR-OBJ-ATTEMPT | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION | Prior Correction Attempt Version | INTEGER | required for a resubmission and absent for the first accepted submission；状态=SUBMITTED；动作=CORR-ACT-RESUBMIT | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-CORRECTION-ANSWER | Student Correction Answer | JSON | required when the correction reaches SUBMITTED；状态=SUBMITTED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-TEACHER-JUDGMENT | Teacher Correction Judgment | STRING | required when the correction reaches JUDGED or NEEDS_RETRY；状态=JUDGED/NEEDS_RETRY | OPTION_SET: OPT-ENUM-028 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF | Correction Teacher Confirmer Reference | ID | required when the correction reaches JUDGED or NEEDS_RETRY；状态=JUDGED/NEEDS_RETRY | OBJECT_REF: ORG-OBJ-TEACHER | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT | Repeated Correction Count | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-OVERDUE-HANDLING | Correction Overdue Handling | TEXT | required when an overdue correction is submitted；状态=SUBMITTED；动作=CORR-ACT-SUBMIT-LATE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-ATTEMPT-F-CORRECTION-VERSION | Correction Attempt Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### CORR-OBJ-INVALIDATION Result Correction Invalidation Record
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DERIVED_LEARNING_INTERPRETATION_INVALIDATION | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S3 | NO_DIRECT_READ | RECORDED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CORR-INVALIDATION-F-ID | Correction Invalidation Record ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-SOURCE-DATA-ID | Invalidated Source Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-SOURCE-RESULT-REF | Invalidated Source Result Reference | ID | 是 | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-SOURCE-RESULT-VERSION | Invalidated Source Result Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-SOURCE-DECISION-REF | Invalidated Source Decision Reference | ID | 是 | OBJECT_REF: GRD-OBJ-DECISION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-SOURCE-DECISION-VERSION | Invalidated Source Decision Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-TARGET-KINDS | Invalidation Target Kinds | STRING_ARRAY | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must contain only EVIDENCE, MASTERY_INTERPRETATION, IMPROVEMENT_CANDIDATE, PLAN_EVALUATION, REPORT_INTERPRETATION, and LEARNING_PATH_EXPLANATION | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-TARGET-TRANSITIONS | Per-target Invalidation Transitions | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | each target kind must enter STALE, INVALIDATED, or PENDING_RECONFIRM independently | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-TARGET-VERSIONS | Invalidation Target Versions | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | each target records its source version, target version, object-level outcome, and retry provenance | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-TARGET-OUTCOMES | Per-target Invalidation Outcomes | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | each dependency records its outcome and retry provenance; preserve every successful target outcome and retry only failed targets | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-HISTORY-PRESERVATION | Invalidation History Preservation | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must be RETAIN_ALL_PRIOR_VERSIONS | retain accepted values with source and version metadata |
+| CORR-INVALIDATION-F-INVALIDATION-VERSION | Invalidation Record Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| CORR-REL-TASK-ATTEMPT | CORR-OBJ-TASK | CONTAINS | CORR-OBJ-ATTEMPT | ONE_TO_MANY | SAME_STUDENT | retain every submitted attempt version when the task or its source result is corrected |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CORR-ACT-CREATE-TASK | Create a Correction Task | CORR-OBJ-TASK | CREATE | CORR-TASK-F-STUDENT-REF<br>CORR-TASK-F-SOURCE-RESULT-REF<br>CORR-TASK-F-SOURCE-RESULT-VERSION | CORR-TASK-F-ID<br>CORR-TASK-F-SOURCE-DATA-ID<br>CORR-TASK-F-DUE-AT<br>CORR-TASK-F-TASK-VERSION | CREATE（成功状态由 CORR-ACT-CREATE-TASK-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher creates a correction task for an assigned student's published result<br>DENY:ROLE-STUDENT — a student cannot create or self-assign a correction task<br>DENY:DUTY-HOMEROOM — a homeroom teacher cannot create another subject's correction task<br>DENY:AI — AI cannot create or assign a correction task<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot create correction tasks by default | WEB / APP | LOW | REQUIRED | CORR-ACT-CREATE-TASK:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-AUTO-CREATE-TASK | Automatically Create a Required Correction Task | CORR-OBJ-TASK | CREATE |  | CORR-TASK-F-ID<br>CORR-TASK-F-STUDENT-REF<br>CORR-TASK-F-SOURCE-DATA-ID<br>CORR-TASK-F-SOURCE-RESULT-REF<br>CORR-TASK-F-SOURCE-RESULT-VERSION<br>CORR-TASK-F-DUE-AT<br>CORR-TASK-F-TASK-VERSION | CREATE（成功状态由 CORR-ACT-AUTO-CREATE-TASK-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified result publication Flow creates a correction task only when the published result requires correction<br>DENY:CURRENT_ACTOR — a user cannot invoke automatic correction task creation directly | FLOW_INTERNAL | LOW | REQUIRED | CORR-ACT-AUTO-CREATE-TASK:school:student:published-result-version | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| CORR-ACT-MARK-OVERDUE | Mark an Open Correction Task Overdue | CORR-OBJ-TASK | UPDATE |  | CORR-TASK-F-OVERDUE-HANDLING<br>CORR-TASK-F-TASK-VERSION | OPEN → OVERDUE | ALLOW:SYSTEM — the system marks only an OPEN correction task overdue at its due time<br>DENY:CURRENT_ACTOR — a user cannot force a correction task into the overdue state | SYSTEM_EVENT | LOW | REQUIRED | CORR-ACT-MARK-OVERDUE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-SUBMIT-INITIAL | Submit an Open Correction Answer | CORR-OBJ-ATTEMPT | CREATE | CORR-ATTEMPT-F-CORRECTION-ANSWER | CORR-ATTEMPT-F-ID<br>CORR-ATTEMPT-F-STUDENT-REF<br>CORR-ATTEMPT-F-TASK-REF<br>CORR-ATTEMPT-F-TASK-VERSION<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-CORRECTION-VERSION | CREATE（成功状态由 CORR-ACT-SUBMIT-INITIAL-SCN-SUCCESS 定义） | ALLOW:ROLE-STUDENT — the student submits or resubmits only the student's own correction answer against a visible result version<br>DENY:DUTY-SUBJECT-TEACHER — a teacher cannot submit a correction answer on the student's behalf<br>DENY:AI — AI may suggest a correction but cannot submit it or confirm the formal judgment<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to correction answers | WEB / APP | LOW | REQUIRED | CORR-ACT-SUBMIT-INITIAL:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-SUBMIT-LATE | Submit an Overdue Correction Answer | CORR-OBJ-ATTEMPT | CREATE | CORR-ATTEMPT-F-CORRECTION-ANSWER | CORR-ATTEMPT-F-ID<br>CORR-ATTEMPT-F-STUDENT-REF<br>CORR-ATTEMPT-F-TASK-REF<br>CORR-ATTEMPT-F-TASK-VERSION<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-CORRECTION-VERSION<br>CORR-ATTEMPT-F-OVERDUE-HANDLING | CREATE（成功状态由 CORR-ACT-SUBMIT-LATE-SCN-SUCCESS 定义） | ALLOW:ROLE-STUDENT — the student submits or resubmits only the student's own correction answer against a visible result version<br>DENY:DUTY-SUBJECT-TEACHER — a teacher cannot submit a correction answer on the student's behalf<br>DENY:AI — AI may suggest a correction but cannot submit it or confirm the formal judgment<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to correction answers | WEB / APP | LOW | REQUIRED | CORR-ACT-SUBMIT-LATE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-CONFIRM-JUDGMENT | Confirm the Formal Correction Judgment | CORR-OBJ-ATTEMPT | UPDATE | CORR-ATTEMPT-F-TEACHER-JUDGMENT | CORR-ATTEMPT-F-TEACHER-JUDGMENT<br>CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF<br>CORR-ATTEMPT-F-CORRECTION-VERSION | SUBMITTED → JUDGED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail<br>DENY:AI — AI may suggest a judgment but cannot confirm the formal correction decision | WEB / APP | HIGH | REQUIRED | CORR-ACT-CONFIRM-JUDGMENT:school:object:source-version:request-id | PERMISSION_DENIED / STALE_RESULT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| CORR-ACT-REQUEST-RETRY | Request Another Correction Attempt | CORR-OBJ-ATTEMPT | UPDATE | CORR-ATTEMPT-F-TEACHER-JUDGMENT | CORR-ATTEMPT-F-TEACHER-JUDGMENT<br>CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF<br>CORR-ATTEMPT-F-CORRECTION-VERSION | SUBMITTED → NEEDS_RETRY | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher writes only inside the assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts<br>DENY:ROLE-SCHOOL-ADMIN — a school administrator attempts to read or mutate student learning detail without a separately authorized case<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to student learning detail<br>DENY:AI — AI may suggest a judgment but cannot confirm the formal correction decision | WEB / APP | HIGH | REQUIRED | CORR-ACT-REQUEST-RETRY:school:object:source-version:request-id | PERMISSION_DENIED / STALE_RESULT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| CORR-ACT-MARK-TASK-AWAITING-RETRY | Mark the Correction Task Awaiting Retry | CORR-OBJ-TASK | UPDATE | CORR-TASK-F-ID<br>CORR-TASK-F-TASK-VERSION | CORR-TASK-F-TASK-VERSION | OPEN / OVERDUE / AWAITING_RETRY → AWAITING_RETRY | ALLOW:SYSTEM — the verified correction judgment Flow updates only the guarded correction Task version<br>DENY:CURRENT_ACTOR — a user cannot bypass the formal judgment to update correction Task state directly | FLOW_INTERNAL | LOW | REQUIRED | CORR-ACT-MARK-TASK-AWAITING-RETRY:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| CORR-ACT-COMPLETE-TASK | Complete the Correction Task after Final Judgment | CORR-OBJ-TASK | UPDATE | CORR-TASK-F-ID<br>CORR-TASK-F-TASK-VERSION | CORR-TASK-F-TASK-VERSION | OPEN / OVERDUE / AWAITING_RETRY → COMPLETED | ALLOW:SYSTEM — the verified correction judgment Flow updates only the guarded correction Task version<br>DENY:CURRENT_ACTOR — a user cannot bypass the formal judgment to update correction Task state directly | FLOW_INTERNAL | LOW | REQUIRED | CORR-ACT-COMPLETE-TASK:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| CORR-ACT-RESUBMIT | Resubmit a Repeated Correction | CORR-OBJ-ATTEMPT | CREATE | CORR-ATTEMPT-F-CORRECTION-ANSWER | CORR-ATTEMPT-F-ID<br>CORR-ATTEMPT-F-STUDENT-REF<br>CORR-ATTEMPT-F-TASK-REF<br>CORR-ATTEMPT-F-TASK-VERSION<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-CORRECTION-VERSION<br>CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF<br>CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION | CREATE（成功状态由 CORR-ACT-RESUBMIT-SCN-SUCCESS 定义） | ALLOW:ROLE-STUDENT — the student submits or resubmits only the student's own correction answer against a visible result version<br>DENY:DUTY-SUBJECT-TEACHER — a teacher cannot submit a correction answer on the student's behalf<br>DENY:AI — AI may suggest a correction but cannot submit it or confirm the formal judgment<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default access to correction answers | WEB / APP | LOW | REQUIRED | CORR-ACT-RESUBMIT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-NORMALIZE-SUBMISSION | Normalize an Accepted Correction Submission | CORR-OBJ-ATTEMPT | UPDATE | CORR-ATTEMPT-F-CORRECTION-ANSWER<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-CORRECTION-VERSION | CORR-ATTEMPT-F-CORRECTION-VERSION | SUBMITTED → SUBMITTED | ALLOW:SYSTEM — the verified correction Flow normalizes one accepted student submission branch<br>DENY:CURRENT_ACTOR — a user cannot invoke internal correction submission normalization directly | FLOW_INTERNAL | LOW | REQUIRED | CORR-ACT-NORMALIZE-SUBMISSION:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+| CORR-ACT-RECORD-INVALIDATION | Record the Result Correction Invalidation Chain | CORR-OBJ-INVALIDATION | CREATE |  | CORR-INVALIDATION-F-ID<br>CORR-INVALIDATION-F-SOURCE-DATA-ID<br>CORR-INVALIDATION-F-SOURCE-RESULT-REF<br>CORR-INVALIDATION-F-SOURCE-RESULT-VERSION<br>CORR-INVALIDATION-F-SOURCE-DECISION-REF<br>CORR-INVALIDATION-F-SOURCE-DECISION-VERSION<br>CORR-INVALIDATION-F-TARGET-KINDS<br>CORR-INVALIDATION-F-TARGET-TRANSITIONS<br>CORR-INVALIDATION-F-TARGET-VERSIONS<br>CORR-INVALIDATION-F-TARGET-OUTCOMES<br>CORR-INVALIDATION-F-HISTORY-PRESERVATION<br>CORR-INVALIDATION-F-INVALIDATION-VERSION | CREATE（成功状态由 CORR-ACT-RECORD-INVALIDATION-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified correction Flow records the object-level invalidation chain and retry provenance<br>DENY:CURRENT_ACTOR — a user cannot bypass the correction judgment to create invalidation records directly | FLOW_INTERNAL | LOW | REQUIRED | CORR-ACT-RECORD-INVALIDATION:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VERSION_CONFLICT |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 错题列表、订正查看、教师判定、批量提醒、证据回流 | 反馈查看、错题订正、拍照/文本提交、判定结果、再次订正 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| CORR-OBJ-TASK | OPEN | CORR-ACT-CREATE-TASK<br>CORR-ACT-AUTO-CREATE-TASK | CORR-ACT-MARK-OVERDUE<br>CORR-ACT-MARK-TASK-AWAITING-RETRY<br>CORR-ACT-COMPLETE-TASK |
+| CORR-OBJ-TASK | OVERDUE | CORR-ACT-MARK-OVERDUE | CORR-ACT-MARK-TASK-AWAITING-RETRY<br>CORR-ACT-COMPLETE-TASK |
+| CORR-OBJ-TASK | AWAITING_RETRY | CORR-ACT-MARK-TASK-AWAITING-RETRY | CORR-ACT-MARK-TASK-AWAITING-RETRY<br>CORR-ACT-COMPLETE-TASK |
+| CORR-OBJ-TASK | COMPLETED | CORR-ACT-COMPLETE-TASK |  |
+| CORR-OBJ-ATTEMPT | SUBMITTED | CORR-ACT-SUBMIT-INITIAL<br>CORR-ACT-SUBMIT-LATE<br>CORR-ACT-RESUBMIT<br>CORR-ACT-NORMALIZE-SUBMISSION | CORR-ACT-CONFIRM-JUDGMENT<br>CORR-ACT-REQUEST-RETRY<br>CORR-ACT-NORMALIZE-SUBMISSION |
+| CORR-OBJ-ATTEMPT | JUDGED | CORR-ACT-CONFIRM-JUDGMENT |  |
+| CORR-OBJ-ATTEMPT | NEEDS_RETRY | CORR-ACT-REQUEST-RETRY |  |
+| CORR-OBJ-INVALIDATION | RECORDED | CORR-ACT-RECORD-INVALIDATION |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-008 | Confirmed Result Publication | 1 | GRD-001 / PUB-001 / CORR-001 | CORR-ACT-AUTO-CREATE-TASK | SELECTED_STUDENT_RESULT_OR_CORRECTION_TASK_OBJECT_WITH_PARTIAL_SUCCESS；{"strategy":"RETRY_FAILED_STUDENT_RESULTS_OR_CORRECTION_TASKS_ONLY","maxAttempts":5,"retryableFailureResults":["OBJECT_PUBLICATION_FAILED","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"DO_NOT_UNPUBLISH_SUCCESSFUL_RESULTS","description":"retain successful student results and correction tasks, then retry only failed result or correction task objects after eligibility and source versions are rechecked"}；{"strategy":"INVALIDATE_STALE_STUDENT_RESULT_READS","targets":["student score view","student feedback view","notification delivery state"]} |
+| DF-009 | Published Result Correction | 1 | GRD-001 / PUB-001 / INS-001 / PLN-001 / CORR-001 | CORR-ACT-RECORD-INVALIDATION | PUBLISHED_STUDENT_RESULT_AND_DEPENDENT_INTERPRETATION_OBJECT；{"strategy":"REFRESH_RESULT_DECISION_EVIDENCE_AND_PLAN_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["STALE_DECISION_VERSION","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_RESULT_AND_DEPENDENT_VERSIONS_UNTIL_OBJECT_OUTCOMES_COMMIT","description":"a failed correction leaves prior result, evidence, mastery, plan evaluation, report, and learning-path history intact and retries only failed objects"}；{"strategy":"VERSION_AND_REQUIRE_RECONFIRMATION_FOR_EVERY_DEPENDENT_TARGET_KIND","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-010 | Correction Submission Judgment and New Evidence | 1 | PUB-001 / INS-001 / PLN-001 / CORR-001 | CORR-ACT-NORMALIZE-SUBMISSION<br>CORR-ACT-CONFIRM-JUDGMENT<br>CORR-ACT-REQUEST-RETRY<br>CORR-ACT-COMPLETE-TASK<br>CORR-ACT-MARK-TASK-AWAITING-RETRY<br>CORR-ACT-RECORD-INVALIDATION | CORRECTION_AND_DEPENDENT_EVIDENCE_OBJECT；{"strategy":"REFRESH_RESULT_EVIDENCE_AND_CORRECTION_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_VISIBLE_RESULT_AND_EVIDENCE_HISTORY","description":"a failed correction or invalidation leaves prior visible versions intact and retries only failed dependent objects"}；{"strategy":"VERSION_AND_RECONFIRM_EVERY_DEPENDENT_INTERPRETATION","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-011 | Versioned Learning Facts to Cross-term Learning Path | 1 | PUB-001 / INS-001 / CORR-001 / APP-001 / GRD-001 / LPATH-001 |  | STUDENT_SOURCE_FACT_VERSION；{"strategy":"REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_ACCEPTED_SOURCE_FACT_AND_RETRY_ONLY_FAILED_DERIVED_OBJECTS","description":"a learning-path failure never rewrites evidence and never removes an accepted timeline entry"}；{"strategy":"SUPERSEDE_OR_MARK_STALE_BY_SOURCE_VERSION","targets":["learning path interpretation version","authorized path read model"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CORR-F001 | 学生 | 自动完成 | OPT-COM-010 | 教师视图必填 | 按任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F002 | 作业 | 自动完成 | OPT-COM-012 | 是 | 只含已发布反馈作业 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F003 | 当前题目 | 题目列表 | OPT-RUN-002 | 是 | 只含需订正题目 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F004 | 订正判定 | 单选下拉 | OPT-ENUM-028 | 教师确认必填 | AI 只能建议 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CORR-F005 | 错误类型 | 多选下拉 | OPT-ENUM-010 | 否 | 教师可修正学生可见解释 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| CORR-PAGE-ATTEMPT | Student Correction and Teacher Judgment | WEB / APP | CORR-OBJ-TASK<br>CORR-OBJ-ATTEMPT | CORR-TASK-F-ID<br>CORR-TASK-F-STUDENT-REF<br>CORR-TASK-F-SOURCE-DATA-ID<br>CORR-TASK-F-SOURCE-RESULT-REF<br>CORR-TASK-F-SOURCE-RESULT-VERSION<br>CORR-TASK-F-DUE-AT<br>CORR-TASK-F-OVERDUE-HANDLING<br>CORR-TASK-F-TASK-VERSION<br>CORR-ATTEMPT-F-ID<br>CORR-ATTEMPT-F-STUDENT-REF<br>CORR-ATTEMPT-F-TASK-REF<br>CORR-ATTEMPT-F-TASK-VERSION<br>CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF<br>CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION<br>CORR-ATTEMPT-F-CORRECTION-ANSWER<br>CORR-ATTEMPT-F-TEACHER-JUDGMENT<br>CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-OVERDUE-HANDLING<br>CORR-ATTEMPT-F-CORRECTION-VERSION | CORR-ACT-CREATE-TASK<br>CORR-ACT-SUBMIT-INITIAL<br>CORR-ACT-SUBMIT-LATE<br>CORR-ACT-CONFIRM-JUDGMENT<br>CORR-ACT-REQUEST-RETRY<br>CORR-ACT-RESUBMIT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| ASSIGNED | 已分配 |
-| VIEWED | 已查看 |
-| SUBMITTED | 已提交 |
-| NEED_MORE | 需补充 |
-| PASSED | 已通过 |
-| FAILED | 未通过 |
-| CLOSED | 已关闭 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CORR-ACT-CREATE-TASK-SCN-SUCCESS | SUCCESS | CORR-ACT-CREATE-TASK | the actor meets the entry conditions for Create a Correction Task | the actor requests Create a Correction Task | Create a Correction Task returns the accepted versioned result | OPEN | ALLOW |  |
+| CORR-ACT-CREATE-TASK-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-CREATE-TASK | PERMISSION_DENIED applies to Create a Correction Task | the actor requests Create a Correction Task | Create a Correction Task returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-CREATE-TASK-SCN-VALIDATION_FAILED | FAILURE | CORR-ACT-CREATE-TASK | VALIDATION_FAILED applies to Create a Correction Task | the actor requests Create a Correction Task | Create a Correction Task returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CORR-ACT-CREATE-TASK-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-CREATE-TASK | VERSION_CONFLICT applies to Create a Correction Task | the actor requests Create a Correction Task | Create a Correction Task returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-AUTO-CREATE-TASK-SCN-SUCCESS | SUCCESS | CORR-ACT-AUTO-CREATE-TASK | the actor meets the entry conditions for Automatically Create a Required Correction Task | the actor requests Automatically Create a Required Correction Task | creates one OPEN correction task with a due time from the published result and its exact result version when correction is required | OPEN | ALLOW |  |
+| CORR-ACT-AUTO-CREATE-TASK-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-AUTO-CREATE-TASK | PERMISSION_DENIED applies to Automatically Create a Required Correction Task | the actor requests Automatically Create a Required Correction Task | Automatically Create a Required Correction Task returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-AUTO-CREATE-TASK-SCN-SOURCE_VERSION_STALE | FAILURE | CORR-ACT-AUTO-CREATE-TASK | SOURCE_VERSION_STALE applies to Automatically Create a Required Correction Task | the actor requests Automatically Create a Required Correction Task | Automatically Create a Required Correction Task returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| CORR-ACT-AUTO-CREATE-TASK-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-AUTO-CREATE-TASK | VERSION_CONFLICT applies to Automatically Create a Required Correction Task | the actor requests Automatically Create a Required Correction Task | Automatically Create a Required Correction Task returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-MARK-OVERDUE-SCN-SUCCESS | SUCCESS | CORR-ACT-MARK-OVERDUE | the actor meets the entry conditions for Mark an Open Correction Task Overdue | the actor requests Mark an Open Correction Task Overdue | Mark an Open Correction Task Overdue returns the accepted versioned result | OVERDUE | ALLOW |  |
+| CORR-ACT-MARK-OVERDUE-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-MARK-OVERDUE | PERMISSION_DENIED applies to Mark an Open Correction Task Overdue | the actor requests Mark an Open Correction Task Overdue | Mark an Open Correction Task Overdue returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-MARK-OVERDUE-SCN-VALIDATION_FAILED | FAILURE | CORR-ACT-MARK-OVERDUE | VALIDATION_FAILED applies to Mark an Open Correction Task Overdue | the actor requests Mark an Open Correction Task Overdue | Mark an Open Correction Task Overdue returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CORR-ACT-MARK-OVERDUE-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-MARK-OVERDUE | VERSION_CONFLICT applies to Mark an Open Correction Task Overdue | the actor requests Mark an Open Correction Task Overdue | Mark an Open Correction Task Overdue returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-SUBMIT-INITIAL-SCN-SUCCESS | SUCCESS | CORR-ACT-SUBMIT-INITIAL | the actor meets the entry conditions for Submit an Open Correction Answer | the actor requests Submit an Open Correction Answer | Submit an Open Correction Answer returns the accepted versioned result | SUBMITTED | ALLOW |  |
+| CORR-ACT-SUBMIT-INITIAL-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-SUBMIT-INITIAL | PERMISSION_DENIED applies to Submit an Open Correction Answer | the actor requests Submit an Open Correction Answer | Submit an Open Correction Answer returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-SUBMIT-INITIAL-SCN-VALIDATION_FAILED | FAILURE | CORR-ACT-SUBMIT-INITIAL | VALIDATION_FAILED applies to Submit an Open Correction Answer | the actor requests Submit an Open Correction Answer | Submit an Open Correction Answer returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CORR-ACT-SUBMIT-INITIAL-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-SUBMIT-INITIAL | VERSION_CONFLICT applies to Submit an Open Correction Answer | the actor requests Submit an Open Correction Answer | Submit an Open Correction Answer returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-SUBMIT-LATE-SCN-SUCCESS | SUCCESS | CORR-ACT-SUBMIT-LATE | the actor meets the entry conditions for Submit an Overdue Correction Answer | the actor requests Submit an Overdue Correction Answer | Submit an Overdue Correction Answer returns the accepted versioned result | SUBMITTED | ALLOW |  |
+| CORR-ACT-SUBMIT-LATE-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-SUBMIT-LATE | PERMISSION_DENIED applies to Submit an Overdue Correction Answer | the actor requests Submit an Overdue Correction Answer | Submit an Overdue Correction Answer returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-SUBMIT-LATE-SCN-VALIDATION_FAILED | FAILURE | CORR-ACT-SUBMIT-LATE | VALIDATION_FAILED applies to Submit an Overdue Correction Answer | the actor requests Submit an Overdue Correction Answer | Submit an Overdue Correction Answer returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CORR-ACT-SUBMIT-LATE-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-SUBMIT-LATE | VERSION_CONFLICT applies to Submit an Overdue Correction Answer | the actor requests Submit an Overdue Correction Answer | Submit an Overdue Correction Answer returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-CONFIRM-JUDGMENT-SCN-SUCCESS | SUCCESS | CORR-ACT-CONFIRM-JUDGMENT | the actor meets the entry conditions for Confirm the Formal Correction Judgment | the actor requests Confirm the Formal Correction Judgment | the corresponding subject teacher confirms the official correction judgment; AI suggestions remain non-authoritative | JUDGED | ALLOW |  |
+| CORR-ACT-CONFIRM-JUDGMENT-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-CONFIRM-JUDGMENT | PERMISSION_DENIED applies to Confirm the Formal Correction Judgment | the actor requests Confirm the Formal Correction Judgment | Confirm the Formal Correction Judgment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-CONFIRM-JUDGMENT-SCN-STALE_RESULT_VERSION | FAILURE | CORR-ACT-CONFIRM-JUDGMENT | STALE_RESULT_VERSION applies to Confirm the Formal Correction Judgment | the actor requests Confirm the Formal Correction Judgment | Confirm the Formal Correction Judgment returns STALE_RESULT_VERSION without hidden writes | UNCHANGED | DENY | STALE_RESULT_VERSION |
+| CORR-ACT-CONFIRM-JUDGMENT-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-CONFIRM-JUDGMENT | VERSION_CONFLICT applies to Confirm the Formal Correction Judgment | the actor requests Confirm the Formal Correction Judgment | Confirm the Formal Correction Judgment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-CONFIRM-JUDGMENT-SCN-AUDIT_FAILED | FAILURE | CORR-ACT-CONFIRM-JUDGMENT | AUDIT_FAILED applies to Confirm the Formal Correction Judgment | the actor requests Confirm the Formal Correction Judgment | Confirm the Formal Correction Judgment returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CORR-ACT-REQUEST-RETRY-SCN-SUCCESS | SUCCESS | CORR-ACT-REQUEST-RETRY | the actor meets the entry conditions for Request Another Correction Attempt | the actor requests Request Another Correction Attempt | the corresponding subject teacher records the retry judgment without accepting the correction as final | NEEDS_RETRY | ALLOW |  |
+| CORR-ACT-REQUEST-RETRY-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-REQUEST-RETRY | PERMISSION_DENIED applies to Request Another Correction Attempt | the actor requests Request Another Correction Attempt | Request Another Correction Attempt returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-REQUEST-RETRY-SCN-STALE_RESULT_VERSION | FAILURE | CORR-ACT-REQUEST-RETRY | STALE_RESULT_VERSION applies to Request Another Correction Attempt | the actor requests Request Another Correction Attempt | Request Another Correction Attempt returns STALE_RESULT_VERSION without hidden writes | UNCHANGED | DENY | STALE_RESULT_VERSION |
+| CORR-ACT-REQUEST-RETRY-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-REQUEST-RETRY | VERSION_CONFLICT applies to Request Another Correction Attempt | the actor requests Request Another Correction Attempt | Request Another Correction Attempt returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-REQUEST-RETRY-SCN-AUDIT_FAILED | FAILURE | CORR-ACT-REQUEST-RETRY | AUDIT_FAILED applies to Request Another Correction Attempt | the actor requests Request Another Correction Attempt | Request Another Correction Attempt returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CORR-ACT-MARK-TASK-AWAITING-RETRY-SCN-SUCCESS | SUCCESS | CORR-ACT-MARK-TASK-AWAITING-RETRY | the actor meets the entry conditions for Mark the Correction Task Awaiting Retry | the actor requests Mark the Correction Task Awaiting Retry | moves the exact guarded correction Task version to AWAITING_RETRY after a retry judgment | AWAITING_RETRY | ALLOW |  |
+| CORR-ACT-MARK-TASK-AWAITING-RETRY-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-MARK-TASK-AWAITING-RETRY | PERMISSION_DENIED applies to Mark the Correction Task Awaiting Retry | the actor requests Mark the Correction Task Awaiting Retry | Mark the Correction Task Awaiting Retry returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-MARK-TASK-AWAITING-RETRY-SCN-SOURCE_VERSION_STALE | FAILURE | CORR-ACT-MARK-TASK-AWAITING-RETRY | SOURCE_VERSION_STALE applies to Mark the Correction Task Awaiting Retry | the actor requests Mark the Correction Task Awaiting Retry | Mark the Correction Task Awaiting Retry returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| CORR-ACT-MARK-TASK-AWAITING-RETRY-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-MARK-TASK-AWAITING-RETRY | VERSION_CONFLICT applies to Mark the Correction Task Awaiting Retry | the actor requests Mark the Correction Task Awaiting Retry | Mark the Correction Task Awaiting Retry returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-COMPLETE-TASK-SCN-SUCCESS | SUCCESS | CORR-ACT-COMPLETE-TASK | the actor meets the entry conditions for Complete the Correction Task after Final Judgment | the actor requests Complete the Correction Task after Final Judgment | moves the exact guarded correction Task version to COMPLETED before dependent evidence work | COMPLETED | ALLOW |  |
+| CORR-ACT-COMPLETE-TASK-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-COMPLETE-TASK | PERMISSION_DENIED applies to Complete the Correction Task after Final Judgment | the actor requests Complete the Correction Task after Final Judgment | Complete the Correction Task after Final Judgment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-COMPLETE-TASK-SCN-SOURCE_VERSION_STALE | FAILURE | CORR-ACT-COMPLETE-TASK | SOURCE_VERSION_STALE applies to Complete the Correction Task after Final Judgment | the actor requests Complete the Correction Task after Final Judgment | Complete the Correction Task after Final Judgment returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| CORR-ACT-COMPLETE-TASK-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-COMPLETE-TASK | VERSION_CONFLICT applies to Complete the Correction Task after Final Judgment | the actor requests Complete the Correction Task after Final Judgment | Complete the Correction Task after Final Judgment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-RESUBMIT-SCN-SUCCESS | SUCCESS | CORR-ACT-RESUBMIT | the actor meets the entry conditions for Resubmit a Repeated Correction | the actor requests Resubmit a Repeated Correction | Resubmit a Repeated Correction returns the accepted versioned result | SUBMITTED | ALLOW |  |
+| CORR-ACT-RESUBMIT-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-RESUBMIT | PERMISSION_DENIED applies to Resubmit a Repeated Correction | the actor requests Resubmit a Repeated Correction | Resubmit a Repeated Correction returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-RESUBMIT-SCN-VALIDATION_FAILED | FAILURE | CORR-ACT-RESUBMIT | VALIDATION_FAILED applies to Resubmit a Repeated Correction | the actor requests Resubmit a Repeated Correction | Resubmit a Repeated Correction returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CORR-ACT-RESUBMIT-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-RESUBMIT | VERSION_CONFLICT applies to Resubmit a Repeated Correction | the actor requests Resubmit a Repeated Correction | Resubmit a Repeated Correction returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-NORMALIZE-SUBMISSION-SCN-SUCCESS | SUCCESS | CORR-ACT-NORMALIZE-SUBMISSION | the actor meets the entry conditions for Normalize an Accepted Correction Submission | the actor requests Normalize an Accepted Correction Submission | normalizes exactly one initial, late, or repeated student submission into the correction Flow contract | SUBMITTED | ALLOW |  |
+| CORR-ACT-NORMALIZE-SUBMISSION-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-NORMALIZE-SUBMISSION | PERMISSION_DENIED applies to Normalize an Accepted Correction Submission | the actor requests Normalize an Accepted Correction Submission | Normalize an Accepted Correction Submission returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-NORMALIZE-SUBMISSION-SCN-SOURCE_VERSION_STALE | FAILURE | CORR-ACT-NORMALIZE-SUBMISSION | SOURCE_VERSION_STALE applies to Normalize an Accepted Correction Submission | the actor requests Normalize an Accepted Correction Submission | Normalize an Accepted Correction Submission returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| CORR-ACT-NORMALIZE-SUBMISSION-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-NORMALIZE-SUBMISSION | VERSION_CONFLICT applies to Normalize an Accepted Correction Submission | the actor requests Normalize an Accepted Correction Submission | Normalize an Accepted Correction Submission returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CORR-ACT-RECORD-INVALIDATION-SCN-SUCCESS | SUCCESS | CORR-ACT-RECORD-INVALIDATION | the actor meets the entry conditions for Record the Result Correction Invalidation Chain | the actor requests Record the Result Correction Invalidation Chain | records old result and decision versions, per-target new versions and states, retry provenance, and RETAIN_ALL_PRIOR_VERSIONS | RECORDED | ALLOW |  |
+| CORR-ACT-RECORD-INVALIDATION-SCN-PERMISSION_DENIED | FAILURE | CORR-ACT-RECORD-INVALIDATION | PERMISSION_DENIED applies to Record the Result Correction Invalidation Chain | the actor requests Record the Result Correction Invalidation Chain | Record the Result Correction Invalidation Chain returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CORR-ACT-RECORD-INVALIDATION-SCN-SOURCE_VERSION_STALE | FAILURE | CORR-ACT-RECORD-INVALIDATION | SOURCE_VERSION_STALE applies to Record the Result Correction Invalidation Chain | the actor requests Record the Result Correction Invalidation Chain | Record the Result Correction Invalidation Chain returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| CORR-ACT-RECORD-INVALIDATION-SCN-VERSION_CONFLICT | FAILURE | CORR-ACT-RECORD-INVALIDATION | VERSION_CONFLICT applies to Record the Result Correction Invalidation Chain | the actor requests Record the Result Correction Invalidation Chain | Record the Result Correction Invalidation Chain returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 学生查看已发布反馈并进入需订正题目。
-2. 学生提交订正答案或说明。
-3. AI 可提供订正建议但不产生正式判定。
-4. 任课教师确认订正判定并生成新学习证据。
-
-关联 Flow: `DF-010`、`DF-011`、`DF-013`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CORR-FR-01 | 对象查询与范围筛选 | CORR-F001、CORR-F002、CORR-F003、CORR-F004、CORR-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | CORR-AC-01 |
-| CORR-FR-02 | 详情查看与版本追踪 | DAT-CORR-01、DAT-CORR-02、DAT-CORR-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | CORR-AC-02 |
-| CORR-FR-03 | 创建/修改/确认主动作 | CORR-F001、CORR-F002、CORR-F003、CORR-F004、CORR-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | CORR-AC-03 |
-| CORR-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | CORR-AC-04 |
-| CORR-FR-05 | 审计、通知与下游失效 | DF-010、DF-011、DF-013 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | CORR-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| CORR-AC-01 | 未发布反馈不能生成学生可见订正任务。 |
-| CORR-AC-02 | 订正判定必须由对应任课教师确认。 |
-| CORR-AC-03 | 订正结果进入 INS-001 作为新证据。 |
-| CORR-AC-04 | 教师私密备注不向学生展示。 |
-| CORR-AC-05 | 关闭订正必须填写原因并保留历史。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-010`、`DF-011`、`DF-013`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

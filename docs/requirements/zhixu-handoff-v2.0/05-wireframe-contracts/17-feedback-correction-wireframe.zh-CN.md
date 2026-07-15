@@ -1,44 +1,64 @@
-# CORR-001 反馈、错题与订正 Web/App 线框合同 v2.0
+# CORR-001 Student Correction and Versioned Invalidation Web/App 页面合同 v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 关联 PRD | [17-feedback-correction_PRD_v2.0.md](../03-full-prd-md/17-feedback-correction_PRD_v2.0.md) |
-| 适用端 | Web、App |
-| 设计原则 | 端不是权限边界；Web 完整，App 高频；所有字段引用 PRD Field ID。 |
-
-## 1. Web 页面合同
-
-| Page ID | 页面 | 核心区域 | 主要动作 | 引用字段 |
-| --- | --- | --- | --- | --- |
-| CORR-W01 | 列表/工作台 | 筛选区、指标区、对象列表、状态标签、批量动作栏 | 查询、筛选、进入详情、打开 AI 一句话入口 | CORR-F001、CORR-F002、CORR-F003、CORR-F004 |
-| CORR-W02 | 详情/处理页 | 源对象摘要、版本信息、处理表单、历史记录、权限提示 | 保存草稿、确认、退回、查看审计 | CORR-F003、CORR-F004、CORR-F005 |
-| CORR-W03 | 预览/确认页 | 影响范围、字段变化、源版本、目标版本、风险提示、审计摘要 | 确认执行、取消、返回修改 | CORR-F001、CORR-F002、CORR-F003、CORR-F004、CORR-F005 |
-| CORR-W04 | 历史/审计页 | 版本列表、状态变化、操作者、时间、失败补偿记录 | 查看差异、筛选审计、导出摘要 | AUD-F001、AUD-F002、AUD-F003 |
-
-## 2. App 能力合同
-
-| View ID | 移动视图 | 保留能力 | 不要求移动端承载 | 状态 |
-| --- | --- | --- | --- | --- |
-| CORR-A01 | 摘要/待办 | 反馈查看、错题订正、拍照/文本提交、判定结果、再次订正 | 复杂批量表格、长表单配置、跨对象高级筛选 | 必须可用 |
-| CORR-A02 | 详情/查看 | 查看本人或授权范围内对象、状态、来源、下一步动作 | 复杂策略编辑 | 必须可用 |
-| CORR-A03 | 必要确认 | 低风险确认、移动审批、困难反馈或处理提醒 | 高风险批量写入默认回 Web | 按模块启用 |
-| CORR-A04 | AI 对话入口 | 一句话查询、摘要、草稿建议、任务提醒 | 未经预览直接执行写入 | 必须继承 AIX-001 |
-
-## 3. 组件与状态要求
-
-- 筛选控件必须使用字段字典中指定的控件类型和 Option Set。
-- 所有列表展示空状态、无权限状态、加载失败状态、部分成功状态和版本过期状态。
-- 高风险动作固定展示影响对象数量、源版本、目标版本、确认人和审计摘要。
-- AI 结果必须展示数据范围、来源模块、源版本和限制说明。
-- App 中被省略的 Web 能力必须显示合理入口或说明，不能让用户以为权限消失。
-
-## 4. 页面级验收
-
-| ID | 验收标准 |
 | --- | --- |
-| CORR-WF-01 | 页面中出现的选择型字段都能回溯到 Field ID 和 Option Set。 |
-| CORR-WF-02 | Web 与 App 的能力差异与 Capability Matrix 一致。 |
-| CORR-WF-03 | 无权限、空数据、加载失败、上下文失效、部分成功都有明确状态。 |
-| CORR-WF-04 | 高风险确认页在执行前展示影响范围、权限结果和审计摘要。 |
-| CORR-WF-05 | AI 对话入口不绕过模块 PRD 的权限、状态和确认门禁。 |
+| 模块 | CORR-001 |
+| 阶段 | 1 |
+| 页面数量 | 1 |
+| 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
+
+## CORR-PAGE-ATTEMPT Student Correction and Teacher Judgment
+
+| 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- |
+| WEB / APP | CORR-OBJ-TASK / CORR-OBJ-ATTEMPT | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+
+### 页面任务
+
+- 进入页面时先校验学校、身份、学期、职责和对象范围；失败进入 FORBIDDEN 或 CONTEXT_EXPIRED。
+- 页面只编排本合同列出的 Action；控件隐藏不能替代服务端 DENY。
+- 提交前展示输入字段、目标对象、当前版本、状态效果、失败码和审计级别。
+- 版本冲突、源版本过期、部分成功和 AI 不可用必须使用不同结果态。
+
+### 字段与控件语义
+
+| Object ID | Field ID | 字段 | 类型 | 必填 | 值来源 / Option Set | 可变性 | 可见性 | 校验 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CORR-OBJ-TASK | CORR-TASK-F-ID | Correction Task ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-TASK | CORR-TASK-F-STUDENT-REF | Correction Task Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-TASK | CORR-TASK-F-SOURCE-DATA-ID | Correction Task Source Result Data ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-TASK | CORR-TASK-F-SOURCE-RESULT-REF | Correction Task Source Result Reference | ID | 是 | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-TASK | CORR-TASK-F-SOURCE-RESULT-VERSION | Correction Task Source Result Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-TASK | CORR-TASK-F-DUE-AT | Correction Task Due Time | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-TASK | CORR-TASK-F-OVERDUE-HANDLING | Correction Task Overdue Handling | TEXT | required when the correction task reaches OVERDUE；状态=OVERDUE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-TASK | CORR-TASK-F-TASK-VERSION | Correction Task Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-ID | Correction Attempt ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-STUDENT-REF | Correction Attempt Student Reference | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TASK-REF | Correction Task Reference | ID | 是 | OBJECT_REF: CORR-OBJ-TASK | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TASK-VERSION | Correction Task Version at Submission | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF | Prior Correction Attempt Reference | ID | required for a resubmission and absent for the first accepted submission；状态=SUBMITTED；动作=CORR-ACT-RESUBMIT | OBJECT_REF: CORR-OBJ-ATTEMPT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION | Prior Correction Attempt Version | INTEGER | required for a resubmission and absent for the first accepted submission；状态=SUBMITTED；动作=CORR-ACT-RESUBMIT | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-CORRECTION-ANSWER | Student Correction Answer | JSON | required when the correction reaches SUBMITTED；状态=SUBMITTED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TEACHER-JUDGMENT | Teacher Correction Judgment | STRING | required when the correction reaches JUDGED or NEEDS_RETRY；状态=JUDGED/NEEDS_RETRY | OPTION_SET: OPT-ENUM-028 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF | Correction Teacher Confirmer Reference | ID | required when the correction reaches JUDGED or NEEDS_RETRY；状态=JUDGED/NEEDS_RETRY | OBJECT_REF: ORG-OBJ-TEACHER | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT | Repeated Correction Count | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-OVERDUE-HANDLING | Correction Overdue Handling | TEXT | required when an overdue correction is submitted；状态=SUBMITTED；动作=CORR-ACT-SUBMIT-LATE | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| CORR-OBJ-ATTEMPT | CORR-ATTEMPT-F-CORRECTION-VERSION | Correction Attempt Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+
+### 动作与反馈
+
+| Action ID | 动作 | 操作 | 输入 | 输出 | 状态效果 | ALLOW | DENY | 风险 / 审计 | 失败反馈 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CORR-ACT-CREATE-TASK | Create a Correction Task | CREATE | CORR-TASK-F-STUDENT-REF<br>CORR-TASK-F-SOURCE-RESULT-REF<br>CORR-TASK-F-SOURCE-RESULT-VERSION | CORR-TASK-F-ID<br>CORR-TASK-F-SOURCE-DATA-ID<br>CORR-TASK-F-DUE-AT<br>CORR-TASK-F-TASK-VERSION | CREATE | DUTY-SUBJECT-TEACHER | ROLE-STUDENT / DUTY-HOMEROOM / AI / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-SUBMIT-INITIAL | Submit an Open Correction Answer | CREATE | CORR-ATTEMPT-F-CORRECTION-ANSWER | CORR-ATTEMPT-F-ID<br>CORR-ATTEMPT-F-STUDENT-REF<br>CORR-ATTEMPT-F-TASK-REF<br>CORR-ATTEMPT-F-TASK-VERSION<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-CORRECTION-VERSION | CREATE | ROLE-STUDENT | DUTY-SUBJECT-TEACHER / AI / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-SUBMIT-LATE | Submit an Overdue Correction Answer | CREATE | CORR-ATTEMPT-F-CORRECTION-ANSWER | CORR-ATTEMPT-F-ID<br>CORR-ATTEMPT-F-STUDENT-REF<br>CORR-ATTEMPT-F-TASK-REF<br>CORR-ATTEMPT-F-TASK-VERSION<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-CORRECTION-VERSION<br>CORR-ATTEMPT-F-OVERDUE-HANDLING | CREATE | ROLE-STUDENT | DUTY-SUBJECT-TEACHER / AI / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CORR-ACT-CONFIRM-JUDGMENT | Confirm the Formal Correction Judgment | UPDATE | CORR-ATTEMPT-F-TEACHER-JUDGMENT | CORR-ATTEMPT-F-TEACHER-JUDGMENT<br>CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF<br>CORR-ATTEMPT-F-CORRECTION-VERSION | SUBMITTED → JUDGED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-SCHOOL-ADMIN / ROLE-PLATFORM-OPS / AI | HIGH / REQUIRED | PERMISSION_DENIED / STALE_RESULT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| CORR-ACT-REQUEST-RETRY | Request Another Correction Attempt | UPDATE | CORR-ATTEMPT-F-TEACHER-JUDGMENT | CORR-ATTEMPT-F-TEACHER-JUDGMENT<br>CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF<br>CORR-ATTEMPT-F-CORRECTION-VERSION | SUBMITTED → NEEDS_RETRY | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-SCHOOL-ADMIN / ROLE-PLATFORM-OPS / AI | HIGH / REQUIRED | PERMISSION_DENIED / STALE_RESULT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| CORR-ACT-RESUBMIT | Resubmit a Repeated Correction | CREATE | CORR-ATTEMPT-F-CORRECTION-ANSWER | CORR-ATTEMPT-F-ID<br>CORR-ATTEMPT-F-STUDENT-REF<br>CORR-ATTEMPT-F-TASK-REF<br>CORR-ATTEMPT-F-TASK-VERSION<br>CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT<br>CORR-ATTEMPT-F-CORRECTION-VERSION<br>CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF<br>CORR-ATTEMPT-F-PRIOR-ATTEMPT-VERSION | CREATE | ROLE-STUDENT | DUTY-SUBJECT-TEACHER / AI / ROLE-PLATFORM-OPS | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+
+### Web / App 差异
+
+| 端 | 本页要求 |
+| --- | --- |
+| WEB | 支持本页登记的完整任务；批量、复杂表格和治理配置优先在 Web 呈现。 |
+| APP | 支持本页登记的高频移动任务、摘要、提醒或必要确认；不要求复制未登记的 Web 复杂能力。 |

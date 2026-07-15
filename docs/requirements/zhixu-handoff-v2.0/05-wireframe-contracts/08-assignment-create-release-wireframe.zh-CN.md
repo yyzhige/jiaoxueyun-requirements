@@ -1,44 +1,117 @@
-# HW-001 作业创建与发布 Web/App 线框合同 v2.0
+# HW-001 Assignment Authoring and Publication Web/App 页面合同 v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 关联 PRD | [08-assignment-create-release_PRD_v2.0.md](../03-full-prd-md/08-assignment-create-release_PRD_v2.0.md) |
-| 适用端 | Web、App |
-| 设计原则 | 端不是权限边界；Web 完整，App 高频；所有字段引用 PRD Field ID。 |
-
-## 1. Web 页面合同
-
-| Page ID | 页面 | 核心区域 | 主要动作 | 引用字段 |
-| --- | --- | --- | --- | --- |
-| HW-W01 | 列表/工作台 | 筛选区、指标区、对象列表、状态标签、批量动作栏 | 查询、筛选、进入详情、打开 AI 一句话入口 | HW-F001、HW-F002、HW-F003、HW-F004 |
-| HW-W02 | 详情/处理页 | 源对象摘要、版本信息、处理表单、历史记录、权限提示 | 保存草稿、确认、退回、查看审计 | HW-F003、HW-F004、HW-F005、HW-F006、HW-F007 |
-| HW-W03 | 预览/确认页 | 影响范围、字段变化、源版本、目标版本、风险提示、审计摘要 | 确认执行、取消、返回修改 | HW-F001、HW-F002、HW-F003、HW-F004、HW-F005、HW-F006 |
-| HW-W04 | 历史/审计页 | 版本列表、状态变化、操作者、时间、失败补偿记录 | 查看差异、筛选审计、导出摘要 | AUD-F001、AUD-F002、AUD-F003 |
-
-## 2. App 能力合同
-
-| View ID | 移动视图 | 保留能力 | 不要求移动端承载 | 状态 |
-| --- | --- | --- | --- | --- |
-| HW-A01 | 摘要/待办 | 移动查看作业、轻量创建学习任务、发布结果提醒 | 复杂批量表格、长表单配置、跨对象高级筛选 | 必须可用 |
-| HW-A02 | 详情/查看 | 查看本人或授权范围内对象、状态、来源、下一步动作 | 复杂策略编辑 | 必须可用 |
-| HW-A03 | 必要确认 | 低风险确认、移动审批、困难反馈或处理提醒 | 高风险批量写入默认回 Web | 按模块启用 |
-| HW-A04 | AI 对话入口 | 一句话查询、摘要、草稿建议、任务提醒 | 未经预览直接执行写入 | 必须继承 AIX-001 |
-
-## 3. 组件与状态要求
-
-- 筛选控件必须使用字段字典中指定的控件类型和 Option Set。
-- 所有列表展示空状态、无权限状态、加载失败状态、部分成功状态和版本过期状态。
-- 高风险动作固定展示影响对象数量、源版本、目标版本、确认人和审计摘要。
-- AI 结果必须展示数据范围、来源模块、源版本和限制说明。
-- App 中被省略的 Web 能力必须显示合理入口或说明，不能让用户以为权限消失。
-
-## 4. 页面级验收
-
-| ID | 验收标准 |
 | --- | --- |
-| HW-WF-01 | 页面中出现的选择型字段都能回溯到 Field ID 和 Option Set。 |
-| HW-WF-02 | Web 与 App 的能力差异与 Capability Matrix 一致。 |
-| HW-WF-03 | 无权限、空数据、加载失败、上下文失效、部分成功都有明确状态。 |
-| HW-WF-04 | 高风险确认页在执行前展示影响范围、权限结果和审计摘要。 |
-| HW-WF-05 | AI 对话入口不绕过模块 PRD 的权限、状态和确认门禁。 |
+| 模块 | HW-001 |
+| 阶段 | 1 |
+| 页面数量 | 2 |
+| 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
+
+## HW-PAGE-AUTHORING Assignment Authoring Workspace
+
+| 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- |
+| WEB / APP | HW-OBJ-ASSIGNMENT / HW-OBJ-ITEM | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+
+### 页面任务
+
+- 进入页面时先校验学校、身份、学期、职责和对象范围；失败进入 FORBIDDEN 或 CONTEXT_EXPIRED。
+- 页面只编排本合同列出的 Action；控件隐藏不能替代服务端 DENY。
+- 提交前展示输入字段、目标对象、当前版本、状态效果、失败码和审计级别。
+- 版本冲突、源版本过期、部分成功和 AI 不可用必须使用不同结果态。
+
+### 字段与控件语义
+
+| Object ID | Field ID | 字段 | 类型 | 必填 | 值来源 / Option Set | 可变性 | 可见性 | 校验 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-ID | Assignment ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-TITLE | Assignment Title | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-INSTRUCTIONS | Assignment Instructions | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-SUBJECT-ID | Subject | ID | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-COURSE-ID | Course | ID | 是 | OPTION_SET: OPT-COM-008 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-CLASS-SCOPE-IDS | Class Scope | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-006 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS | Published Student Fanout Set | STRING_ARRAY | required when the assignment reaches PUBLISHED；状态=PUBLISHED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-OPEN-AT | Open Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-DUE-AT | Due Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-LATE-POLICY | Late Policy | STRING | 是 | OPTION_SET: OPT-ENUM-032 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-RESUBMISSION-POLICY | Resubmission Policy | STRING | 是 | OPTION_SET: OPT-ENUM-033 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-ASSIGNMENT-TYPE | Assignment Type | STRING | 是 | OPTION_SET: OPT-ENUM-002 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-QUESTION-ORDER | Question Order | STRING | 是 | OPTION_SET: OPT-TL-001 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-RUBRIC-VERSION | Assignment Rubric Version | ID | 是 | RUNTIME_QUERY: QUERY-AUTHORIZED-RUBRIC-VERSIONS | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS | Assignment Knowledge Points | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-011 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-FEEDBACK-POLICY | Feedback Policy | STRING | 是 | OPTION_SET: OPT-ENUM-004 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-NOTIFICATION-POLICY | Notification Policy | STRING | 是 | OPTION_SET: OPT-TL-002 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-PUBLICATION-VERSION | Publication Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-REVISION-REASON | Revision Reason | TEXT | required when revising a published assignment；状态=REVISION_DRAFT；动作=HW-ACT-REVISE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-ID | Assignment Item ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-ITEM-VERSION | Item Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-QUESTION-TYPE | Question Type | STRING | 是 | OPTION_SET: OPT-ENUM-003 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-ORDER | Item Order | INTEGER | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-PROMPT | Question Prompt | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-ANSWER-KEY | Answer Key | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-POINTS | Item Points | DECIMAL | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-RUBRIC-VERSION | Item Rubric Version | ID | 是 | RUNTIME_QUERY: QUERY-AUTHORIZED-RUBRIC-VERSIONS | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-RUBRIC-REF | Item Rubric Reference | ID | 是 | OBJECT_REF: HW-OBJ-RUBRIC | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ITEM | HW-ITEM-F-KNOWLEDGE-POINT-IDS | Item Knowledge Points | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-011 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+
+### 动作与反馈
+
+| Action ID | 动作 | 操作 | 输入 | 输出 | 状态效果 | ALLOW | DENY | 风险 / 审计 | 失败反馈 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-ACT-CREATE-DRAFT | Create Assignment Draft | CREATE | HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-SUBJECT-ID<br>HW-ASSIGNMENT-F-COURSE-ID<br>HW-ASSIGNMENT-F-CLASS-SCOPE-IDS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-LATE-POLICY<br>HW-ASSIGNMENT-F-RESUBMISSION-POLICY<br>HW-ASSIGNMENT-F-ASSIGNMENT-TYPE<br>HW-ASSIGNMENT-F-QUESTION-ORDER<br>HW-ASSIGNMENT-F-RUBRIC-VERSION<br>HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS<br>HW-ASSIGNMENT-F-FEEDBACK-POLICY<br>HW-ASSIGNMENT-F-NOTIFICATION-POLICY | HW-ASSIGNMENT-F-ID<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | CREATE | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| HW-ACT-CREATE-ITEM | Create Assignment Item | CREATE | HW-ITEM-F-QUESTION-TYPE<br>HW-ITEM-F-ORDER<br>HW-ITEM-F-PROMPT<br>HW-ITEM-F-ANSWER-KEY<br>HW-ITEM-F-POINTS<br>HW-ITEM-F-RUBRIC-VERSION<br>HW-ITEM-F-KNOWLEDGE-POINT-IDS<br>HW-ITEM-F-RUBRIC-REF | HW-ITEM-F-ID<br>HW-ITEM-F-ITEM-VERSION | CREATE | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| HW-ACT-EDIT-ITEM | Edit Assignment Item | UPDATE | HW-ITEM-F-QUESTION-TYPE<br>HW-ITEM-F-ORDER<br>HW-ITEM-F-PROMPT<br>HW-ITEM-F-ANSWER-KEY<br>HW-ITEM-F-POINTS<br>HW-ITEM-F-RUBRIC-VERSION<br>HW-ITEM-F-KNOWLEDGE-POINT-IDS | HW-ITEM-F-ITEM-VERSION | DRAFT → DRAFT | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| HW-ACT-VALIDATE-ITEM | Validate Assignment Item Version | UPDATE |  | HW-ITEM-F-ITEM-VERSION | DRAFT → VALIDATED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-VALIDATE | Validate Assignment Version | UPDATE |  | HW-ASSIGNMENT-F-PUBLICATION-VERSION | DRAFT → VALIDATED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-REVALIDATE-ITEM | Revalidate Revised Assignment Item | UPDATE |  | HW-ITEM-F-ITEM-VERSION | REVISION_DRAFT → VALIDATED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-REVALIDATE-REVISION | Revalidate Assignment Revision | UPDATE |  | HW-ASSIGNMENT-F-PUBLICATION-VERSION | REVISION_DRAFT → VALIDATED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | LOW / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / INCOMPLETE_ITEM / VERSION_CONFLICT |
+| HW-ACT-PREVIEW | Preview Assignment as Student | READ |  | HW-ASSIGNMENT-F-ID<br>HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-SUBJECT-ID<br>HW-ASSIGNMENT-F-COURSE-ID<br>HW-ASSIGNMENT-F-CLASS-SCOPE-IDS<br>HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-LATE-POLICY<br>HW-ASSIGNMENT-F-RESUBMISSION-POLICY<br>HW-ASSIGNMENT-F-ASSIGNMENT-TYPE<br>HW-ASSIGNMENT-F-QUESTION-ORDER<br>HW-ASSIGNMENT-F-RUBRIC-VERSION<br>HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS<br>HW-ASSIGNMENT-F-FEEDBACK-POLICY<br>HW-ASSIGNMENT-F-NOTIFICATION-POLICY<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION<br>HW-ASSIGNMENT-F-REVISION-REASON | UNCHANGED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | READ / NOT_REQUIRED | PERMISSION_DENIED / NOT_FOUND |
+| HW-ACT-PUBLISH-ITEM | Publish Validated Assignment Item | UPDATE |  | HW-ITEM-F-ITEM-VERSION | VALIDATED → PUBLISHED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | HIGH / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-PUBLISH-NOW | Publish Assignment Immediately | UPDATE |  | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | VALIDATED → PUBLISHED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | HIGH / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-SCHEDULE-PUBLISH | Schedule Assignment Publication | UPDATE | HW-ASSIGNMENT-F-OPEN-AT | HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | VALIDATED → SCHEDULED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | HIGH / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-CLOSE | Close Assignment | UPDATE |  | HW-ASSIGNMENT-F-PUBLICATION-VERSION | PUBLISHED → CLOSED | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | HIGH / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-REVISE | Revise Published Assignment | UPDATE | HW-ASSIGNMENT-F-REVISION-REASON | HW-ASSIGNMENT-F-REVISION-REASON<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | PUBLISHED → REVISION_DRAFT | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | HIGH / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| HW-ACT-REVISE-ITEM | Revise Published Assignment Item | UPDATE | HW-ITEM-F-QUESTION-TYPE<br>HW-ITEM-F-ORDER<br>HW-ITEM-F-PROMPT<br>HW-ITEM-F-ANSWER-KEY<br>HW-ITEM-F-POINTS<br>HW-ITEM-F-RUBRIC-VERSION<br>HW-ITEM-F-KNOWLEDGE-POINT-IDS | HW-ITEM-F-ITEM-VERSION | PUBLISHED → REVISION_DRAFT | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM / ROLE-STUDENT | HIGH / REQUIRED | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+
+### Web / App 差异
+
+| 端 | 本页要求 |
+| --- | --- |
+| WEB | 支持本页登记的完整任务；批量、复杂表格和治理配置优先在 Web 呈现。 |
+| APP | 支持本页登记的高频移动任务、摘要、提醒或必要确认；不要求复制未登记的 Web 复杂能力。 |
+
+## HW-PAGE-STUDENT Published Assignment Reader
+
+| 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- |
+| WEB / APP | HW-OBJ-ASSIGNMENT | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+
+### 页面任务
+
+- 进入页面时先校验学校、身份、学期、职责和对象范围；失败进入 FORBIDDEN 或 CONTEXT_EXPIRED。
+- 页面只编排本合同列出的 Action；控件隐藏不能替代服务端 DENY。
+- 提交前展示输入字段、目标对象、当前版本、状态效果、失败码和审计级别。
+- 版本冲突、源版本过期、部分成功和 AI 不可用必须使用不同结果态。
+
+### 字段与控件语义
+
+| Object ID | Field ID | 字段 | 类型 | 必填 | 值来源 / Option Set | 可变性 | 可见性 | 校验 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-TITLE | Assignment Title | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-INSTRUCTIONS | Assignment Instructions | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-OPEN-AT | Open Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-DUE-AT | Due Time | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| HW-OBJ-ASSIGNMENT | HW-ASSIGNMENT-F-PUBLICATION-VERSION | Publication Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+
+### 动作与反馈
+
+| Action ID | 动作 | 操作 | 输入 | 输出 | 状态效果 | ALLOW | DENY | 风险 / 审计 | 失败反馈 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HW-ACT-OPEN-PUBLISHED | Open Published Assignment | READ |  | HW-ASSIGNMENT-F-TITLE<br>HW-ASSIGNMENT-F-INSTRUCTIONS<br>HW-ASSIGNMENT-F-OPEN-AT<br>HW-ASSIGNMENT-F-DUE-AT<br>HW-ASSIGNMENT-F-PUBLICATION-VERSION | UNCHANGED | ROLE-STUDENT | ROLE-PLATFORM-OPS | READ / NOT_REQUIRED | PERMISSION_DENIED / NOT_FOUND / NOT_OPEN_YET |
+
+### Web / App 差异
+
+| 端 | 本页要求 |
+| --- | --- |
+| WEB | 支持本页登记的完整任务；批量、复杂表格和治理配置优先在 Web 呈现。 |
+| APP | 支持本页登记的高频移动任务、摘要、提醒或必要确认；不要求复制未登记的 Web 复杂能力。 |

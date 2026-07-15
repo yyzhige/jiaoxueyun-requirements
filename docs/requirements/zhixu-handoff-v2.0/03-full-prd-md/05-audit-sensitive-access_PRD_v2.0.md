@@ -1,136 +1,238 @@
-# AUD-001 操作审计与敏感访问 PRD v2.0
+# AUD-001 Audit and sensitive access PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学校管理员、教务、技术支持 |
-| 关联线框 | [05-audit-sensitive-access-wireframe.zh-CN.md](../05-wireframe-contracts/05-audit-sensitive-access-wireframe.zh-CN.md) |
+| 目标 | Append immutable audit facts and gate sensitive access by school authorization, scope, and time. |
+| 基线决策 | `BASE-001`、`BASE-007`、`BASE-008` |
+| NFR | `NFR-008`、`NFR-009` |
+| 进入条件 | audit storage accepts append-only events；sensitive access starts with no default platform-operations student detail |
+| 退出条件 | all sensitive sessions are bounded by approved scope and expiry；review outcomes retain immutable source event references |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-为登录、查询、发布、授权、AI 执行、导出等关键行为保存不可变审计，支撑追责和越权排查。
+- 本模块权威拥有 4 个对象、15 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-AUD-01 | Audit Event | 系统 | 操作事件 | 系统 | 系统 | 学校管理员 | S3 安全审计数据 |
-| DAT-AUD-02 | Sensitive Access Session | 学校管理员 | 敏感访问会话 | 申请人 | 学校管理员 | 学校管理员 | S4 敏感访问数据 |
-| DAT-AUD-03 | Audit Review Case | 学校管理员 | 审计复核工单 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
+### AUD-OBJ-EVENT Audit Event
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUDITED_SCHOOL_ACTIVITY | SCHOOL | SYSTEM | SYSTEM | SYSTEM | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | AUTHORIZED | ACCEPTED / ARCHIVED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-EVENT-F-ID | Audit Event ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-EVENT-F-TIME | Event Time | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-EVENT-F-ACTOR | Actor ID | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-EVENT-F-ACTION | Audited Action | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-EVENT-F-SCOPE | Audited Object Scope | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-EVENT-F-RESULT | Audited Result | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-EVENT-F-EVENT-VERSION | Audit Event Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 学校管理员、教务、技术支持
-- 解决问题: 为登录、查询、发布、授权、AI 执行、导出等关键行为保存不可变审计，支撑追责和越权排查。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### AUD-OBJ-ACCESS-REQUEST Sensitive Access Request
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACCESS_REQUESTER_AND_SCOPED_DATA | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | REQUESTED / APPROVED / DENIED / EXPIRED |
 
-- DAT-AUD-01 Audit Event
-- DAT-AUD-02 Sensitive Access Session
-- DAT-AUD-03 Audit Review Case
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-REQUEST-F-ID | Sensitive Access Request ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-REQUESTER | Access Requester ID | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-SCOPE | Requested Sensitive Scope | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-PURPOSE | Sensitive Access Purpose | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-EXPIRY | Requested Access Expiry | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-APPROVER | School Approver ID | STRING | required before APPROVED；状态=APPROVED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-DECISION-REASON | Sensitive Access Decision Reason | TEXT | required for APPROVED or DENIED；状态=APPROVED/DENIED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-RESULT | Access Decision Result | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-VERSION | Sensitive Access Request Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### AUD-OBJ-ACCESS-SESSION Sensitive Access Session
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| APPROVED_SENSITIVE_ACCESS | SCHOOL | SYSTEM | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | ACTIVE / EXPIRED / REVOKED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-SESSION-F-ID | Sensitive Session ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-REQUEST-ID | Approved Request ID | ID | 是 | OBJECT_REF: AUD-OBJ-ACCESS-REQUEST | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-REQUEST-VERSION | Approved Request Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-SCOPE | Session Object Scope | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-START | Session Start | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-EXPIRY | Session Expiry | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-AUTHORIZED-OPERATOR-ID | Authorized Session Operator | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-STATUS | Session Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SESSION-F-VERSION | Sensitive Access Session Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+### AUD-OBJ-REVIEW Audit Review Case
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUDIT_REVIEW_CASE | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | OPEN / INVESTIGATING / RESOLVED / CLOSED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-REVIEW-F-ID | Review Case ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REVIEW-F-EVENT-IDS | Related Audit Event IDs | STRING_ARRAY | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REVIEW-F-REASON | Review Reason | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REVIEW-F-RESOLUTION | Review Resolution | STRING | required before RESOLVED；状态=RESOLVED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REVIEW-F-STATUS | Review Case Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| AUD-REL-SESSION-REQUEST | AUD-OBJ-ACCESS-SESSION | AUTHORIZED_BY | AUD-OBJ-ACCESS-REQUEST | MANY_TO_ONE | SAME_SCHOOL | expire the active session immediately |
+| AUD-REL-REVIEW-EVENT | AUD-OBJ-REVIEW | REVIEWS | AUD-OBJ-EVENT | MANY_TO_MANY | SAME_SCHOOL | immutable accepted events cannot be invalidated; archive preserves references |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-ACT-APPEND-EVENT | Append an Immutable Audit Event | AUD-OBJ-EVENT | CREATE | AUD-EVENT-F-ACTOR<br>AUD-EVENT-F-ACTION<br>AUD-EVENT-F-SCOPE<br>AUD-EVENT-F-RESULT | AUD-EVENT-F-ID<br>AUD-EVENT-F-TIME<br>AUD-EVENT-F-EVENT-VERSION | CREATE（成功状态由 AUD-ACT-APPEND-EVENT-SCN-SUCCESS 定义） | ALLOW:SYSTEM — system append is mandatory for audited actions<br>DENY:CURRENT_ACTOR — no user may update or delete an accepted immutable audit event | SYSTEM_EVENT | HIGH | ATOMIC_SELF_RECORD | AUD-ACT-APPEND-EVENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| AUD-ACT-ARCHIVE-EVENT | Archive a Retained Audit Event | AUD-OBJ-EVENT | UPDATE | AUD-EVENT-F-ID | AUD-EVENT-F-EVENT-VERSION | ACCEPTED → ARCHIVED | ALLOW:SYSTEM — the system archives an audit event only after its retention threshold<br>DENY:CURRENT_ACTOR — a user cannot archive or delete an audit event directly | SYSTEM_EVENT | HIGH | ATOMIC_SELF_RECORD | AUD-ACT-ARCHIVE-EVENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| AUD-ACT-QUERY-AUDIT | Query Authorized Audit Events | AUD-OBJ-EVENT | READ | AUD-EVENT-F-SCOPE<br>AUD-EVENT-F-ACTOR<br>AUD-EVENT-F-ACTION | AUD-EVENT-F-ID<br>AUD-EVENT-F-TIME<br>AUD-EVENT-F-RESULT | UNCHANGED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | READ | REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| AUD-ACT-REQUEST-SENSITIVE | Request Time-limited Sensitive Access | AUD-OBJ-ACCESS-REQUEST | CREATE | AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-PURPOSE<br>AUD-REQUEST-F-EXPIRY | AUD-REQUEST-F-ID<br>AUD-REQUEST-F-REQUESTER<br>AUD-REQUEST-F-RESULT<br>AUD-REQUEST-F-VERSION | CREATE（成功状态由 AUD-ACT-REQUEST-SENSITIVE-SCN-SUCCESS 定义） | ALLOW:ROLE-PLATFORM-OPS — platform operations may request but not self-approve explicitly limited school scope and time<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access without a school-approved request | WEB / APP | HIGH | REQUIRED | AUD-ACT-REQUEST-SENSITIVE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-APPROVE-SENSITIVE | Approve Limited Sensitive Access | AUD-OBJ-ACCESS-REQUEST | UPDATE | AUD-REQUEST-F-ID<br>AUD-REQUEST-F-APPROVER<br>AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-EXPIRY<br>AUD-REQUEST-F-DECISION-REASON | AUD-REQUEST-F-RESULT<br>AUD-REQUEST-F-VERSION | REQUESTED → APPROVED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-APPROVE-SENSITIVE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-DENY-SENSITIVE | Deny Sensitive Access | AUD-OBJ-ACCESS-REQUEST | UPDATE | AUD-REQUEST-F-ID<br>AUD-REQUEST-F-APPROVER<br>AUD-REQUEST-F-DECISION-REASON | AUD-REQUEST-F-RESULT<br>AUD-REQUEST-F-VERSION | REQUESTED → DENIED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-DENY-SENSITIVE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-EXPIRE-ACCESS-REQUEST | Expire a Sensitive Access Request | AUD-OBJ-ACCESS-REQUEST | UPDATE | AUD-REQUEST-F-ID<br>AUD-REQUEST-F-EXPIRY | AUD-REQUEST-F-RESULT<br>AUD-REQUEST-F-VERSION | REQUESTED / APPROVED → EXPIRED | ALLOW:SYSTEM — the system expires an unexecutable request at its declared deadline<br>DENY:CURRENT_ACTOR — a user cannot extend a sensitive request without a new approval | SYSTEM_EVENT | HIGH | REQUIRED | AUD-ACT-EXPIRE-ACCESS-REQUEST:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-OPEN-SESSION | Open an Approved Sensitive Access Session | AUD-OBJ-ACCESS-SESSION | CREATE | AUD-SESSION-F-REQUEST-ID<br>AUD-SESSION-F-REQUEST-VERSION<br>AUD-SESSION-F-SCOPE<br>AUD-SESSION-F-EXPIRY | AUD-SESSION-F-ID<br>AUD-SESSION-F-START<br>AUD-SESSION-F-AUTHORIZED-OPERATOR-ID<br>AUD-SESSION-F-STATUS<br>AUD-SESSION-F-VERSION | CREATE（成功状态由 AUD-ACT-OPEN-SESSION-SCN-SUCCESS 定义） | ALLOW:SYSTEM — system atomically opens only the school-approved scope and time and requires immutable audit<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot widen the approved student-detail scope | SYSTEM_EVENT | HIGH | REQUIRED | AUD-ACT-OPEN-SESSION:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-EXPIRE-SESSION | Expire a Sensitive Access Session | AUD-OBJ-ACCESS-SESSION | UPDATE | AUD-SESSION-F-EXPIRY | AUD-SESSION-F-STATUS<br>AUD-SESSION-F-VERSION | ACTIVE → EXPIRED | ALLOW:SYSTEM — system expires the session at the approved deadline<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot extend a sensitive session directly | SYSTEM_EVENT | HIGH | REQUIRED | AUD-ACT-EXPIRE-SESSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-REVOKE-SESSION | Revoke a Sensitive Access Session | AUD-OBJ-ACCESS-SESSION | UPDATE | AUD-SESSION-F-ID | AUD-SESSION-F-STATUS<br>AUD-SESSION-F-VERSION | ACTIVE → REVOKED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-REVOKE-SESSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-CREATE-REVIEW | Create an Audit Review Case | AUD-OBJ-REVIEW | CREATE | AUD-REVIEW-F-EVENT-IDS<br>AUD-REVIEW-F-REASON | AUD-REVIEW-F-ID<br>AUD-REVIEW-F-STATUS | CREATE（成功状态由 AUD-ACT-CREATE-REVIEW-SCN-SUCCESS 定义） | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-CREATE-REVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-INVESTIGATE-REVIEW | Start an Audit Review Investigation | AUD-OBJ-REVIEW | UPDATE | AUD-REVIEW-F-ID | AUD-REVIEW-F-STATUS | OPEN → INVESTIGATING | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-INVESTIGATE-REVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-RESOLVE-REVIEW | Resolve an Audit Review Case | AUD-OBJ-REVIEW | UPDATE | AUD-REVIEW-F-ID<br>AUD-REVIEW-F-RESOLUTION | AUD-REVIEW-F-STATUS | INVESTIGATING → RESOLVED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-RESOLVE-REVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-CLOSE-REVIEW | Close a Resolved Audit Review Case | AUD-OBJ-REVIEW | UPDATE | AUD-REVIEW-F-ID | AUD-REVIEW-F-STATUS | RESOLVED → CLOSED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-CLOSE-REVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-EXPORT-SUMMARY | Export an Authorized Audit Summary | AUD-OBJ-REVIEW | UPDATE | AUD-REVIEW-F-ID<br>AUD-REVIEW-F-EVENT-IDS | AUD-REVIEW-F-RESOLUTION | RESOLVED → RESOLVED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-EXPORT-SUMMARY:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 审计检索、敏感访问申请、复核工单、导出审计摘要 | 高风险确认记录、敏感访问到期提醒、本人操作记录入口 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| AUD-OBJ-EVENT | ACCEPTED | AUD-ACT-APPEND-EVENT | AUD-ACT-ARCHIVE-EVENT |
+| AUD-OBJ-EVENT | ARCHIVED | AUD-ACT-ARCHIVE-EVENT |  |
+| AUD-OBJ-ACCESS-REQUEST | REQUESTED | AUD-ACT-REQUEST-SENSITIVE | AUD-ACT-APPROVE-SENSITIVE<br>AUD-ACT-DENY-SENSITIVE<br>AUD-ACT-EXPIRE-ACCESS-REQUEST |
+| AUD-OBJ-ACCESS-REQUEST | APPROVED | AUD-ACT-APPROVE-SENSITIVE | AUD-ACT-EXPIRE-ACCESS-REQUEST |
+| AUD-OBJ-ACCESS-REQUEST | DENIED | AUD-ACT-DENY-SENSITIVE |  |
+| AUD-OBJ-ACCESS-REQUEST | EXPIRED | AUD-ACT-EXPIRE-ACCESS-REQUEST |  |
+| AUD-OBJ-ACCESS-SESSION | ACTIVE | AUD-ACT-OPEN-SESSION | AUD-ACT-EXPIRE-SESSION<br>AUD-ACT-REVOKE-SESSION |
+| AUD-OBJ-ACCESS-SESSION | EXPIRED | AUD-ACT-EXPIRE-SESSION |  |
+| AUD-OBJ-ACCESS-SESSION | REVOKED | AUD-ACT-REVOKE-SESSION |  |
+| AUD-OBJ-REVIEW | OPEN | AUD-ACT-CREATE-REVIEW | AUD-ACT-INVESTIGATE-REVIEW |
+| AUD-OBJ-REVIEW | INVESTIGATING | AUD-ACT-INVESTIGATE-REVIEW | AUD-ACT-RESOLVE-REVIEW |
+| AUD-OBJ-REVIEW | RESOLVED | AUD-ACT-RESOLVE-REVIEW<br>AUD-ACT-EXPORT-SUMMARY | AUD-ACT-CLOSE-REVIEW<br>AUD-ACT-EXPORT-SUMMARY |
+| AUD-OBJ-REVIEW | CLOSED | AUD-ACT-CLOSE-REVIEW |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-002 | Organization Import and Permission Refresh | 1 | ORG-001 / IAM-001 / AUD-001 | AUD-ACT-APPEND-EVENT<br>AUD-ACT-APPEND-EVENT | OBJECT_ROW_WITH_PARTIAL_SUCCESS_AND_FAILED_ROW_RETRY；{"strategy":"RETRY_FAILED_ROWS_OR_AUDIT_APPEND","maxAttempts":5,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"ROLLBACK_UNAUDITED_PROVISIONAL_ROWS","description":"rollback provisional accepted rows to the pre-import version when outcome audit fails; do not recalculate permissions until the outcome audit succeeds"}；{"strategy":"INVALIDATE_AFFECTED_ORGANIZATION_SCOPES","targets":["permission decisions","active contexts","teacher work views"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-F001 | 审计动作 | 多选下拉 | OPT-ENUM-023 | 查询必填 | 按动作过滤 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F002 | 审计结果 | 多选下拉 | OPT-ENUM-024 | 查询必填 | 拒绝事件可查询但隐藏目标明细 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F003 | 时间范围 | 时间范围选择 | OPT-COM-014 | 是 | 默认最近7天 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F004 | 对象域 | 级联选择 | OPT-COM-015 | 否 | 只能查有权审计域 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| AUD-F005 | 访问原因 | 文本 | OPT-ENUM-023 | 敏感访问必填 | 进入审计，不可后改 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| AUD-PAGE-SEARCH | Authorized Audit Event Search | WEB | AUD-OBJ-EVENT | AUD-EVENT-F-TIME<br>AUD-EVENT-F-ACTOR<br>AUD-EVENT-F-ACTION<br>AUD-EVENT-F-SCOPE<br>AUD-EVENT-F-RESULT | AUD-ACT-QUERY-AUDIT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-ACCESS-REQUEST | Time-limited Sensitive Access Request | WEB / APP | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-REQUESTER<br>AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-PURPOSE<br>AUD-REQUEST-F-EXPIRY<br>AUD-REQUEST-F-RESULT | AUD-ACT-REQUEST-SENSITIVE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-ACCESS-APPROVAL | School Sensitive Access Approval | WEB | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-PURPOSE<br>AUD-REQUEST-F-EXPIRY<br>AUD-REQUEST-F-APPROVER<br>AUD-REQUEST-F-DECISION-REASON<br>AUD-REQUEST-F-RESULT | AUD-ACT-APPROVE-SENSITIVE<br>AUD-ACT-DENY-SENSITIVE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-ACTIVE-SESSION | Active Sensitive Access Session | WEB | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-SCOPE<br>AUD-SESSION-F-START<br>AUD-SESSION-F-EXPIRY<br>AUD-SESSION-F-AUTHORIZED-OPERATOR-ID<br>AUD-SESSION-F-STATUS | AUD-ACT-REVOKE-SESSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-REVIEW | Audit Review Case Investigation | WEB | AUD-OBJ-REVIEW | AUD-REVIEW-F-EVENT-IDS<br>AUD-REVIEW-F-REASON<br>AUD-REVIEW-F-RESOLUTION<br>AUD-REVIEW-F-STATUS | AUD-ACT-CREATE-REVIEW<br>AUD-ACT-INVESTIGATE-REVIEW<br>AUD-ACT-RESOLVE-REVIEW<br>AUD-ACT-CLOSE-REVIEW<br>AUD-ACT-EXPORT-SUMMARY | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| RECORDED | 已记录 |
-| SEALED | 已封存 |
-| REVIEWING | 复核中 |
-| RESOLVED | 已处理 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-ACT-APPEND-EVENT-SCN-SUCCESS | SUCCESS | AUD-ACT-APPEND-EVENT | the actor meets the entry conditions for Append an Immutable Audit Event | the actor requests Append an Immutable Audit Event | immutable audit event is appended before the audited result is final | ACCEPTED | ALLOW |  |
+| AUD-ACT-APPEND-EVENT-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-APPEND-EVENT | PERMISSION_DENIED applies to Append an Immutable Audit Event | the actor requests Append an Immutable Audit Event | Append an Immutable Audit Event returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-APPEND-EVENT-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-APPEND-EVENT | VALIDATION_FAILED applies to Append an Immutable Audit Event | the actor requests Append an Immutable Audit Event | Append an Immutable Audit Event returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-APPEND-EVENT-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-APPEND-EVENT | VERSION_CONFLICT applies to Append an Immutable Audit Event | the actor requests Append an Immutable Audit Event | Append an Immutable Audit Event returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-ARCHIVE-EVENT-SCN-SUCCESS | SUCCESS | AUD-ACT-ARCHIVE-EVENT | the actor meets the entry conditions for Archive a Retained Audit Event | the actor requests Archive a Retained Audit Event | Archive a Retained Audit Event returns the accepted task-specific result | ARCHIVED | ALLOW |  |
+| AUD-ACT-ARCHIVE-EVENT-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-ARCHIVE-EVENT | PERMISSION_DENIED applies to Archive a Retained Audit Event | the actor requests Archive a Retained Audit Event | Archive a Retained Audit Event returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-ARCHIVE-EVENT-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-ARCHIVE-EVENT | VALIDATION_FAILED applies to Archive a Retained Audit Event | the actor requests Archive a Retained Audit Event | Archive a Retained Audit Event returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-ARCHIVE-EVENT-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-ARCHIVE-EVENT | VERSION_CONFLICT applies to Archive a Retained Audit Event | the actor requests Archive a Retained Audit Event | Archive a Retained Audit Event returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-QUERY-AUDIT-SCN-SUCCESS | SUCCESS | AUD-ACT-QUERY-AUDIT | the actor meets the entry conditions for Query Authorized Audit Events | the actor requests Query Authorized Audit Events | Query Authorized Audit Events returns the accepted task-specific result | UNCHANGED | ALLOW |  |
+| AUD-ACT-QUERY-AUDIT-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-QUERY-AUDIT | PERMISSION_DENIED applies to Query Authorized Audit Events | the actor requests Query Authorized Audit Events | Query Authorized Audit Events returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-QUERY-AUDIT-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-QUERY-AUDIT | VALIDATION_FAILED applies to Query Authorized Audit Events | the actor requests Query Authorized Audit Events | Query Authorized Audit Events returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-QUERY-AUDIT-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-QUERY-AUDIT | VERSION_CONFLICT applies to Query Authorized Audit Events | the actor requests Query Authorized Audit Events | Query Authorized Audit Events returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-REQUEST-SENSITIVE-SCN-SUCCESS | SUCCESS | AUD-ACT-REQUEST-SENSITIVE | the actor meets the entry conditions for Request Time-limited Sensitive Access | the actor requests Request Time-limited Sensitive Access | request remains non-executable until school authorization | REQUESTED | ALLOW |  |
+| AUD-ACT-REQUEST-SENSITIVE-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-REQUEST-SENSITIVE | PERMISSION_DENIED applies to Request Time-limited Sensitive Access | the actor requests Request Time-limited Sensitive Access | Request Time-limited Sensitive Access returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-REQUEST-SENSITIVE-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-REQUEST-SENSITIVE | VALIDATION_FAILED applies to Request Time-limited Sensitive Access | the actor requests Request Time-limited Sensitive Access | Request Time-limited Sensitive Access returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-REQUEST-SENSITIVE-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-REQUEST-SENSITIVE | VERSION_CONFLICT applies to Request Time-limited Sensitive Access | the actor requests Request Time-limited Sensitive Access | Request Time-limited Sensitive Access returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-REQUEST-SENSITIVE-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-REQUEST-SENSITIVE | AUDIT_FAILED applies to Request Time-limited Sensitive Access | the actor requests Request Time-limited Sensitive Access | Request Time-limited Sensitive Access returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-APPROVE-SENSITIVE-SCN-SUCCESS | SUCCESS | AUD-ACT-APPROVE-SENSITIVE | the actor meets the entry conditions for Approve Limited Sensitive Access | the actor requests Approve Limited Sensitive Access | Approve Limited Sensitive Access returns the accepted task-specific result | APPROVED | ALLOW |  |
+| AUD-ACT-APPROVE-SENSITIVE-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-APPROVE-SENSITIVE | PERMISSION_DENIED applies to Approve Limited Sensitive Access | the actor requests Approve Limited Sensitive Access | Approve Limited Sensitive Access returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-APPROVE-SENSITIVE-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-APPROVE-SENSITIVE | VALIDATION_FAILED applies to Approve Limited Sensitive Access | the actor requests Approve Limited Sensitive Access | Approve Limited Sensitive Access returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-APPROVE-SENSITIVE-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-APPROVE-SENSITIVE | VERSION_CONFLICT applies to Approve Limited Sensitive Access | the actor requests Approve Limited Sensitive Access | Approve Limited Sensitive Access returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-APPROVE-SENSITIVE-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-APPROVE-SENSITIVE | AUDIT_FAILED applies to Approve Limited Sensitive Access | the actor requests Approve Limited Sensitive Access | Approve Limited Sensitive Access returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-DENY-SENSITIVE-SCN-SUCCESS | SUCCESS | AUD-ACT-DENY-SENSITIVE | the actor meets the entry conditions for Deny Sensitive Access | the actor requests Deny Sensitive Access | Deny Sensitive Access returns the accepted task-specific result | DENIED | ALLOW |  |
+| AUD-ACT-DENY-SENSITIVE-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-DENY-SENSITIVE | PERMISSION_DENIED applies to Deny Sensitive Access | the actor requests Deny Sensitive Access | Deny Sensitive Access returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-DENY-SENSITIVE-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-DENY-SENSITIVE | VALIDATION_FAILED applies to Deny Sensitive Access | the actor requests Deny Sensitive Access | Deny Sensitive Access returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-DENY-SENSITIVE-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-DENY-SENSITIVE | VERSION_CONFLICT applies to Deny Sensitive Access | the actor requests Deny Sensitive Access | Deny Sensitive Access returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-DENY-SENSITIVE-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-DENY-SENSITIVE | AUDIT_FAILED applies to Deny Sensitive Access | the actor requests Deny Sensitive Access | Deny Sensitive Access returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-EXPIRE-ACCESS-REQUEST-SCN-SUCCESS | SUCCESS | AUD-ACT-EXPIRE-ACCESS-REQUEST | the actor meets the entry conditions for Expire a Sensitive Access Request | the actor requests Expire a Sensitive Access Request | Expire a Sensitive Access Request returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| AUD-ACT-EXPIRE-ACCESS-REQUEST-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-EXPIRE-ACCESS-REQUEST | PERMISSION_DENIED applies to Expire a Sensitive Access Request | the actor requests Expire a Sensitive Access Request | Expire a Sensitive Access Request returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-EXPIRE-ACCESS-REQUEST-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-EXPIRE-ACCESS-REQUEST | VALIDATION_FAILED applies to Expire a Sensitive Access Request | the actor requests Expire a Sensitive Access Request | Expire a Sensitive Access Request returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-EXPIRE-ACCESS-REQUEST-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-EXPIRE-ACCESS-REQUEST | VERSION_CONFLICT applies to Expire a Sensitive Access Request | the actor requests Expire a Sensitive Access Request | Expire a Sensitive Access Request returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-EXPIRE-ACCESS-REQUEST-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-EXPIRE-ACCESS-REQUEST | AUDIT_FAILED applies to Expire a Sensitive Access Request | the actor requests Expire a Sensitive Access Request | Expire a Sensitive Access Request returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-OPEN-SESSION-SCN-SUCCESS | SUCCESS | AUD-ACT-OPEN-SESSION | the actor meets the entry conditions for Open an Approved Sensitive Access Session | the actor requests Open an Approved Sensitive Access Session | Open an Approved Sensitive Access Session returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| AUD-ACT-OPEN-SESSION-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-OPEN-SESSION | PERMISSION_DENIED applies to Open an Approved Sensitive Access Session | the actor requests Open an Approved Sensitive Access Session | Open an Approved Sensitive Access Session returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-OPEN-SESSION-SCN-SOURCE_VERSION_STALE | FAILURE | AUD-ACT-OPEN-SESSION | SOURCE_VERSION_STALE applies to Open an Approved Sensitive Access Session | the actor requests Open an Approved Sensitive Access Session | Open an Approved Sensitive Access Session returns SOURCE_VERSION_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| AUD-ACT-OPEN-SESSION-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-OPEN-SESSION | VALIDATION_FAILED applies to Open an Approved Sensitive Access Session | the actor requests Open an Approved Sensitive Access Session | Open an Approved Sensitive Access Session returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-OPEN-SESSION-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-OPEN-SESSION | VERSION_CONFLICT applies to Open an Approved Sensitive Access Session | the actor requests Open an Approved Sensitive Access Session | Open an Approved Sensitive Access Session returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-OPEN-SESSION-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-OPEN-SESSION | AUDIT_FAILED applies to Open an Approved Sensitive Access Session | the actor requests Open an Approved Sensitive Access Session | Open an Approved Sensitive Access Session returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-EXPIRE-SESSION-SCN-SUCCESS | SUCCESS | AUD-ACT-EXPIRE-SESSION | the actor meets the entry conditions for Expire a Sensitive Access Session | the actor requests Expire a Sensitive Access Session | Expire a Sensitive Access Session returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| AUD-ACT-EXPIRE-SESSION-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-EXPIRE-SESSION | PERMISSION_DENIED applies to Expire a Sensitive Access Session | the actor requests Expire a Sensitive Access Session | Expire a Sensitive Access Session returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-EXPIRE-SESSION-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-EXPIRE-SESSION | VALIDATION_FAILED applies to Expire a Sensitive Access Session | the actor requests Expire a Sensitive Access Session | Expire a Sensitive Access Session returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-EXPIRE-SESSION-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-EXPIRE-SESSION | VERSION_CONFLICT applies to Expire a Sensitive Access Session | the actor requests Expire a Sensitive Access Session | Expire a Sensitive Access Session returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-EXPIRE-SESSION-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-EXPIRE-SESSION | AUDIT_FAILED applies to Expire a Sensitive Access Session | the actor requests Expire a Sensitive Access Session | Expire a Sensitive Access Session returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-REVOKE-SESSION-SCN-SUCCESS | SUCCESS | AUD-ACT-REVOKE-SESSION | the actor meets the entry conditions for Revoke a Sensitive Access Session | the actor requests Revoke a Sensitive Access Session | Revoke a Sensitive Access Session returns the accepted task-specific result | REVOKED | ALLOW |  |
+| AUD-ACT-REVOKE-SESSION-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-REVOKE-SESSION | PERMISSION_DENIED applies to Revoke a Sensitive Access Session | the actor requests Revoke a Sensitive Access Session | Revoke a Sensitive Access Session returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-REVOKE-SESSION-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-REVOKE-SESSION | VALIDATION_FAILED applies to Revoke a Sensitive Access Session | the actor requests Revoke a Sensitive Access Session | Revoke a Sensitive Access Session returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-REVOKE-SESSION-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-REVOKE-SESSION | VERSION_CONFLICT applies to Revoke a Sensitive Access Session | the actor requests Revoke a Sensitive Access Session | Revoke a Sensitive Access Session returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-REVOKE-SESSION-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-REVOKE-SESSION | AUDIT_FAILED applies to Revoke a Sensitive Access Session | the actor requests Revoke a Sensitive Access Session | Revoke a Sensitive Access Session returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-CREATE-REVIEW-SCN-SUCCESS | SUCCESS | AUD-ACT-CREATE-REVIEW | the actor meets the entry conditions for Create an Audit Review Case | the actor requests Create an Audit Review Case | Create an Audit Review Case returns the accepted task-specific result | OPEN | ALLOW |  |
+| AUD-ACT-CREATE-REVIEW-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-CREATE-REVIEW | PERMISSION_DENIED applies to Create an Audit Review Case | the actor requests Create an Audit Review Case | Create an Audit Review Case returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-CREATE-REVIEW-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-CREATE-REVIEW | VALIDATION_FAILED applies to Create an Audit Review Case | the actor requests Create an Audit Review Case | Create an Audit Review Case returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-CREATE-REVIEW-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-CREATE-REVIEW | VERSION_CONFLICT applies to Create an Audit Review Case | the actor requests Create an Audit Review Case | Create an Audit Review Case returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-CREATE-REVIEW-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-CREATE-REVIEW | AUDIT_FAILED applies to Create an Audit Review Case | the actor requests Create an Audit Review Case | Create an Audit Review Case returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-INVESTIGATE-REVIEW-SCN-SUCCESS | SUCCESS | AUD-ACT-INVESTIGATE-REVIEW | the actor meets the entry conditions for Start an Audit Review Investigation | the actor requests Start an Audit Review Investigation | Start an Audit Review Investigation returns the accepted task-specific result | INVESTIGATING | ALLOW |  |
+| AUD-ACT-INVESTIGATE-REVIEW-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-INVESTIGATE-REVIEW | PERMISSION_DENIED applies to Start an Audit Review Investigation | the actor requests Start an Audit Review Investigation | Start an Audit Review Investigation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-INVESTIGATE-REVIEW-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-INVESTIGATE-REVIEW | VALIDATION_FAILED applies to Start an Audit Review Investigation | the actor requests Start an Audit Review Investigation | Start an Audit Review Investigation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-INVESTIGATE-REVIEW-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-INVESTIGATE-REVIEW | VERSION_CONFLICT applies to Start an Audit Review Investigation | the actor requests Start an Audit Review Investigation | Start an Audit Review Investigation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-INVESTIGATE-REVIEW-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-INVESTIGATE-REVIEW | AUDIT_FAILED applies to Start an Audit Review Investigation | the actor requests Start an Audit Review Investigation | Start an Audit Review Investigation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-RESOLVE-REVIEW-SCN-SUCCESS | SUCCESS | AUD-ACT-RESOLVE-REVIEW | the actor meets the entry conditions for Resolve an Audit Review Case | the actor requests Resolve an Audit Review Case | Resolve an Audit Review Case returns the accepted task-specific result | RESOLVED | ALLOW |  |
+| AUD-ACT-RESOLVE-REVIEW-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-RESOLVE-REVIEW | PERMISSION_DENIED applies to Resolve an Audit Review Case | the actor requests Resolve an Audit Review Case | Resolve an Audit Review Case returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-RESOLVE-REVIEW-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-RESOLVE-REVIEW | VALIDATION_FAILED applies to Resolve an Audit Review Case | the actor requests Resolve an Audit Review Case | Resolve an Audit Review Case returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-RESOLVE-REVIEW-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-RESOLVE-REVIEW | VERSION_CONFLICT applies to Resolve an Audit Review Case | the actor requests Resolve an Audit Review Case | Resolve an Audit Review Case returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-RESOLVE-REVIEW-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-RESOLVE-REVIEW | AUDIT_FAILED applies to Resolve an Audit Review Case | the actor requests Resolve an Audit Review Case | Resolve an Audit Review Case returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-CLOSE-REVIEW-SCN-SUCCESS | SUCCESS | AUD-ACT-CLOSE-REVIEW | the actor meets the entry conditions for Close a Resolved Audit Review Case | the actor requests Close a Resolved Audit Review Case | Close a Resolved Audit Review Case returns the accepted task-specific result | CLOSED | ALLOW |  |
+| AUD-ACT-CLOSE-REVIEW-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-CLOSE-REVIEW | PERMISSION_DENIED applies to Close a Resolved Audit Review Case | the actor requests Close a Resolved Audit Review Case | Close a Resolved Audit Review Case returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-CLOSE-REVIEW-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-CLOSE-REVIEW | VALIDATION_FAILED applies to Close a Resolved Audit Review Case | the actor requests Close a Resolved Audit Review Case | Close a Resolved Audit Review Case returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-CLOSE-REVIEW-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-CLOSE-REVIEW | VERSION_CONFLICT applies to Close a Resolved Audit Review Case | the actor requests Close a Resolved Audit Review Case | Close a Resolved Audit Review Case returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-CLOSE-REVIEW-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-CLOSE-REVIEW | AUDIT_FAILED applies to Close a Resolved Audit Review Case | the actor requests Close a Resolved Audit Review Case | Close a Resolved Audit Review Case returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-EXPORT-SUMMARY-SCN-SUCCESS | SUCCESS | AUD-ACT-EXPORT-SUMMARY | the actor meets the entry conditions for Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | summary excludes unauthorized student detail and retains immutable source event references | RESOLVED | ALLOW |  |
+| AUD-ACT-EXPORT-SUMMARY-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-EXPORT-SUMMARY | PERMISSION_DENIED applies to Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | Export an Authorized Audit Summary returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-EXPORT-SUMMARY-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-EXPORT-SUMMARY | VALIDATION_FAILED applies to Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | Export an Authorized Audit Summary returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-EXPORT-SUMMARY-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-EXPORT-SUMMARY | VERSION_CONFLICT applies to Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | Export an Authorized Audit Summary returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-EXPORT-SUMMARY-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-EXPORT-SUMMARY | AUDIT_FAILED applies to Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | Export an Authorized Audit Summary returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 源模块提交高风险动作前请求审计门禁。
-2. 权限、源版本、目标版本、确认人、结果同步写入。
-3. 管理员按时间、动作、对象域复核异常。
-4. 审计事件只追加，不因业务撤销而删除。
-
-关联 Flow: `DF-019`、`DF-015`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-FR-01 | 对象查询与范围筛选 | AUD-F001、AUD-F002、AUD-F003、AUD-F004、AUD-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | AUD-AC-01 |
-| AUD-FR-02 | 详情查看与版本追踪 | DAT-AUD-01、DAT-AUD-02、DAT-AUD-03 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | AUD-AC-02 |
-| AUD-FR-03 | 创建/修改/确认主动作 | AUD-F001、AUD-F002、AUD-F003、AUD-F004、AUD-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | AUD-AC-03 |
-| AUD-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | AUD-AC-04 |
-| AUD-FR-05 | 审计、通知与下游失效 | DF-019、DF-015 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | AUD-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| AUD-AC-01 | 审计写入失败时发布、授权、导出、AI 执行等高风险动作失败关闭。 |
-| AUD-AC-02 | 审计事件包含操作者、身份、学校、学期、源版本、目标版本。 |
-| AUD-AC-03 | 拒绝事件不泄露无权对象名称。 |
-| AUD-AC-04 | 敏感访问必须有原因、时长、审批和到期。 |
-| AUD-AC-05 | 审计导出本身也进入审计。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-019`、`DF-015`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

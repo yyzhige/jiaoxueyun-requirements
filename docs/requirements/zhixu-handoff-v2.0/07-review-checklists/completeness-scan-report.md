@@ -1,31 +1,12 @@
-# v2.0 需求包完整性扫描报告
+# 完整性与语义扫描报告
 
-| 属性 | 值 |
-|---|---|
-| 日期 | 2026-07-14 |
-| 扫描对象 | zhixu-handoff-v2.0 |
-| 模块数 | 27 |
-| PRD 文件 | 27 |
-| 线框合同 | 27 |
-| 状态 | 机械扫描通过 |
+reviewStatus: `SEMANTIC_RECONSTRUCTION`
 
-## 1. 结构扫描
-
-| 项目 | 期望 | 结果 |
+| 检查项 | 结果 | 证据 |
 | --- | --- | --- |
-| 模块 PRD | 27 | 27 |
-| Web/App 线框合同 | 27 | 27 |
-| Data ID | 每个权威对象唯一且有 Owner | 104 个 Data ID，已进入 Owner 矩阵 |
-| Field ID | 每个选择型字段有 Option Set | 149 个 Field ID，已进入字段字典 |
-| 功能需求 | 每个模块有 FR 编号与 AC 映射 | 27 个模块均已包含 |
-| 缺失扫描 | 无缺少 Owner/Option Set/Flow/验收的 PRD | 缺失项 0 |
-| 占位扫描 | 无占位关键词 | 命中 0 |
-| 中央数据合同 | 7 类以上 | 权威对象、Owner、字段、状态、Flow、权限、生命周期已生成 |
-| AI 合同 | 2 | AI 对话任务执行、报表与长期学习路径已生成 |
-| 治理准则 | 1 | 已生成 |
-
-## 2. 仍需人工复核
-
-- 各学科具体 Rubric、主观题抽检阈值、考试综合权重需要学校和教研确认。
-- 线框合同是页面能力合同，不替代最终视觉原型。
-- 进入研发前应把阻断开放决策关闭或转为学校配置项。
+| 结构化事实规模 | PASS | modules=27；objects=88；fields=731；actions=333；pages=73；scenarios=1486；flows=14；aiTasks=22；metrics=5 |
+| 27 模块清单 | PASS | 事实模型 modules |
+| 第二阶段无可执行页面 | PASS | phase=2 actions/pages |
+| 对象责任字段 | PASS | producer/owner/confirmer/steward |
+| 动作场景追踪 | PASS | scenarioIds |
+| 生成源 | PASS | validated facts → renderers → Markdown |

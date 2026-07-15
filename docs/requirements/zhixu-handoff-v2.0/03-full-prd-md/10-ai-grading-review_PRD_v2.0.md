@@ -1,142 +1,214 @@
-# GRD-001 AI 初评与教师复核 PRD v2.0
+# GRD-001 Grading Routing and Teacher Decision PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 任课教师 |
-| 关联线框 | [10-ai-grading-review-wireframe.zh-CN.md](../05-wireframe-contracts/10-ai-grading-review-wireframe.zh-CN.md) |
+| 目标 | Route every supported combination by evidence while keeping official scoring under subject-teacher control |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-008` |
+| NFR | `NFR-006`、`NFR-008` |
+| 进入条件 | an immutable submitted version references an assignment item and Rubric version |
+| 退出条件 | the corresponding subject teacher confirms a versioned official score or the item remains routed for manual grading |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-用 AI 辅助识别、初评和分流，但正式评分必须由对应任课教师确认。
+- 本模块权威拥有 2 个对象、14 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-GRD-01 | Recognition Result | 任课教师 | 识别结果 | AI | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-GRD-02 | AI Grading Suggestion | 任课教师 | AI 评分建议 | AI | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-GRD-03 | Teacher Grading Decision | 任课教师 | 教师评分决定 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
-| DAT-GRD-04 | Grading Batch State | 任课教师 | 批改批次状态 | 任课教师 | 任课教师 | 任课教师 | S2 教学业务数据 |
+### GRD-OBJ-CAPABILITY-RULE Grading Capability Rule
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GRADING_CAPABILITY | SCHOOL | SYSTEM | ROLE-ACADEMIC | ROLE-ACADEMIC | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | ACTIVE / RETIRED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GRD-CAP-F-RULE-ID | Capability Rule ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-RULE-VERSION | Capability Rule Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-SOURCE-REF | Capability Rule Source Reference | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-SOURCE-VERSION | Capability Rule Source Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-SUBJECT-FAMILY | Subject Family | STRING | 是 | OPTION_SET: OPT-TL-003 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-QUESTION-TYPE | Question Type | STRING | 是 | OPTION_SET: OPT-ENUM-003 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-SUBMISSION-METHOD | Submission Method | STRING | 是 | OPTION_SET: OPT-ENUM-031 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-RECOGNITION-LEVEL | Recognition Level | STRING | 是 | OPTION_SET: OPT-TL-004 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-SCORING-LEVEL | Scoring Level | STRING | 是 | OPTION_SET: OPT-TL-005 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-REQUIRED-EVIDENCE | Required Evidence | STRING_ARRAY | 是 | OPTION_SET: OPT-TL-006 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-TEACHER-REVIEW | Teacher Review Required | STRING | 是 | OPTION_SET: OPT-ENUM-001 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-BATCH-CONFIRM | Batch Confirmation Eligibility | STRING | 是 | OPTION_SET: OPT-TL-007 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-CAP-F-UNAVAILABLE-FALLBACK | Unavailable Fallback | STRING | 是 | OPTION_SET: OPT-TL-008 | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 任课教师
-- 解决问题: 用 AI 辅助识别、初评和分流，但正式评分必须由对应任课教师确认。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### GRD-OBJ-DECISION Grading Decision Version
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_SCORE_AND_FEEDBACK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | ROLE-ACADEMIC | LIFE-003 | S3 | NO_DIRECT_READ | QUEUED / PROCESSING / ROUTED_REVIEW / ROUTED_MANUAL / CONFLICT / REVISION_PENDING / TEACHER_CONFIRMED |
 
-- DAT-GRD-01 Recognition Result
-- DAT-GRD-02 AI Grading Suggestion
-- DAT-GRD-03 Teacher Grading Decision
-- DAT-GRD-04 Grading Batch State
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GRD-DECISION-F-ID | Grading Decision ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-RECOGNIZED-ANSWER | Recognized Answer | JSON | required when automated grading processing produces recognition evidence；状态=PROCESSING；动作=GRD-ACT-PROCESS | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-RECOGNIZED-REGION | Recognized Region | JSON | required when automated grading processing produces recognition evidence；状态=PROCESSING；动作=GRD-ACT-PROCESS | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-SUBMISSION-REF | Input Submission Reference | ID | 是 | OBJECT_REF: SUB-OBJ-ATTEMPT | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_REF | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-SUBMISSION-VERSION | Input Submission Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-ITEM-REF | Input Item Reference | ID | 是 | OBJECT_REF: HW-OBJ-ITEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-ITEM-VERSION | Input Item Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-RUBRIC-REF | Input Rubric Reference | ID | 是 | OBJECT_REF: HW-OBJ-RUBRIC | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-RUBRIC-VERSION | Input Rubric Version | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-CAPABILITY-RULE-REF | Capability Rule Reference | ID | 是 | OBJECT_REF: GRD-OBJ-CAPABILITY-RULE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-CAPABILITY-RULE-VERSION | Capability Rule Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-SUGGESTED-SCORE | Suggested Score | DECIMAL | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-SCORING-RATIONALE | Scoring Rationale | TEXT | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-CONFIDENCE | Confidence Status | STRING | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | OPTION_SET: OPT-ENUM-005 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-LIMITATION | Limitation Note | TEXT | required when automated grading processing produces a scoring suggestion；状态=PROCESSING；动作=GRD-ACT-PROCESS | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-OFFICIAL-SCORE | Teacher Official Score | DECIMAL | required when the grading decision reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-TEACHER-FEEDBACK | Teacher Feedback | TEXT | required when the grading decision reaches TEACHER_CONFIRMED；状态=TEACHER_CONFIRMED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-CORRECTION-REASON | Correction Reason | STRING | required when correcting recognition, overriding a score, or revising a confirmed decision；状态=ROUTED_REVIEW/TEACHER_CONFIRMED/REVISION_PENDING/QUEUED；动作=GRD-ACT-CORRECT-RECOGNITION/GRD-ACT-OVERRIDE-SCORE/GRD-ACT-OPEN-CONFIRMED-REVISION/GRD-ACT-CONFIRM-REVISION/GRD-ACT-RESOLVE-VERSION-CONFLICT | OPTION_SET: OPT-ENUM-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-DECISION-VERSION | Decision Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-PRIOR-DECISION-VERSION | Prior Confirmed Decision Version | INTEGER | required when revising a confirmed decision；状态=REVISION_PENDING；动作=GRD-ACT-OPEN-CONFIRMED-REVISION | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| GRD-DECISION-F-ROUTE | Grading Route | STRING | required when the grading decision reaches ROUTED_REVIEW or ROUTED_MANUAL；状态=ROUTED_REVIEW/ROUTED_MANUAL | OPTION_SET: OPT-TL-011 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+## 3. 对象关系
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| GRD-REL-CAPABILITY-DECISION | GRD-OBJ-CAPABILITY-RULE | CONFIGURES | GRD-OBJ-DECISION | ONE_TO_MANY | SAME_SUBJECT | retain the capability rule version used by every decision and route only new decisions with the replacement rule |
 
-## 2. Web/App Capability Matrix
+## 4. 可执行动作合同
 
-| 能力 | Web | App | 差异原则 |
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GRD-ACT-SYNC-CAPABILITY-RULE | Sync a Versioned Grading Capability Rule Snapshot | GRD-OBJ-CAPABILITY-RULE | CREATE | GRD-CAP-F-SOURCE-REF<br>GRD-CAP-F-SOURCE-VERSION<br>GRD-CAP-F-SUBJECT-FAMILY<br>GRD-CAP-F-QUESTION-TYPE<br>GRD-CAP-F-SUBMISSION-METHOD<br>GRD-CAP-F-RECOGNITION-LEVEL<br>GRD-CAP-F-SCORING-LEVEL<br>GRD-CAP-F-REQUIRED-EVIDENCE<br>GRD-CAP-F-TEACHER-REVIEW<br>GRD-CAP-F-BATCH-CONFIRM<br>GRD-CAP-F-UNAVAILABLE-FALLBACK | GRD-CAP-F-RULE-ID<br>GRD-CAP-F-RULE-VERSION<br>GRD-CAP-F-SOURCE-REF<br>GRD-CAP-F-SOURCE-VERSION | CREATE（成功状态由  定义） | ALLOW:SYSTEM — the system accepts only a registered versioned grading-capability snapshot<br>DENY:CURRENT_ACTOR — a user cannot synthesize or replace a grading-capability rule snapshot | SYSTEM_EVENT | HIGH | REQUIRED | GRD-ACT-SYNC-CAPABILITY-RULE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| GRD-ACT-ENQUEUE | Enqueue Submission for Grading | GRD-OBJ-DECISION | CREATE |  | GRD-DECISION-F-ID<br>GRD-DECISION-F-SUBMISSION-REF<br>GRD-DECISION-F-SUBMISSION-VERSION<br>GRD-DECISION-F-ITEM-REF<br>GRD-DECISION-F-ITEM-VERSION<br>GRD-DECISION-F-RUBRIC-REF<br>GRD-DECISION-F-RUBRIC-VERSION<br>GRD-DECISION-F-CAPABILITY-RULE-REF<br>GRD-DECISION-F-CAPABILITY-RULE-VERSION<br>GRD-DECISION-F-DECISION-VERSION | CREATE（成功状态由 GRD-ACT-ENQUEUE-SCN-SUCCESS 定义） | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | LOW | REQUIRED | GRD-ACT-ENQUEUE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| GRD-ACT-PROCESS | Process Grading Evidence | GRD-OBJ-DECISION | UPDATE |  | GRD-DECISION-F-RECOGNIZED-ANSWER<br>GRD-DECISION-F-RECOGNIZED-REGION<br>GRD-DECISION-F-SUGGESTED-SCORE<br>GRD-DECISION-F-SCORING-RATIONALE<br>GRD-DECISION-F-CONFIDENCE<br>GRD-DECISION-F-LIMITATION<br>GRD-DECISION-F-DECISION-VERSION | QUEUED → PROCESSING | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | LOW | REQUIRED | GRD-ACT-PROCESS:school:object:source-version:request-id | PERMISSION_DENIED / AI_UNAVAILABLE / VERSION_CONFLICT |
+| GRD-ACT-ROUTE | Route Grading Decision | GRD-OBJ-DECISION | UPDATE |  | GRD-DECISION-F-ROUTE<br>GRD-DECISION-F-DECISION-VERSION | PROCESSING → ROUTED_REVIEW | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | LOW | REQUIRED | GRD-ACT-ROUTE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| GRD-ACT-ROUTE-UNSUPPORTED | Route Unsupported Combination to Manual Grading | GRD-OBJ-DECISION | UPDATE |  | GRD-DECISION-F-ROUTE<br>GRD-DECISION-F-DECISION-VERSION | QUEUED → ROUTED_MANUAL | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | LOW | REQUIRED | GRD-ACT-ROUTE-UNSUPPORTED:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| GRD-ACT-ROUTE-AI-UNAVAILABLE | Route AI-unavailable Decision to Manual Fallback | GRD-OBJ-DECISION | UPDATE |  | GRD-DECISION-F-ROUTE<br>GRD-DECISION-F-DECISION-VERSION | PROCESSING → ROUTED_MANUAL | ALLOW:SYSTEM — the verified Flow invokes the versioned grading step<br>DENY:CURRENT_ACTOR — a user attempts to invoke an internal grading step directly | FLOW_INTERNAL | LOW | REQUIRED | GRD-ACT-ROUTE-AI-UNAVAILABLE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| GRD-ACT-CORRECT-RECOGNITION | Correct Recognized Answer Region | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-RECOGNIZED-ANSWER<br>GRD-DECISION-F-RECOGNIZED-REGION<br>GRD-DECISION-F-CORRECTION-REASON | GRD-DECISION-F-CORRECTION-REASON<br>GRD-DECISION-F-DECISION-VERSION | ROUTED_REVIEW → ROUTED_REVIEW | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | LOW | REQUIRED | GRD-ACT-CORRECT-RECOGNITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| GRD-ACT-ACCEPT-SUGGESTION | Accept Suggested Score | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-SUGGESTED-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK | GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK<br>GRD-DECISION-F-DECISION-VERSION | ROUTED_REVIEW → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | HIGH | REQUIRED | GRD-ACT-ACCEPT-SUGGESTION:school:object:source-version:request-id | PERMISSION_DENIED / SUBJECTIVE_REVIEW_REQUIRED / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| GRD-ACT-OVERRIDE-SCORE | Override Suggested Score | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK<br>GRD-DECISION-F-CORRECTION-REASON | GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK<br>GRD-DECISION-F-CORRECTION-REASON<br>GRD-DECISION-F-DECISION-VERSION | ROUTED_REVIEW → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | HIGH | REQUIRED | GRD-ACT-OVERRIDE-SCORE:school:object:source-version:request-id | PERMISSION_DENIED / CORRECTION_REASON_REQUIRED / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| GRD-ACT-MANUAL-GRADE | Grade Submission Manually | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK | GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK<br>GRD-DECISION-F-DECISION-VERSION | ROUTED_MANUAL → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | HIGH | REQUIRED | GRD-ACT-MANUAL-GRADE:school:object:source-version:request-id | PERMISSION_DENIED / MISSING_REQUIRED_EVIDENCE / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| GRD-ACT-BATCH-CONFIRM | Batch Confirm Eligible Scores | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-SUGGESTED-SCORE<br>GRD-DECISION-F-SCORING-RATIONALE | GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK<br>GRD-DECISION-F-DECISION-VERSION | ROUTED_REVIEW → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | HIGH | REQUIRED | GRD-ACT-BATCH-CONFIRM:school:object:source-version:request-id | PERMISSION_DENIED / SUBJECTIVE_ITEMS_INELIGIBLE / LOW_CONFIDENCE_INELIGIBLE / VERSION_CONFLICT / AUDIT_FAILED |
+| GRD-ACT-OPEN-CONFIRMED-REVISION | Open Confirmed Decision Revision | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-CORRECTION-REASON | GRD-DECISION-F-CORRECTION-REASON<br>GRD-DECISION-F-PRIOR-DECISION-VERSION<br>GRD-DECISION-F-DECISION-VERSION | TEACHER_CONFIRMED → REVISION_PENDING | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | HIGH | REQUIRED | GRD-ACT-OPEN-CONFIRMED-REVISION:school:object:source-version:request-id | PERMISSION_DENIED / CORRECTION_REASON_REQUIRED / VERSION_CONFLICT / AUDIT_FAILED |
+| GRD-ACT-CONFIRM-REVISION | Confirm Revised Decision | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK<br>GRD-DECISION-F-CORRECTION-REASON | GRD-DECISION-F-CORRECTION-REASON<br>GRD-DECISION-F-DECISION-VERSION | REVISION_PENDING → TEACHER_CONFIRMED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | HIGH | REQUIRED | GRD-ACT-CONFIRM-REVISION:school:object:source-version:request-id | PERMISSION_DENIED / CORRECTION_REASON_REQUIRED / STALE_INPUT_VERSION / VERSION_CONFLICT / AUDIT_FAILED |
+| GRD-ACT-RESOLVE-VERSION-CONFLICT | Resolve Grading Version Conflict | GRD-OBJ-DECISION | UPDATE | GRD-DECISION-F-CORRECTION-REASON | GRD-DECISION-F-SUBMISSION-REF<br>GRD-DECISION-F-SUBMISSION-VERSION<br>GRD-DECISION-F-ITEM-REF<br>GRD-DECISION-F-ITEM-VERSION<br>GRD-DECISION-F-RUBRIC-REF<br>GRD-DECISION-F-RUBRIC-VERSION<br>GRD-DECISION-F-CAPABILITY-RULE-REF<br>GRD-DECISION-F-CAPABILITY-RULE-VERSION<br>GRD-DECISION-F-CORRECTION-REASON<br>GRD-DECISION-F-DECISION-VERSION | CONFLICT → QUEUED | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher confirms the decision inside assigned course and student scope<br>DENY:DUTY-HOMEROOM — a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score<br>DENY:ROLE-PLATFORM-OPS — platform operations attempts to assign an official student score | WEB / APP | HIGH | REQUIRED | GRD-ACT-RESOLVE-VERSION-CONFLICT:school:object:source-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STILL_STALE / AUDIT_FAILED |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 批改队列、逐题复核、识别修正、批量确认、人工路径、版本冲突处理 | 查看批改进度、移动端低风险确认、异常提醒 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| GRD-OBJ-CAPABILITY-RULE | ACTIVE | GRD-ACT-SYNC-CAPABILITY-RULE |  |
+| GRD-OBJ-CAPABILITY-RULE | RETIRED | GRD-ACT-SYNC-CAPABILITY-RULE |  |
+| GRD-OBJ-DECISION | QUEUED | GRD-ACT-ENQUEUE<br>GRD-ACT-RESOLVE-VERSION-CONFLICT | GRD-ACT-PROCESS<br>GRD-ACT-ROUTE-UNSUPPORTED |
+| GRD-OBJ-DECISION | PROCESSING | GRD-ACT-PROCESS | GRD-ACT-ROUTE<br>GRD-ACT-ROUTE-AI-UNAVAILABLE |
+| GRD-OBJ-DECISION | ROUTED_REVIEW | GRD-ACT-ROUTE<br>GRD-ACT-CORRECT-RECOGNITION | GRD-ACT-CORRECT-RECOGNITION<br>GRD-ACT-ACCEPT-SUGGESTION<br>GRD-ACT-OVERRIDE-SCORE<br>GRD-ACT-BATCH-CONFIRM |
+| GRD-OBJ-DECISION | ROUTED_MANUAL | GRD-ACT-ROUTE-UNSUPPORTED<br>GRD-ACT-ROUTE-AI-UNAVAILABLE | GRD-ACT-MANUAL-GRADE |
+| GRD-OBJ-DECISION | CONFLICT | GRD-ACT-ENQUEUE<br>GRD-ACT-PROCESS<br>GRD-ACT-ROUTE<br>GRD-ACT-ROUTE-UNSUPPORTED<br>GRD-ACT-ROUTE-AI-UNAVAILABLE<br>GRD-ACT-CORRECT-RECOGNITION<br>GRD-ACT-ACCEPT-SUGGESTION<br>GRD-ACT-OVERRIDE-SCORE<br>GRD-ACT-MANUAL-GRADE<br>GRD-ACT-BATCH-CONFIRM<br>GRD-ACT-OPEN-CONFIRMED-REVISION<br>GRD-ACT-CONFIRM-REVISION | GRD-ACT-RESOLVE-VERSION-CONFLICT |
+| GRD-OBJ-DECISION | REVISION_PENDING | GRD-ACT-OPEN-CONFIRMED-REVISION | GRD-ACT-CONFIRM-REVISION |
+| GRD-OBJ-DECISION | TEACHER_CONFIRMED | GRD-ACT-ACCEPT-SUGGESTION<br>GRD-ACT-OVERRIDE-SCORE<br>GRD-ACT-MANUAL-GRADE<br>GRD-ACT-BATCH-CONFIRM<br>GRD-ACT-CONFIRM-REVISION | GRD-ACT-OPEN-CONFIRMED-REVISION |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-006 | Submission Grading Routing | 1 | HW-001 / SUB-001 / GRD-001 | GRD-ACT-ENQUEUE<br>GRD-ACT-ROUTE-UNSUPPORTED<br>GRD-ACT-PROCESS<br>GRD-ACT-ROUTE<br>GRD-ACT-ROUTE-AI-UNAVAILABLE | SUBMISSION_ITEM_OBJECT_WITH_INDEPENDENT_MANUAL_ROUTE；{"strategy":"RETRY_QUEUE_AND_PROCESSING_WITH_MANUAL_CUTOFF","maxAttempts":3,"retryableFailureResults":["AI_UNAVAILABLE","VERSION_CONFLICT"]}；{"strategy":"ROUTE_MANUAL_WITHOUT_ROLLING_BACK_SUBMISSION","description":"an AI failure preserves the accepted submission and creates or keeps a manual grading route"}；{"strategy":"INVALIDATE_STALE_GRADING_QUEUE_VIEWS","targets":["subject teacher grading queue","AI suggestion preview","batch confirmation eligibility"]} |
+| DF-007 | Subject Teacher Grading Confirmation | 1 | GRD-001 | GRD-ACT-CORRECT-RECOGNITION<br>GRD-ACT-ACCEPT-SUGGESTION<br>GRD-ACT-OVERRIDE-SCORE<br>GRD-ACT-MANUAL-GRADE<br>GRD-ACT-BATCH-CONFIRM<br>GRD-ACT-RESOLVE-VERSION-CONFLICT | STUDENT_ITEM_GRADING_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_THEN_RECONFIRM","maxAttempts":3,"retryableFailureResults":["STALE_INPUT_VERSION","SOURCE_VERSION_STILL_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_PRIOR_CONFIRMED_DECISION","description":"a failed confirmation never replaces the prior official decision and never publishes an unconfirmed subjective score"}；{"strategy":"INVALIDATE_PUBLICATION_ELIGIBILITY_AND_DERIVED_EXPLANATIONS","targets":["result publication eligibility","score explanation","knowledge evidence projection"]} |
+| DF-008 | Confirmed Result Publication | 1 | GRD-001 / PUB-001 / CORR-001 | GRD-ACT-ACCEPT-SUGGESTION<br>GRD-ACT-OVERRIDE-SCORE<br>GRD-ACT-MANUAL-GRADE | SELECTED_STUDENT_RESULT_OR_CORRECTION_TASK_OBJECT_WITH_PARTIAL_SUCCESS；{"strategy":"RETRY_FAILED_STUDENT_RESULTS_OR_CORRECTION_TASKS_ONLY","maxAttempts":5,"retryableFailureResults":["OBJECT_PUBLICATION_FAILED","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"DO_NOT_UNPUBLISH_SUCCESSFUL_RESULTS","description":"retain successful student results and correction tasks, then retry only failed result or correction task objects after eligibility and source versions are rechecked"}；{"strategy":"INVALIDATE_STALE_STUDENT_RESULT_READS","targets":["student score view","student feedback view","notification delivery state"]} |
+| DF-009 | Published Result Correction | 1 | GRD-001 / PUB-001 / INS-001 / PLN-001 / CORR-001 | GRD-ACT-OPEN-CONFIRMED-REVISION<br>GRD-ACT-CONFIRM-REVISION | PUBLISHED_STUDENT_RESULT_AND_DEPENDENT_INTERPRETATION_OBJECT；{"strategy":"REFRESH_RESULT_DECISION_EVIDENCE_AND_PLAN_VERSIONS_THEN_RETRY_FAILED_OBJECTS","maxAttempts":3,"retryableFailureResults":["STALE_DECISION_VERSION","SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_RESULT_AND_DEPENDENT_VERSIONS_UNTIL_OBJECT_OUTCOMES_COMMIT","description":"a failed correction leaves prior result, evidence, mastery, plan evaluation, report, and learning-path history intact and retries only failed objects"}；{"strategy":"VERSION_AND_REQUIRE_RECONFIRMATION_FOR_EVERY_DEPENDENT_TARGET_KIND","targets":["EVIDENCE","MASTERY_INTERPRETATION","IMPROVEMENT_CANDIDATE","PLAN_EVALUATION","REPORT_INTERPRETATION","LEARNING_PATH_EXPLANATION"]} |
+| DF-011 | Versioned Learning Facts to Cross-term Learning Path | 1 | PUB-001 / INS-001 / CORR-001 / APP-001 / GRD-001 / LPATH-001 |  | STUDENT_SOURCE_FACT_VERSION；{"strategy":"REFRESH_SELECTED_SOURCE_VERSION_AND_RETRY_FAILED_PATH_OBJECTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_ACCEPTED_SOURCE_FACT_AND_RETRY_ONLY_FAILED_DERIVED_OBJECTS","description":"a learning-path failure never rewrites evidence and never removes an accepted timeline entry"}；{"strategy":"SUPERSEDE_OR_MARK_STALE_BY_SOURCE_VERSION","targets":["learning path interpretation version","authorized path read model"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GRD-F001 | 作业 | 自动完成 | OPT-COM-012 | 是 | 当前任课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F002 | 班级 | 多选下拉 | OPT-COM-006 | 否 | 依赖作业发布范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F003 | AI 置信状态 | 多选下拉 | OPT-ENUM-005 | 否 | 低置信优先显示 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F004 | 当前题目 | 题目导航 | OPT-RUN-002 | 是 | 绑定提交版本和题目版本 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F005 | 修改原因 | 单选下拉 | OPT-ENUM-006 | 改分/修正必填 | OTHER 必填说明 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| GRD-F006 | 可批量确认范围 | 多选列表 | OPT-RUN-003 | 批量必选 | 排除主观题、低置信、失败项 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| GRD-PAGE-DECISION | Subject Teacher Grading Workspace | WEB / APP | GRD-OBJ-CAPABILITY-RULE<br>GRD-OBJ-DECISION | GRD-CAP-F-RULE-ID<br>GRD-CAP-F-RULE-VERSION<br>GRD-CAP-F-SOURCE-REF<br>GRD-CAP-F-SOURCE-VERSION<br>GRD-CAP-F-SUBJECT-FAMILY<br>GRD-CAP-F-QUESTION-TYPE<br>GRD-CAP-F-SUBMISSION-METHOD<br>GRD-CAP-F-RECOGNITION-LEVEL<br>GRD-CAP-F-SCORING-LEVEL<br>GRD-CAP-F-REQUIRED-EVIDENCE<br>GRD-CAP-F-TEACHER-REVIEW<br>GRD-CAP-F-BATCH-CONFIRM<br>GRD-CAP-F-UNAVAILABLE-FALLBACK<br>GRD-DECISION-F-ID<br>GRD-DECISION-F-RECOGNIZED-ANSWER<br>GRD-DECISION-F-RECOGNIZED-REGION<br>GRD-DECISION-F-SUBMISSION-REF<br>GRD-DECISION-F-SUBMISSION-VERSION<br>GRD-DECISION-F-ITEM-REF<br>GRD-DECISION-F-ITEM-VERSION<br>GRD-DECISION-F-RUBRIC-REF<br>GRD-DECISION-F-RUBRIC-VERSION<br>GRD-DECISION-F-CAPABILITY-RULE-REF<br>GRD-DECISION-F-CAPABILITY-RULE-VERSION<br>GRD-DECISION-F-SUGGESTED-SCORE<br>GRD-DECISION-F-SCORING-RATIONALE<br>GRD-DECISION-F-CONFIDENCE<br>GRD-DECISION-F-LIMITATION<br>GRD-DECISION-F-OFFICIAL-SCORE<br>GRD-DECISION-F-TEACHER-FEEDBACK<br>GRD-DECISION-F-CORRECTION-REASON<br>GRD-DECISION-F-DECISION-VERSION<br>GRD-DECISION-F-PRIOR-DECISION-VERSION<br>GRD-DECISION-F-ROUTE | GRD-ACT-CORRECT-RECOGNITION<br>GRD-ACT-ACCEPT-SUGGESTION<br>GRD-ACT-OVERRIDE-SCORE<br>GRD-ACT-MANUAL-GRADE<br>GRD-ACT-BATCH-CONFIRM<br>GRD-ACT-OPEN-CONFIRMED-REVISION<br>GRD-ACT-CONFIRM-REVISION<br>GRD-ACT-RESOLVE-VERSION-CONFLICT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| QUEUED | 排队中 |
-| PROCESSING | 识别/初评中 |
-| NEED_REVIEW | 待复核 |
-| UNJUDGED | 无法判断 |
-| CONFIRMED | 已确认 |
-| VERSION_STALE | 版本过期 |
-| FAILED | 失败 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GRD-ACT-SYNC-CAPABILITY-RULE-SCN-SUCCESS-ACTIVE | SUCCESS | GRD-ACT-SYNC-CAPABILITY-RULE | the actor meets the entry conditions for Sync a Versioned Grading Capability Rule Snapshot | the actor requests Sync a Versioned Grading Capability Rule Snapshot | Sync a Versioned Grading Capability Rule Snapshot returns the accepted versioned result | ACTIVE | ALLOW |  |
+| GRD-ACT-SYNC-CAPABILITY-RULE-SCN-SUCCESS-RETIRED | SUCCESS | GRD-ACT-SYNC-CAPABILITY-RULE | the actor meets the entry conditions for Sync a Versioned Grading Capability Rule Snapshot | the actor requests Sync a Versioned Grading Capability Rule Snapshot | Sync a Versioned Grading Capability Rule Snapshot returns the accepted versioned result | RETIRED | ALLOW |  |
+| GRD-ACT-SYNC-CAPABILITY-RULE-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-SYNC-CAPABILITY-RULE | PERMISSION_DENIED applies to Sync a Versioned Grading Capability Rule Snapshot | the actor requests Sync a Versioned Grading Capability Rule Snapshot | Sync a Versioned Grading Capability Rule Snapshot returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-SYNC-CAPABILITY-RULE-SCN-VALIDATION_FAILED | FAILURE | GRD-ACT-SYNC-CAPABILITY-RULE | VALIDATION_FAILED applies to Sync a Versioned Grading Capability Rule Snapshot | the actor requests Sync a Versioned Grading Capability Rule Snapshot | Sync a Versioned Grading Capability Rule Snapshot returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| GRD-ACT-SYNC-CAPABILITY-RULE-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-SYNC-CAPABILITY-RULE | VERSION_CONFLICT applies to Sync a Versioned Grading Capability Rule Snapshot | the actor requests Sync a Versioned Grading Capability Rule Snapshot | Sync a Versioned Grading Capability Rule Snapshot returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| GRD-ACT-SYNC-CAPABILITY-RULE-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-SYNC-CAPABILITY-RULE | AUDIT_FAILED applies to Sync a Versioned Grading Capability Rule Snapshot | the actor requests Sync a Versioned Grading Capability Rule Snapshot | Sync a Versioned Grading Capability Rule Snapshot returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| GRD-ACT-ENQUEUE-SCN-SUCCESS | SUCCESS | GRD-ACT-ENQUEUE | the actor meets the entry conditions for Enqueue Submission for Grading | the actor requests Enqueue Submission for Grading | creates a queued decision with immutable submission, item, and Rubric source versions | QUEUED | ALLOW |  |
+| GRD-ACT-ENQUEUE-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-ENQUEUE | PERMISSION_DENIED applies to Enqueue Submission for Grading | the actor requests Enqueue Submission for Grading | Enqueue Submission for Grading returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-ENQUEUE-SCN-VALIDATION_FAILED | FAILURE | GRD-ACT-ENQUEUE | VALIDATION_FAILED applies to Enqueue Submission for Grading | the actor requests Enqueue Submission for Grading | Enqueue Submission for Grading returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| GRD-ACT-ENQUEUE-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-ENQUEUE | VERSION_CONFLICT applies to Enqueue Submission for Grading | the actor requests Enqueue Submission for Grading | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-PROCESS-SCN-SUCCESS | SUCCESS | GRD-ACT-PROCESS | the actor meets the entry conditions for Process Grading Evidence | the actor requests Process Grading Evidence | Process Grading Evidence returns the accepted versioned result | PROCESSING | ALLOW |  |
+| GRD-ACT-PROCESS-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-PROCESS | PERMISSION_DENIED applies to Process Grading Evidence | the actor requests Process Grading Evidence | Process Grading Evidence returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-PROCESS-SCN-AI_UNAVAILABLE | BOUNDARY | GRD-ACT-PROCESS | AI_UNAVAILABLE applies to Process Grading Evidence | the actor requests Process Grading Evidence | records AI unavailability and preserves the submission for manual grading | PROCESSING | ALLOW | AI_UNAVAILABLE |
+| GRD-ACT-PROCESS-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-PROCESS | VERSION_CONFLICT applies to Process Grading Evidence | the actor requests Process Grading Evidence | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-ROUTE-SCN-SUCCESS | SUCCESS | GRD-ACT-ROUTE | the actor meets the entry conditions for Route Grading Decision | the actor requests Route Grading Decision | sets AI-SUGGESTION-REVIEW or AUTO-SCORE-CONFIRMATION from the exact capability decision; both remain teacher-confirmed paths | ROUTED_REVIEW | ALLOW |  |
+| GRD-ACT-ROUTE-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-ROUTE | PERMISSION_DENIED applies to Route Grading Decision | the actor requests Route Grading Decision | Route Grading Decision returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-ROUTE-SCN-VALIDATION_FAILED | FAILURE | GRD-ACT-ROUTE | VALIDATION_FAILED applies to Route Grading Decision | the actor requests Route Grading Decision | Route Grading Decision returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| GRD-ACT-ROUTE-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-ROUTE | VERSION_CONFLICT applies to Route Grading Decision | the actor requests Route Grading Decision | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-ROUTE-UNSUPPORTED-SCN-SUCCESS | SUCCESS | GRD-ACT-ROUTE-UNSUPPORTED | the actor meets the entry conditions for Route Unsupported Combination to Manual Grading | the actor requests Route Unsupported Combination to Manual Grading | sets MANUAL-GRADING or MANUAL-TRANSCRIPTION-THEN-GRADING from the explicit unsupported decision | ROUTED_MANUAL | ALLOW |  |
+| GRD-ACT-ROUTE-UNSUPPORTED-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-ROUTE-UNSUPPORTED | PERMISSION_DENIED applies to Route Unsupported Combination to Manual Grading | the actor requests Route Unsupported Combination to Manual Grading | Route Unsupported Combination to Manual Grading returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-ROUTE-UNSUPPORTED-SCN-VALIDATION_FAILED | FAILURE | GRD-ACT-ROUTE-UNSUPPORTED | VALIDATION_FAILED applies to Route Unsupported Combination to Manual Grading | the actor requests Route Unsupported Combination to Manual Grading | Route Unsupported Combination to Manual Grading returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| GRD-ACT-ROUTE-UNSUPPORTED-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-ROUTE-UNSUPPORTED | VERSION_CONFLICT applies to Route Unsupported Combination to Manual Grading | the actor requests Route Unsupported Combination to Manual Grading | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-ROUTE-AI-UNAVAILABLE-SCN-SUCCESS | SUCCESS | GRD-ACT-ROUTE-AI-UNAVAILABLE | the actor meets the entry conditions for Route AI-unavailable Decision to Manual Fallback | the actor requests Route AI-unavailable Decision to Manual Fallback | sets the explicit MANUAL fallback route after an AI-unavailable processing outcome | ROUTED_MANUAL | ALLOW |  |
+| GRD-ACT-ROUTE-AI-UNAVAILABLE-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-ROUTE-AI-UNAVAILABLE | PERMISSION_DENIED applies to Route AI-unavailable Decision to Manual Fallback | the actor requests Route AI-unavailable Decision to Manual Fallback | Route AI-unavailable Decision to Manual Fallback returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-ROUTE-AI-UNAVAILABLE-SCN-VALIDATION_FAILED | FAILURE | GRD-ACT-ROUTE-AI-UNAVAILABLE | VALIDATION_FAILED applies to Route AI-unavailable Decision to Manual Fallback | the actor requests Route AI-unavailable Decision to Manual Fallback | Route AI-unavailable Decision to Manual Fallback returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| GRD-ACT-ROUTE-AI-UNAVAILABLE-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-ROUTE-AI-UNAVAILABLE | VERSION_CONFLICT applies to Route AI-unavailable Decision to Manual Fallback | the actor requests Route AI-unavailable Decision to Manual Fallback | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-CORRECT-RECOGNITION-SCN-SUCCESS | SUCCESS | GRD-ACT-CORRECT-RECOGNITION | the actor meets the entry conditions for Correct Recognized Answer Region | the actor requests Correct Recognized Answer Region | Correct Recognized Answer Region returns the accepted versioned result | ROUTED_REVIEW | ALLOW |  |
+| GRD-ACT-CORRECT-RECOGNITION-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-CORRECT-RECOGNITION | PERMISSION_DENIED applies to Correct Recognized Answer Region | the actor requests Correct Recognized Answer Region | Correct Recognized Answer Region returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-CORRECT-RECOGNITION-SCN-VALIDATION_FAILED | FAILURE | GRD-ACT-CORRECT-RECOGNITION | VALIDATION_FAILED applies to Correct Recognized Answer Region | the actor requests Correct Recognized Answer Region | Correct Recognized Answer Region returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| GRD-ACT-CORRECT-RECOGNITION-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-CORRECT-RECOGNITION | VERSION_CONFLICT applies to Correct Recognized Answer Region | the actor requests Correct Recognized Answer Region | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-ACCEPT-SUGGESTION-SCN-SUCCESS | SUCCESS | GRD-ACT-ACCEPT-SUGGESTION | the actor meets the entry conditions for Accept Suggested Score | the actor requests Accept Suggested Score | Accept Suggested Score returns the accepted versioned result | TEACHER_CONFIRMED | ALLOW |  |
+| GRD-ACT-ACCEPT-SUGGESTION-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-ACCEPT-SUGGESTION | PERMISSION_DENIED applies to Accept Suggested Score | the actor requests Accept Suggested Score | Accept Suggested Score returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-ACCEPT-SUGGESTION-SCN-SUBJECTIVE_REVIEW_REQUIRED | FAILURE | GRD-ACT-ACCEPT-SUGGESTION | SUBJECTIVE_REVIEW_REQUIRED applies to Accept Suggested Score | the actor requests Accept Suggested Score | Accept Suggested Score returns SUBJECTIVE_REVIEW_REQUIRED without hidden writes | UNCHANGED | DENY | SUBJECTIVE_REVIEW_REQUIRED |
+| GRD-ACT-ACCEPT-SUGGESTION-SCN-STALE_INPUT_VERSION | FAILURE | GRD-ACT-ACCEPT-SUGGESTION | STALE_INPUT_VERSION applies to Accept Suggested Score | the actor requests Accept Suggested Score | Accept Suggested Score returns STALE_INPUT_VERSION without hidden writes | UNCHANGED | DENY | STALE_INPUT_VERSION |
+| GRD-ACT-ACCEPT-SUGGESTION-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-ACCEPT-SUGGESTION | VERSION_CONFLICT applies to Accept Suggested Score | the actor requests Accept Suggested Score | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-ACCEPT-SUGGESTION-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-ACCEPT-SUGGESTION | AUDIT_FAILED applies to Accept Suggested Score | the actor requests Accept Suggested Score | Accept Suggested Score returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| GRD-ACT-OVERRIDE-SCORE-SCN-SUCCESS | SUCCESS | GRD-ACT-OVERRIDE-SCORE | the actor meets the entry conditions for Override Suggested Score | the actor requests Override Suggested Score | Override Suggested Score returns the accepted versioned result | TEACHER_CONFIRMED | ALLOW |  |
+| GRD-ACT-OVERRIDE-SCORE-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-OVERRIDE-SCORE | PERMISSION_DENIED applies to Override Suggested Score | the actor requests Override Suggested Score | Override Suggested Score returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-OVERRIDE-SCORE-SCN-CORRECTION_REASON_REQUIRED | FAILURE | GRD-ACT-OVERRIDE-SCORE | CORRECTION_REASON_REQUIRED applies to Override Suggested Score | the actor requests Override Suggested Score | Override Suggested Score returns CORRECTION_REASON_REQUIRED without hidden writes | UNCHANGED | DENY | CORRECTION_REASON_REQUIRED |
+| GRD-ACT-OVERRIDE-SCORE-SCN-STALE_INPUT_VERSION | FAILURE | GRD-ACT-OVERRIDE-SCORE | STALE_INPUT_VERSION applies to Override Suggested Score | the actor requests Override Suggested Score | Override Suggested Score returns STALE_INPUT_VERSION without hidden writes | UNCHANGED | DENY | STALE_INPUT_VERSION |
+| GRD-ACT-OVERRIDE-SCORE-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-OVERRIDE-SCORE | VERSION_CONFLICT applies to Override Suggested Score | the actor requests Override Suggested Score | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-OVERRIDE-SCORE-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-OVERRIDE-SCORE | AUDIT_FAILED applies to Override Suggested Score | the actor requests Override Suggested Score | Override Suggested Score returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| GRD-ACT-MANUAL-GRADE-SCN-SUCCESS | SUCCESS | GRD-ACT-MANUAL-GRADE | the actor meets the entry conditions for Grade Submission Manually | the actor requests Grade Submission Manually | Grade Submission Manually returns the accepted versioned result | TEACHER_CONFIRMED | ALLOW |  |
+| GRD-ACT-MANUAL-GRADE-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-MANUAL-GRADE | PERMISSION_DENIED applies to Grade Submission Manually | the actor requests Grade Submission Manually | Grade Submission Manually returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-MANUAL-GRADE-SCN-MISSING_REQUIRED_EVIDENCE | FAILURE | GRD-ACT-MANUAL-GRADE | MISSING_REQUIRED_EVIDENCE applies to Grade Submission Manually | the actor requests Grade Submission Manually | Grade Submission Manually returns MISSING_REQUIRED_EVIDENCE without hidden writes | UNCHANGED | DENY | MISSING_REQUIRED_EVIDENCE |
+| GRD-ACT-MANUAL-GRADE-SCN-STALE_INPUT_VERSION | FAILURE | GRD-ACT-MANUAL-GRADE | STALE_INPUT_VERSION applies to Grade Submission Manually | the actor requests Grade Submission Manually | Grade Submission Manually returns STALE_INPUT_VERSION without hidden writes | UNCHANGED | DENY | STALE_INPUT_VERSION |
+| GRD-ACT-MANUAL-GRADE-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-MANUAL-GRADE | VERSION_CONFLICT applies to Grade Submission Manually | the actor requests Grade Submission Manually | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-MANUAL-GRADE-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-MANUAL-GRADE | AUDIT_FAILED applies to Grade Submission Manually | the actor requests Grade Submission Manually | Grade Submission Manually returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| GRD-ACT-BATCH-CONFIRM-SCN-SUCCESS | SUCCESS | GRD-ACT-BATCH-CONFIRM | the actor meets the entry conditions for Batch Confirm Eligible Scores | the actor requests Batch Confirm Eligible Scores | Batch Confirm Eligible Scores returns the accepted versioned result | TEACHER_CONFIRMED | ALLOW |  |
+| GRD-ACT-BATCH-CONFIRM-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-BATCH-CONFIRM | PERMISSION_DENIED applies to Batch Confirm Eligible Scores | the actor requests Batch Confirm Eligible Scores | Batch Confirm Eligible Scores returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-BATCH-CONFIRM-SCN-SUBJECTIVE_ITEMS_INELIGIBLE | FAILURE | GRD-ACT-BATCH-CONFIRM | SUBJECTIVE_ITEMS_INELIGIBLE applies to Batch Confirm Eligible Scores | the actor requests Batch Confirm Eligible Scores | Batch Confirm Eligible Scores returns SUBJECTIVE_ITEMS_INELIGIBLE without hidden writes | UNCHANGED | DENY | SUBJECTIVE_ITEMS_INELIGIBLE |
+| GRD-ACT-BATCH-CONFIRM-SCN-LOW_CONFIDENCE_INELIGIBLE | FAILURE | GRD-ACT-BATCH-CONFIRM | LOW_CONFIDENCE_INELIGIBLE applies to Batch Confirm Eligible Scores | the actor requests Batch Confirm Eligible Scores | Batch Confirm Eligible Scores returns LOW_CONFIDENCE_INELIGIBLE without hidden writes | UNCHANGED | DENY | LOW_CONFIDENCE_INELIGIBLE |
+| GRD-ACT-BATCH-CONFIRM-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-BATCH-CONFIRM | VERSION_CONFLICT applies to Batch Confirm Eligible Scores | the actor requests Batch Confirm Eligible Scores | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-BATCH-CONFIRM-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-BATCH-CONFIRM | AUDIT_FAILED applies to Batch Confirm Eligible Scores | the actor requests Batch Confirm Eligible Scores | Batch Confirm Eligible Scores returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| GRD-ACT-OPEN-CONFIRMED-REVISION-SCN-SUCCESS | SUCCESS | GRD-ACT-OPEN-CONFIRMED-REVISION | the actor meets the entry conditions for Open Confirmed Decision Revision | the actor requests Open Confirmed Decision Revision | creates a revision-pending decision version that retains the immutable prior confirmed decision version and correction reason | REVISION_PENDING | ALLOW |  |
+| GRD-ACT-OPEN-CONFIRMED-REVISION-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-OPEN-CONFIRMED-REVISION | PERMISSION_DENIED applies to Open Confirmed Decision Revision | the actor requests Open Confirmed Decision Revision | Open Confirmed Decision Revision returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-OPEN-CONFIRMED-REVISION-SCN-CORRECTION_REASON_REQUIRED | FAILURE | GRD-ACT-OPEN-CONFIRMED-REVISION | CORRECTION_REASON_REQUIRED applies to Open Confirmed Decision Revision | the actor requests Open Confirmed Decision Revision | Open Confirmed Decision Revision returns CORRECTION_REASON_REQUIRED without hidden writes | UNCHANGED | DENY | CORRECTION_REASON_REQUIRED |
+| GRD-ACT-OPEN-CONFIRMED-REVISION-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-OPEN-CONFIRMED-REVISION | VERSION_CONFLICT applies to Open Confirmed Decision Revision | the actor requests Open Confirmed Decision Revision | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-OPEN-CONFIRMED-REVISION-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-OPEN-CONFIRMED-REVISION | AUDIT_FAILED applies to Open Confirmed Decision Revision | the actor requests Open Confirmed Decision Revision | Open Confirmed Decision Revision returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| GRD-ACT-CONFIRM-REVISION-SCN-SUCCESS | SUCCESS | GRD-ACT-CONFIRM-REVISION | the actor meets the entry conditions for Confirm Revised Decision | the actor requests Confirm Revised Decision | creates a new decision version after corresponding subject-teacher confirmation and retains the prior confirmed version in history | TEACHER_CONFIRMED | ALLOW |  |
+| GRD-ACT-CONFIRM-REVISION-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-CONFIRM-REVISION | PERMISSION_DENIED applies to Confirm Revised Decision | the actor requests Confirm Revised Decision | Confirm Revised Decision returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-CONFIRM-REVISION-SCN-CORRECTION_REASON_REQUIRED | FAILURE | GRD-ACT-CONFIRM-REVISION | CORRECTION_REASON_REQUIRED applies to Confirm Revised Decision | the actor requests Confirm Revised Decision | Confirm Revised Decision returns CORRECTION_REASON_REQUIRED without hidden writes | UNCHANGED | DENY | CORRECTION_REASON_REQUIRED |
+| GRD-ACT-CONFIRM-REVISION-SCN-STALE_INPUT_VERSION | FAILURE | GRD-ACT-CONFIRM-REVISION | STALE_INPUT_VERSION applies to Confirm Revised Decision | the actor requests Confirm Revised Decision | Confirm Revised Decision returns STALE_INPUT_VERSION without hidden writes | UNCHANGED | DENY | STALE_INPUT_VERSION |
+| GRD-ACT-CONFIRM-REVISION-SCN-VERSION_CONFLICT | FAILURE | GRD-ACT-CONFIRM-REVISION | VERSION_CONFLICT applies to Confirm Revised Decision | the actor requests Confirm Revised Decision | records the conflicting source versions and blocks confirmation until the decision is requeued | CONFLICT | DENY | VERSION_CONFLICT |
+| GRD-ACT-CONFIRM-REVISION-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-CONFIRM-REVISION | AUDIT_FAILED applies to Confirm Revised Decision | the actor requests Confirm Revised Decision | Confirm Revised Decision returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| GRD-ACT-RESOLVE-VERSION-CONFLICT-SCN-SUCCESS | SUCCESS | GRD-ACT-RESOLVE-VERSION-CONFLICT | the actor meets the entry conditions for Resolve Grading Version Conflict | the actor requests Resolve Grading Version Conflict | refreshes immutable source lineage into a new queued decision version without confirming a score | QUEUED | ALLOW |  |
+| GRD-ACT-RESOLVE-VERSION-CONFLICT-SCN-PERMISSION_DENIED | FAILURE | GRD-ACT-RESOLVE-VERSION-CONFLICT | PERMISSION_DENIED applies to Resolve Grading Version Conflict | the actor requests Resolve Grading Version Conflict | Resolve Grading Version Conflict returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| GRD-ACT-RESOLVE-VERSION-CONFLICT-SCN-SOURCE_VERSION_STILL_STALE | FAILURE | GRD-ACT-RESOLVE-VERSION-CONFLICT | SOURCE_VERSION_STILL_STALE applies to Resolve Grading Version Conflict | the actor requests Resolve Grading Version Conflict | Resolve Grading Version Conflict returns SOURCE_VERSION_STILL_STALE without hidden writes | UNCHANGED | DENY | SOURCE_VERSION_STILL_STALE |
+| GRD-ACT-RESOLVE-VERSION-CONFLICT-SCN-AUDIT_FAILED | FAILURE | GRD-ACT-RESOLVE-VERSION-CONFLICT | AUDIT_FAILED applies to Resolve Grading Version Conflict | the actor requests Resolve Grading Version Conflict | Resolve Grading Version Conflict returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 系统对提交版本生成识别结果和 AI 建议。
-2. 主观题、低置信、识别异常和规则冲突进入强制复核。
-3. 教师逐题接受、改分、修正识别或人工评分。
-4. 确认评分版本输出给成绩发布模块，学生发布前不可见。
-
-关联 Flow: `DF-006`、`DF-007`、`DF-019`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GRD-FR-01 | 对象查询与范围筛选 | GRD-F001、GRD-F002、GRD-F003、GRD-F004、GRD-F005、GRD-F006 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | GRD-AC-01 |
-| GRD-FR-02 | 详情查看与版本追踪 | DAT-GRD-01、DAT-GRD-02、DAT-GRD-03、DAT-GRD-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | GRD-AC-02 |
-| GRD-FR-03 | 创建/修改/确认主动作 | GRD-F001、GRD-F002、GRD-F003、GRD-F004、GRD-F005、GRD-F006 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | GRD-AC-03 |
-| GRD-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | GRD-AC-04 |
-| GRD-FR-05 | 审计、通知与下游失效 | DF-006、DF-007、DF-019 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | GRD-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| GRD-AC-01 | AI 建议必须包含依据、置信状态、输入版本。 |
-| GRD-AC-02 | 主观题和低置信结果不能绕过教师确认。 |
-| GRD-AC-03 | 教师修正识别后旧建议失效并保留版本。 |
-| GRD-AC-04 | AI 不可用时教师可完成人工批改。 |
-| GRD-AC-05 | 班主任非任课职责只能查看进度，不能改分。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-006`、`DF-007`、`DF-019`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

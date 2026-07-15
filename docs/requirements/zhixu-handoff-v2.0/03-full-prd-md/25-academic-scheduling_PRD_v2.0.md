@@ -1,140 +1,231 @@
-# SCH-001 教务辅助排课 PRD v2.0
+# SCH-001 Calendar Constraint and Schedule Publication PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 优先级 | P2 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 教务 |
-| 关联线框 | [25-academic-scheduling-wireframe.zh-CN.md](../05-wireframe-contracts/25-academic-scheduling-wireframe.zh-CN.md) |
-
-## 0. 产品评审摘要
-
-基于课程、班级、教师、教室、校历和约束生成候选课表，并由教务确认正式发布。
-
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
-
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-SCH-01 | Scheduling Input | 教务 | 排课输入 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-SCH-02 | Scheduling Constraint | 教务 | 排课约束 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-SCH-03 | Schedule Candidate | 系统 | 候选课表 | 系统 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-SCH-04 | Published Timetable | 教务 | 正式课表 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-
-## 1. 范围
-
-### 1.1 目标用户与价值
-
-- 目标用户: 教务
-- 解决问题: 基于课程、班级、教师、教室、校历和约束生成候选课表，并由教务确认正式发布。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
-
-### 1.2 本模块负责
-
-- DAT-SCH-01 Scheduling Input
-- DAT-SCH-02 Scheduling Constraint
-- DAT-SCH-03 Schedule Candidate
-- DAT-SCH-04 Published Timetable
-
-### 1.3 本模块不负责
-
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
-
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
-| --- | --- | --- | --- |
-| 完整业务处理 | 排课输入、约束维护、候选对比、正式发布、调课 | 教师/学生课表查看、调课通知、教务移动审批 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
-
-## 3. 字段与选项合同
-
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| SCH-F001 | 班级 | 多选下拉 | OPT-COM-006 | 是 | 排课范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F002 | 教师 | 多选下拉 | OPT-COM-009 | 是 | 任课关系来源 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F003 | 课程 | 多选下拉 | OPT-COM-008 | 是 | 课时规则 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F004 | 约束性质 | 单选下拉 | OPT-ENUM-029 | 约束必填 | 硬约束不可违反 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| SCH-F005 | 课表视角 | 分段控件 | OPT-ENUM-030 | 否；班级 | 只影响预览 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-
-## 4. 状态机
-
-| 状态 | 含义/要求 |
 | --- | --- |
-| DRAFT | 输入中 |
-| SOLVING | 生成中 |
-| CANDIDATE_READY | 候选就绪 |
-| CONFIRMED | 已确认 |
-| PUBLISHED | 已发布 |
-| STALE | 已过期 |
+| 阶段 | 1 |
+| 优先级 | P0 |
+| 目标 | Generate review confirm and publish schedules without bypassing hard constraints or stale-source detection |
+| 基线决策 | `BASE-004`、`BASE-005`、`BASE-007` |
+| NFR | `NFR-003`、`NFR-006`、`NFR-008` |
+| 进入条件 | academic administration has current calendar teacher class course room and constraint facts |
+| 退出条件 | only hard-constraint-clean confirmed candidates are published and stale candidates remain blocked |
 
-状态通用规则：
+## 1. 范围与事实边界
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
+- 本模块权威拥有 4 个对象、15 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-## 5. 权限与责任
+## 2. 权威对象与字段合同
 
-| 角色/职责 | 读权限 | 写权限 | 限制 |
+### SCH-OBJ-CALENDAR School Calendar Version
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACADEMIC_OPERATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | DRAFT / PUBLISHED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCH-CALENDAR-F-ID | School Calendar Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CALENDAR-F-TERM | School Term | STRING | 是 | OPTION_SET: OPT-COM-004 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CALENDAR-F-WORKING-DAYS | Working Days and Periods | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CALENDAR-F-VERSION | Calendar Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### SCH-OBJ-CONSTRAINT Schedule Constraint
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACADEMIC_OPERATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | DRAFT / ACTIVE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCH-CONSTRAINT-F-ID | Schedule Constraint ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-F-KIND | Constraint Kind | STRING | 是 | OPTION_SET: OPT-EXT-017 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-F-HARDNESS | Constraint Hardness | STRING | 是 | OPTION_SET: OPT-EXT-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-F-TEACHER-AVAILABILITY-WINDOWS | Teacher Availability Windows | JSON | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-F-CLASS-COURSE-PERIOD-RULES | Class Course Period Rules | JSON | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-F-TEACHER-LOAD-LIMITS | Teacher Course Load Limits | JSON | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-F-ROOM-CAPACITY-RULES | Room Capacity Rules | JSON | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-F-VERSION | Constraint Snapshot Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### SCH-OBJ-CONSTRAINT-SNAPSHOT Immutable Constraint Snapshot
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACADEMIC_OPERATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | DRAFT / ACTIVE / REPLACED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCH-CONSTRAINT-SNAPSHOT-F-ID | Immutable Constraint Snapshot ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-SNAPSHOT-F-ITEMS | Constraint Snapshot Items | JSON | 是 | USER_INPUT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS | Constraint Snapshot Stable IDs | STRING_ARRAY | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | FANOUT_SET | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-SNAPSHOT-F-HASH | Constraint Snapshot Hash | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-SNAPSHOT-F-STATUS | Constraint Snapshot Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CONSTRAINT-SNAPSHOT-F-VERSION | Constraint Snapshot Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### SCH-OBJ-CANDIDATE Schedule Candidate Version
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACADEMIC_OPERATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | GENERATED / REVIEWED / CONFIRMED / PUBLISHED / STALE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCH-CANDIDATE-F-ID | Schedule Candidate Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-ASSIGNMENTS | Candidate Teacher Class Course Room Assignments | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-HARD-CHECK | Hard Constraint Check | STRING | 是 | OPTION_SET: OPT-EXT-007 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-CONFLICTS | Conflict Review Findings | JSON | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED | Soft Constraint Acknowledgement | BOOLEAN | required when the schedule candidate is confirmed；状态=CONFIRMED；动作=SCH-ACT-CONFIRM-CANDIDATE | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-STATUS | Schedule Candidate Status | STRING | 是 | OPTION_SET: OPT-EXT-014 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-CALENDAR-REF | Pinned Calendar Version | ID | 是 | OBJECT_REF: SCH-OBJ-CALENDAR | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-CALENDAR-VERSION | Pinned Calendar Version Number | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF | Pinned Constraint Snapshot | ID | 是 | OBJECT_REF: SCH-OBJ-CONSTRAINT-SNAPSHOT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION | Pinned Constraint Snapshot Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| SCH-REL-CANDIDATE-CALENDAR | SCH-OBJ-CANDIDATE | DERIVED_FROM | SCH-OBJ-CALENDAR | MANY_TO_ONE | SAME_SCHOOL | mark every candidate pinned to the prior calendar version stale |
+| SCH-REL-CANDIDATE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CANDIDATE | DERIVED_FROM | SCH-OBJ-CONSTRAINT-SNAPSHOT | MANY_TO_ONE | SAME_SCHOOL | mark every candidate pinned to the prior constraint snapshot stale |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCH-ACT-CREATE-CALENDAR | Create School Calendar Version | SCH-OBJ-CALENDAR | CREATE | SCH-CALENDAR-F-TERM<br>SCH-CALENDAR-F-WORKING-DAYS | SCH-CALENDAR-F-ID<br>SCH-CALENDAR-F-VERSION | CREATE（成功状态由 SCH-ACT-CREATE-CALENDAR-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-CREATE-CALENDAR:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-PUBLISH-CALENDAR | Publish School Calendar Version | SCH-OBJ-CALENDAR | UPDATE |  | SCH-CALENDAR-F-VERSION | DRAFT → PUBLISHED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-PUBLISH-CALENDAR:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | Create Teacher Availability Constraint Snapshot | SCH-OBJ-CONSTRAINT | CREATE | SCH-CONSTRAINT-F-KIND<br>SCH-CONSTRAINT-F-HARDNESS<br>SCH-CONSTRAINT-F-TEACHER-AVAILABILITY-WINDOWS | SCH-CONSTRAINT-F-ID<br>SCH-CONSTRAINT-F-VERSION | CREATE（成功状态由 SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | Create Class Course Period Constraint Snapshot | SCH-OBJ-CONSTRAINT | CREATE | SCH-CONSTRAINT-F-KIND<br>SCH-CONSTRAINT-F-HARDNESS<br>SCH-CONSTRAINT-F-CLASS-COURSE-PERIOD-RULES | SCH-CONSTRAINT-F-ID<br>SCH-CONSTRAINT-F-VERSION | CREATE（成功状态由 SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | Create Teacher Course Load Constraint Snapshot | SCH-OBJ-CONSTRAINT | CREATE | SCH-CONSTRAINT-F-KIND<br>SCH-CONSTRAINT-F-HARDNESS<br>SCH-CONSTRAINT-F-TEACHER-LOAD-LIMITS | SCH-CONSTRAINT-F-ID<br>SCH-CONSTRAINT-F-VERSION | CREATE（成功状态由 SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | Create Room Capacity Constraint Snapshot | SCH-OBJ-CONSTRAINT | CREATE | SCH-CONSTRAINT-F-KIND<br>SCH-CONSTRAINT-F-HARDNESS<br>SCH-CONSTRAINT-F-ROOM-CAPACITY-RULES | SCH-CONSTRAINT-F-ID<br>SCH-CONSTRAINT-F-VERSION | CREATE（成功状态由 SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-ACTIVATE-CONSTRAINT | Activate Schedule Constraint | SCH-OBJ-CONSTRAINT | UPDATE |  | SCH-CONSTRAINT-F-HARDNESS<br>SCH-CONSTRAINT-F-VERSION | DRAFT → ACTIVE | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-ACTIVATE-CONSTRAINT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | Create Complete Constraint Snapshot | SCH-OBJ-CONSTRAINT-SNAPSHOT | CREATE | SCH-CONSTRAINT-SNAPSHOT-F-ITEMS | SCH-CONSTRAINT-SNAPSHOT-F-ID<br>SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS<br>SCH-CONSTRAINT-SNAPSHOT-F-HASH<br>SCH-CONSTRAINT-SNAPSHOT-F-VERSION<br>SCH-CONSTRAINT-SNAPSHOT-F-STATUS | CREATE（成功状态由 SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | Activate Complete Constraint Snapshot | SCH-OBJ-CONSTRAINT-SNAPSHOT | UPDATE |  | SCH-CONSTRAINT-SNAPSHOT-F-STATUS<br>SCH-CONSTRAINT-SNAPSHOT-F-VERSION | DRAFT → ACTIVE | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | Replace Active Constraint Snapshot | SCH-OBJ-CONSTRAINT-SNAPSHOT | UPDATE |  | SCH-CONSTRAINT-SNAPSHOT-F-STATUS<br>SCH-CONSTRAINT-SNAPSHOT-F-VERSION | ACTIVE → REPLACED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-GENERATE-CANDIDATE | Generate Schedule Candidate | SCH-OBJ-CANDIDATE | CREATE | SCH-CANDIDATE-F-ASSIGNMENTS<br>SCH-CANDIDATE-F-CALENDAR-REF<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF | SCH-CANDIDATE-F-ID<br>SCH-CANDIDATE-F-HARD-CHECK<br>SCH-CANDIDATE-F-CONFLICTS<br>SCH-CANDIDATE-F-STATUS<br>SCH-CANDIDATE-F-CALENDAR-VERSION<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION | CREATE（成功状态由 SCH-ACT-GENERATE-CANDIDATE-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-GENERATE-CANDIDATE:school:object-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-REVIEW-CONFLICTS | Review Schedule Candidate Conflicts | SCH-OBJ-CANDIDATE | UPDATE |  | SCH-CANDIDATE-F-CONFLICTS<br>SCH-CANDIDATE-F-STATUS | GENERATED → REVIEWED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB / APP | LOW | REQUIRED | SCH-ACT-REVIEW-CONFLICTS:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-CONFIRM-CANDIDATE | Confirm Hard-Constraint-Clean Schedule Candidate | SCH-OBJ-CANDIDATE | UPDATE | SCH-CANDIDATE-F-HARD-CHECK<br>SCH-CANDIDATE-F-CALENDAR-REF<br>SCH-CANDIDATE-F-CALENDAR-VERSION<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION<br>SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED | SCH-CANDIDATE-F-STATUS<br>SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED | REVIEWED → CONFIRMED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-CONFIRM-CANDIDATE:school:object-version:request-id | PERMISSION_DENIED / HARD_CONSTRAINT_FAILED / SOURCE_VERSION_STALE / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-PUBLISH-CANDIDATE | Publish Confirmed Schedule Candidate | SCH-OBJ-CANDIDATE | UPDATE | SCH-CANDIDATE-F-CALENDAR-REF<br>SCH-CANDIDATE-F-CALENDAR-VERSION<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION<br>SCH-CANDIDATE-F-HARD-CHECK<br>SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED | SCH-CANDIDATE-F-STATUS | CONFIRMED → PUBLISHED | ALLOW:ROLE-ACADEMIC — academic administration acts inside the authorized school and term scope<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | SCH-ACT-PUBLISH-CANDIDATE:school:object-version:request-id | PERMISSION_DENIED / SOURCE_VERSION_STALE / VALIDATION_FAILED / VERSION_CONFLICT |
+| SCH-ACT-MARK-CANDIDATE-STALE | Mark Schedule Candidate Stale After Source Change | SCH-OBJ-CANDIDATE | UPDATE |  | SCH-CANDIDATE-F-STATUS | GENERATED / REVIEWED / CONFIRMED / PUBLISHED → STALE | ALLOW:SYSTEM — the registered source-version event marks every affected candidate stale<br>DENY:ROLE-ACADEMIC — ROLE-ACADEMIC is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | SYSTEM_EVENT | LOW | REQUIRED | SCH-ACT-MARK-CANDIDATE-STALE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+
+## 5. 业务失败因果语义
+
+| Action ID | 失败码 | 因果谓词 | Given | When | Expected Data |
+| --- | --- | --- | --- | --- | --- |
+| SCH-ACT-GENERATE-CANDIDATE | SOURCE_VERSION_STALE | calendar.state !== PUBLISHED \|\| constraintSnapshot.state !== ACTIVE \|\| sourceVersionChangedDuringGeneration === true | the selected calendar is not PUBLISHED, the constraint snapshot is not ACTIVE, or either source version changes while generation is running | academic affairs generates a schedule candidate | SOURCE_VERSION_STALE creates no candidate and returns the current calendar and constraint-snapshot versions |
+| SCH-ACT-CONFIRM-CANDIDATE | HARD_CONSTRAINT_FAILED | candidate.hardConstraintCheck !== PASS | the reviewed schedule candidate does not have a PASS hard-constraint result | academic affairs confirms the reviewed schedule candidate | HARD_CONSTRAINT_FAILED preserves the candidate in REVIEWED and returns the blocking conflicts |
+| SCH-ACT-CONFIRM-CANDIDATE | SOURCE_VERSION_STALE | candidate.calendarVersion !== calendar.version \|\| candidate.constraintSnapshotVersion !== constraintSnapshot.version \|\| calendar.state !== PUBLISHED \|\| constraintSnapshot.state !== ACTIVE | the candidate's pinned calendar or constraint-snapshot version no longer matches an eligible source | academic affairs confirms the reviewed schedule candidate | SOURCE_VERSION_STALE preserves the candidate outside CONFIRMED and returns both current source versions |
+| SCH-ACT-PUBLISH-CANDIDATE | SOURCE_VERSION_STALE | candidate.calendarVersion !== calendar.version \|\| candidate.constraintSnapshotVersion !== constraintSnapshot.version \|\| calendar.state !== PUBLISHED \|\| constraintSnapshot.state !== ACTIVE | the confirmed candidate's pinned calendar or constraint-snapshot version no longer matches an eligible source | academic affairs publishes the confirmed schedule candidate | SOURCE_VERSION_STALE preserves the candidate outside PUBLISHED and returns both current source versions |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
+| SCH-OBJ-CALENDAR | DRAFT | SCH-ACT-CREATE-CALENDAR | SCH-ACT-PUBLISH-CALENDAR |
+| SCH-OBJ-CALENDAR | PUBLISHED | SCH-ACT-PUBLISH-CALENDAR |  |
+| SCH-OBJ-CONSTRAINT | DRAFT | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT<br>SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT<br>SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT<br>SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | SCH-ACT-ACTIVATE-CONSTRAINT |
+| SCH-OBJ-CONSTRAINT | ACTIVE | SCH-ACT-ACTIVATE-CONSTRAINT |  |
+| SCH-OBJ-CONSTRAINT-SNAPSHOT | DRAFT | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT |
+| SCH-OBJ-CONSTRAINT-SNAPSHOT | ACTIVE | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT |
+| SCH-OBJ-CONSTRAINT-SNAPSHOT | REPLACED | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT |  |
+| SCH-OBJ-CANDIDATE | GENERATED | SCH-ACT-GENERATE-CANDIDATE | SCH-ACT-REVIEW-CONFLICTS<br>SCH-ACT-MARK-CANDIDATE-STALE |
+| SCH-OBJ-CANDIDATE | REVIEWED | SCH-ACT-REVIEW-CONFLICTS | SCH-ACT-CONFIRM-CANDIDATE<br>SCH-ACT-MARK-CANDIDATE-STALE |
+| SCH-OBJ-CANDIDATE | CONFIRMED | SCH-ACT-CONFIRM-CANDIDATE | SCH-ACT-PUBLISH-CANDIDATE<br>SCH-ACT-MARK-CANDIDATE-STALE |
+| SCH-OBJ-CANDIDATE | PUBLISHED | SCH-ACT-PUBLISH-CANDIDATE | SCH-ACT-MARK-CANDIDATE-STALE |
+| SCH-OBJ-CANDIDATE | STALE | SCH-ACT-MARK-CANDIDATE-STALE |  |
 
-## 6. 主流程
+## 7. 参与数据流
 
-1. 教务维护排课输入和约束。
-2. 系统生成候选课表并标注冲突。
-3. 教务选择候选并人工确认。
-4. 正式课表发布后通知受影响教师和学生。
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
 
-关联 Flow: `DF-201`、`DF-202`。
+## 8. 页面任务合同
 
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| SCH-FR-01 | 对象查询与范围筛选 | SCH-F001、SCH-F002、SCH-F003、SCH-F004、SCH-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P2 | SCH-AC-01 |
-| SCH-FR-02 | 详情查看与版本追踪 | DAT-SCH-01、DAT-SCH-02、DAT-SCH-03、DAT-SCH-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P2 | SCH-AC-02 |
-| SCH-FR-03 | 创建/修改/确认主动作 | SCH-F001、SCH-F002、SCH-F003、SCH-F004、SCH-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P2 | SCH-AC-03 |
-| SCH-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P2 | SCH-AC-04 |
-| SCH-FR-05 | 审计、通知与下游失效 | DF-201、DF-202 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P2 | SCH-AC-05 |
+| SCH-PAGE-SCHEDULE-OPERATIONS | Web Schedule Generation and Conflict Review Workspace | WEB | SCH-OBJ-CALENDAR<br>SCH-OBJ-CONSTRAINT<br>SCH-OBJ-CONSTRAINT-SNAPSHOT<br>SCH-OBJ-CANDIDATE | SCH-CALENDAR-F-ID<br>SCH-CALENDAR-F-TERM<br>SCH-CALENDAR-F-WORKING-DAYS<br>SCH-CALENDAR-F-VERSION<br>SCH-CONSTRAINT-F-ID<br>SCH-CONSTRAINT-F-KIND<br>SCH-CONSTRAINT-F-HARDNESS<br>SCH-CONSTRAINT-F-TEACHER-AVAILABILITY-WINDOWS<br>SCH-CONSTRAINT-F-CLASS-COURSE-PERIOD-RULES<br>SCH-CONSTRAINT-F-TEACHER-LOAD-LIMITS<br>SCH-CONSTRAINT-F-ROOM-CAPACITY-RULES<br>SCH-CONSTRAINT-F-VERSION<br>SCH-CONSTRAINT-SNAPSHOT-F-ID<br>SCH-CONSTRAINT-SNAPSHOT-F-ITEMS<br>SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS<br>SCH-CONSTRAINT-SNAPSHOT-F-HASH<br>SCH-CONSTRAINT-SNAPSHOT-F-STATUS<br>SCH-CONSTRAINT-SNAPSHOT-F-VERSION<br>SCH-CANDIDATE-F-ID<br>SCH-CANDIDATE-F-ASSIGNMENTS<br>SCH-CANDIDATE-F-HARD-CHECK<br>SCH-CANDIDATE-F-CONFLICTS<br>SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED<br>SCH-CANDIDATE-F-STATUS<br>SCH-CANDIDATE-F-CALENDAR-REF<br>SCH-CANDIDATE-F-CALENDAR-VERSION<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION | SCH-ACT-CREATE-CALENDAR<br>SCH-ACT-PUBLISH-CALENDAR<br>SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT<br>SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT<br>SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT<br>SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT<br>SCH-ACT-ACTIVATE-CONSTRAINT<br>SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT<br>SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT<br>SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT<br>SCH-ACT-GENERATE-CANDIDATE<br>SCH-ACT-REVIEW-CONFLICTS<br>SCH-ACT-CONFIRM-CANDIDATE<br>SCH-ACT-PUBLISH-CANDIDATE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| SCH-PAGE-MOBILE-CONFLICT-REVIEW | Mobile Schedule Conflict Review | APP | SCH-OBJ-CANDIDATE | SCH-CANDIDATE-F-ASSIGNMENTS<br>SCH-CANDIDATE-F-HARD-CHECK<br>SCH-CANDIDATE-F-CONFLICTS<br>SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED<br>SCH-CANDIDATE-F-STATUS<br>SCH-CANDIDATE-F-CALENDAR-REF<br>SCH-CANDIDATE-F-CALENDAR-VERSION<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF<br>SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION | SCH-ACT-REVIEW-CONFLICTS | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 7. 异常、幂等与补偿
+## 9. 验收场景
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCH-ACT-CREATE-CALENDAR-SCN-SUCCESS | SUCCESS | SCH-ACT-CREATE-CALENDAR | the authorized actor satisfies the task-specific entry conditions for Create School Calendar Version | the actor requests Create School Calendar Version | Create School Calendar Version returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| SCH-ACT-CREATE-CALENDAR-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-CREATE-CALENDAR | PERMISSION_DENIED blocks Create School Calendar Version | the actor requests Create School Calendar Version | Create School Calendar Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-CREATE-CALENDAR-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-CREATE-CALENDAR | VALIDATION_FAILED blocks Create School Calendar Version | the actor requests Create School Calendar Version | Create School Calendar Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-CREATE-CALENDAR-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-CREATE-CALENDAR | VERSION_CONFLICT blocks Create School Calendar Version | the actor requests Create School Calendar Version | Create School Calendar Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-PUBLISH-CALENDAR-SCN-SUCCESS | SUCCESS | SCH-ACT-PUBLISH-CALENDAR | the authorized actor satisfies the task-specific entry conditions for Publish School Calendar Version | the actor requests Publish School Calendar Version | Publish School Calendar Version returns the accepted versioned task result without widening scope | PUBLISHED | ALLOW |  |
+| SCH-ACT-PUBLISH-CALENDAR-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-PUBLISH-CALENDAR | PERMISSION_DENIED blocks Publish School Calendar Version | the actor requests Publish School Calendar Version | Publish School Calendar Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-PUBLISH-CALENDAR-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-PUBLISH-CALENDAR | VALIDATION_FAILED blocks Publish School Calendar Version | the actor requests Publish School Calendar Version | Publish School Calendar Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-PUBLISH-CALENDAR-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-PUBLISH-CALENDAR | VERSION_CONFLICT blocks Publish School Calendar Version | the actor requests Publish School Calendar Version | Publish School Calendar Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT-SCN-SUCCESS | SUCCESS | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | the authorized actor satisfies the task-specific entry conditions for Create Teacher Availability Constraint Snapshot | the actor requests Create Teacher Availability Constraint Snapshot | Create Teacher Availability Constraint Snapshot returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | PERMISSION_DENIED blocks Create Teacher Availability Constraint Snapshot | the actor requests Create Teacher Availability Constraint Snapshot | Create Teacher Availability Constraint Snapshot returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | VALIDATION_FAILED blocks Create Teacher Availability Constraint Snapshot | the actor requests Create Teacher Availability Constraint Snapshot | Create Teacher Availability Constraint Snapshot returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | VERSION_CONFLICT blocks Create Teacher Availability Constraint Snapshot | the actor requests Create Teacher Availability Constraint Snapshot | Create Teacher Availability Constraint Snapshot returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT-SCN-SUCCESS | SUCCESS | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | the authorized actor satisfies the task-specific entry conditions for Create Class Course Period Constraint Snapshot | the actor requests Create Class Course Period Constraint Snapshot | Create Class Course Period Constraint Snapshot returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | PERMISSION_DENIED blocks Create Class Course Period Constraint Snapshot | the actor requests Create Class Course Period Constraint Snapshot | Create Class Course Period Constraint Snapshot returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | VALIDATION_FAILED blocks Create Class Course Period Constraint Snapshot | the actor requests Create Class Course Period Constraint Snapshot | Create Class Course Period Constraint Snapshot returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | VERSION_CONFLICT blocks Create Class Course Period Constraint Snapshot | the actor requests Create Class Course Period Constraint Snapshot | Create Class Course Period Constraint Snapshot returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT-SCN-SUCCESS | SUCCESS | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | the authorized actor satisfies the task-specific entry conditions for Create Teacher Course Load Constraint Snapshot | the actor requests Create Teacher Course Load Constraint Snapshot | Create Teacher Course Load Constraint Snapshot returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | PERMISSION_DENIED blocks Create Teacher Course Load Constraint Snapshot | the actor requests Create Teacher Course Load Constraint Snapshot | Create Teacher Course Load Constraint Snapshot returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | VALIDATION_FAILED blocks Create Teacher Course Load Constraint Snapshot | the actor requests Create Teacher Course Load Constraint Snapshot | Create Teacher Course Load Constraint Snapshot returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | VERSION_CONFLICT blocks Create Teacher Course Load Constraint Snapshot | the actor requests Create Teacher Course Load Constraint Snapshot | Create Teacher Course Load Constraint Snapshot returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT-SCN-SUCCESS | SUCCESS | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | the authorized actor satisfies the task-specific entry conditions for Create Room Capacity Constraint Snapshot | the actor requests Create Room Capacity Constraint Snapshot | Create Room Capacity Constraint Snapshot returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | PERMISSION_DENIED blocks Create Room Capacity Constraint Snapshot | the actor requests Create Room Capacity Constraint Snapshot | Create Room Capacity Constraint Snapshot returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | VALIDATION_FAILED blocks Create Room Capacity Constraint Snapshot | the actor requests Create Room Capacity Constraint Snapshot | Create Room Capacity Constraint Snapshot returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | VERSION_CONFLICT blocks Create Room Capacity Constraint Snapshot | the actor requests Create Room Capacity Constraint Snapshot | Create Room Capacity Constraint Snapshot returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SCN-SUCCESS | SUCCESS | SCH-ACT-ACTIVATE-CONSTRAINT | the authorized actor satisfies the task-specific entry conditions for Activate Schedule Constraint | the actor requests Activate Schedule Constraint | Activate Schedule Constraint returns the accepted versioned task result without widening scope | ACTIVE | ALLOW |  |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-ACTIVATE-CONSTRAINT | PERMISSION_DENIED blocks Activate Schedule Constraint | the actor requests Activate Schedule Constraint | Activate Schedule Constraint returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-ACTIVATE-CONSTRAINT | VALIDATION_FAILED blocks Activate Schedule Constraint | the actor requests Activate Schedule Constraint | Activate Schedule Constraint returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-ACTIVATE-CONSTRAINT | VERSION_CONFLICT blocks Activate Schedule Constraint | the actor requests Activate Schedule Constraint | Activate Schedule Constraint returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT-SCN-SUCCESS | SUCCESS | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | the authorized actor satisfies the task-specific entry conditions for Create Complete Constraint Snapshot | the actor requests Create Complete Constraint Snapshot | Create Complete Constraint Snapshot returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | PERMISSION_DENIED blocks Create Complete Constraint Snapshot | the actor requests Create Complete Constraint Snapshot | Create Complete Constraint Snapshot returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | VALIDATION_FAILED blocks Create Complete Constraint Snapshot | the actor requests Create Complete Constraint Snapshot | Create Complete Constraint Snapshot returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | VERSION_CONFLICT blocks Create Complete Constraint Snapshot | the actor requests Create Complete Constraint Snapshot | Create Complete Constraint Snapshot returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT-SCN-SUCCESS | SUCCESS | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | the authorized actor satisfies the task-specific entry conditions for Activate Complete Constraint Snapshot | the actor requests Activate Complete Constraint Snapshot | Activate Complete Constraint Snapshot returns the accepted versioned task result without widening scope | ACTIVE | ALLOW |  |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | PERMISSION_DENIED blocks Activate Complete Constraint Snapshot | the actor requests Activate Complete Constraint Snapshot | Activate Complete Constraint Snapshot returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | VALIDATION_FAILED blocks Activate Complete Constraint Snapshot | the actor requests Activate Complete Constraint Snapshot | Activate Complete Constraint Snapshot returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | VERSION_CONFLICT blocks Activate Complete Constraint Snapshot | the actor requests Activate Complete Constraint Snapshot | Activate Complete Constraint Snapshot returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT-SCN-SUCCESS | SUCCESS | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | the authorized actor satisfies the task-specific entry conditions for Replace Active Constraint Snapshot | the actor requests Replace Active Constraint Snapshot | Replace Active Constraint Snapshot returns the accepted versioned task result without widening scope | REPLACED | ALLOW |  |
+| SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | PERMISSION_DENIED blocks Replace Active Constraint Snapshot | the actor requests Replace Active Constraint Snapshot | Replace Active Constraint Snapshot returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | VALIDATION_FAILED blocks Replace Active Constraint Snapshot | the actor requests Replace Active Constraint Snapshot | Replace Active Constraint Snapshot returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | VERSION_CONFLICT blocks Replace Active Constraint Snapshot | the actor requests Replace Active Constraint Snapshot | Replace Active Constraint Snapshot returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-GENERATE-CANDIDATE-SCN-SUCCESS | SUCCESS | SCH-ACT-GENERATE-CANDIDATE | the authorized actor satisfies the task-specific entry conditions for Generate Schedule Candidate | the actor requests Generate Schedule Candidate | Generate Schedule Candidate returns the accepted versioned task result without widening scope | GENERATED | ALLOW |  |
+| SCH-ACT-GENERATE-CANDIDATE-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-GENERATE-CANDIDATE | PERMISSION_DENIED blocks Generate Schedule Candidate | the actor requests Generate Schedule Candidate | Generate Schedule Candidate returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-GENERATE-CANDIDATE-SCN-SOURCE_VERSION_STALE | FAILURE | SCH-ACT-GENERATE-CANDIDATE | the selected calendar is not PUBLISHED, the constraint snapshot is not ACTIVE, or either source version changes while generation is running | academic affairs generates a schedule candidate | SOURCE_VERSION_STALE creates no candidate and returns the current calendar and constraint-snapshot versions | UNCHANGED | DENY | SOURCE_VERSION_STALE — calendar.state !== PUBLISHED \|\| constraintSnapshot.state !== ACTIVE \|\| sourceVersionChangedDuringGeneration === true |
+| SCH-ACT-GENERATE-CANDIDATE-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-GENERATE-CANDIDATE | VALIDATION_FAILED blocks Generate Schedule Candidate | the actor requests Generate Schedule Candidate | Generate Schedule Candidate returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-GENERATE-CANDIDATE-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-GENERATE-CANDIDATE | VERSION_CONFLICT blocks Generate Schedule Candidate | the actor requests Generate Schedule Candidate | Generate Schedule Candidate returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-REVIEW-CONFLICTS-SCN-SUCCESS | SUCCESS | SCH-ACT-REVIEW-CONFLICTS | the authorized actor satisfies the task-specific entry conditions for Review Schedule Candidate Conflicts | the actor requests Review Schedule Candidate Conflicts | Review Schedule Candidate Conflicts returns the accepted versioned task result without widening scope | REVIEWED | ALLOW |  |
+| SCH-ACT-REVIEW-CONFLICTS-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-REVIEW-CONFLICTS | PERMISSION_DENIED blocks Review Schedule Candidate Conflicts | the actor requests Review Schedule Candidate Conflicts | Review Schedule Candidate Conflicts returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-REVIEW-CONFLICTS-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-REVIEW-CONFLICTS | VALIDATION_FAILED blocks Review Schedule Candidate Conflicts | the actor requests Review Schedule Candidate Conflicts | Review Schedule Candidate Conflicts returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-REVIEW-CONFLICTS-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-REVIEW-CONFLICTS | VERSION_CONFLICT blocks Review Schedule Candidate Conflicts | the actor requests Review Schedule Candidate Conflicts | Review Schedule Candidate Conflicts returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-CONFIRM-CANDIDATE-SCN-SUCCESS | SUCCESS | SCH-ACT-CONFIRM-CANDIDATE | the authorized actor satisfies the task-specific entry conditions for Confirm Hard-Constraint-Clean Schedule Candidate | the actor requests Confirm Hard-Constraint-Clean Schedule Candidate | Confirm Hard-Constraint-Clean Schedule Candidate returns the accepted versioned task result without widening scope | CONFIRMED | ALLOW |  |
+| SCH-ACT-CONFIRM-CANDIDATE-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-CONFIRM-CANDIDATE | PERMISSION_DENIED blocks Confirm Hard-Constraint-Clean Schedule Candidate | the actor requests Confirm Hard-Constraint-Clean Schedule Candidate | Confirm Hard-Constraint-Clean Schedule Candidate returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-CONFIRM-CANDIDATE-SCN-HARD_CONSTRAINT_FAILED | FAILURE | SCH-ACT-CONFIRM-CANDIDATE | the reviewed schedule candidate does not have a PASS hard-constraint result | academic affairs confirms the reviewed schedule candidate | HARD_CONSTRAINT_FAILED preserves the candidate in REVIEWED and returns the blocking conflicts | UNCHANGED | DENY | HARD_CONSTRAINT_FAILED — candidate.hardConstraintCheck !== PASS |
+| SCH-ACT-CONFIRM-CANDIDATE-SCN-SOURCE_VERSION_STALE | FAILURE | SCH-ACT-CONFIRM-CANDIDATE | the candidate's pinned calendar or constraint-snapshot version no longer matches an eligible source | academic affairs confirms the reviewed schedule candidate | SOURCE_VERSION_STALE preserves the candidate outside CONFIRMED and returns both current source versions | UNCHANGED | DENY | SOURCE_VERSION_STALE — candidate.calendarVersion !== calendar.version \|\| candidate.constraintSnapshotVersion !== constraintSnapshot.version \|\| calendar.state !== PUBLISHED \|\| constraintSnapshot.state !== ACTIVE |
+| SCH-ACT-CONFIRM-CANDIDATE-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-CONFIRM-CANDIDATE | VALIDATION_FAILED blocks Confirm Hard-Constraint-Clean Schedule Candidate | the actor requests Confirm Hard-Constraint-Clean Schedule Candidate | Confirm Hard-Constraint-Clean Schedule Candidate returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-CONFIRM-CANDIDATE-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-CONFIRM-CANDIDATE | VERSION_CONFLICT blocks Confirm Hard-Constraint-Clean Schedule Candidate | the actor requests Confirm Hard-Constraint-Clean Schedule Candidate | Confirm Hard-Constraint-Clean Schedule Candidate returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-PUBLISH-CANDIDATE-SCN-SUCCESS | SUCCESS | SCH-ACT-PUBLISH-CANDIDATE | the authorized actor satisfies the task-specific entry conditions for Publish Confirmed Schedule Candidate | the actor requests Publish Confirmed Schedule Candidate | Publish Confirmed Schedule Candidate returns the accepted versioned task result without widening scope | PUBLISHED | ALLOW |  |
+| SCH-ACT-PUBLISH-CANDIDATE-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-PUBLISH-CANDIDATE | PERMISSION_DENIED blocks Publish Confirmed Schedule Candidate | the actor requests Publish Confirmed Schedule Candidate | Publish Confirmed Schedule Candidate returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-PUBLISH-CANDIDATE-SCN-SOURCE_VERSION_STALE | FAILURE | SCH-ACT-PUBLISH-CANDIDATE | the confirmed candidate's pinned calendar or constraint-snapshot version no longer matches an eligible source | academic affairs publishes the confirmed schedule candidate | SOURCE_VERSION_STALE preserves the candidate outside PUBLISHED and returns both current source versions | UNCHANGED | DENY | SOURCE_VERSION_STALE — candidate.calendarVersion !== calendar.version \|\| candidate.constraintSnapshotVersion !== constraintSnapshot.version \|\| calendar.state !== PUBLISHED \|\| constraintSnapshot.state !== ACTIVE |
+| SCH-ACT-PUBLISH-CANDIDATE-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-PUBLISH-CANDIDATE | VALIDATION_FAILED blocks Publish Confirmed Schedule Candidate | the actor requests Publish Confirmed Schedule Candidate | Publish Confirmed Schedule Candidate returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-PUBLISH-CANDIDATE-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-PUBLISH-CANDIDATE | VERSION_CONFLICT blocks Publish Confirmed Schedule Candidate | the actor requests Publish Confirmed Schedule Candidate | Publish Confirmed Schedule Candidate returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| SCH-ACT-MARK-CANDIDATE-STALE-SCN-SUCCESS | SUCCESS | SCH-ACT-MARK-CANDIDATE-STALE | the authorized actor satisfies the task-specific entry conditions for Mark Schedule Candidate Stale After Source Change | the actor requests Mark Schedule Candidate Stale After Source Change | Mark Schedule Candidate Stale After Source Change returns the accepted versioned task result without widening scope | STALE | ALLOW |  |
+| SCH-ACT-MARK-CANDIDATE-STALE-SCN-PERMISSION_DENIED | FAILURE | SCH-ACT-MARK-CANDIDATE-STALE | PERMISSION_DENIED blocks Mark Schedule Candidate Stale After Source Change | the actor requests Mark Schedule Candidate Stale After Source Change | Mark Schedule Candidate Stale After Source Change returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| SCH-ACT-MARK-CANDIDATE-STALE-SCN-VALIDATION_FAILED | FAILURE | SCH-ACT-MARK-CANDIDATE-STALE | VALIDATION_FAILED blocks Mark Schedule Candidate Stale After Source Change | the actor requests Mark Schedule Candidate Stale After Source Change | Mark Schedule Candidate Stale After Source Change returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| SCH-ACT-MARK-CANDIDATE-STALE-SCN-VERSION_CONFLICT | FAILURE | SCH-ACT-MARK-CANDIDATE-STALE | VERSION_CONFLICT blocks Mark Schedule Candidate Stale After Source Change | the actor requests Mark Schedule Candidate Stale After Source Change | Mark Schedule Candidate Stale After Source Change returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
 
-## 8. AI 对话与任务执行
+## 10. AI 任务映射
 
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-## 9. 验收标准
+## 11. 研发与测试就绪门禁
 
-| ID | 验收标准 |
-| --- | --- |
-| SCH-AC-01 | 候选课表不能直接成为正式课表。 |
-| SCH-AC-02 | 硬约束冲突必须可见。 |
-| SCH-AC-03 | 正式发布形成课表版本。 |
-| SCH-AC-04 | 调课必须生成新版本和通知。 |
-| SCH-AC-05 | P2 模块不阻断第一阶段主闭环。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-201`、`DF-202`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

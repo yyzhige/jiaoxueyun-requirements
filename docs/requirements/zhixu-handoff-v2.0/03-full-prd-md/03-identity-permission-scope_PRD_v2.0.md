@@ -1,140 +1,287 @@
-# IAM-001 工作身份、职责授权与数据范围 PRD v2.0
+# IAM-001 Identity, duty, and data scope PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 学校管理员、教务、全业务角色 |
-| 关联线框 | [03-identity-permission-scope-wireframe.zh-CN.md](../05-wireframe-contracts/03-identity-permission-scope-wireframe.zh-CN.md) |
+| 目标 | Evaluate every protected action from current roles, duties, object scopes, time limits, and source versions. |
+| 基线决策 | `BASE-001`、`BASE-007`、`BASE-008` |
+| NFR | `NFR-008`、`NFR-009` |
+| 进入条件 | an active work context identifies school, identity, and term；organization versions are resolvable |
+| 退出条件 | permission decisions contain result, reason, and source versions；temporary grants cannot outlive explicit expiry |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-把账号、工作身份、职责和数据范围分离，让教师可同时承担任课与班主任职责，但写权限仍按动作逐项校验。
+- 本模块权威拥有 5 个对象、18 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-IAM-01 | Role Policy | 学校管理员 | 学校权限策略 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-| DAT-IAM-02 | Duty Grant | 学校管理员 | 职责授权 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-| DAT-IAM-03 | Data Scope Grant | 学校管理员 | 数据范围授权 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-| DAT-IAM-04 | Permission Decision | 系统 | 权限校验结果 | 系统 | 系统 | 学校管理员 | S2 教学业务数据 |
+### IAM-OBJ-ROLE-POLICY Role Policy
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_ROLE_POLICY | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-001 | S4 | NO_DIRECT_READ | DRAFT / ACTIVE / SUPERSEDED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IAM-ROLE-F-ID | Role Policy ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-ROLE-F-SOURCE-REF | Role Policy Source Reference | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-ROLE-F-SOURCE-VERSION | Role Policy Source Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-ROLE-F-ROLE | Login Role | STRING | 是 | OPTION_SET: OPT-COM-003 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-ROLE-F-ACTIONS | Allowed Action Set | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-016 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-ROLE-F-VERSION | Policy Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 学校管理员、教务、全业务角色
-- 解决问题: 把账号、工作身份、职责和数据范围分离，让教师可同时承担任课与班主任职责，但写权限仍按动作逐项校验。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### IAM-OBJ-DUTY-GRANT Duty Grant
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_DUTY_GRANT | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-002 | S4 | NO_DIRECT_READ | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
 
-- DAT-IAM-01 Role Policy
-- DAT-IAM-02 Duty Grant
-- DAT-IAM-03 Data Scope Grant
-- DAT-IAM-04 Permission Decision
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IAM-DUTY-F-ID | Duty Grant ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-GRANTOR-AUTHORITY | Grantor Authority | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-SUBJECT | Subject Account ID | STRING | 是 | OPTION_SET: OPT-COM-009 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-DUTY | Duty ID | STRING | 是 | OPTION_SET: OPT-ENUM-042 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-SCOPE | Duty Object Scope | JSON | 是 | OPTION_SET: OPT-COM-015 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-ACTIONS | Duty Granted Actions | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-016 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-EFFECTIVE | Effective At | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-EXPIRY | Expires At | DATETIME | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-REASON | Grant Reason | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DUTY-F-STATUS | Duty Grant Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### IAM-OBJ-SCOPE-GRANT Data Scope Grant
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_SCOPE_GRANT | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-002 | S4 | NO_DIRECT_READ | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IAM-SCOPE-F-ID | Data Scope Grant ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-GRANTOR-AUTHORITY | Scope Grantor Authority | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-SUBJECT | Scope Subject ID | STRING | 是 | OPTION_SET: OPT-COM-009 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-DUTY | Target Duty ID | STRING | 是 | OPTION_SET: OPT-ENUM-042 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-SCOPE | Granted Object Scope | JSON | 是 | OPTION_SET: OPT-COM-015 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-ACTIONS | Granted Actions | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-016 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-EFFECTIVE | Scope Effective At | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-EXPIRY | Scope Expires At | DATETIME | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-REASON | Scope Grant Reason | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-SCOPE-F-STATUS | Scope Grant Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+### IAM-OBJ-PERMISSION-DECISION Permission Decision
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PERMISSION_EVALUATION | SCHOOL | SYSTEM | SYSTEM | SYSTEM | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | AUTHORIZED | ALLOW / DENY / STALE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IAM-DECISION-F-ID | Permission Decision ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DECISION-F-SUBJECT | Decision Subject ID | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DECISION-F-ACTION | Evaluated Action | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DECISION-F-SCOPE | Evaluated Object Scope | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DECISION-F-RESULT | Permission Result | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DECISION-F-REASON | Permission Reason | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DECISION-F-SOURCE-VERSIONS | Permission Source Versions | JSON | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-DECISION-F-DECISION-VERSION | Permission Decision Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### IAM-OBJ-TEMP-GRANT Temporary Grant
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TEMPORARY_SCHOOL_GRANT | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-001 | S4 | NO_DIRECT_READ | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IAM-TEMP-F-ID | Temporary Grant ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-GRANTOR-AUTHORITY | Temporary Grantor Authority | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-SUBJECT | Temporary Subject ID | STRING | 是 | OPTION_SET: OPT-COM-009 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-DUTY | Temporary Duty ID | STRING | 是 | OPTION_SET: OPT-ENUM-042 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-SCOPE | Temporary Scope | JSON | 是 | OPTION_SET: OPT-COM-015 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-ACTIONS | Temporary Actions | STRING_ARRAY | 是 | OPTION_SET: OPT-COM-016 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-EFFECTIVE | Temporary Effective At | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-EXPIRY | Mandatory Expiry | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-REASON | Temporary Grant Reason | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| IAM-TEMP-F-STATUS | Temporary Grant Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| IAM-REL-DUTY-ROLE | IAM-OBJ-DUTY-GRANT | EXTENDS_ROLE | IAM-OBJ-ROLE-POLICY | MANY_TO_ONE | SAME_SCHOOL | invalidate permission decisions based on the superseded role policy |
+| IAM-REL-TEMP-SCOPE | IAM-OBJ-TEMP-GRANT | TEMPORARILY_EXTENDS | IAM-OBJ-SCOPE-GRANT | MANY_TO_ONE | SAME_SCHOOL | revoke the temporary grant when its base scope is invalidated |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IAM-ACT-SYNC-ROLE-POLICY | Sync a Versioned Role Policy Snapshot | IAM-OBJ-ROLE-POLICY | CREATE | IAM-ROLE-F-SOURCE-REF<br>IAM-ROLE-F-SOURCE-VERSION<br>IAM-ROLE-F-ROLE<br>IAM-ROLE-F-ACTIONS | IAM-ROLE-F-ID<br>IAM-ROLE-F-SOURCE-REF<br>IAM-ROLE-F-SOURCE-VERSION<br>IAM-ROLE-F-VERSION | CREATE（成功状态由  定义） | ALLOW:SYSTEM — the system accepts only a registered versioned role-policy snapshot<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot synthesize or widen a role-policy snapshot | SYSTEM_EVENT | HIGH | REQUIRED | IAM-ACT-SYNC-ROLE-POLICY:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-PREVIEW-SCOPE | Preview Effective Current Data Scope | IAM-OBJ-PERMISSION-DECISION | READ | IAM-DECISION-F-SUBJECT<br>IAM-DECISION-F-ACTION | IAM-DECISION-F-SCOPE<br>IAM-DECISION-F-SOURCE-VERSIONS | UNCHANGED | ALLOW:CURRENT_ACTOR — the actor may preview only the actor's effective school scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot preview student detail without school authorization | WEB / APP | READ | REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| IAM-ACT-GRANT-DUTY | Grant a Planned Teacher Duty | IAM-OBJ-DUTY-GRANT | CREATE | IAM-DUTY-F-GRANTOR-AUTHORITY<br>IAM-DUTY-F-SUBJECT<br>IAM-DUTY-F-DUTY<br>IAM-DUTY-F-SCOPE<br>IAM-DUTY-F-ACTIONS<br>IAM-DUTY-F-EFFECTIVE<br>IAM-DUTY-F-EXPIRY<br>IAM-DUTY-F-REASON | IAM-DUTY-F-ID<br>IAM-DUTY-F-STATUS | CREATE（成功状态由 IAM-ACT-GRANT-DUTY-SCN-SUCCESS 定义） | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-GRANT-DUTY:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-ACTIVATE-DUTY-GRANT | Activate a Planned Teacher Duty Grant | IAM-OBJ-DUTY-GRANT | UPDATE | IAM-DUTY-F-ID | IAM-DUTY-F-STATUS | PLANNED → EFFECTIVE | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-ACTIVATE-DUTY-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-EXPIRE-DUTY-GRANT | Expire an Effective Teacher Duty Grant | IAM-OBJ-DUTY-GRANT | UPDATE | IAM-DUTY-F-ID | IAM-DUTY-F-STATUS | EFFECTIVE → EXPIRED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-EXPIRE-DUTY-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-REVOKE-DUTY-GRANT | Revoke a Teacher Duty Grant | IAM-OBJ-DUTY-GRANT | UPDATE | IAM-DUTY-F-ID<br>IAM-DUTY-F-REASON | IAM-DUTY-F-STATUS | PLANNED / EFFECTIVE → REVOKED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-REVOKE-DUTY-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-GRANT-SCOPE | Grant a Planned Object-level Data Scope | IAM-OBJ-SCOPE-GRANT | CREATE | IAM-SCOPE-F-GRANTOR-AUTHORITY<br>IAM-SCOPE-F-SUBJECT<br>IAM-SCOPE-F-DUTY<br>IAM-SCOPE-F-SCOPE<br>IAM-SCOPE-F-ACTIONS<br>IAM-SCOPE-F-EFFECTIVE<br>IAM-SCOPE-F-EXPIRY<br>IAM-SCOPE-F-REASON | IAM-SCOPE-F-ID<br>IAM-SCOPE-F-STATUS | CREATE（成功状态由 IAM-ACT-GRANT-SCOPE-SCN-SUCCESS 定义） | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-GRANT-SCOPE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-ACTIVATE-SCOPE-GRANT | Activate a Planned Data Scope Grant | IAM-OBJ-SCOPE-GRANT | UPDATE | IAM-SCOPE-F-ID | IAM-SCOPE-F-STATUS | PLANNED → EFFECTIVE | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-ACTIVATE-SCOPE-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-EXPIRE-SCOPE-GRANT | Expire an Effective Data Scope Grant | IAM-OBJ-SCOPE-GRANT | UPDATE | IAM-SCOPE-F-ID | IAM-SCOPE-F-STATUS | EFFECTIVE → EXPIRED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-EXPIRE-SCOPE-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-CREATE-TEMP-GRANT | Create a Planned Time-bounded Temporary Grant | IAM-OBJ-TEMP-GRANT | CREATE | IAM-TEMP-F-GRANTOR-AUTHORITY<br>IAM-TEMP-F-SUBJECT<br>IAM-TEMP-F-DUTY<br>IAM-TEMP-F-SCOPE<br>IAM-TEMP-F-ACTIONS<br>IAM-TEMP-F-EFFECTIVE<br>IAM-TEMP-F-EXPIRY<br>IAM-TEMP-F-REASON | IAM-TEMP-F-ID<br>IAM-TEMP-F-STATUS | CREATE（成功状态由 IAM-ACT-CREATE-TEMP-GRANT-SCN-SUCCESS 定义） | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-CREATE-TEMP-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-ACTIVATE-TEMP-GRANT | Activate a Planned Temporary Grant | IAM-OBJ-TEMP-GRANT | UPDATE | IAM-TEMP-F-ID | IAM-TEMP-F-STATUS | PLANNED → EFFECTIVE | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-ACTIVATE-TEMP-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-REVOKE-TEMP-GRANT | Revoke a Temporary Grant | IAM-OBJ-TEMP-GRANT | UPDATE | IAM-TEMP-F-ID<br>IAM-TEMP-F-REASON | IAM-TEMP-F-STATUS | PLANNED / EFFECTIVE → REVOKED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-REVOKE-TEMP-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-REVOKE-GRANT | Revoke an Effective Data Scope Grant | IAM-OBJ-SCOPE-GRANT | UPDATE | IAM-SCOPE-F-ID<br>IAM-SCOPE-F-REASON | IAM-SCOPE-F-STATUS | EFFECTIVE → REVOKED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator grants only duties and data scopes owned by the school<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default right to grant school or student-detail permissions | WEB | HIGH | REQUIRED | IAM-ACT-REVOKE-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-EXPIRE-GRANT | Expire a Temporary Grant at Deadline | IAM-OBJ-TEMP-GRANT | UPDATE | IAM-TEMP-F-EXPIRY | IAM-TEMP-F-STATUS | EFFECTIVE → EXPIRED | ALLOW:SYSTEM — the system expires grants at the mandatory deadline<br>DENY:CURRENT_ACTOR — a user cannot bypass or extend expiry without a new grant | SYSTEM_EVENT | HIGH | REQUIRED | IAM-ACT-EXPIRE-GRANT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-EVALUATE-PERMISSION | Evaluate Context Action Permission | IAM-OBJ-PERMISSION-DECISION | CREATE | IAM-DECISION-F-SUBJECT<br>IAM-DECISION-F-ACTION<br>IAM-DECISION-F-SCOPE<br>IAM-DECISION-F-SOURCE-VERSIONS | IAM-DECISION-F-ID<br>IAM-DECISION-F-RESULT<br>IAM-DECISION-F-REASON<br>IAM-DECISION-F-DECISION-VERSION | CREATE（成功状态由  定义） | ALLOW:SYSTEM — the system evaluates role, duty, object scope, action, time, and source versions<br>DENY:ROLE-PLATFORM-OPS — platform operations receives DENY for student detail without school authorization | FLOW_INTERNAL | HIGH | REQUIRED | IAM-ACT-EVALUATE-PERMISSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-MARK-PERMISSION-STALE | Mark a Permission Decision Stale after Source Change | IAM-OBJ-PERMISSION-DECISION | UPDATE | IAM-DECISION-F-ID | IAM-DECISION-F-RESULT<br>IAM-DECISION-F-REASON<br>IAM-DECISION-F-SOURCE-VERSIONS<br>IAM-DECISION-F-DECISION-VERSION | ALLOW / DENY → STALE | ALLOW:SYSTEM — the system marks a decision stale when a bound source version changes<br>DENY:CURRENT_ACTOR — a user cannot keep using a decision with stale source versions | SYSTEM_EVENT | HIGH | REQUIRED | IAM-ACT-MARK-PERMISSION-STALE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| IAM-ACT-REPLAY-DECISION | Replay a Permission Decision from Source Versions | IAM-OBJ-PERMISSION-DECISION | READ | IAM-DECISION-F-ID<br>IAM-DECISION-F-SOURCE-VERSIONS | IAM-DECISION-F-RESULT<br>IAM-DECISION-F-REASON | UNCHANGED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator may replay decisions inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations needs explicit school authorization to replay student-detail decisions | WEB | READ | REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| IAM-ACT-RECALCULATE-PERMISSIONS | Recalculate Permissions after Organization Change | IAM-OBJ-PERMISSION-DECISION | UPDATE | IAM-DECISION-F-SOURCE-VERSIONS | IAM-DECISION-F-RESULT<br>IAM-DECISION-F-REASON<br>IAM-DECISION-F-SOURCE-VERSIONS<br>IAM-DECISION-F-DECISION-VERSION | STALE → ALLOW | ALLOW:SYSTEM — organization source version change invalidates and recalculates affected decisions<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot override the recalculated school scope | FLOW_INTERNAL | LOW | REQUIRED | IAM-ACT-RECALCULATE-PERMISSIONS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 身份策略配置、职责授权、范围预览、临时授权、权限审计回放 | 查看当前身份范围、授权到期提醒、高风险动作确认 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| IAM-OBJ-ROLE-POLICY | DRAFT | IAM-ACT-SYNC-ROLE-POLICY |  |
+| IAM-OBJ-ROLE-POLICY | ACTIVE | IAM-ACT-SYNC-ROLE-POLICY |  |
+| IAM-OBJ-ROLE-POLICY | SUPERSEDED | IAM-ACT-SYNC-ROLE-POLICY |  |
+| IAM-OBJ-DUTY-GRANT | PLANNED | IAM-ACT-GRANT-DUTY | IAM-ACT-ACTIVATE-DUTY-GRANT<br>IAM-ACT-REVOKE-DUTY-GRANT |
+| IAM-OBJ-DUTY-GRANT | EFFECTIVE | IAM-ACT-ACTIVATE-DUTY-GRANT | IAM-ACT-EXPIRE-DUTY-GRANT<br>IAM-ACT-REVOKE-DUTY-GRANT |
+| IAM-OBJ-DUTY-GRANT | EXPIRED | IAM-ACT-EXPIRE-DUTY-GRANT |  |
+| IAM-OBJ-DUTY-GRANT | REVOKED | IAM-ACT-REVOKE-DUTY-GRANT |  |
+| IAM-OBJ-SCOPE-GRANT | PLANNED | IAM-ACT-GRANT-SCOPE | IAM-ACT-ACTIVATE-SCOPE-GRANT |
+| IAM-OBJ-SCOPE-GRANT | EFFECTIVE | IAM-ACT-ACTIVATE-SCOPE-GRANT | IAM-ACT-EXPIRE-SCOPE-GRANT<br>IAM-ACT-REVOKE-GRANT |
+| IAM-OBJ-SCOPE-GRANT | EXPIRED | IAM-ACT-EXPIRE-SCOPE-GRANT |  |
+| IAM-OBJ-SCOPE-GRANT | REVOKED | IAM-ACT-REVOKE-GRANT |  |
+| IAM-OBJ-PERMISSION-DECISION | ALLOW | IAM-ACT-EVALUATE-PERMISSION<br>IAM-ACT-RECALCULATE-PERMISSIONS | IAM-ACT-MARK-PERMISSION-STALE |
+| IAM-OBJ-PERMISSION-DECISION | DENY | IAM-ACT-EVALUATE-PERMISSION<br>IAM-ACT-RECALCULATE-PERMISSIONS | IAM-ACT-MARK-PERMISSION-STALE |
+| IAM-OBJ-PERMISSION-DECISION | STALE | IAM-ACT-MARK-PERMISSION-STALE | IAM-ACT-RECALCULATE-PERMISSIONS |
+| IAM-OBJ-TEMP-GRANT | PLANNED | IAM-ACT-CREATE-TEMP-GRANT | IAM-ACT-ACTIVATE-TEMP-GRANT<br>IAM-ACT-REVOKE-TEMP-GRANT |
+| IAM-OBJ-TEMP-GRANT | EFFECTIVE | IAM-ACT-ACTIVATE-TEMP-GRANT | IAM-ACT-REVOKE-TEMP-GRANT<br>IAM-ACT-EXPIRE-GRANT |
+| IAM-OBJ-TEMP-GRANT | EXPIRED | IAM-ACT-EXPIRE-GRANT |  |
+| IAM-OBJ-TEMP-GRANT | REVOKED | IAM-ACT-REVOKE-TEMP-GRANT |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-001 | School Context Establishment | 1 | ACC-001 / ORG-001 / IAM-001 | IAM-ACT-EVALUATE-PERMISSION | STEP_WITH_NO_CONTEXT_ACTIVATION_BEFORE_ALL_CHECKS_PASS；{"strategy":"RETRY_READS_AND_IDEMPOTENT_CONTEXT_WRITE","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT"]}；{"strategy":"EXPIRE_PARTIAL_CONTEXT","description":"if a context write exists before final acceptance, expire it and require full re-establishment"}；{"strategy":"INVALIDATE_PREVIOUS_CONTEXT_DERIVATIONS","targets":["permission cache","term-scoped navigation","write authorization tokens"]} |
+| DF-002 | Organization Import and Permission Refresh | 1 | ORG-001 / IAM-001 / AUD-001 | IAM-ACT-EVALUATE-PERMISSION<br>IAM-ACT-RECALCULATE-PERMISSIONS | OBJECT_ROW_WITH_PARTIAL_SUCCESS_AND_FAILED_ROW_RETRY；{"strategy":"RETRY_FAILED_ROWS_OR_AUDIT_APPEND","maxAttempts":5,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"ROLLBACK_UNAUDITED_PROVISIONAL_ROWS","description":"rollback provisional accepted rows to the pre-import version when outcome audit fails; do not recalculate permissions until the outcome audit succeeds"}；{"strategy":"INVALIDATE_AFFECTED_ORGANIZATION_SCOPES","targets":["permission decisions","active contexts","teacher work views"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| IAM-F001 | 工作身份 | 单选/多选卡片 | OPT-COM-003 | 是 | 同一教师身份可挂载任课和班主任职责 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F002 | 权限范围对象 | 级联选择 | OPT-COM-015 | 授权必填 | 只能授予操作者可管理范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F003 | 班级 | 多选下拉 | OPT-COM-006 | 按职责 | 班主任职责必须绑定班级 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F004 | 学科 | 多选下拉 | OPT-COM-007 | 任课职责必填 | 班主任查看全科不获得他科写权 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F005 | 临时授权原因 | 文本+单选 | OPT-ENUM-023 | 临时授权必填 | 进入审计，自动到期 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| IAM-F006 | 审计结果 | 只读状态 | OPT-ENUM-024 | 系统生成 | 拒绝事件不泄露无权目标 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| IAM-PAGE-POLICY | Login Role Policy and Effective Scope | WEB / APP | IAM-OBJ-ROLE-POLICY<br>IAM-OBJ-PERMISSION-DECISION | IAM-ROLE-F-ROLE<br>IAM-ROLE-F-ACTIONS<br>IAM-ROLE-F-VERSION<br>IAM-DECISION-F-SCOPE<br>IAM-DECISION-F-SOURCE-VERSIONS | IAM-ACT-PREVIEW-SCOPE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| IAM-PAGE-DUTY-GRANT | Teacher Duty Grant Administration | WEB | IAM-OBJ-DUTY-GRANT | IAM-DUTY-F-GRANTOR-AUTHORITY<br>IAM-DUTY-F-SUBJECT<br>IAM-DUTY-F-DUTY<br>IAM-DUTY-F-SCOPE<br>IAM-DUTY-F-ACTIONS<br>IAM-DUTY-F-EFFECTIVE<br>IAM-DUTY-F-EXPIRY<br>IAM-DUTY-F-REASON<br>IAM-DUTY-F-STATUS | IAM-ACT-GRANT-DUTY<br>IAM-ACT-ACTIVATE-DUTY-GRANT<br>IAM-ACT-EXPIRE-DUTY-GRANT<br>IAM-ACT-REVOKE-DUTY-GRANT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| IAM-PAGE-SCOPE-GRANT | Object-level Data Scope Grant Administration | WEB | IAM-OBJ-SCOPE-GRANT | IAM-SCOPE-F-ID<br>IAM-SCOPE-F-GRANTOR-AUTHORITY<br>IAM-SCOPE-F-SUBJECT<br>IAM-SCOPE-F-DUTY<br>IAM-SCOPE-F-SCOPE<br>IAM-SCOPE-F-ACTIONS<br>IAM-SCOPE-F-EFFECTIVE<br>IAM-SCOPE-F-EXPIRY<br>IAM-SCOPE-F-REASON<br>IAM-SCOPE-F-STATUS | IAM-ACT-GRANT-SCOPE<br>IAM-ACT-ACTIVATE-SCOPE-GRANT<br>IAM-ACT-EXPIRE-SCOPE-GRANT<br>IAM-ACT-REVOKE-GRANT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| IAM-PAGE-TEMP-GRANT | Time-bounded Temporary Grant Administration | WEB | IAM-OBJ-TEMP-GRANT | IAM-TEMP-F-GRANTOR-AUTHORITY<br>IAM-TEMP-F-SUBJECT<br>IAM-TEMP-F-DUTY<br>IAM-TEMP-F-SCOPE<br>IAM-TEMP-F-ACTIONS<br>IAM-TEMP-F-EFFECTIVE<br>IAM-TEMP-F-EXPIRY<br>IAM-TEMP-F-REASON<br>IAM-TEMP-F-STATUS | IAM-ACT-CREATE-TEMP-GRANT<br>IAM-ACT-ACTIVATE-TEMP-GRANT<br>IAM-ACT-REVOKE-TEMP-GRANT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| IAM-PAGE-REPLAY | Permission Decision Replay | WEB | IAM-OBJ-PERMISSION-DECISION | IAM-DECISION-F-SUBJECT<br>IAM-DECISION-F-ACTION<br>IAM-DECISION-F-RESULT<br>IAM-DECISION-F-REASON<br>IAM-DECISION-F-SOURCE-VERSIONS | IAM-ACT-REPLAY-DECISION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| DRAFT | 待配置 |
-| ACTIVE | 生效中 |
-| SUSPENDED | 暂停 |
-| EXPIRED | 已过期 |
-| REVOKED | 已撤销 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IAM-ACT-SYNC-ROLE-POLICY-SCN-SUCCESS-DRAFT | SUCCESS | IAM-ACT-SYNC-ROLE-POLICY | the actor meets the entry conditions for Sync a Versioned Role Policy Snapshot | the actor requests Sync a Versioned Role Policy Snapshot | Sync a Versioned Role Policy Snapshot returns the accepted task-specific result | DRAFT | ALLOW |  |
+| IAM-ACT-SYNC-ROLE-POLICY-SCN-SUCCESS-ACTIVE | SUCCESS | IAM-ACT-SYNC-ROLE-POLICY | the actor meets the entry conditions for Sync a Versioned Role Policy Snapshot | the actor requests Sync a Versioned Role Policy Snapshot | Sync a Versioned Role Policy Snapshot returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| IAM-ACT-SYNC-ROLE-POLICY-SCN-SUCCESS-SUPERSEDED | SUCCESS | IAM-ACT-SYNC-ROLE-POLICY | the actor meets the entry conditions for Sync a Versioned Role Policy Snapshot | the actor requests Sync a Versioned Role Policy Snapshot | Sync a Versioned Role Policy Snapshot returns the accepted task-specific result | SUPERSEDED | ALLOW |  |
+| IAM-ACT-SYNC-ROLE-POLICY-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-SYNC-ROLE-POLICY | PERMISSION_DENIED applies to Sync a Versioned Role Policy Snapshot | the actor requests Sync a Versioned Role Policy Snapshot | Sync a Versioned Role Policy Snapshot returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-SYNC-ROLE-POLICY-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-SYNC-ROLE-POLICY | VALIDATION_FAILED applies to Sync a Versioned Role Policy Snapshot | the actor requests Sync a Versioned Role Policy Snapshot | Sync a Versioned Role Policy Snapshot returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-SYNC-ROLE-POLICY-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-SYNC-ROLE-POLICY | VERSION_CONFLICT applies to Sync a Versioned Role Policy Snapshot | the actor requests Sync a Versioned Role Policy Snapshot | Sync a Versioned Role Policy Snapshot returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-SYNC-ROLE-POLICY-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-SYNC-ROLE-POLICY | AUDIT_FAILED applies to Sync a Versioned Role Policy Snapshot | the actor requests Sync a Versioned Role Policy Snapshot | Sync a Versioned Role Policy Snapshot returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-PREVIEW-SCOPE-SCN-SUCCESS | SUCCESS | IAM-ACT-PREVIEW-SCOPE | the actor meets the entry conditions for Preview Effective Current Data Scope | the actor requests Preview Effective Current Data Scope | Preview Effective Current Data Scope returns the accepted task-specific result | UNCHANGED | ALLOW |  |
+| IAM-ACT-PREVIEW-SCOPE-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-PREVIEW-SCOPE | PERMISSION_DENIED applies to Preview Effective Current Data Scope | the actor requests Preview Effective Current Data Scope | Preview Effective Current Data Scope returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-PREVIEW-SCOPE-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-PREVIEW-SCOPE | VALIDATION_FAILED applies to Preview Effective Current Data Scope | the actor requests Preview Effective Current Data Scope | Preview Effective Current Data Scope returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-PREVIEW-SCOPE-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-PREVIEW-SCOPE | VERSION_CONFLICT applies to Preview Effective Current Data Scope | the actor requests Preview Effective Current Data Scope | Preview Effective Current Data Scope returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-GRANT-DUTY-SCN-SUCCESS | SUCCESS | IAM-ACT-GRANT-DUTY | the actor meets the entry conditions for Grant a Planned Teacher Duty | the actor requests Grant a Planned Teacher Duty | Grant a Planned Teacher Duty returns the accepted task-specific result | PLANNED | ALLOW |  |
+| IAM-ACT-GRANT-DUTY-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-GRANT-DUTY | PERMISSION_DENIED applies to Grant a Planned Teacher Duty | the actor requests Grant a Planned Teacher Duty | Grant a Planned Teacher Duty returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-GRANT-DUTY-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-GRANT-DUTY | VALIDATION_FAILED applies to Grant a Planned Teacher Duty | the actor requests Grant a Planned Teacher Duty | Grant a Planned Teacher Duty returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-GRANT-DUTY-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-GRANT-DUTY | VERSION_CONFLICT applies to Grant a Planned Teacher Duty | the actor requests Grant a Planned Teacher Duty | Grant a Planned Teacher Duty returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-GRANT-DUTY-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-GRANT-DUTY | AUDIT_FAILED applies to Grant a Planned Teacher Duty | the actor requests Grant a Planned Teacher Duty | Grant a Planned Teacher Duty returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-ACTIVATE-DUTY-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-ACTIVATE-DUTY-GRANT | the actor meets the entry conditions for Activate a Planned Teacher Duty Grant | the actor requests Activate a Planned Teacher Duty Grant | Activate a Planned Teacher Duty Grant returns the accepted task-specific result | EFFECTIVE | ALLOW |  |
+| IAM-ACT-ACTIVATE-DUTY-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-ACTIVATE-DUTY-GRANT | PERMISSION_DENIED applies to Activate a Planned Teacher Duty Grant | the actor requests Activate a Planned Teacher Duty Grant | Activate a Planned Teacher Duty Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-ACTIVATE-DUTY-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-ACTIVATE-DUTY-GRANT | VALIDATION_FAILED applies to Activate a Planned Teacher Duty Grant | the actor requests Activate a Planned Teacher Duty Grant | Activate a Planned Teacher Duty Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-ACTIVATE-DUTY-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-ACTIVATE-DUTY-GRANT | VERSION_CONFLICT applies to Activate a Planned Teacher Duty Grant | the actor requests Activate a Planned Teacher Duty Grant | Activate a Planned Teacher Duty Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-ACTIVATE-DUTY-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-ACTIVATE-DUTY-GRANT | AUDIT_FAILED applies to Activate a Planned Teacher Duty Grant | the actor requests Activate a Planned Teacher Duty Grant | Activate a Planned Teacher Duty Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-EXPIRE-DUTY-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-EXPIRE-DUTY-GRANT | the actor meets the entry conditions for Expire an Effective Teacher Duty Grant | the actor requests Expire an Effective Teacher Duty Grant | Expire an Effective Teacher Duty Grant returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| IAM-ACT-EXPIRE-DUTY-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-EXPIRE-DUTY-GRANT | PERMISSION_DENIED applies to Expire an Effective Teacher Duty Grant | the actor requests Expire an Effective Teacher Duty Grant | Expire an Effective Teacher Duty Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-EXPIRE-DUTY-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-EXPIRE-DUTY-GRANT | VALIDATION_FAILED applies to Expire an Effective Teacher Duty Grant | the actor requests Expire an Effective Teacher Duty Grant | Expire an Effective Teacher Duty Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-EXPIRE-DUTY-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-EXPIRE-DUTY-GRANT | VERSION_CONFLICT applies to Expire an Effective Teacher Duty Grant | the actor requests Expire an Effective Teacher Duty Grant | Expire an Effective Teacher Duty Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-EXPIRE-DUTY-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-EXPIRE-DUTY-GRANT | AUDIT_FAILED applies to Expire an Effective Teacher Duty Grant | the actor requests Expire an Effective Teacher Duty Grant | Expire an Effective Teacher Duty Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-REVOKE-DUTY-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-REVOKE-DUTY-GRANT | the actor meets the entry conditions for Revoke a Teacher Duty Grant | the actor requests Revoke a Teacher Duty Grant | Revoke a Teacher Duty Grant returns the accepted task-specific result | REVOKED | ALLOW |  |
+| IAM-ACT-REVOKE-DUTY-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-REVOKE-DUTY-GRANT | PERMISSION_DENIED applies to Revoke a Teacher Duty Grant | the actor requests Revoke a Teacher Duty Grant | Revoke a Teacher Duty Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-REVOKE-DUTY-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-REVOKE-DUTY-GRANT | VALIDATION_FAILED applies to Revoke a Teacher Duty Grant | the actor requests Revoke a Teacher Duty Grant | Revoke a Teacher Duty Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-REVOKE-DUTY-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-REVOKE-DUTY-GRANT | VERSION_CONFLICT applies to Revoke a Teacher Duty Grant | the actor requests Revoke a Teacher Duty Grant | Revoke a Teacher Duty Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-REVOKE-DUTY-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-REVOKE-DUTY-GRANT | AUDIT_FAILED applies to Revoke a Teacher Duty Grant | the actor requests Revoke a Teacher Duty Grant | Revoke a Teacher Duty Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-GRANT-SCOPE-SCN-SUCCESS | SUCCESS | IAM-ACT-GRANT-SCOPE | the actor meets the entry conditions for Grant a Planned Object-level Data Scope | the actor requests Grant a Planned Object-level Data Scope | Grant a Planned Object-level Data Scope returns the accepted task-specific result | PLANNED | ALLOW |  |
+| IAM-ACT-GRANT-SCOPE-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-GRANT-SCOPE | PERMISSION_DENIED applies to Grant a Planned Object-level Data Scope | the actor requests Grant a Planned Object-level Data Scope | Grant a Planned Object-level Data Scope returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-GRANT-SCOPE-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-GRANT-SCOPE | VALIDATION_FAILED applies to Grant a Planned Object-level Data Scope | the actor requests Grant a Planned Object-level Data Scope | Grant a Planned Object-level Data Scope returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-GRANT-SCOPE-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-GRANT-SCOPE | VERSION_CONFLICT applies to Grant a Planned Object-level Data Scope | the actor requests Grant a Planned Object-level Data Scope | Grant a Planned Object-level Data Scope returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-GRANT-SCOPE-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-GRANT-SCOPE | AUDIT_FAILED applies to Grant a Planned Object-level Data Scope | the actor requests Grant a Planned Object-level Data Scope | Grant a Planned Object-level Data Scope returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-ACTIVATE-SCOPE-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-ACTIVATE-SCOPE-GRANT | the actor meets the entry conditions for Activate a Planned Data Scope Grant | the actor requests Activate a Planned Data Scope Grant | Activate a Planned Data Scope Grant returns the accepted task-specific result | EFFECTIVE | ALLOW |  |
+| IAM-ACT-ACTIVATE-SCOPE-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-ACTIVATE-SCOPE-GRANT | PERMISSION_DENIED applies to Activate a Planned Data Scope Grant | the actor requests Activate a Planned Data Scope Grant | Activate a Planned Data Scope Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-ACTIVATE-SCOPE-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-ACTIVATE-SCOPE-GRANT | VALIDATION_FAILED applies to Activate a Planned Data Scope Grant | the actor requests Activate a Planned Data Scope Grant | Activate a Planned Data Scope Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-ACTIVATE-SCOPE-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-ACTIVATE-SCOPE-GRANT | VERSION_CONFLICT applies to Activate a Planned Data Scope Grant | the actor requests Activate a Planned Data Scope Grant | Activate a Planned Data Scope Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-ACTIVATE-SCOPE-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-ACTIVATE-SCOPE-GRANT | AUDIT_FAILED applies to Activate a Planned Data Scope Grant | the actor requests Activate a Planned Data Scope Grant | Activate a Planned Data Scope Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-EXPIRE-SCOPE-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-EXPIRE-SCOPE-GRANT | the actor meets the entry conditions for Expire an Effective Data Scope Grant | the actor requests Expire an Effective Data Scope Grant | Expire an Effective Data Scope Grant returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| IAM-ACT-EXPIRE-SCOPE-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-EXPIRE-SCOPE-GRANT | PERMISSION_DENIED applies to Expire an Effective Data Scope Grant | the actor requests Expire an Effective Data Scope Grant | Expire an Effective Data Scope Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-EXPIRE-SCOPE-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-EXPIRE-SCOPE-GRANT | VALIDATION_FAILED applies to Expire an Effective Data Scope Grant | the actor requests Expire an Effective Data Scope Grant | Expire an Effective Data Scope Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-EXPIRE-SCOPE-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-EXPIRE-SCOPE-GRANT | VERSION_CONFLICT applies to Expire an Effective Data Scope Grant | the actor requests Expire an Effective Data Scope Grant | Expire an Effective Data Scope Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-EXPIRE-SCOPE-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-EXPIRE-SCOPE-GRANT | AUDIT_FAILED applies to Expire an Effective Data Scope Grant | the actor requests Expire an Effective Data Scope Grant | Expire an Effective Data Scope Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-CREATE-TEMP-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-CREATE-TEMP-GRANT | the actor meets the entry conditions for Create a Planned Time-bounded Temporary Grant | the actor requests Create a Planned Time-bounded Temporary Grant | temporary grant has explicit school owner, scope, actions, reason, and mandatory expiry | PLANNED | ALLOW |  |
+| IAM-ACT-CREATE-TEMP-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-CREATE-TEMP-GRANT | PERMISSION_DENIED applies to Create a Planned Time-bounded Temporary Grant | the actor requests Create a Planned Time-bounded Temporary Grant | Create a Planned Time-bounded Temporary Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-CREATE-TEMP-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-CREATE-TEMP-GRANT | VALIDATION_FAILED applies to Create a Planned Time-bounded Temporary Grant | the actor requests Create a Planned Time-bounded Temporary Grant | Create a Planned Time-bounded Temporary Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-CREATE-TEMP-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-CREATE-TEMP-GRANT | VERSION_CONFLICT applies to Create a Planned Time-bounded Temporary Grant | the actor requests Create a Planned Time-bounded Temporary Grant | Create a Planned Time-bounded Temporary Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-CREATE-TEMP-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-CREATE-TEMP-GRANT | AUDIT_FAILED applies to Create a Planned Time-bounded Temporary Grant | the actor requests Create a Planned Time-bounded Temporary Grant | Create a Planned Time-bounded Temporary Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-ACTIVATE-TEMP-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-ACTIVATE-TEMP-GRANT | the actor meets the entry conditions for Activate a Planned Temporary Grant | the actor requests Activate a Planned Temporary Grant | Activate a Planned Temporary Grant returns the accepted task-specific result | EFFECTIVE | ALLOW |  |
+| IAM-ACT-ACTIVATE-TEMP-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-ACTIVATE-TEMP-GRANT | PERMISSION_DENIED applies to Activate a Planned Temporary Grant | the actor requests Activate a Planned Temporary Grant | Activate a Planned Temporary Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-ACTIVATE-TEMP-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-ACTIVATE-TEMP-GRANT | VALIDATION_FAILED applies to Activate a Planned Temporary Grant | the actor requests Activate a Planned Temporary Grant | Activate a Planned Temporary Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-ACTIVATE-TEMP-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-ACTIVATE-TEMP-GRANT | VERSION_CONFLICT applies to Activate a Planned Temporary Grant | the actor requests Activate a Planned Temporary Grant | Activate a Planned Temporary Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-ACTIVATE-TEMP-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-ACTIVATE-TEMP-GRANT | AUDIT_FAILED applies to Activate a Planned Temporary Grant | the actor requests Activate a Planned Temporary Grant | Activate a Planned Temporary Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-REVOKE-TEMP-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-REVOKE-TEMP-GRANT | the actor meets the entry conditions for Revoke a Temporary Grant | the actor requests Revoke a Temporary Grant | Revoke a Temporary Grant returns the accepted task-specific result | REVOKED | ALLOW |  |
+| IAM-ACT-REVOKE-TEMP-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-REVOKE-TEMP-GRANT | PERMISSION_DENIED applies to Revoke a Temporary Grant | the actor requests Revoke a Temporary Grant | Revoke a Temporary Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-REVOKE-TEMP-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-REVOKE-TEMP-GRANT | VALIDATION_FAILED applies to Revoke a Temporary Grant | the actor requests Revoke a Temporary Grant | Revoke a Temporary Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-REVOKE-TEMP-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-REVOKE-TEMP-GRANT | VERSION_CONFLICT applies to Revoke a Temporary Grant | the actor requests Revoke a Temporary Grant | Revoke a Temporary Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-REVOKE-TEMP-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-REVOKE-TEMP-GRANT | AUDIT_FAILED applies to Revoke a Temporary Grant | the actor requests Revoke a Temporary Grant | Revoke a Temporary Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-REVOKE-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-REVOKE-GRANT | the actor meets the entry conditions for Revoke an Effective Data Scope Grant | the actor requests Revoke an Effective Data Scope Grant | Revoke an Effective Data Scope Grant returns the accepted task-specific result | REVOKED | ALLOW |  |
+| IAM-ACT-REVOKE-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-REVOKE-GRANT | PERMISSION_DENIED applies to Revoke an Effective Data Scope Grant | the actor requests Revoke an Effective Data Scope Grant | Revoke an Effective Data Scope Grant returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-REVOKE-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-REVOKE-GRANT | VALIDATION_FAILED applies to Revoke an Effective Data Scope Grant | the actor requests Revoke an Effective Data Scope Grant | Revoke an Effective Data Scope Grant returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-REVOKE-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-REVOKE-GRANT | VERSION_CONFLICT applies to Revoke an Effective Data Scope Grant | the actor requests Revoke an Effective Data Scope Grant | Revoke an Effective Data Scope Grant returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-REVOKE-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-REVOKE-GRANT | AUDIT_FAILED applies to Revoke an Effective Data Scope Grant | the actor requests Revoke an Effective Data Scope Grant | Revoke an Effective Data Scope Grant returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-EXPIRE-GRANT-SCN-SUCCESS | SUCCESS | IAM-ACT-EXPIRE-GRANT | the actor meets the entry conditions for Expire a Temporary Grant at Deadline | the actor requests Expire a Temporary Grant at Deadline | Expire a Temporary Grant at Deadline returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| IAM-ACT-EXPIRE-GRANT-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-EXPIRE-GRANT | PERMISSION_DENIED applies to Expire a Temporary Grant at Deadline | the actor requests Expire a Temporary Grant at Deadline | Expire a Temporary Grant at Deadline returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-EXPIRE-GRANT-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-EXPIRE-GRANT | VALIDATION_FAILED applies to Expire a Temporary Grant at Deadline | the actor requests Expire a Temporary Grant at Deadline | Expire a Temporary Grant at Deadline returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-EXPIRE-GRANT-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-EXPIRE-GRANT | VERSION_CONFLICT applies to Expire a Temporary Grant at Deadline | the actor requests Expire a Temporary Grant at Deadline | Expire a Temporary Grant at Deadline returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-EXPIRE-GRANT-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-EXPIRE-GRANT | AUDIT_FAILED applies to Expire a Temporary Grant at Deadline | the actor requests Expire a Temporary Grant at Deadline | Expire a Temporary Grant at Deadline returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-EVALUATE-PERMISSION-SCN-SUCCESS-ALLOW | SUCCESS | IAM-ACT-EVALUATE-PERMISSION | the actor meets the entry conditions for Evaluate Context Action Permission | the actor requests Evaluate Context Action Permission | permission decision records result, reason, and every source version used | ALLOW | ALLOW |  |
+| IAM-ACT-EVALUATE-PERMISSION-SCN-SUCCESS-DENY | SUCCESS | IAM-ACT-EVALUATE-PERMISSION | the actor meets the entry conditions for Evaluate Context Action Permission | the actor requests Evaluate Context Action Permission | permission decision records result, reason, and every source version used | DENY | ALLOW |  |
+| IAM-ACT-EVALUATE-PERMISSION-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-EVALUATE-PERMISSION | PERMISSION_DENIED applies to Evaluate Context Action Permission | the actor requests Evaluate Context Action Permission | Evaluate Context Action Permission returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-EVALUATE-PERMISSION-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-EVALUATE-PERMISSION | VALIDATION_FAILED applies to Evaluate Context Action Permission | the actor requests Evaluate Context Action Permission | Evaluate Context Action Permission returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-EVALUATE-PERMISSION-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-EVALUATE-PERMISSION | VERSION_CONFLICT applies to Evaluate Context Action Permission | the actor requests Evaluate Context Action Permission | Evaluate Context Action Permission returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-EVALUATE-PERMISSION-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-EVALUATE-PERMISSION | AUDIT_FAILED applies to Evaluate Context Action Permission | the actor requests Evaluate Context Action Permission | Evaluate Context Action Permission returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-MARK-PERMISSION-STALE-SCN-SUCCESS | SUCCESS | IAM-ACT-MARK-PERMISSION-STALE | the actor meets the entry conditions for Mark a Permission Decision Stale after Source Change | the actor requests Mark a Permission Decision Stale after Source Change | Mark a Permission Decision Stale after Source Change returns the accepted task-specific result | STALE | ALLOW |  |
+| IAM-ACT-MARK-PERMISSION-STALE-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-MARK-PERMISSION-STALE | PERMISSION_DENIED applies to Mark a Permission Decision Stale after Source Change | the actor requests Mark a Permission Decision Stale after Source Change | Mark a Permission Decision Stale after Source Change returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-MARK-PERMISSION-STALE-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-MARK-PERMISSION-STALE | VALIDATION_FAILED applies to Mark a Permission Decision Stale after Source Change | the actor requests Mark a Permission Decision Stale after Source Change | Mark a Permission Decision Stale after Source Change returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-MARK-PERMISSION-STALE-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-MARK-PERMISSION-STALE | VERSION_CONFLICT applies to Mark a Permission Decision Stale after Source Change | the actor requests Mark a Permission Decision Stale after Source Change | Mark a Permission Decision Stale after Source Change returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-MARK-PERMISSION-STALE-SCN-AUDIT_FAILED | FAILURE | IAM-ACT-MARK-PERMISSION-STALE | AUDIT_FAILED applies to Mark a Permission Decision Stale after Source Change | the actor requests Mark a Permission Decision Stale after Source Change | Mark a Permission Decision Stale after Source Change returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| IAM-ACT-REPLAY-DECISION-SCN-SUCCESS | SUCCESS | IAM-ACT-REPLAY-DECISION | the actor meets the entry conditions for Replay a Permission Decision from Source Versions | the actor requests Replay a Permission Decision from Source Versions | Replay a Permission Decision from Source Versions returns the accepted task-specific result | UNCHANGED | ALLOW |  |
+| IAM-ACT-REPLAY-DECISION-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-REPLAY-DECISION | PERMISSION_DENIED applies to Replay a Permission Decision from Source Versions | the actor requests Replay a Permission Decision from Source Versions | Replay a Permission Decision from Source Versions returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| IAM-ACT-REPLAY-DECISION-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-REPLAY-DECISION | VALIDATION_FAILED applies to Replay a Permission Decision from Source Versions | the actor requests Replay a Permission Decision from Source Versions | Replay a Permission Decision from Source Versions returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-REPLAY-DECISION-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-REPLAY-DECISION | VERSION_CONFLICT applies to Replay a Permission Decision from Source Versions | the actor requests Replay a Permission Decision from Source Versions | Replay a Permission Decision from Source Versions returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| IAM-ACT-RECALCULATE-PERMISSIONS-SCN-SUCCESS | SUCCESS | IAM-ACT-RECALCULATE-PERMISSIONS | the actor meets the entry conditions for Recalculate Permissions after Organization Change | the actor requests Recalculate Permissions after Organization Change | affected permission decisions use the new organization versions and stale decisions are invalidated | ALLOW | ALLOW |  |
+| IAM-ACT-RECALCULATE-PERMISSIONS-SCN-PERMISSION_DENIED | FAILURE | IAM-ACT-RECALCULATE-PERMISSIONS | PERMISSION_DENIED applies to Recalculate Permissions after Organization Change | the actor requests Recalculate Permissions after Organization Change | Recalculate Permissions after Organization Change returns PERMISSION_DENIED without hidden writes | DENY | DENY | PERMISSION_DENIED |
+| IAM-ACT-RECALCULATE-PERMISSIONS-SCN-VALIDATION_FAILED | FAILURE | IAM-ACT-RECALCULATE-PERMISSIONS | VALIDATION_FAILED applies to Recalculate Permissions after Organization Change | the actor requests Recalculate Permissions after Organization Change | Recalculate Permissions after Organization Change returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| IAM-ACT-RECALCULATE-PERMISSIONS-SCN-VERSION_CONFLICT | FAILURE | IAM-ACT-RECALCULATE-PERMISSIONS | VERSION_CONFLICT applies to Recalculate Permissions after Organization Change | the actor requests Recalculate Permissions after Organization Change | Recalculate Permissions after Organization Change returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 管理员维护角色策略和职责授权。
-2. 每次业务查询或写入重新计算 Permission Decision。
-3. 读权限按职责汇总，写权限按动作、对象、字段校验。
-4. 授权变更触发上下文失效和审计追加。
-
-关联 Flow: `DF-001`、`DF-002`、`DF-013`、`DF-019`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| IAM-FR-01 | 对象查询与范围筛选 | IAM-F001、IAM-F002、IAM-F003、IAM-F004、IAM-F005、IAM-F006 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | IAM-AC-01 |
-| IAM-FR-02 | 详情查看与版本追踪 | DAT-IAM-01、DAT-IAM-02、DAT-IAM-03、DAT-IAM-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | IAM-AC-02 |
-| IAM-FR-03 | 创建/修改/确认主动作 | IAM-F001、IAM-F002、IAM-F003、IAM-F004、IAM-F005、IAM-F006 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | IAM-AC-03 |
-| IAM-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | IAM-AC-04 |
-| IAM-FR-05 | 审计、通知与下游失效 | DF-001、DF-002、DF-013、DF-019 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | IAM-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| IAM-AC-01 | 班主任可查看本班全学科，但不能修改他科学科评分和计划。 |
-| IAM-AC-02 | 学生只能访问本人已发布对象。 |
-| IAM-AC-03 | 学校管理员有配置权但不默认拥有全部学生明细浏览权。 |
-| IAM-AC-04 | 权限拒绝必须记录审计但不暴露无权对象详情。 |
-| IAM-AC-05 | 身份与端无绑定，Web/App 使用同一权限判断。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-001`、`DF-002`、`DF-013`、`DF-019`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

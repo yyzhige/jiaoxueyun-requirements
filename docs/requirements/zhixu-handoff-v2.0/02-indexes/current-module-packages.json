@@ -1,697 +1,878 @@
 {
-  "version": "v2.0",
-  "generatedAt": "2026-07-14",
-  "productBaseline": "docs/product/zhixu-teaching-cloud-prd-v2.0.md",
-  "packageRoot": "docs/requirements/zhixu-handoff-v2.0",
+  "reviewStatus": {
+    "code": "SEMANTIC_RECONSTRUCTION",
+    "label": "v2.0 semantic reconstruction pending human promotion",
+    "reviewedAt": "2026-07-15"
+  },
   "modules": [
     {
       "id": "ACC-001",
-      "title": "学校入口、登录与工作上下文",
+      "title": "School entry, login, and active context",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/01-school-entry-access_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/01-school-entry-access-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-ACC-01",
-        "DAT-ACC-02",
-        "DAT-ACC-03",
-        "DAT-ACC-04"
+      "objectIds": [
+        "ACC-OBJ-SCHOOL",
+        "ACC-OBJ-MEMBERSHIP",
+        "ACC-OBJ-IDENTITY",
+        "ACC-OBJ-CONTEXT"
       ],
-      "fieldIds": [
-        "ACC-F001",
-        "ACC-F002",
-        "ACC-F003",
-        "ACC-F004",
-        "ACC-F005",
-        "ACC-F006"
+      "actionIds": [
+        "ACC-ACT-SYNC-SCHOOL",
+        "ACC-ACT-SYNC-IDENTITY",
+        "ACC-ACT-SEARCH-SCHOOL",
+        "ACC-ACT-SELECT-SCHOOL",
+        "ACC-ACT-LOGIN",
+        "ACC-ACT-FIRST-ACTIVATION",
+        "ACC-ACT-SUSPEND-MEMBERSHIP",
+        "ACC-ACT-DEACTIVATE-MEMBERSHIP",
+        "ACC-ACT-SELECT-IDENTITY",
+        "ACC-ACT-SELECT-TERM",
+        "ACC-ACT-SWITCH-CONTEXT",
+        "ACC-ACT-EXPIRE-CONTEXT",
+        "ACC-ACT-INVALIDATE-CONTEXT"
       ],
-      "flowIds": [
-        "DF-001",
-        "DF-015",
-        "DF-019"
+      "pageIds": [
+        "ACC-PAGE-SCHOOL-ENTRY",
+        "ACC-PAGE-LOGIN-ACTIVATION",
+        "ACC-PAGE-IDENTITY-TERM",
+        "ACC-PAGE-CONTEXT-SWITCH",
+        "ACC-PAGE-CONTEXT-RECOVERY"
       ]
     },
     {
       "id": "ORG-001",
-      "title": "学校组织、成员与导入",
+      "title": "Organization, members, and import",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/02-organization-members-import_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/02-organization-members-import-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-ORG-01",
-        "DAT-ORG-02",
-        "DAT-ORG-03",
-        "DAT-ORG-04",
-        "DAT-ORG-05",
-        "DAT-ORG-06",
-        "DAT-ORG-07",
-        "DAT-ORG-08",
-        "DAT-ORG-09",
-        "DAT-ORG-10"
+      "objectIds": [
+        "ORG-OBJ-TERM",
+        "ORG-OBJ-GRADE",
+        "ORG-OBJ-CLASS",
+        "ORG-OBJ-SUBJECT",
+        "ORG-OBJ-COURSE",
+        "ORG-OBJ-TEACHER",
+        "ORG-OBJ-STUDENT",
+        "ORG-OBJ-TEACHING-ASSIGNMENT",
+        "ORG-OBJ-HOMEROOM-ASSIGNMENT",
+        "ORG-OBJ-IMPORT-BATCH",
+        "ORG-OBJ-IMPORT-ROW"
       ],
-      "fieldIds": [
-        "ORG-F001",
-        "ORG-F002",
-        "ORG-F003",
-        "ORG-F004",
-        "ORG-F005",
-        "ORG-F006",
-        "ORG-F007",
-        "ORG-F008"
+      "actionIds": [
+        "ORG-ACT-CREATE-TERM-VERSION",
+        "ORG-ACT-ACTIVATE-TERM",
+        "ORG-ACT-CLOSE-TERM",
+        "ORG-ACT-ARCHIVE-TERM",
+        "ORG-ACT-CREATE-GRADE",
+        "ORG-ACT-UPDATE-GRADE",
+        "ORG-ACT-MARK-GRADE-HISTORICAL",
+        "ORG-ACT-CREATE-CLASS",
+        "ORG-ACT-UPDATE-CLASS",
+        "ORG-ACT-MARK-CLASS-HISTORICAL",
+        "ORG-ACT-DEACTIVATE-CLASS",
+        "ORG-ACT-CREATE-SUBJECT",
+        "ORG-ACT-UPDATE-SUBJECT",
+        "ORG-ACT-DEPRECATE-SUBJECT",
+        "ORG-ACT-CREATE-COURSE",
+        "ORG-ACT-UPDATE-COURSE",
+        "ORG-ACT-ACTIVATE-COURSE",
+        "ORG-ACT-END-COURSE",
+        "ORG-ACT-CREATE-TEACHER",
+        "ORG-ACT-UPDATE-TEACHER",
+        "ORG-ACT-SUSPEND-TEACHER",
+        "ORG-ACT-DEACTIVATE-TEACHER",
+        "ORG-ACT-CREATE-STUDENT",
+        "ORG-ACT-UPDATE-STUDENT",
+        "ORG-ACT-TRANSFER-STUDENT",
+        "ORG-ACT-ASSIGN-SUBJECT-TEACHER",
+        "ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT",
+        "ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT",
+        "ORG-ACT-REVOKE-TEACHING-ASSIGNMENT",
+        "ORG-ACT-ASSIGN-HOMEROOM",
+        "ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT",
+        "ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT",
+        "ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT",
+        "ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE",
+        "ORG-ACT-UPLOAD-IMPORT",
+        "ORG-ACT-MAP-IMPORT-FIELDS",
+        "ORG-ACT-VALIDATE-IMPORT-BATCH",
+        "ORG-ACT-REJECT-IMPORT-BATCH",
+        "ORG-ACT-VALIDATE-IMPORT",
+        "ORG-ACT-CONFIRM-IMPORT",
+        "ORG-ACT-FINALIZE-AUDITED-IMPORT",
+        "ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT",
+        "ORG-ACT-RETRY-FAILED-ROWS",
+        "ORG-ACT-MARK-IMPORT-ROW-RETRYABLE",
+        "ORG-ACT-DEACTIVATE-MEMBER",
+        "ORG-ACT-RESOLVE-CONTEXT-SCOPE",
+        "ORG-ACT-VIEW-MY-TEACHING-SCOPE",
+        "ORG-ACT-VIEW-IMPORT-NOTIFICATION",
+        "ORG-ACT-CONFIRM-IMPORT-ANOMALY"
       ],
-      "flowIds": [
-        "DF-002",
-        "DF-013",
-        "DF-019"
+      "pageIds": [
+        "ORG-PAGE-TREE",
+        "ORG-PAGE-MEMBERS",
+        "ORG-PAGE-IMPORT-TEMPLATE",
+        "ORG-PAGE-IMPORT-MAPPING",
+        "ORG-PAGE-IMPORT-RESULT",
+        "ORG-PAGE-TEACHING-ASSIGNMENT",
+        "ORG-PAGE-APP-MY-TEACHING-SCOPE",
+        "ORG-PAGE-APP-IMPORT-RESULT"
       ]
     },
     {
       "id": "IAM-001",
-      "title": "工作身份、职责授权与数据范围",
+      "title": "Identity, duty, and data scope",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/03-identity-permission-scope_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/03-identity-permission-scope-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-IAM-01",
-        "DAT-IAM-02",
-        "DAT-IAM-03",
-        "DAT-IAM-04"
+      "objectIds": [
+        "IAM-OBJ-ROLE-POLICY",
+        "IAM-OBJ-DUTY-GRANT",
+        "IAM-OBJ-SCOPE-GRANT",
+        "IAM-OBJ-PERMISSION-DECISION",
+        "IAM-OBJ-TEMP-GRANT"
       ],
-      "fieldIds": [
-        "IAM-F001",
-        "IAM-F002",
-        "IAM-F003",
-        "IAM-F004",
-        "IAM-F005",
-        "IAM-F006"
+      "actionIds": [
+        "IAM-ACT-SYNC-ROLE-POLICY",
+        "IAM-ACT-PREVIEW-SCOPE",
+        "IAM-ACT-GRANT-DUTY",
+        "IAM-ACT-ACTIVATE-DUTY-GRANT",
+        "IAM-ACT-EXPIRE-DUTY-GRANT",
+        "IAM-ACT-REVOKE-DUTY-GRANT",
+        "IAM-ACT-GRANT-SCOPE",
+        "IAM-ACT-ACTIVATE-SCOPE-GRANT",
+        "IAM-ACT-EXPIRE-SCOPE-GRANT",
+        "IAM-ACT-CREATE-TEMP-GRANT",
+        "IAM-ACT-ACTIVATE-TEMP-GRANT",
+        "IAM-ACT-REVOKE-TEMP-GRANT",
+        "IAM-ACT-REVOKE-GRANT",
+        "IAM-ACT-EXPIRE-GRANT",
+        "IAM-ACT-EVALUATE-PERMISSION",
+        "IAM-ACT-MARK-PERMISSION-STALE",
+        "IAM-ACT-REPLAY-DECISION",
+        "IAM-ACT-RECALCULATE-PERMISSIONS"
       ],
-      "flowIds": [
-        "DF-001",
-        "DF-002",
-        "DF-013",
-        "DF-019"
+      "pageIds": [
+        "IAM-PAGE-POLICY",
+        "IAM-PAGE-DUTY-GRANT",
+        "IAM-PAGE-SCOPE-GRANT",
+        "IAM-PAGE-TEMP-GRANT",
+        "IAM-PAGE-REPLAY"
       ]
     },
     {
       "id": "DGV-001",
-      "title": "数据治理、生命周期与 AI 数据使用",
+      "title": "Governance, lifecycle, and AI data use",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/04-data-governance-ai-usage_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/04-data-governance-ai-usage-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-DGV-01",
-        "DAT-DGV-02",
-        "DAT-DGV-03",
-        "DAT-DGV-04"
+      "objectIds": [
+        "DGV-OBJ-POLICY",
+        "DGV-OBJ-RETENTION",
+        "DGV-OBJ-AI-RULE",
+        "DGV-OBJ-EXPORT"
       ],
-      "fieldIds": [
-        "DGV-F001",
-        "DGV-F002",
-        "DGV-F003",
-        "DGV-F004",
-        "DGV-F005"
+      "actionIds": [
+        "DGV-ACT-SYNC-POLICY",
+        "DGV-ACT-VIEW-EXPLANATION",
+        "DGV-ACT-CONFIGURE-RETENTION",
+        "DGV-ACT-SUPERSEDE-RETENTION",
+        "DGV-ACT-CONFIGURE-AI-USE",
+        "DGV-ACT-DISABLE-AI-USE",
+        "DGV-ACT-SUPERSEDE-AI-RULE",
+        "DGV-ACT-REQUEST-EXPORT",
+        "DGV-ACT-APPROVE-EXPORT",
+        "DGV-ACT-DENY-EXPORT",
+        "DGV-ACT-GENERATE-EXPORT",
+        "DGV-ACT-COMPLETE-EXPORT",
+        "DGV-ACT-FAIL-EXPORT",
+        "DGV-ACT-EXPIRE-EXPORT"
       ],
-      "flowIds": [
-        "DF-015",
-        "DF-019",
-        "DF-301"
+      "pageIds": [
+        "DGV-PAGE-POLICY",
+        "DGV-PAGE-RETENTION",
+        "DGV-PAGE-AI-BOUNDARY",
+        "DGV-PAGE-EXPORT-REQUEST",
+        "DGV-PAGE-EXPORT-DECISION",
+        "DGV-PAGE-EXPORT-RESULT",
+        "DGV-PAGE-EXPORT-NOTIFICATION"
       ]
     },
     {
       "id": "AUD-001",
-      "title": "操作审计与敏感访问",
+      "title": "Audit and sensitive access",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/05-audit-sensitive-access_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/05-audit-sensitive-access-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-AUD-01",
-        "DAT-AUD-02",
-        "DAT-AUD-03"
+      "objectIds": [
+        "AUD-OBJ-EVENT",
+        "AUD-OBJ-ACCESS-REQUEST",
+        "AUD-OBJ-ACCESS-SESSION",
+        "AUD-OBJ-REVIEW"
       ],
-      "fieldIds": [
-        "AUD-F001",
-        "AUD-F002",
-        "AUD-F003",
-        "AUD-F004",
-        "AUD-F005"
+      "actionIds": [
+        "AUD-ACT-APPEND-EVENT",
+        "AUD-ACT-ARCHIVE-EVENT",
+        "AUD-ACT-QUERY-AUDIT",
+        "AUD-ACT-REQUEST-SENSITIVE",
+        "AUD-ACT-APPROVE-SENSITIVE",
+        "AUD-ACT-DENY-SENSITIVE",
+        "AUD-ACT-EXPIRE-ACCESS-REQUEST",
+        "AUD-ACT-OPEN-SESSION",
+        "AUD-ACT-EXPIRE-SESSION",
+        "AUD-ACT-REVOKE-SESSION",
+        "AUD-ACT-CREATE-REVIEW",
+        "AUD-ACT-INVESTIGATE-REVIEW",
+        "AUD-ACT-RESOLVE-REVIEW",
+        "AUD-ACT-CLOSE-REVIEW",
+        "AUD-ACT-EXPORT-SUMMARY"
       ],
-      "flowIds": [
-        "DF-019",
-        "DF-015"
+      "pageIds": [
+        "AUD-PAGE-SEARCH",
+        "AUD-PAGE-ACCESS-REQUEST",
+        "AUD-PAGE-ACCESS-APPROVAL",
+        "AUD-PAGE-ACTIVE-SESSION",
+        "AUD-PAGE-REVIEW"
       ]
     },
     {
       "id": "CURR-001",
-      "title": "课程、教材版本与知识点体系",
+      "title": "Curriculum, textbook, and knowledge map",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/06-curriculum-knowledge-map_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/06-curriculum-knowledge-map-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-CURR-01",
-        "DAT-CURR-02",
-        "DAT-CURR-03",
-        "DAT-CURR-04"
+      "objectIds": [
+        "CURR-OBJ-CURRICULUM",
+        "CURR-OBJ-TEXTBOOK",
+        "CURR-OBJ-CHAPTER",
+        "CURR-OBJ-KNOWLEDGE-POINT",
+        "CURR-OBJ-MAPPING"
       ],
-      "fieldIds": [
-        "CURR-F001",
-        "CURR-F002",
-        "CURR-F003",
-        "CURR-F004",
-        "CURR-F005"
+      "actionIds": [
+        "CURR-ACT-CREATE-DRAFT",
+        "CURR-ACT-BEGIN-VALIDATION",
+        "CURR-ACT-ADD-TEXTBOOK",
+        "CURR-ACT-ACTIVATE-TEXTBOOK",
+        "CURR-ACT-DEPRECATE-TEXTBOOK",
+        "CURR-ACT-CREATE-CHAPTER",
+        "CURR-ACT-REORDER-CHAPTER",
+        "CURR-ACT-ACTIVATE-CHAPTER",
+        "CURR-ACT-DEPRECATE-CHAPTER",
+        "CURR-ACT-CREATE-KNOWLEDGE-VERSION",
+        "CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION",
+        "CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION",
+        "CURR-ACT-CREATE-MAPPING",
+        "CURR-ACT-VALIDATE-MAPPING",
+        "CURR-ACT-VALIDATE-VERSION",
+        "CURR-ACT-PUBLISH-MAPPING",
+        "CURR-ACT-PUBLISH-VERSION",
+        "CURR-ACT-DEPRECATE-VERSION",
+        "CURR-ACT-DEPRECATE-MAPPING",
+        "CURR-ACT-VIEW-KNOWLEDGE-PATH"
       ],
-      "flowIds": [
-        "DF-003",
-        "DF-011",
-        "DF-017"
+      "pageIds": [
+        "CURR-PAGE-VERSIONS",
+        "CURR-PAGE-TEXTBOOK-TREE",
+        "CURR-PAGE-KP-EDITOR",
+        "CURR-PAGE-MAPPING",
+        "CURR-PAGE-PUBLISH",
+        "CURR-PAGE-PATH"
       ]
     },
     {
       "id": "TEA-001",
-      "title": "教师与班主任工作台",
+      "title": "Teacher and homeroom workbench",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/07-teacher-homeroom-workbench_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/07-teacher-homeroom-workbench-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-TEA-01",
-        "DAT-TEA-02",
-        "DAT-TEA-03"
+      "objectIds": [
+        "TEA-OBJ-TODO-VIEW",
+        "TEA-OBJ-COORDINATION",
+        "TEA-OBJ-PREFERENCE"
       ],
-      "fieldIds": [
-        "TEA-F001",
-        "TEA-F002",
-        "TEA-F003",
-        "TEA-F004",
-        "TEA-F005"
+      "actionIds": [
+        "TEA-ACT-SYNC-TODO-VIEW",
+        "TEA-ACT-QUERY-SUBJECT-TODOS",
+        "TEA-ACT-QUERY-HOMEROOM-SUMMARY",
+        "TEA-ACT-CREATE-COORDINATION",
+        "TEA-ACT-UPDATE-COORDINATION",
+        "TEA-ACT-CLOSE-COORDINATION",
+        "TEA-ACT-CANCEL-COORDINATION",
+        "TEA-ACT-CREATE-PREFERENCE",
+        "TEA-ACT-UPDATE-PREFERENCE",
+        "TEA-ACT-SUPERSEDE-PREFERENCE"
       ],
-      "flowIds": [
-        "DF-004",
-        "DF-007",
-        "DF-012",
-        "DF-014",
-        "DF-016"
+      "pageIds": [
+        "TEA-PAGE-TODAY",
+        "TEA-PAGE-QUEUE",
+        "TEA-PAGE-HOMEROOM",
+        "TEA-PAGE-COORDINATION",
+        "TEA-PAGE-PREFERENCE"
       ]
     },
     {
       "id": "HW-001",
-      "title": "作业创建与发布",
+      "title": "Assignment Authoring and Publication",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/08-assignment-create-release_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/08-assignment-create-release-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-HW-01",
-        "DAT-HW-02",
-        "DAT-HW-03",
-        "DAT-HW-04",
-        "DAT-HW-05"
+      "objectIds": [
+        "HW-OBJ-ASSIGNMENT",
+        "HW-OBJ-ITEM",
+        "HW-OBJ-RUBRIC"
       ],
-      "fieldIds": [
-        "HW-F001",
-        "HW-F002",
-        "HW-F003",
-        "HW-F004",
-        "HW-F005",
-        "HW-F006",
-        "HW-F007",
-        "HW-F008"
+      "actionIds": [
+        "HW-ACT-SYNC-RUBRIC",
+        "HW-ACT-CREATE-DRAFT",
+        "HW-ACT-CREATE-ITEM",
+        "HW-ACT-EDIT-ITEM",
+        "HW-ACT-VALIDATE-ITEM",
+        "HW-ACT-VALIDATE",
+        "HW-ACT-REVALIDATE-ITEM",
+        "HW-ACT-REVALIDATE-REVISION",
+        "HW-ACT-PREVIEW",
+        "HW-ACT-PUBLISH-ITEM",
+        "HW-ACT-PUBLISH-NOW",
+        "HW-ACT-SCHEDULE-PUBLISH",
+        "HW-ACT-PUBLISH-SCHEDULED",
+        "HW-ACT-CLOSE",
+        "HW-ACT-REVISE",
+        "HW-ACT-REVISE-ITEM",
+        "HW-ACT-OPEN-PUBLISHED",
+        "HW-ACT-RESOLVE-GRADING-SNAPSHOT"
       ],
-      "flowIds": [
-        "DF-003",
-        "DF-004",
-        "DF-006",
-        "DF-102"
+      "pageIds": [
+        "HW-PAGE-AUTHORING",
+        "HW-PAGE-STUDENT"
       ]
     },
     {
       "id": "SUB-001",
-      "title": "学生作答与提交",
+      "title": "Student Answering and Submission",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/09-student-answer-submit_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/09-student-answer-submit-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-SUB-01",
-        "DAT-SUB-02",
-        "DAT-SUB-03"
+      "objectIds": [
+        "SUB-OBJ-DRAFT",
+        "SUB-OBJ-ATTEMPT"
       ],
-      "fieldIds": [
-        "SUB-F001",
-        "SUB-F002",
-        "SUB-F003",
-        "SUB-F004",
-        "SUB-F005"
+      "actionIds": [
+        "SUB-ACT-SAVE-DRAFT",
+        "SUB-ACT-UPLOAD-CHUNK",
+        "SUB-ACT-RETRY-UPLOAD",
+        "SUB-ACT-MARK-DRAFT-READY",
+        "SUB-ACT-SUBMIT",
+        "SUB-ACT-RESUBMIT",
+        "SUB-ACT-VIEW-RECEIPT",
+        "SUB-ACT-HANDOFF-ACCEPTED"
       ],
-      "flowIds": [
-        "DF-005",
-        "DF-006"
+      "pageIds": [
+        "SUB-PAGE-APP",
+        "SUB-PAGE-WEB"
       ]
     },
     {
       "id": "GRD-001",
-      "title": "AI 初评与教师复核",
+      "title": "Grading Routing and Teacher Decision",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/10-ai-grading-review_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/10-ai-grading-review-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-GRD-01",
-        "DAT-GRD-02",
-        "DAT-GRD-03",
-        "DAT-GRD-04"
+      "objectIds": [
+        "GRD-OBJ-CAPABILITY-RULE",
+        "GRD-OBJ-DECISION"
       ],
-      "fieldIds": [
-        "GRD-F001",
-        "GRD-F002",
-        "GRD-F003",
-        "GRD-F004",
-        "GRD-F005",
-        "GRD-F006"
+      "actionIds": [
+        "GRD-ACT-SYNC-CAPABILITY-RULE",
+        "GRD-ACT-ENQUEUE",
+        "GRD-ACT-PROCESS",
+        "GRD-ACT-ROUTE",
+        "GRD-ACT-ROUTE-UNSUPPORTED",
+        "GRD-ACT-ROUTE-AI-UNAVAILABLE",
+        "GRD-ACT-CORRECT-RECOGNITION",
+        "GRD-ACT-ACCEPT-SUGGESTION",
+        "GRD-ACT-OVERRIDE-SCORE",
+        "GRD-ACT-MANUAL-GRADE",
+        "GRD-ACT-BATCH-CONFIRM",
+        "GRD-ACT-OPEN-CONFIRMED-REVISION",
+        "GRD-ACT-CONFIRM-REVISION",
+        "GRD-ACT-RESOLVE-VERSION-CONFLICT"
       ],
-      "flowIds": [
-        "DF-006",
-        "DF-007",
-        "DF-019"
+      "pageIds": [
+        "GRD-PAGE-DECISION"
       ]
     },
     {
       "id": "PUB-001",
-      "title": "成绩与反馈发布、修正",
+      "title": "Result Publication and Correction",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/11-result-publish-correction_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/11-result-publish-correction-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-PUB-01",
-        "DAT-PUB-02",
-        "DAT-PUB-03",
-        "DAT-PUB-04"
+      "objectIds": [
+        "PUB-OBJ-BATCH",
+        "PUB-OBJ-PREVIEW",
+        "PUB-OBJ-RESULT",
+        "PUB-OBJ-DEPENDENCY-SNAPSHOT"
       ],
-      "fieldIds": [
-        "PUB-F001",
-        "PUB-F002",
-        "PUB-F003",
-        "PUB-F004",
-        "PUB-F005"
+      "actionIds": [
+        "PUB-ACT-PREVIEW",
+        "PUB-ACT-PREPARE-BATCH",
+        "PUB-ACT-PUBLISH-SELECTED",
+        "PUB-ACT-MATERIALIZE-RESULT",
+        "PUB-ACT-PUBLISH-RESULT",
+        "PUB-ACT-FINALIZE-BATCH",
+        "PUB-ACT-RETRY-FAILED",
+        "PUB-ACT-RECONCILE-BATCH",
+        "PUB-ACT-VIEW-RESULT",
+        "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT",
+        "PUB-ACT-CORRECT-RESULT",
+        "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION"
       ],
-      "flowIds": [
-        "DF-008",
-        "DF-009",
-        "DF-018",
-        "DF-019"
+      "pageIds": [
+        "PUB-PAGE-RELEASE",
+        "PUB-PAGE-CORRECTION",
+        "PUB-PAGE-STUDENT-RESULT"
       ]
     },
     {
       "id": "SCO-001",
-      "title": "成绩册与成绩视图",
+      "title": "Source-pinned Gradebook Views",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/12-gradebook-score-view_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/12-gradebook-score-view-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-SCO-01",
-        "DAT-SCO-02",
-        "DAT-SCO-03"
+      "objectIds": [
+        "SCO-OBJ-VIEW",
+        "SCO-OBJ-FOLLOW-UP"
       ],
-      "fieldIds": [
-        "SCO-F001",
-        "SCO-F002",
-        "SCO-F003",
-        "SCO-F004",
-        "SCO-F005"
+      "actionIds": [
+        "SCO-ACT-CREATE-VIEW",
+        "SCO-ACT-READ-GRADEBOOK",
+        "SCO-ACT-CREATE-FOLLOW-UP",
+        "SCO-ACT-VIEW-FOLLOW-UP"
       ],
-      "flowIds": [
-        "DF-008",
-        "DF-009",
-        "DF-014",
-        "DF-103"
+      "pageIds": [
+        "SCO-PAGE-GRADEBOOK",
+        "SCO-PAGE-FOLLOW-UP"
       ]
     },
     {
       "id": "STU-001",
-      "title": "教师学生管理与学生详情",
+      "title": "Source-pinned Student Management Profile",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/13-teacher-student-management_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/13-teacher-student-management-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-STU-01",
-        "DAT-STU-02",
-        "DAT-STU-03"
+      "objectIds": [
+        "STU-OBJ-PROFILE",
+        "STU-OBJ-ATTENTION"
       ],
-      "fieldIds": [
-        "STU-F001",
-        "STU-F002",
-        "STU-F003",
-        "STU-F004",
-        "STU-F005"
+      "actionIds": [
+        "STU-ACT-BUILD-PROFILE",
+        "STU-ACT-OPEN-PROFILE",
+        "STU-ACT-SAVE-VIEW",
+        "STU-ACT-CREATE-ATTENTION",
+        "STU-ACT-VIEW-ATTENTION"
       ],
-      "flowIds": [
-        "DF-014",
-        "DF-011",
-        "DF-012"
+      "pageIds": [
+        "STU-PAGE-PROFILE",
+        "STU-PAGE-ATTENTION"
       ]
     },
     {
       "id": "INS-001",
-      "title": "学习证据、知识点归因与掌握判断",
+      "title": "Evidence and Mastery Interpretation",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/14-mastery-evidence-insight_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/14-mastery-evidence-insight-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-INS-01",
-        "DAT-INS-02",
-        "DAT-INS-03",
-        "DAT-INS-04"
+      "objectIds": [
+        "INS-OBJ-EVIDENCE"
       ],
-      "fieldIds": [
-        "INS-F001",
-        "INS-F002",
-        "INS-F003",
-        "INS-F004",
-        "INS-F005",
-        "INS-F006",
-        "INS-F007"
+      "actionIds": [
+        "INS-ACT-CREATE-CANDIDATE",
+        "INS-ACT-MARK-STALE",
+        "INS-ACT-CONFIRM-MASTERY",
+        "INS-ACT-PUBLISH-INTERPRETATION",
+        "INS-ACT-READ-CONFIRMED-EVIDENCE",
+        "INS-ACT-VIEW-MASTERY"
       ],
-      "flowIds": [
-        "DF-010",
-        "DF-011",
-        "DF-017"
+      "pageIds": [
+        "INS-PAGE-EVIDENCE-REVIEW",
+        "INS-PAGE-STUDENT-MASTERY"
       ]
     },
     {
       "id": "PLN-001",
-      "title": "个性化提升与全科协调",
+      "title": "Improvement Plans and Explicit Coordination Outputs",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/15-personalized-improvement-plan_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/15-personalized-improvement-plan-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-PLN-01",
-        "DAT-PLN-02",
-        "DAT-PLN-03",
-        "DAT-PLN-04"
+      "objectIds": [
+        "PLN-OBJ-PLAN",
+        "PLN-OBJ-SUBJECT-SYNC",
+        "PLN-OBJ-HOMEROOM-COORDINATION"
       ],
-      "fieldIds": [
-        "PLN-F001",
-        "PLN-F002",
-        "PLN-F003",
-        "PLN-F004",
-        "PLN-F005",
-        "PLN-F006",
-        "PLN-F007"
+      "actionIds": [
+        "PLN-ACT-CREATE-CANDIDATE",
+        "PLN-ACT-CONFIRM-PLAN",
+        "PLN-ACT-SYNC-SUBJECT-TEACHER",
+        "PLN-ACT-SYNC-HOMEROOM-COORDINATION",
+        "PLN-ACT-ADJUST-PLAN",
+        "PLN-ACT-CLOSE-PLAN",
+        "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
+        "PLN-ACT-VIEW-HOMEROOM-COORDINATION"
       ],
-      "flowIds": [
-        "DF-012",
-        "DF-013",
-        "DF-016",
-        "DF-017"
+      "pageIds": [
+        "PLN-PAGE-PLAN",
+        "PLN-PAGE-HOMEROOM"
       ]
     },
     {
       "id": "APP-001",
-      "title": "学生首页与学习执行",
+      "title": "Student Todo Aggregation and Local Execution",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/16-student-home-learning-execution_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/16-student-home-learning-execution-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-APP-01",
-        "DAT-APP-02",
-        "DAT-APP-03"
+      "objectIds": [
+        "APP-OBJ-TODO"
       ],
-      "fieldIds": [
-        "APP-F001",
-        "APP-F002",
-        "APP-F003",
-        "APP-F004",
-        "APP-F005"
+      "actionIds": [
+        "APP-ACT-CREATE-PLAN-TODO",
+        "APP-ACT-CREATE-HOMEWORK-TODO",
+        "APP-ACT-REFRESH-TODOS",
+        "APP-ACT-VIEW-TODOS",
+        "APP-ACT-UPDATE-LOCAL-PROGRESS"
       ],
-      "flowIds": [
-        "DF-004",
-        "DF-005",
-        "DF-010",
-        "DF-013",
-        "DF-017"
+      "pageIds": [
+        "APP-PAGE-TODOS"
       ]
     },
     {
       "id": "CORR-001",
-      "title": "反馈、错题与订正",
+      "title": "Student Correction and Versioned Invalidation",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/17-feedback-correction_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/17-feedback-correction-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-CORR-01",
-        "DAT-CORR-02",
-        "DAT-CORR-03"
+      "objectIds": [
+        "CORR-OBJ-TASK",
+        "CORR-OBJ-ATTEMPT",
+        "CORR-OBJ-INVALIDATION"
       ],
-      "fieldIds": [
-        "CORR-F001",
-        "CORR-F002",
-        "CORR-F003",
-        "CORR-F004",
-        "CORR-F005"
+      "actionIds": [
+        "CORR-ACT-CREATE-TASK",
+        "CORR-ACT-AUTO-CREATE-TASK",
+        "CORR-ACT-MARK-OVERDUE",
+        "CORR-ACT-SUBMIT-INITIAL",
+        "CORR-ACT-SUBMIT-LATE",
+        "CORR-ACT-CONFIRM-JUDGMENT",
+        "CORR-ACT-REQUEST-RETRY",
+        "CORR-ACT-MARK-TASK-AWAITING-RETRY",
+        "CORR-ACT-COMPLETE-TASK",
+        "CORR-ACT-RESUBMIT",
+        "CORR-ACT-NORMALIZE-SUBMISSION",
+        "CORR-ACT-RECORD-INVALIDATION"
       ],
-      "flowIds": [
-        "DF-010",
-        "DF-011",
-        "DF-013"
+      "pageIds": [
+        "CORR-PAGE-ATTEMPT"
       ]
     },
     {
       "id": "AIX-001",
-      "title": "AI 对话、可视化命令与任务执行",
+      "title": "AI Conversation and Controlled Task Preview",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/18-ai-conversation-task-execution_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/18-ai-conversation-task-execution-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-AIX-01",
-        "DAT-AIX-02",
-        "DAT-AIX-03",
-        "DAT-AIX-04"
+      "objectIds": [
+        "AIX-OBJ-TASK-PREVIEW"
       ],
-      "fieldIds": [
-        "AIX-F001",
-        "AIX-F002",
-        "AIX-F003",
-        "AIX-F004",
-        "AIX-F005"
+      "actionIds": [
+        "AIX-ACT-PREPARE-TASK-PREVIEW",
+        "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+        "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW"
       ],
-      "flowIds": [
-        "DF-015",
-        "DF-016",
-        "DF-019"
+      "pageIds": [
+        "AIX-PAGE-CONVERSATION"
       ]
     },
     {
       "id": "RPT-001",
-      "title": "临时分析、定期报告与订阅",
+      "title": "Ad-hoc Analysis and Scheduled Reports",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/19-reports-subscriptions_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/19-reports-subscriptions-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-RPT-01",
-        "DAT-RPT-02",
-        "DAT-RPT-03",
-        "DAT-RPT-04"
+      "objectIds": [
+        "RPT-OBJ-DEFINITION",
+        "RPT-OBJ-SUBSCRIPTION",
+        "RPT-OBJ-RUN",
+        "RPT-OBJ-SNAPSHOT",
+        "RPT-OBJ-DELIVERY"
       ],
-      "fieldIds": [
-        "RPT-F001",
-        "RPT-F002",
-        "RPT-F003",
-        "RPT-F004",
-        "RPT-F005",
-        "RPT-F006"
+      "actionIds": [
+        "RPT-ACT-CREATE-AD-HOC-DEFINITION",
+        "RPT-ACT-CREATE-HOMEROOM-DEFINITION",
+        "RPT-ACT-CREATE-ACADEMIC-DEFINITION",
+        "RPT-ACT-CREATE-SUBSCRIPTION",
+        "RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION",
+        "RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION",
+        "RPT-ACT-UPDATE-SUBSCRIPTION",
+        "RPT-ACT-PAUSE-SUBSCRIPTION",
+        "RPT-ACT-CANCEL-SUBSCRIPTION",
+        "RPT-ACT-CREATE-AD-HOC-RUN",
+        "RPT-ACT-CREATE-RUN",
+        "RPT-ACT-START-RUN",
+        "RPT-ACT-COMPLETE-RUN",
+        "RPT-ACT-FAIL-RUN",
+        "RPT-ACT-BLOCK-RUN-PERMISSION",
+        "RPT-ACT-MATERIALIZE-SNAPSHOT",
+        "RPT-ACT-CREATE-DELIVERY",
+        "RPT-ACT-MARK-DELIVERED",
+        "RPT-ACT-FAIL-DELIVERY",
+        "RPT-ACT-RETRY-DELIVERY"
       ],
-      "flowIds": [
-        "DF-016",
-        "DF-018",
-        "DF-015"
+      "pageIds": [
+        "RPT-PAGE-CENTER"
       ]
     },
     {
       "id": "LPATH-001",
-      "title": "长期学习画像与学习路径",
+      "title": "Cross-term Learning Path",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/20-long-term-learning-path_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/20-long-term-learning-path-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-LPATH-01",
-        "DAT-LPATH-02",
-        "DAT-LPATH-03"
+      "objectIds": [
+        "LPATH-OBJ-TIMELINE-ENTRY",
+        "LPATH-OBJ-INTERPRETATION"
       ],
-      "fieldIds": [
-        "LPATH-F001",
-        "LPATH-F002",
-        "LPATH-F003",
-        "LPATH-F004",
-        "LPATH-F005"
+      "actionIds": [
+        "LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE",
+        "LPATH-ACT-APPEND-EVIDENCE-TIMELINE",
+        "LPATH-ACT-APPEND-CORRECTION-TIMELINE",
+        "LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE",
+        "LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE",
+        "LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE",
+        "LPATH-ACT-CONFIRM-INTERPRETATION",
+        "LPATH-ACT-SUPERSEDE-INTERPRETATION",
+        "LPATH-ACT-MARK-INTERPRETATION-STALE",
+        "LPATH-ACT-PUBLISH-INTERPRETATION",
+        "LPATH-ACT-VIEW-PATH"
       ],
-      "flowIds": [
-        "DF-017",
-        "DF-011",
-        "DF-012"
+      "pageIds": [
+        "LPATH-PAGE-PATH"
       ]
     },
     {
       "id": "NOTI-001",
-      "title": "站内通知、投递与阅读状态",
+      "title": "In-product Notification Delivery",
+      "phase": 1,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/21-in-app-notification_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/21-in-app-notification-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-NOTI-01",
-        "DAT-NOTI-02",
-        "DAT-NOTI-03"
+      "objectIds": [
+        "NOTI-OBJ-NOTIFICATION"
       ],
-      "fieldIds": [
-        "NOTI-F001",
-        "NOTI-F002",
-        "NOTI-F003",
-        "NOTI-F004",
-        "NOTI-F005"
+      "actionIds": [
+        "NOTI-ACT-CREATE-REMINDER",
+        "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
+        "NOTI-ACT-DELIVER",
+        "NOTI-ACT-FAIL-DELIVERY",
+        "NOTI-ACT-RETRY-DELIVERY",
+        "NOTI-ACT-MARK-READ",
+        "NOTI-ACT-MARK-HANDLED"
       ],
-      "flowIds": [
-        "DF-018",
-        "DF-004",
-        "DF-008",
-        "DF-016"
+      "pageIds": [
+        "NOTI-PAGE-INBOX"
       ]
     },
     {
       "id": "PREP-001",
-      "title": "教师备课与课堂授课",
-      "priority": "P1",
+      "title": "Lesson Preparation and Classroom Activity",
+      "phase": 1,
+      "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/22-lesson-prep-delivery_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/22-lesson-prep-delivery-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-PREP-01",
-        "DAT-PREP-02",
-        "DAT-PREP-03"
+      "objectIds": [
+        "PREP-OBJ-LESSON-PLAN",
+        "PREP-OBJ-MATERIAL-REF",
+        "PREP-OBJ-CLASSROOM-ACTIVITY",
+        "PREP-OBJ-ASSIGNMENT-DRAFT"
       ],
-      "fieldIds": [
-        "PREP-F001",
-        "PREP-F002",
-        "PREP-F003",
-        "PREP-F004",
-        "PREP-F005"
+      "actionIds": [
+        "PREP-ACT-CREATE-LESSON-PLAN",
+        "PREP-ACT-CONFIRM-LESSON-PLAN",
+        "PREP-ACT-REFERENCE-MATERIAL",
+        "PREP-ACT-VERIFY-MATERIAL-LICENSE",
+        "PREP-ACT-PLAN-CLASSROOM-ACTIVITY",
+        "PREP-ACT-RECORD-CLASSROOM-ACTIVITY",
+        "PREP-ACT-GENERATE-ASSIGNMENT-DRAFT",
+        "PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT",
+        "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF"
       ],
-      "flowIds": [
-        "DF-101",
-        "DF-102"
+      "pageIds": [
+        "PREP-PAGE-LESSON-WORKSPACE",
+        "PREP-PAGE-MOBILE-CLASSROOM"
       ]
     },
     {
       "id": "CONTENT-001",
-      "title": "题库与教学内容管理",
-      "priority": "P1",
+      "title": "Versioned Question and Content Governance",
+      "phase": 1,
+      "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/23-question-content-management_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/23-question-content-management-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-CONTENT-01",
-        "DAT-CONTENT-02",
-        "DAT-CONTENT-03",
-        "DAT-CONTENT-04"
+      "objectIds": [
+        "CONTENT-OBJ-QUESTION-VERSION",
+        "CONTENT-OBJ-LICENSE",
+        "CONTENT-OBJ-PERMISSION"
       ],
-      "fieldIds": [
-        "CONTENT-F001",
-        "CONTENT-F002",
-        "CONTENT-F003",
-        "CONTENT-F004",
-        "CONTENT-F005"
+      "actionIds": [
+        "CONTENT-ACT-CREATE-QUESTION-VERSION",
+        "CONTENT-ACT-PUBLISH-QUESTION-VERSION",
+        "CONTENT-ACT-CREATE-LICENSE",
+        "CONTENT-ACT-ACTIVATE-LICENSE",
+        "CONTENT-ACT-CREATE-SCHOOL-PERMISSION",
+        "CONTENT-ACT-CREATE-SUBJECT-PERMISSION",
+        "CONTENT-ACT-CREATE-COURSE-PERMISSION",
+        "CONTENT-ACT-ACTIVATE-PERMISSION"
       ],
-      "flowIds": [
-        "DF-102",
-        "DF-101"
+      "pageIds": [
+        "CONTENT-PAGE-GOVERNANCE"
       ]
     },
     {
       "id": "EXM-001",
-      "title": "考试与综合成绩管理",
-      "priority": "P1",
+      "title": "Exam Event Score Import and Publication",
+      "phase": 1,
+      "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/24-exam-score-management_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/24-exam-score-management-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-EXM-01",
-        "DAT-EXM-02",
-        "DAT-EXM-03",
-        "DAT-EXM-04"
+      "objectIds": [
+        "EXM-OBJ-EXAM-EVENT",
+        "EXM-OBJ-SCORE-IMPORT",
+        "EXM-OBJ-AGGREGATE-RULE",
+        "EXM-OBJ-SUBJECT-SCORE"
       ],
-      "fieldIds": [
-        "EXM-F001",
-        "EXM-F002",
-        "EXM-F003",
-        "EXM-F004",
-        "EXM-F005"
+      "actionIds": [
+        "EXM-ACT-CREATE-EVENT",
+        "EXM-ACT-PUBLISH-EVENT",
+        "EXM-ACT-OPEN-CORRECTION",
+        "EXM-ACT-IMPORT-SCORES",
+        "EXM-ACT-VALIDATE-SCORE-IMPORT",
+        "EXM-ACT-REJECT-SCORE-IMPORT",
+        "EXM-ACT-REVISE-REJECTED-IMPORT",
+        "EXM-ACT-ACCEPT-SCORE-IMPORT",
+        "EXM-ACT-CREATE-AGGREGATE-RULE",
+        "EXM-ACT-ACTIVATE-AGGREGATE-RULE",
+        "EXM-ACT-CREATE-SUBJECT-SCORE",
+        "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+        "EXM-ACT-REJECT-SUBJECT-SCORE",
+        "EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE",
+        "EXM-ACT-PUBLISH-SUBJECT-SCORE",
+        "EXM-ACT-CORRECT-SUBJECT-SCORE",
+        "EXM-ACT-REPUBLISH-CORRECTED-SCORE",
+        "EXM-ACT-VIEW-PUBLISHED-SCORE"
       ],
-      "flowIds": [
-        "DF-103",
-        "DF-008",
-        "DF-011"
+      "pageIds": [
+        "EXM-PAGE-ACADEMIC-OPERATIONS",
+        "EXM-PAGE-MOBILE-ACADEMIC-REVIEW",
+        "EXM-PAGE-STUDENT-PUBLISHED-SCORE"
       ]
     },
     {
       "id": "SCH-001",
-      "title": "教务辅助排课",
-      "priority": "P2",
+      "title": "Calendar Constraint and Schedule Publication",
+      "phase": 1,
+      "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/25-academic-scheduling_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/25-academic-scheduling-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-SCH-01",
-        "DAT-SCH-02",
-        "DAT-SCH-03",
-        "DAT-SCH-04"
+      "objectIds": [
+        "SCH-OBJ-CALENDAR",
+        "SCH-OBJ-CONSTRAINT",
+        "SCH-OBJ-CONSTRAINT-SNAPSHOT",
+        "SCH-OBJ-CANDIDATE"
       ],
-      "fieldIds": [
-        "SCH-F001",
-        "SCH-F002",
-        "SCH-F003",
-        "SCH-F004",
-        "SCH-F005"
+      "actionIds": [
+        "SCH-ACT-CREATE-CALENDAR",
+        "SCH-ACT-PUBLISH-CALENDAR",
+        "SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT",
+        "SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT",
+        "SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT",
+        "SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT",
+        "SCH-ACT-ACTIVATE-CONSTRAINT",
+        "SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT",
+        "SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT",
+        "SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT",
+        "SCH-ACT-GENERATE-CANDIDATE",
+        "SCH-ACT-REVIEW-CONFLICTS",
+        "SCH-ACT-CONFIRM-CANDIDATE",
+        "SCH-ACT-PUBLISH-CANDIDATE",
+        "SCH-ACT-MARK-CANDIDATE-STALE"
       ],
-      "flowIds": [
-        "DF-201",
-        "DF-202"
+      "pageIds": [
+        "SCH-PAGE-SCHEDULE-OPERATIONS",
+        "SCH-PAGE-MOBILE-CONFLICT-REVIEW"
       ]
     },
     {
       "id": "REPORT-001",
-      "title": "家长报告受控分享",
-      "priority": "P2",
+      "title": "Future Extended Reporting Contract",
+      "phase": 2,
+      "priority": "P1",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/26-guardian-report-sharing_PRD_v2.0.md",
-      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/26-guardian-report-sharing-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-REPORT-01",
-        "DAT-REPORT-02",
-        "DAT-REPORT-03"
+      "wireframe": null,
+      "objectIds": [
+        "REPORT-OBJ-FUTURE-CONTRACT"
       ],
-      "fieldIds": [
-        "REPORT-F001",
-        "REPORT-F002",
-        "REPORT-F003",
-        "REPORT-F004",
-        "REPORT-F005"
-      ],
-      "flowIds": [
-        "DF-202",
-        "DF-016",
-        "DF-019"
-      ]
+      "actionIds": [],
+      "pageIds": []
     },
     {
       "id": "PLAT-001",
-      "title": "平台学校入驻与运营治理",
-      "priority": "P3",
+      "title": "School Onboarding Service and Support Access",
+      "phase": 1,
+      "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/27-platform-onboarding-governance_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/27-platform-onboarding-governance-wireframe.zh-CN.md",
-      "dataIds": [
-        "DAT-PLAT-01",
-        "DAT-PLAT-02",
-        "DAT-PLAT-03",
-        "DAT-PLAT-04"
+      "objectIds": [
+        "PLAT-OBJ-ONBOARDING-CASE",
+        "PLAT-OBJ-SERVICE-PLAN",
+        "PLAT-OBJ-POLICY-TEMPLATE",
+        "PLAT-OBJ-SUPPORT-CASE"
       ],
-      "fieldIds": [
-        "PLAT-F001",
-        "PLAT-F002",
-        "PLAT-F003",
-        "PLAT-F004",
-        "PLAT-F005"
+      "actionIds": [
+        "PLAT-ACT-CREATE-ONBOARDING-CASE",
+        "PLAT-ACT-CONFIRM-ONBOARDING-CASE",
+        "PLAT-ACT-CREATE-SERVICE-PLAN",
+        "PLAT-ACT-CONFIRM-SERVICE-PLAN",
+        "PLAT-ACT-ACTIVATE-SERVICE-PLAN",
+        "PLAT-ACT-CREATE-POLICY-TEMPLATE",
+        "PLAT-ACT-CONFIRM-POLICY-TEMPLATE",
+        "PLAT-ACT-ACTIVATE-POLICY-TEMPLATE",
+        "PLAT-ACT-CREATE-SUPPORT-CASE",
+        "PLAT-ACT-CLOSE-SUPPORT-CASE",
+        "PLAT-ACT-USE-SUPPORT-ACCESS"
       ],
-      "flowIds": [
-        "DF-301",
-        "DF-001",
-        "DF-019"
+      "pageIds": [
+        "PLAT-PAGE-SCHOOL-SERVICE-OPERATIONS",
+        "PLAT-PAGE-MOBILE-SUPPORT-CASE"
       ]
     }
   ]

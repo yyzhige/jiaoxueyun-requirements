@@ -1,138 +1,271 @@
-# CURR-001 课程、教材版本与知识点体系 PRD v2.0
+# CURR-001 Curriculum, textbook, and knowledge map PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
+| --- | --- |
+| 阶段 | 1 |
 | 优先级 | P0 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 教务、学科负责人、任课教师 |
-| 关联线框 | [06-curriculum-knowledge-map-wireframe.zh-CN.md](../05-wireframe-contracts/06-curriculum-knowledge-map-wireframe.zh-CN.md) |
+| 目标 | Publish versioned curriculum maps without rewriting historical teaching or evidence references. |
+| 基线决策 | `BASE-003`、`BASE-007`、`BASE-009` |
+| NFR | `NFR-002`、`NFR-008` |
+| 进入条件 | academic staff has an active subject scope；textbook and knowledge point source versions are explicit |
+| 退出条件 | a published curriculum version is immutable；historical assignment and evidence references continue to resolve their original version |
 
-## 0. 产品评审摘要
+## 1. 范围与事实边界
 
-提供全科课程、教材版本、章节和知识点的稳定引用，让作业、成绩、证据、计划和长期路径共用同一知识体系。
+- 本模块权威拥有 5 个对象、20 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
+## 2. 权威对象与字段合同
 
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-CURR-01 | Curriculum Version | 教务 | 课程体系 | 教务 | 教务 | 教务 | S2 教学业务数据 |
-| DAT-CURR-02 | Textbook Version | 学科负责人 | 教材版本 | 学科负责人 | 学科负责人 | 学科负责人 | S2 教学业务数据 |
-| DAT-CURR-03 | Knowledge Point | 学科负责人 | 知识点 | 学科负责人 | 学科负责人 | 学科负责人 | S2 教学业务数据 |
-| DAT-CURR-04 | Knowledge Mapping | 学科负责人 | 知识点映射关系 | 学科负责人 | 学科负责人 | 学科负责人 | S2 教学业务数据 |
+### CURR-OBJ-CURRICULUM Curriculum Version
 
-## 1. 范围
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / VALIDATING / VALIDATED / PUBLISHED / DEPRECATED |
 
-### 1.1 目标用户与价值
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-CURRICULUM-F-ID | Curriculum Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CURRICULUM-F-NAME | Curriculum Version Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CURRICULUM-F-SUBJECT | Curriculum Subject | STRING | 是 | OPTION_SET: OPT-COM-007 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CURRICULUM-F-VERSION | Curriculum Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CURRICULUM-F-STATUS | Curriculum Version Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CURRICULUM-F-VALIDATION | Version Validation Result | JSON | required when the curriculum version reaches VALIDATED；状态=VALIDATED | SYSTEM | READ_ONLY | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CURRICULUM-F-PUBLISHED-AT | Published At | DATETIME | 否 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-- 目标用户: 教务、学科负责人、任课教师
-- 解决问题: 提供全科课程、教材版本、章节和知识点的稳定引用，让作业、成绩、证据、计划和长期路径共用同一知识体系。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
+### CURR-OBJ-TEXTBOOK Textbook Version
 
-### 1.2 本模块负责
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / DEPRECATED |
 
-- DAT-CURR-01 Curriculum Version
-- DAT-CURR-02 Textbook Version
-- DAT-CURR-03 Knowledge Point
-- DAT-CURR-04 Knowledge Mapping
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-TEXTBOOK-F-ID | Textbook Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-TEXTBOOK-F-CURRICULUM-ID | Curriculum Version ID | STRING | 是 | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-TEXTBOOK-F-NAME | Textbook Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-TEXTBOOK-F-EDITION | Textbook Edition | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-TEXTBOOK-F-STATUS | Textbook Version Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-### 1.3 本模块不负责
+### CURR-OBJ-CHAPTER Chapter
 
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / DEPRECATED |
 
-## 2. Web/App Capability Matrix
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-CHAPTER-F-ID | Chapter ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CHAPTER-F-TEXTBOOK-ID | Textbook Version ID | STRING | 是 | SYSTEM | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CHAPTER-F-TITLE | Chapter Title | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CHAPTER-F-ORDER | Chapter Order | INTEGER | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-CHAPTER-F-STATUS | Chapter Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
-| 能力 | Web | App | 差异原则 |
+### CURR-OBJ-KNOWLEDGE-POINT Knowledge Point
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / DEPRECATED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-KP-F-ID | Knowledge Point ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-KP-F-NAME | Knowledge Point Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-KP-F-DEFINITION | Knowledge Point Definition | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-KP-F-PARENT-ID | Parent Knowledge Point ID | STRING | 否 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-KP-F-STATUS | Knowledge Point Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### CURR-OBJ-MAPPING Knowledge Mapping
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | AUTHORIZED | DRAFT / VALIDATED / PUBLISHED / DEPRECATED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-MAPPING-F-ID | Knowledge Mapping ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-MAPPING-F-CHAPTER-ID | Mapped Chapter ID | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-MAPPING-F-KP-ID | Mapped Knowledge Point ID | STRING | 是 | OPTION_SET: OPT-COM-011 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-MAPPING-F-RELATION | Mapping Relation | STRING | 是 | OPTION_SET: OPT-ENUM-043 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-MAPPING-F-VERSION | Mapping Source Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| CURR-MAPPING-F-STATUS | Mapping Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| CURR-REL-TEXTBOOK-CURRICULUM | CURR-OBJ-TEXTBOOK | VERSION_MEMBER | CURR-OBJ-CURRICULUM | MANY_TO_ONE | SAME_SUBJECT | block publication while preserving previously published historical references |
+| CURR-REL-CHAPTER-TEXTBOOK | CURR-OBJ-CHAPTER | PART_OF | CURR-OBJ-TEXTBOOK | MANY_TO_ONE | SAME_SUBJECT | mark draft mappings stale without rewriting published mappings |
+| CURR-REL-MAPPING-KP | CURR-OBJ-MAPPING | MAPS_TO | CURR-OBJ-KNOWLEDGE-POINT | MANY_TO_ONE | SAME_SUBJECT | create a new mapping version and retain historical references |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-ACT-CREATE-DRAFT | Create a Curriculum Version Draft | CURR-OBJ-CURRICULUM | CREATE | CURR-CURRICULUM-F-NAME<br>CURR-CURRICULUM-F-SUBJECT | CURR-CURRICULUM-F-ID<br>CURR-CURRICULUM-F-VERSION<br>CURR-CURRICULUM-F-STATUS | CREATE（成功状态由 CURR-ACT-CREATE-DRAFT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff maintains curriculum facts inside school and subject scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school curriculum facts by default | WEB | LOW | REQUIRED | CURR-ACT-CREATE-DRAFT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-BEGIN-VALIDATION | Begin Curriculum Version Validation | CURR-OBJ-CURRICULUM | UPDATE | CURR-CURRICULUM-F-ID | CURR-CURRICULUM-F-VERSION<br>CURR-CURRICULUM-F-STATUS | DRAFT → VALIDATING | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | HIGH | REQUIRED | CURR-ACT-BEGIN-VALIDATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| CURR-ACT-ADD-TEXTBOOK | Add a Textbook Version to Curriculum | CURR-OBJ-TEXTBOOK | CREATE | CURR-TEXTBOOK-F-CURRICULUM-ID<br>CURR-TEXTBOOK-F-NAME<br>CURR-TEXTBOOK-F-EDITION | CURR-TEXTBOOK-F-ID<br>CURR-TEXTBOOK-F-STATUS | CREATE（成功状态由 CURR-ACT-ADD-TEXTBOOK-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff maintains curriculum facts inside school and subject scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school curriculum facts by default | WEB | LOW | REQUIRED | CURR-ACT-ADD-TEXTBOOK:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-ACTIVATE-TEXTBOOK | Activate a Draft Textbook Version | CURR-OBJ-TEXTBOOK | UPDATE | CURR-TEXTBOOK-F-ID | CURR-TEXTBOOK-F-STATUS | DRAFT → ACTIVE | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-ACTIVATE-TEXTBOOK:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-TEXTBOOK | Deprecate an Active Textbook Version | CURR-OBJ-TEXTBOOK | UPDATE | CURR-TEXTBOOK-F-ID | CURR-TEXTBOOK-F-STATUS | ACTIVE → DEPRECATED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-DEPRECATE-TEXTBOOK:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-CREATE-CHAPTER | Create a Textbook Chapter | CURR-OBJ-CHAPTER | CREATE | CURR-CHAPTER-F-TEXTBOOK-ID<br>CURR-CHAPTER-F-TITLE<br>CURR-CHAPTER-F-ORDER | CURR-CHAPTER-F-ID<br>CURR-CHAPTER-F-STATUS | CREATE（成功状态由 CURR-ACT-CREATE-CHAPTER-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff maintains curriculum facts inside school and subject scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school curriculum facts by default | WEB | LOW | REQUIRED | CURR-ACT-CREATE-CHAPTER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-REORDER-CHAPTER | Reorder a Draft Textbook Chapter | CURR-OBJ-CHAPTER | UPDATE | CURR-CHAPTER-F-ID<br>CURR-CHAPTER-F-ORDER | CURR-CHAPTER-F-ORDER<br>CURR-CHAPTER-F-STATUS | DRAFT → DRAFT | ALLOW:ROLE-ACADEMIC — academic staff maintains curriculum facts inside school and subject scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school curriculum facts by default | WEB | LOW | REQUIRED | CURR-ACT-REORDER-CHAPTER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-ACTIVATE-CHAPTER | Activate a Draft Textbook Chapter | CURR-OBJ-CHAPTER | UPDATE | CURR-CHAPTER-F-ID | CURR-CHAPTER-F-STATUS | DRAFT → ACTIVE | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-ACTIVATE-CHAPTER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-CHAPTER | Deprecate an Active Textbook Chapter | CURR-OBJ-CHAPTER | UPDATE | CURR-CHAPTER-F-ID | CURR-CHAPTER-F-STATUS | ACTIVE → DEPRECATED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-DEPRECATE-CHAPTER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-CREATE-KNOWLEDGE-VERSION | Create a Knowledge Point Version | CURR-OBJ-KNOWLEDGE-POINT | CREATE | CURR-KP-F-NAME<br>CURR-KP-F-DEFINITION<br>CURR-KP-F-PARENT-ID | CURR-KP-F-ID<br>CURR-KP-F-STATUS | CREATE（成功状态由 CURR-ACT-CREATE-KNOWLEDGE-VERSION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-CREATE-KNOWLEDGE-VERSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | Activate a Draft Knowledge Point Version | CURR-OBJ-KNOWLEDGE-POINT | UPDATE | CURR-KP-F-ID | CURR-KP-F-STATUS | DRAFT → ACTIVE | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | Deprecate an Active Knowledge Point Version | CURR-OBJ-KNOWLEDGE-POINT | UPDATE | CURR-KP-F-ID | CURR-KP-F-STATUS | ACTIVE → DEPRECATED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-CREATE-MAPPING | Map a Chapter to a Knowledge Point | CURR-OBJ-MAPPING | CREATE | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION | CURR-MAPPING-F-ID<br>CURR-MAPPING-F-VERSION<br>CURR-MAPPING-F-STATUS | CREATE（成功状态由 CURR-ACT-CREATE-MAPPING-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | LOW | REQUIRED | CURR-ACT-CREATE-MAPPING:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| CURR-ACT-VALIDATE-MAPPING | Validate Knowledge Mapping Publication Readiness | CURR-OBJ-MAPPING | UPDATE | CURR-MAPPING-F-ID<br>CURR-MAPPING-F-VERSION | CURR-MAPPING-F-VERSION<br>CURR-MAPPING-F-STATUS | DRAFT → VALIDATED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | HIGH | REQUIRED | CURR-ACT-VALIDATE-MAPPING:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| CURR-ACT-VALIDATE-VERSION | Validate Curriculum Publication Readiness | CURR-OBJ-CURRICULUM | UPDATE | CURR-CURRICULUM-F-ID | CURR-CURRICULUM-F-VERSION<br>CURR-CURRICULUM-F-VALIDATION<br>CURR-CURRICULUM-F-STATUS | DRAFT / VALIDATING → VALIDATED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | HIGH | REQUIRED | CURR-ACT-VALIDATE-VERSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| CURR-ACT-PUBLISH-MAPPING | Publish a Validated Knowledge Mapping | CURR-OBJ-MAPPING | UPDATE | CURR-MAPPING-F-ID<br>CURR-MAPPING-F-VERSION | CURR-MAPPING-F-VERSION<br>CURR-MAPPING-F-STATUS | VALIDATED → PUBLISHED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | HIGH | REQUIRED | CURR-ACT-PUBLISH-MAPPING:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| CURR-ACT-PUBLISH-VERSION | Publish a Validated Curriculum Version | CURR-OBJ-CURRICULUM | UPDATE | CURR-CURRICULUM-F-ID<br>CURR-CURRICULUM-F-VALIDATION | CURR-CURRICULUM-F-VERSION<br>CURR-CURRICULUM-F-STATUS<br>CURR-CURRICULUM-F-PUBLISHED-AT | VALIDATED → PUBLISHED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | HIGH | REQUIRED | CURR-ACT-PUBLISH-VERSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| CURR-ACT-DEPRECATE-VERSION | Deprecate a Published Curriculum Version | CURR-OBJ-CURRICULUM | UPDATE | CURR-CURRICULUM-F-ID | CURR-CURRICULUM-F-STATUS | PUBLISHED → DEPRECATED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | HIGH | REQUIRED | CURR-ACT-DEPRECATE-VERSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| CURR-ACT-DEPRECATE-MAPPING | Deprecate a Published Knowledge Mapping | CURR-OBJ-MAPPING | UPDATE | CURR-MAPPING-F-ID<br>CURR-MAPPING-F-VERSION | CURR-MAPPING-F-VERSION<br>CURR-MAPPING-F-STATUS | PUBLISHED → DEPRECATED | ALLOW:DUTY-SUBJECT-LEAD — subject lead may validate and review only the assigned subject curriculum version<br>ALLOW:ROLE-ACADEMIC — academic staff may publish an approved school curriculum version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot publish a school subject version without school authorization | WEB | HIGH | REQUIRED | CURR-ACT-DEPRECATE-MAPPING:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| CURR-ACT-VIEW-KNOWLEDGE-PATH | View Student or Teacher Knowledge Path | CURR-OBJ-MAPPING | READ | CURR-MAPPING-F-VERSION | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION | UNCHANGED | ALLOW:CURRENT_ACTOR — student and teacher views resolve the historically referenced published mapping version<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot view student learning path detail without school authorization | WEB / APP | READ | REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 完整业务处理 | 课程目录、教材版本、知识点树、映射维护、版本发布 | 学生查看知识点路径、教师移动端查看知识点标签 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
+| CURR-OBJ-CURRICULUM | DRAFT | CURR-ACT-CREATE-DRAFT | CURR-ACT-BEGIN-VALIDATION<br>CURR-ACT-VALIDATE-VERSION |
+| CURR-OBJ-CURRICULUM | VALIDATING | CURR-ACT-BEGIN-VALIDATION | CURR-ACT-VALIDATE-VERSION |
+| CURR-OBJ-CURRICULUM | VALIDATED | CURR-ACT-VALIDATE-VERSION | CURR-ACT-PUBLISH-VERSION |
+| CURR-OBJ-CURRICULUM | PUBLISHED | CURR-ACT-PUBLISH-VERSION | CURR-ACT-DEPRECATE-VERSION |
+| CURR-OBJ-CURRICULUM | DEPRECATED | CURR-ACT-DEPRECATE-VERSION |  |
+| CURR-OBJ-TEXTBOOK | DRAFT | CURR-ACT-ADD-TEXTBOOK | CURR-ACT-ACTIVATE-TEXTBOOK |
+| CURR-OBJ-TEXTBOOK | ACTIVE | CURR-ACT-ACTIVATE-TEXTBOOK | CURR-ACT-DEPRECATE-TEXTBOOK |
+| CURR-OBJ-TEXTBOOK | DEPRECATED | CURR-ACT-DEPRECATE-TEXTBOOK |  |
+| CURR-OBJ-CHAPTER | DRAFT | CURR-ACT-CREATE-CHAPTER<br>CURR-ACT-REORDER-CHAPTER | CURR-ACT-REORDER-CHAPTER<br>CURR-ACT-ACTIVATE-CHAPTER |
+| CURR-OBJ-CHAPTER | ACTIVE | CURR-ACT-ACTIVATE-CHAPTER | CURR-ACT-DEPRECATE-CHAPTER |
+| CURR-OBJ-CHAPTER | DEPRECATED | CURR-ACT-DEPRECATE-CHAPTER |  |
+| CURR-OBJ-KNOWLEDGE-POINT | DRAFT | CURR-ACT-CREATE-KNOWLEDGE-VERSION | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION |
+| CURR-OBJ-KNOWLEDGE-POINT | ACTIVE | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION |
+| CURR-OBJ-KNOWLEDGE-POINT | DEPRECATED | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION |  |
+| CURR-OBJ-MAPPING | DRAFT | CURR-ACT-CREATE-MAPPING | CURR-ACT-VALIDATE-MAPPING |
+| CURR-OBJ-MAPPING | VALIDATED | CURR-ACT-VALIDATE-MAPPING | CURR-ACT-PUBLISH-MAPPING |
+| CURR-OBJ-MAPPING | PUBLISHED | CURR-ACT-PUBLISH-MAPPING | CURR-ACT-DEPRECATE-MAPPING |
+| CURR-OBJ-MAPPING | DEPRECATED | CURR-ACT-DEPRECATE-MAPPING |  |
 
-## 3. 字段与选项合同
+## 7. 参与数据流
 
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
+| DF-003 | Curriculum Version Publication | 1 | CURR-001 | CURR-ACT-VALIDATE-MAPPING<br>CURR-ACT-VALIDATE-VERSION<br>CURR-ACT-PUBLISH-MAPPING<br>CURR-ACT-PUBLISH-VERSION | VERSION_PUBLICATION_WITH_NO_PARTIAL_PUBLISH；{"strategy":"REVALIDATE_STALE_DRAFT_THEN_RETRY","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT"]}；{"strategy":"KEEP_PRIOR_PUBLISHED_VERSION","description":"failed publication leaves the prior published version active and the draft unreferenced by new work"}；{"strategy":"NEW_WORK_ONLY","targets":["new assignment curriculum selectors","new knowledge-path selectors","historical assignment and evidence references are immutable and never rewritten"]} |
+
+## 8. 页面任务合同
+
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CURR-F001 | 学科 | 单选下拉 | OPT-COM-007 | 是 | 控制课程、教材、知识点树 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F002 | 课程 | 单选下拉 | OPT-COM-008 | 是 | 依赖年级和学科 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F003 | 教材版本 | 自动完成 | OPT-COM-011 | 是 | 版本发布后只读 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F004 | 章节/单元 | 级联选择 | OPT-COM-011 | 否 | 控制知识点候选 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| CURR-F005 | 知识点 | 树形多选 | OPT-COM-011 | 是 | 作业题目可多知识点标记 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
+| CURR-PAGE-VERSIONS | Curriculum Version Management | WEB | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-NAME<br>CURR-CURRICULUM-F-SUBJECT<br>CURR-CURRICULUM-F-STATUS<br>CURR-CURRICULUM-F-PUBLISHED-AT | CURR-ACT-CREATE-DRAFT<br>CURR-ACT-BEGIN-VALIDATION<br>CURR-ACT-DEPRECATE-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-TEXTBOOK-TREE | Textbook and Chapter Version Tree | WEB | CURR-OBJ-TEXTBOOK<br>CURR-OBJ-CHAPTER | CURR-TEXTBOOK-F-NAME<br>CURR-TEXTBOOK-F-EDITION<br>CURR-CHAPTER-F-ID<br>CURR-CHAPTER-F-TITLE<br>CURR-CHAPTER-F-ORDER | CURR-ACT-ADD-TEXTBOOK<br>CURR-ACT-ACTIVATE-TEXTBOOK<br>CURR-ACT-DEPRECATE-TEXTBOOK<br>CURR-ACT-CREATE-CHAPTER<br>CURR-ACT-REORDER-CHAPTER<br>CURR-ACT-ACTIVATE-CHAPTER<br>CURR-ACT-DEPRECATE-CHAPTER | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-KP-EDITOR | Knowledge Point Version Editor | WEB | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-NAME<br>CURR-KP-F-DEFINITION<br>CURR-KP-F-PARENT-ID<br>CURR-KP-F-STATUS | CURR-ACT-CREATE-KNOWLEDGE-VERSION<br>CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION<br>CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-MAPPING | Chapter Knowledge Mapping Review | WEB | CURR-OBJ-MAPPING | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION<br>CURR-MAPPING-F-STATUS | CURR-ACT-CREATE-MAPPING<br>CURR-ACT-DEPRECATE-MAPPING | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-PUBLISH | Curriculum and Mapping Publication Preview | WEB | CURR-OBJ-CURRICULUM<br>CURR-OBJ-MAPPING | CURR-CURRICULUM-F-VALIDATION<br>CURR-CURRICULUM-F-STATUS<br>CURR-CURRICULUM-F-PUBLISHED-AT<br>CURR-MAPPING-F-VERSION<br>CURR-MAPPING-F-STATUS | CURR-ACT-VALIDATE-MAPPING<br>CURR-ACT-VALIDATE-VERSION<br>CURR-ACT-PUBLISH-MAPPING<br>CURR-ACT-PUBLISH-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-PATH | Published Knowledge Path Viewer | WEB / APP | CURR-OBJ-MAPPING | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION<br>CURR-MAPPING-F-VERSION | CURR-ACT-VIEW-KNOWLEDGE-PATH | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 4. 状态机
+## 9. 验收场景
 
-| 状态 | 含义/要求 |
-| --- | --- |
-| DRAFT | 草稿 |
-| ACTIVE | 生效 |
-| DEPRECATED | 停用新引用 |
-| ARCHIVED | 归档 |
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-ACT-CREATE-DRAFT-SCN-SUCCESS | SUCCESS | CURR-ACT-CREATE-DRAFT | the actor meets the entry conditions for Create a Curriculum Version Draft | the actor requests Create a Curriculum Version Draft | Create a Curriculum Version Draft returns the accepted task-specific result | DRAFT | ALLOW |  |
+| CURR-ACT-CREATE-DRAFT-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-CREATE-DRAFT | PERMISSION_DENIED applies to Create a Curriculum Version Draft | the actor requests Create a Curriculum Version Draft | Create a Curriculum Version Draft returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-CREATE-DRAFT-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-CREATE-DRAFT | VALIDATION_FAILED applies to Create a Curriculum Version Draft | the actor requests Create a Curriculum Version Draft | Create a Curriculum Version Draft returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-CREATE-DRAFT-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-CREATE-DRAFT | VERSION_CONFLICT applies to Create a Curriculum Version Draft | the actor requests Create a Curriculum Version Draft | Create a Curriculum Version Draft returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-BEGIN-VALIDATION-SCN-SUCCESS | SUCCESS | CURR-ACT-BEGIN-VALIDATION | the actor meets the entry conditions for Begin Curriculum Version Validation | the actor requests Begin Curriculum Version Validation | Begin Curriculum Version Validation returns the accepted task-specific result | VALIDATING | ALLOW |  |
+| CURR-ACT-BEGIN-VALIDATION-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-BEGIN-VALIDATION | PERMISSION_DENIED applies to Begin Curriculum Version Validation | the actor requests Begin Curriculum Version Validation | Begin Curriculum Version Validation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-BEGIN-VALIDATION-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-BEGIN-VALIDATION | VALIDATION_FAILED applies to Begin Curriculum Version Validation | the actor requests Begin Curriculum Version Validation | Begin Curriculum Version Validation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-BEGIN-VALIDATION-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-BEGIN-VALIDATION | VERSION_CONFLICT applies to Begin Curriculum Version Validation | the actor requests Begin Curriculum Version Validation | Begin Curriculum Version Validation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-BEGIN-VALIDATION-SCN-AUDIT_FAILED | FAILURE | CURR-ACT-BEGIN-VALIDATION | AUDIT_FAILED applies to Begin Curriculum Version Validation | the actor requests Begin Curriculum Version Validation | Begin Curriculum Version Validation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CURR-ACT-ADD-TEXTBOOK-SCN-SUCCESS | SUCCESS | CURR-ACT-ADD-TEXTBOOK | the actor meets the entry conditions for Add a Textbook Version to Curriculum | the actor requests Add a Textbook Version to Curriculum | Add a Textbook Version to Curriculum returns the accepted task-specific result | DRAFT | ALLOW |  |
+| CURR-ACT-ADD-TEXTBOOK-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-ADD-TEXTBOOK | PERMISSION_DENIED applies to Add a Textbook Version to Curriculum | the actor requests Add a Textbook Version to Curriculum | Add a Textbook Version to Curriculum returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-ADD-TEXTBOOK-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-ADD-TEXTBOOK | VALIDATION_FAILED applies to Add a Textbook Version to Curriculum | the actor requests Add a Textbook Version to Curriculum | Add a Textbook Version to Curriculum returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-ADD-TEXTBOOK-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-ADD-TEXTBOOK | VERSION_CONFLICT applies to Add a Textbook Version to Curriculum | the actor requests Add a Textbook Version to Curriculum | Add a Textbook Version to Curriculum returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-ACTIVATE-TEXTBOOK-SCN-SUCCESS | SUCCESS | CURR-ACT-ACTIVATE-TEXTBOOK | the actor meets the entry conditions for Activate a Draft Textbook Version | the actor requests Activate a Draft Textbook Version | Activate a Draft Textbook Version returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| CURR-ACT-ACTIVATE-TEXTBOOK-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-ACTIVATE-TEXTBOOK | PERMISSION_DENIED applies to Activate a Draft Textbook Version | the actor requests Activate a Draft Textbook Version | Activate a Draft Textbook Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-ACTIVATE-TEXTBOOK-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-ACTIVATE-TEXTBOOK | VALIDATION_FAILED applies to Activate a Draft Textbook Version | the actor requests Activate a Draft Textbook Version | Activate a Draft Textbook Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-ACTIVATE-TEXTBOOK-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-ACTIVATE-TEXTBOOK | VERSION_CONFLICT applies to Activate a Draft Textbook Version | the actor requests Activate a Draft Textbook Version | Activate a Draft Textbook Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-TEXTBOOK-SCN-SUCCESS | SUCCESS | CURR-ACT-DEPRECATE-TEXTBOOK | the actor meets the entry conditions for Deprecate an Active Textbook Version | the actor requests Deprecate an Active Textbook Version | Deprecate an Active Textbook Version returns the accepted task-specific result | DEPRECATED | ALLOW |  |
+| CURR-ACT-DEPRECATE-TEXTBOOK-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-DEPRECATE-TEXTBOOK | PERMISSION_DENIED applies to Deprecate an Active Textbook Version | the actor requests Deprecate an Active Textbook Version | Deprecate an Active Textbook Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-DEPRECATE-TEXTBOOK-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-DEPRECATE-TEXTBOOK | VALIDATION_FAILED applies to Deprecate an Active Textbook Version | the actor requests Deprecate an Active Textbook Version | Deprecate an Active Textbook Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-DEPRECATE-TEXTBOOK-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-DEPRECATE-TEXTBOOK | VERSION_CONFLICT applies to Deprecate an Active Textbook Version | the actor requests Deprecate an Active Textbook Version | Deprecate an Active Textbook Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-CREATE-CHAPTER-SCN-SUCCESS | SUCCESS | CURR-ACT-CREATE-CHAPTER | the actor meets the entry conditions for Create a Textbook Chapter | the actor requests Create a Textbook Chapter | Create a Textbook Chapter returns the accepted task-specific result | DRAFT | ALLOW |  |
+| CURR-ACT-CREATE-CHAPTER-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-CREATE-CHAPTER | PERMISSION_DENIED applies to Create a Textbook Chapter | the actor requests Create a Textbook Chapter | Create a Textbook Chapter returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-CREATE-CHAPTER-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-CREATE-CHAPTER | VALIDATION_FAILED applies to Create a Textbook Chapter | the actor requests Create a Textbook Chapter | Create a Textbook Chapter returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-CREATE-CHAPTER-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-CREATE-CHAPTER | VERSION_CONFLICT applies to Create a Textbook Chapter | the actor requests Create a Textbook Chapter | Create a Textbook Chapter returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-REORDER-CHAPTER-SCN-SUCCESS | SUCCESS | CURR-ACT-REORDER-CHAPTER | the actor meets the entry conditions for Reorder a Draft Textbook Chapter | the actor requests Reorder a Draft Textbook Chapter | Reorder a Draft Textbook Chapter returns the accepted task-specific result | DRAFT | ALLOW |  |
+| CURR-ACT-REORDER-CHAPTER-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-REORDER-CHAPTER | PERMISSION_DENIED applies to Reorder a Draft Textbook Chapter | the actor requests Reorder a Draft Textbook Chapter | Reorder a Draft Textbook Chapter returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-REORDER-CHAPTER-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-REORDER-CHAPTER | VALIDATION_FAILED applies to Reorder a Draft Textbook Chapter | the actor requests Reorder a Draft Textbook Chapter | Reorder a Draft Textbook Chapter returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-REORDER-CHAPTER-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-REORDER-CHAPTER | VERSION_CONFLICT applies to Reorder a Draft Textbook Chapter | the actor requests Reorder a Draft Textbook Chapter | Reorder a Draft Textbook Chapter returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-ACTIVATE-CHAPTER-SCN-SUCCESS | SUCCESS | CURR-ACT-ACTIVATE-CHAPTER | the actor meets the entry conditions for Activate a Draft Textbook Chapter | the actor requests Activate a Draft Textbook Chapter | Activate a Draft Textbook Chapter returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| CURR-ACT-ACTIVATE-CHAPTER-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-ACTIVATE-CHAPTER | PERMISSION_DENIED applies to Activate a Draft Textbook Chapter | the actor requests Activate a Draft Textbook Chapter | Activate a Draft Textbook Chapter returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-ACTIVATE-CHAPTER-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-ACTIVATE-CHAPTER | VALIDATION_FAILED applies to Activate a Draft Textbook Chapter | the actor requests Activate a Draft Textbook Chapter | Activate a Draft Textbook Chapter returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-ACTIVATE-CHAPTER-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-ACTIVATE-CHAPTER | VERSION_CONFLICT applies to Activate a Draft Textbook Chapter | the actor requests Activate a Draft Textbook Chapter | Activate a Draft Textbook Chapter returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-CHAPTER-SCN-SUCCESS | SUCCESS | CURR-ACT-DEPRECATE-CHAPTER | the actor meets the entry conditions for Deprecate an Active Textbook Chapter | the actor requests Deprecate an Active Textbook Chapter | Deprecate an Active Textbook Chapter returns the accepted task-specific result | DEPRECATED | ALLOW |  |
+| CURR-ACT-DEPRECATE-CHAPTER-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-DEPRECATE-CHAPTER | PERMISSION_DENIED applies to Deprecate an Active Textbook Chapter | the actor requests Deprecate an Active Textbook Chapter | Deprecate an Active Textbook Chapter returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-DEPRECATE-CHAPTER-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-DEPRECATE-CHAPTER | VALIDATION_FAILED applies to Deprecate an Active Textbook Chapter | the actor requests Deprecate an Active Textbook Chapter | Deprecate an Active Textbook Chapter returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-DEPRECATE-CHAPTER-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-DEPRECATE-CHAPTER | VERSION_CONFLICT applies to Deprecate an Active Textbook Chapter | the actor requests Deprecate an Active Textbook Chapter | Deprecate an Active Textbook Chapter returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-CREATE-KNOWLEDGE-VERSION-SCN-SUCCESS | SUCCESS | CURR-ACT-CREATE-KNOWLEDGE-VERSION | the actor meets the entry conditions for Create a Knowledge Point Version | the actor requests Create a Knowledge Point Version | Create a Knowledge Point Version returns the accepted task-specific result | DRAFT | ALLOW |  |
+| CURR-ACT-CREATE-KNOWLEDGE-VERSION-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-CREATE-KNOWLEDGE-VERSION | PERMISSION_DENIED applies to Create a Knowledge Point Version | the actor requests Create a Knowledge Point Version | Create a Knowledge Point Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-CREATE-KNOWLEDGE-VERSION-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-CREATE-KNOWLEDGE-VERSION | VALIDATION_FAILED applies to Create a Knowledge Point Version | the actor requests Create a Knowledge Point Version | Create a Knowledge Point Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-CREATE-KNOWLEDGE-VERSION-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-CREATE-KNOWLEDGE-VERSION | VERSION_CONFLICT applies to Create a Knowledge Point Version | the actor requests Create a Knowledge Point Version | Create a Knowledge Point Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION-SCN-SUCCESS | SUCCESS | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | the actor meets the entry conditions for Activate a Draft Knowledge Point Version | the actor requests Activate a Draft Knowledge Point Version | Activate a Draft Knowledge Point Version returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | PERMISSION_DENIED applies to Activate a Draft Knowledge Point Version | the actor requests Activate a Draft Knowledge Point Version | Activate a Draft Knowledge Point Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | VALIDATION_FAILED applies to Activate a Draft Knowledge Point Version | the actor requests Activate a Draft Knowledge Point Version | Activate a Draft Knowledge Point Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | VERSION_CONFLICT applies to Activate a Draft Knowledge Point Version | the actor requests Activate a Draft Knowledge Point Version | Activate a Draft Knowledge Point Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION-SCN-SUCCESS | SUCCESS | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | the actor meets the entry conditions for Deprecate an Active Knowledge Point Version | the actor requests Deprecate an Active Knowledge Point Version | Deprecate an Active Knowledge Point Version returns the accepted task-specific result | DEPRECATED | ALLOW |  |
+| CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | PERMISSION_DENIED applies to Deprecate an Active Knowledge Point Version | the actor requests Deprecate an Active Knowledge Point Version | Deprecate an Active Knowledge Point Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | VALIDATION_FAILED applies to Deprecate an Active Knowledge Point Version | the actor requests Deprecate an Active Knowledge Point Version | Deprecate an Active Knowledge Point Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | VERSION_CONFLICT applies to Deprecate an Active Knowledge Point Version | the actor requests Deprecate an Active Knowledge Point Version | Deprecate an Active Knowledge Point Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-CREATE-MAPPING-SCN-SUCCESS | SUCCESS | CURR-ACT-CREATE-MAPPING | the actor meets the entry conditions for Map a Chapter to a Knowledge Point | the actor requests Map a Chapter to a Knowledge Point | Map a Chapter to a Knowledge Point returns the accepted task-specific result | DRAFT | ALLOW |  |
+| CURR-ACT-CREATE-MAPPING-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-CREATE-MAPPING | PERMISSION_DENIED applies to Map a Chapter to a Knowledge Point | the actor requests Map a Chapter to a Knowledge Point | Map a Chapter to a Knowledge Point returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-CREATE-MAPPING-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-CREATE-MAPPING | VALIDATION_FAILED applies to Map a Chapter to a Knowledge Point | the actor requests Map a Chapter to a Knowledge Point | Map a Chapter to a Knowledge Point returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-CREATE-MAPPING-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-CREATE-MAPPING | VERSION_CONFLICT applies to Map a Chapter to a Knowledge Point | the actor requests Map a Chapter to a Knowledge Point | Map a Chapter to a Knowledge Point returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-VALIDATE-MAPPING-SCN-SUCCESS | SUCCESS | CURR-ACT-VALIDATE-MAPPING | the actor meets the entry conditions for Validate Knowledge Mapping Publication Readiness | the actor requests Validate Knowledge Mapping Publication Readiness | mapping validation confirms chapter, knowledge point, relation, and source version resolve before publication | VALIDATED | ALLOW |  |
+| CURR-ACT-VALIDATE-MAPPING-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-VALIDATE-MAPPING | PERMISSION_DENIED applies to Validate Knowledge Mapping Publication Readiness | the actor requests Validate Knowledge Mapping Publication Readiness | Validate Knowledge Mapping Publication Readiness returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-VALIDATE-MAPPING-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-VALIDATE-MAPPING | VALIDATION_FAILED applies to Validate Knowledge Mapping Publication Readiness | the actor requests Validate Knowledge Mapping Publication Readiness | Validate Knowledge Mapping Publication Readiness returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-VALIDATE-MAPPING-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-VALIDATE-MAPPING | VERSION_CONFLICT applies to Validate Knowledge Mapping Publication Readiness | the actor requests Validate Knowledge Mapping Publication Readiness | Validate Knowledge Mapping Publication Readiness returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-VALIDATE-MAPPING-SCN-AUDIT_FAILED | FAILURE | CURR-ACT-VALIDATE-MAPPING | AUDIT_FAILED applies to Validate Knowledge Mapping Publication Readiness | the actor requests Validate Knowledge Mapping Publication Readiness | Validate Knowledge Mapping Publication Readiness returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CURR-ACT-VALIDATE-VERSION-SCN-SUCCESS | SUCCESS | CURR-ACT-VALIDATE-VERSION | the actor meets the entry conditions for Validate Curriculum Publication Readiness | the actor requests Validate Curriculum Publication Readiness | validation confirms textbook, chapter, knowledge point, and mapping references resolve in one version | VALIDATED | ALLOW |  |
+| CURR-ACT-VALIDATE-VERSION-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-VALIDATE-VERSION | PERMISSION_DENIED applies to Validate Curriculum Publication Readiness | the actor requests Validate Curriculum Publication Readiness | Validate Curriculum Publication Readiness returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-VALIDATE-VERSION-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-VALIDATE-VERSION | VALIDATION_FAILED applies to Validate Curriculum Publication Readiness | the actor requests Validate Curriculum Publication Readiness | Validate Curriculum Publication Readiness returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-VALIDATE-VERSION-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-VALIDATE-VERSION | VERSION_CONFLICT applies to Validate Curriculum Publication Readiness | the actor requests Validate Curriculum Publication Readiness | Validate Curriculum Publication Readiness returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-VALIDATE-VERSION-SCN-AUDIT_FAILED | FAILURE | CURR-ACT-VALIDATE-VERSION | AUDIT_FAILED applies to Validate Curriculum Publication Readiness | the actor requests Validate Curriculum Publication Readiness | Validate Curriculum Publication Readiness returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CURR-ACT-PUBLISH-MAPPING-SCN-SUCCESS | SUCCESS | CURR-ACT-PUBLISH-MAPPING | the actor meets the entry conditions for Publish a Validated Knowledge Mapping | the actor requests Publish a Validated Knowledge Mapping | the usable mapping version is published before curriculum activation and historical references remain immutable | PUBLISHED | ALLOW |  |
+| CURR-ACT-PUBLISH-MAPPING-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-PUBLISH-MAPPING | PERMISSION_DENIED applies to Publish a Validated Knowledge Mapping | the actor requests Publish a Validated Knowledge Mapping | Publish a Validated Knowledge Mapping returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-PUBLISH-MAPPING-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-PUBLISH-MAPPING | VALIDATION_FAILED applies to Publish a Validated Knowledge Mapping | the actor requests Publish a Validated Knowledge Mapping | Publish a Validated Knowledge Mapping returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-PUBLISH-MAPPING-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-PUBLISH-MAPPING | VERSION_CONFLICT applies to Publish a Validated Knowledge Mapping | the actor requests Publish a Validated Knowledge Mapping | Publish a Validated Knowledge Mapping returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-PUBLISH-MAPPING-SCN-AUDIT_FAILED | FAILURE | CURR-ACT-PUBLISH-MAPPING | AUDIT_FAILED applies to Publish a Validated Knowledge Mapping | the actor requests Publish a Validated Knowledge Mapping | Publish a Validated Knowledge Mapping returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CURR-ACT-PUBLISH-VERSION-SCN-SUCCESS | SUCCESS | CURR-ACT-PUBLISH-VERSION | the actor meets the entry conditions for Publish a Validated Curriculum Version | the actor requests Publish a Validated Curriculum Version | published version becomes selectable; historical assignment and evidence references are immutable and never rewrite to the new version | PUBLISHED | ALLOW |  |
+| CURR-ACT-PUBLISH-VERSION-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-PUBLISH-VERSION | PERMISSION_DENIED applies to Publish a Validated Curriculum Version | the actor requests Publish a Validated Curriculum Version | Publish a Validated Curriculum Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-PUBLISH-VERSION-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-PUBLISH-VERSION | VALIDATION_FAILED applies to Publish a Validated Curriculum Version | the actor requests Publish a Validated Curriculum Version | Publish a Validated Curriculum Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-PUBLISH-VERSION-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-PUBLISH-VERSION | VERSION_CONFLICT applies to Publish a Validated Curriculum Version | the actor requests Publish a Validated Curriculum Version | publication failure leaves historical references unchanged and the prior published version active | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-PUBLISH-VERSION-SCN-AUDIT_FAILED | FAILURE | CURR-ACT-PUBLISH-VERSION | AUDIT_FAILED applies to Publish a Validated Curriculum Version | the actor requests Publish a Validated Curriculum Version | Publish a Validated Curriculum Version returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CURR-ACT-DEPRECATE-VERSION-SCN-SUCCESS | SUCCESS | CURR-ACT-DEPRECATE-VERSION | the actor meets the entry conditions for Deprecate a Published Curriculum Version | the actor requests Deprecate a Published Curriculum Version | deprecated version is blocked for new work while historical assignment and evidence references remain immutable | DEPRECATED | ALLOW |  |
+| CURR-ACT-DEPRECATE-VERSION-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-DEPRECATE-VERSION | PERMISSION_DENIED applies to Deprecate a Published Curriculum Version | the actor requests Deprecate a Published Curriculum Version | Deprecate a Published Curriculum Version returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-DEPRECATE-VERSION-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-DEPRECATE-VERSION | VALIDATION_FAILED applies to Deprecate a Published Curriculum Version | the actor requests Deprecate a Published Curriculum Version | Deprecate a Published Curriculum Version returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-DEPRECATE-VERSION-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-DEPRECATE-VERSION | VERSION_CONFLICT applies to Deprecate a Published Curriculum Version | the actor requests Deprecate a Published Curriculum Version | Deprecate a Published Curriculum Version returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-VERSION-SCN-AUDIT_FAILED | FAILURE | CURR-ACT-DEPRECATE-VERSION | AUDIT_FAILED applies to Deprecate a Published Curriculum Version | the actor requests Deprecate a Published Curriculum Version | Deprecate a Published Curriculum Version returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CURR-ACT-DEPRECATE-MAPPING-SCN-SUCCESS | SUCCESS | CURR-ACT-DEPRECATE-MAPPING | the actor meets the entry conditions for Deprecate a Published Knowledge Mapping | the actor requests Deprecate a Published Knowledge Mapping | Deprecate a Published Knowledge Mapping returns the accepted task-specific result | DEPRECATED | ALLOW |  |
+| CURR-ACT-DEPRECATE-MAPPING-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-DEPRECATE-MAPPING | PERMISSION_DENIED applies to Deprecate a Published Knowledge Mapping | the actor requests Deprecate a Published Knowledge Mapping | Deprecate a Published Knowledge Mapping returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-DEPRECATE-MAPPING-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-DEPRECATE-MAPPING | VALIDATION_FAILED applies to Deprecate a Published Knowledge Mapping | the actor requests Deprecate a Published Knowledge Mapping | Deprecate a Published Knowledge Mapping returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-DEPRECATE-MAPPING-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-DEPRECATE-MAPPING | VERSION_CONFLICT applies to Deprecate a Published Knowledge Mapping | the actor requests Deprecate a Published Knowledge Mapping | Deprecate a Published Knowledge Mapping returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| CURR-ACT-DEPRECATE-MAPPING-SCN-AUDIT_FAILED | FAILURE | CURR-ACT-DEPRECATE-MAPPING | AUDIT_FAILED applies to Deprecate a Published Knowledge Mapping | the actor requests Deprecate a Published Knowledge Mapping | Deprecate a Published Knowledge Mapping returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| CURR-ACT-VIEW-KNOWLEDGE-PATH-SCN-SUCCESS | SUCCESS | CURR-ACT-VIEW-KNOWLEDGE-PATH | the actor meets the entry conditions for View Student or Teacher Knowledge Path | the actor requests View Student or Teacher Knowledge Path | View Student or Teacher Knowledge Path returns the accepted task-specific result | UNCHANGED | ALLOW |  |
+| CURR-ACT-VIEW-KNOWLEDGE-PATH-SCN-PERMISSION_DENIED | FAILURE | CURR-ACT-VIEW-KNOWLEDGE-PATH | PERMISSION_DENIED applies to View Student or Teacher Knowledge Path | the actor requests View Student or Teacher Knowledge Path | View Student or Teacher Knowledge Path returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| CURR-ACT-VIEW-KNOWLEDGE-PATH-SCN-VALIDATION_FAILED | FAILURE | CURR-ACT-VIEW-KNOWLEDGE-PATH | VALIDATION_FAILED applies to View Student or Teacher Knowledge Path | the actor requests View Student or Teacher Knowledge Path | View Student or Teacher Knowledge Path returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| CURR-ACT-VIEW-KNOWLEDGE-PATH-SCN-VERSION_CONFLICT | FAILURE | CURR-ACT-VIEW-KNOWLEDGE-PATH | VERSION_CONFLICT applies to View Student or Teacher Knowledge Path | the actor requests View Student or Teacher Knowledge Path | View Student or Teacher Knowledge Path returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 
-状态通用规则：
+## 10. AI 任务映射
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
-
-## 5. 权限与责任
-
-| 角色/职责 | 读权限 | 写权限 | 限制 |
-| --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
-
-## 6. 主流程
-
-1. 教务建立课程目录和适用年级。
-2. 学科负责人维护教材版本、章节和知识点。
-3. 发布后业务模块引用知识点版本 ID。
-4. 版本变化通过映射衔接历史证据，不改写历史。
-
-关联 Flow: `DF-003`、`DF-011`、`DF-017`。
-
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CURR-FR-01 | 对象查询与范围筛选 | CURR-F001、CURR-F002、CURR-F003、CURR-F004、CURR-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P0 | CURR-AC-01 |
-| CURR-FR-02 | 详情查看与版本追踪 | DAT-CURR-01、DAT-CURR-02、DAT-CURR-03、DAT-CURR-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P0 | CURR-AC-02 |
-| CURR-FR-03 | 创建/修改/确认主动作 | CURR-F001、CURR-F002、CURR-F003、CURR-F004、CURR-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P0 | CURR-AC-03 |
-| CURR-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P0 | CURR-AC-04 |
-| CURR-FR-05 | 审计、通知与下游失效 | DF-003、DF-011、DF-017 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P0 | CURR-AC-05 |
 
-## 7. 异常、幂等与补偿
+## 11. 研发与测试就绪门禁
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
-
-## 8. AI 对话与任务执行
-
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
-
-## 9. 验收标准
-
-| ID | 验收标准 |
-| --- | --- |
-| CURR-AC-01 | 作业题目、证据和计划必须引用 Knowledge Point ID 与版本。 |
-| CURR-AC-02 | 知识点删除只能停用新引用，历史引用仍可显示。 |
-| CURR-AC-03 | 跨学科不能共享同一知识点 code。 |
-| CURR-AC-04 | 知识点映射变更不自动改变已发布学生路径。 |
-| CURR-AC-05 | 学生可见知识点解释必须来自已发布版本。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-003`、`DF-011`、`DF-017`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。

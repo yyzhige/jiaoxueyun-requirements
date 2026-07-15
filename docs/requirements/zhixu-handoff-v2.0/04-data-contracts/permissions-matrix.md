@@ -1,141 +1,854 @@
-# 工作身份、职责与权限矩阵
+# Action 级权限矩阵
 
-权限判断公式：当前学校 × 当前学期 × 工作身份 × 职责授权 × 数据范围 × 业务动作 × 字段级规则。
+每一行均为可执行动作的显式 ALLOW 或 DENY 决策；客户端可见性不能替代服务端权限判断。
 
-| 模块 | 角色/职责 | 读范围 | 写范围 | 限制 |
-| --- | --- | --- | --- | --- |
-| ACC-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| ACC-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| ACC-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| ACC-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| ACC-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| ORG-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| ORG-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| ORG-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| ORG-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| ORG-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| IAM-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| IAM-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| IAM-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| IAM-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| IAM-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| DGV-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| DGV-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| DGV-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| DGV-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| DGV-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| AUD-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| AUD-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| AUD-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| AUD-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| AUD-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| CURR-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| CURR-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| CURR-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| CURR-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| CURR-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| TEA-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| TEA-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| TEA-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| TEA-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| TEA-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| HW-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| HW-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| HW-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| HW-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| HW-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| SUB-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| SUB-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| SUB-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| SUB-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| SUB-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| GRD-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| GRD-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| GRD-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| GRD-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| GRD-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| PUB-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| PUB-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| PUB-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| PUB-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| PUB-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| SCO-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| SCO-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| SCO-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| SCO-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| SCO-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| STU-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| STU-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| STU-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| STU-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| STU-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| INS-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| INS-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| INS-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| INS-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| INS-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| PLN-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| PLN-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| PLN-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| PLN-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| PLN-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| APP-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| APP-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| APP-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| APP-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| APP-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| CORR-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| CORR-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| CORR-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| CORR-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| CORR-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| AIX-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| AIX-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| AIX-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| AIX-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| AIX-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| RPT-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| RPT-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| RPT-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| RPT-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| RPT-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| LPATH-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| LPATH-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| LPATH-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| LPATH-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| LPATH-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| NOTI-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| NOTI-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| NOTI-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| NOTI-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| NOTI-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| PREP-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| PREP-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| PREP-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| PREP-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| PREP-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| CONTENT-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| CONTENT-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| CONTENT-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| CONTENT-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| CONTENT-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| EXM-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| EXM-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| EXM-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| EXM-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| EXM-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| SCH-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| SCH-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| SCH-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| SCH-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| SCH-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| REPORT-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| REPORT-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| REPORT-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| REPORT-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| REPORT-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
-| PLAT-001 | 学生 | 本人已发布/本人产生数据 | 本人作答、提交、反馈、学习执行 | 不能访问他人、未发布成绩、教师私密备注 |
-| PLAT-001 | 任课教师 | 任课班级、本学科、授权学生 | 本学科作业、评分、反馈、证据、计划 | 不能写入非任教学科专业结论 |
-| PLAT-001 | 班主任 | 本班全学科摘要和学生详情 | 班主任跟进和协调事项 | 不能替代学科教师确认评分、掌握、计划 |
-| PLAT-001 | 教务 | 授权组织、课程、考试、排课和汇总数据 | 教务主数据与教务流程 | 明细专业判断需额外授权 |
-| PLAT-001 | 学校管理员 | 配置、审计和治理所需范围 | 账号、身份、策略、治理 | 不默认拥有全部学生内容浏览权 |
+| 模块 | Action ID | 目标对象 | 效果 | 主体 | 条件 | 记录范围 | 端 | 风险 | 审计 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACC-001 | ACC-ACT-SYNC-SCHOOL | ACC-OBJ-SCHOOL | ALLOW | SYSTEM | the system accepts only a registered versioned school-directory snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-SYNC-SCHOOL | ACC-OBJ-SCHOOL | DENY | ROLE-PLATFORM-OPS | platform operations cannot synthesize or alter a school-directory snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-SYNC-IDENTITY | ACC-OBJ-IDENTITY | ALLOW | SYSTEM | the system accepts only a registered versioned identity-directory snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-SYNC-IDENTITY | ACC-OBJ-IDENTITY | DENY | ROLE-PLATFORM-OPS | platform operations cannot synthesize or extend a work identity snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-SEARCH-SCHOOL | ACC-OBJ-SCHOOL | ALLOW | CURRENT_ACTOR | school first search is limited to schools visible to the actor | — | WEB / APP | READ | NOT_REQUIRED |
+| ACC-001 | ACC-ACT-SEARCH-SCHOOL | ACC-OBJ-SCHOOL | DENY | ROLE-PLATFORM-OPS | platform operations has no school member entry without school authorization | — | WEB / APP | READ | NOT_REQUIRED |
+| ACC-001 | ACC-ACT-SELECT-SCHOOL | ACC-OBJ-SCHOOL | ALLOW | CURRENT_ACTOR | the actor explicitly selects one authorized active school | — | WEB / APP | READ | REQUIRED |
+| ACC-001 | ACC-ACT-SELECT-SCHOOL | ACC-OBJ-SCHOOL | DENY | ROLE-PLATFORM-OPS | platform operations cannot select a school member context without authorization | — | WEB / APP | READ | REQUIRED |
+| ACC-001 | ACC-ACT-LOGIN | ACC-OBJ-MEMBERSHIP | ALLOW | CURRENT_ACTOR | all approved login roles may authenticate on Web and App after selecting a school | — | WEB / APP | READ | REQUIRED |
+| ACC-001 | ACC-ACT-LOGIN | ACC-OBJ-MEMBERSHIP | DENY | ROLE-PLATFORM-OPS | platform operations cannot assume a school member identity | — | WEB / APP | READ | REQUIRED |
+| ACC-001 | ACC-ACT-FIRST-ACTIVATION | ACC-OBJ-MEMBERSHIP | ALLOW | CURRENT_ACTOR | the invited member may activate only the selected school membership | — | WEB / APP | LOW | REQUIRED |
+| ACC-001 | ACC-ACT-FIRST-ACTIVATION | ACC-OBJ-MEMBERSHIP | DENY | ROLE-PLATFORM-OPS | platform operations cannot activate a member account by default | — | WEB / APP | LOW | REQUIRED |
+| ACC-001 | ACC-ACT-SUSPEND-MEMBERSHIP | ACC-OBJ-MEMBERSHIP | ALLOW | ROLE-SCHOOL-ADMIN | school administration suspends only a membership owned by the school | — | WEB / APP | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-SUSPEND-MEMBERSHIP | ACC-OBJ-MEMBERSHIP | DENY | ROLE-PLATFORM-OPS | platform operations cannot suspend a school membership by default | — | WEB / APP | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-DEACTIVATE-MEMBERSHIP | ACC-OBJ-MEMBERSHIP | ALLOW | ROLE-SCHOOL-ADMIN | school administration deactivates only a membership owned by the school | — | WEB / APP | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-DEACTIVATE-MEMBERSHIP | ACC-OBJ-MEMBERSHIP | DENY | ROLE-PLATFORM-OPS | platform operations cannot deactivate a school membership by default | — | WEB / APP | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-SELECT-IDENTITY | ACC-OBJ-IDENTITY | ALLOW | CURRENT_ACTOR | the actor may select only an effective assigned role and duty set | — | WEB / APP | READ | REQUIRED |
+| ACC-001 | ACC-ACT-SELECT-IDENTITY | ACC-OBJ-IDENTITY | DENY | ROLE-PLATFORM-OPS | platform operations cannot select an ungranted school identity | — | WEB / APP | READ | REQUIRED |
+| ACC-001 | ACC-ACT-SELECT-TERM | ACC-OBJ-CONTEXT | ALLOW | CURRENT_ACTOR | the term is inside the selected school and identity scope | — | WEB / APP | LOW | REQUIRED |
+| ACC-001 | ACC-ACT-SELECT-TERM | ACC-OBJ-CONTEXT | DENY | ROLE-PLATFORM-OPS | platform operations cannot open a school term without authorization | — | WEB / APP | LOW | REQUIRED |
+| ACC-001 | ACC-ACT-SWITCH-CONTEXT | ACC-OBJ-CONTEXT | ALLOW | CURRENT_ACTOR | every destination component is re-authorized before context switch | — | WEB / APP | LOW | REQUIRED |
+| ACC-001 | ACC-ACT-SWITCH-CONTEXT | ACC-OBJ-CONTEXT | DENY | ROLE-PLATFORM-OPS | platform operations cannot switch into student detail or school identity by default | — | WEB / APP | LOW | REQUIRED |
+| ACC-001 | ACC-ACT-EXPIRE-CONTEXT | ACC-OBJ-CONTEXT | ALLOW | SYSTEM | the system expires a context at its declared expiry | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-EXPIRE-CONTEXT | ACC-OBJ-CONTEXT | DENY | CURRENT_ACTOR | a user cannot extend an expired context without re-establishment | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-INVALIDATE-CONTEXT | ACC-OBJ-CONTEXT | ALLOW | SYSTEM | the system invalidates a context after a bound school, identity, or term version changes | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ACC-001 | ACC-ACT-INVALIDATE-CONTEXT | ACC-OBJ-CONTEXT | DENY | CURRENT_ACTOR | a user cannot keep a context active after its source version changes | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-TERM-VERSION | ORG-OBJ-TERM | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-TERM-VERSION | ORG-OBJ-TERM | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-TERM | ORG-OBJ-TERM | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-TERM | ORG-OBJ-TERM | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CLOSE-TERM | ORG-OBJ-TERM | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CLOSE-TERM | ORG-OBJ-TERM | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ARCHIVE-TERM | ORG-OBJ-TERM | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ARCHIVE-TERM | ORG-OBJ-TERM | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-GRADE | ORG-OBJ-GRADE | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-GRADE | ORG-OBJ-GRADE | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-GRADE | ORG-OBJ-GRADE | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-GRADE | ORG-OBJ-GRADE | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MARK-GRADE-HISTORICAL | ORG-OBJ-GRADE | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MARK-GRADE-HISTORICAL | ORG-OBJ-GRADE | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-CLASS | ORG-OBJ-CLASS | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-CLASS | ORG-OBJ-CLASS | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-CLASS | ORG-OBJ-CLASS | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-CLASS | ORG-OBJ-CLASS | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MARK-CLASS-HISTORICAL | ORG-OBJ-CLASS | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MARK-CLASS-HISTORICAL | ORG-OBJ-CLASS | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-DEACTIVATE-CLASS | ORG-OBJ-CLASS | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-DEACTIVATE-CLASS | ORG-OBJ-CLASS | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-SUBJECT | ORG-OBJ-SUBJECT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-SUBJECT | ORG-OBJ-SUBJECT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-SUBJECT | ORG-OBJ-SUBJECT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-SUBJECT | ORG-OBJ-SUBJECT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-DEPRECATE-SUBJECT | ORG-OBJ-SUBJECT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-DEPRECATE-SUBJECT | ORG-OBJ-SUBJECT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-COURSE | ORG-OBJ-COURSE | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-COURSE | ORG-OBJ-COURSE | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-COURSE | ORG-OBJ-COURSE | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-COURSE | ORG-OBJ-COURSE | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-COURSE | ORG-OBJ-COURSE | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-COURSE | ORG-OBJ-COURSE | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-END-COURSE | ORG-OBJ-COURSE | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-END-COURSE | ORG-OBJ-COURSE | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-TEACHER | ORG-OBJ-TEACHER | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-TEACHER | ORG-OBJ-TEACHER | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-TEACHER | ORG-OBJ-TEACHER | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-TEACHER | ORG-OBJ-TEACHER | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-SUSPEND-TEACHER | ORG-OBJ-TEACHER | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-SUSPEND-TEACHER | ORG-OBJ-TEACHER | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-DEACTIVATE-TEACHER | ORG-OBJ-TEACHER | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-DEACTIVATE-TEACHER | ORG-OBJ-TEACHER | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-STUDENT | ORG-OBJ-STUDENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CREATE-STUDENT | ORG-OBJ-STUDENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-STUDENT | ORG-OBJ-STUDENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPDATE-STUDENT | ORG-OBJ-STUDENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-TRANSFER-STUDENT | ORG-OBJ-STUDENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-TRANSFER-STUDENT | ORG-OBJ-STUDENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-ASSIGN-SUBJECT-TEACHER | ORG-OBJ-TEACHING-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff owns assignment changes | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ASSIGN-SUBJECT-TEACHER | ORG-OBJ-TEACHING-ASSIGNMENT | DENY | DUTY-SUBJECT-LEAD | subject lead may review subject scope but cannot grant organization duties | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | ORG-OBJ-TEACHING-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | ORG-OBJ-TEACHING-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | ORG-OBJ-TEACHING-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | ORG-OBJ-TEACHING-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT | ORG-OBJ-TEACHING-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-REVOKE-TEACHING-ASSIGNMENT | ORG-OBJ-TEACHING-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ASSIGN-HOMEROOM | ORG-OBJ-HOMEROOM-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ASSIGN-HOMEROOM | ORG-OBJ-HOMEROOM-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | ORG-OBJ-HOMEROOM-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | ORG-OBJ-HOMEROOM-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | ORG-OBJ-HOMEROOM-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | ORG-OBJ-HOMEROOM-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | ORG-OBJ-HOMEROOM-ASSIGNMENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | ORG-OBJ-HOMEROOM-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | ORG-OBJ-IMPORT-BATCH | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | ORG-OBJ-IMPORT-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-UPLOAD-IMPORT | ORG-OBJ-IMPORT-BATCH | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-UPLOAD-IMPORT | ORG-OBJ-IMPORT-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MAP-IMPORT-FIELDS | ORG-OBJ-IMPORT-BATCH | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MAP-IMPORT-FIELDS | ORG-OBJ-IMPORT-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-VALIDATE-IMPORT-BATCH | ORG-OBJ-IMPORT-BATCH | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-VALIDATE-IMPORT-BATCH | ORG-OBJ-IMPORT-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-REJECT-IMPORT-BATCH | ORG-OBJ-IMPORT-BATCH | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-REJECT-IMPORT-BATCH | ORG-OBJ-IMPORT-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-VALIDATE-IMPORT | ORG-OBJ-IMPORT-ROW | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-VALIDATE-IMPORT | ORG-OBJ-IMPORT-ROW | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-CONFIRM-IMPORT | ORG-OBJ-IMPORT-BATCH | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-CONFIRM-IMPORT | ORG-OBJ-IMPORT-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-FINALIZE-AUDITED-IMPORT | ORG-OBJ-IMPORT-BATCH | ALLOW | SYSTEM | the system finalizes only rows covered by the successful outcome audit | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-FINALIZE-AUDITED-IMPORT | ORG-OBJ-IMPORT-BATCH | DENY | CURRENT_ACTOR | a user cannot finalize provisional rows without the outcome audit | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | ORG-OBJ-IMPORT-BATCH | ALLOW | SYSTEM | the system finalizes only partial-success rows covered by the successful outcome audit | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | ORG-OBJ-IMPORT-BATCH | DENY | CURRENT_ACTOR | a user cannot finalize provisional partial rows without the outcome audit | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-RETRY-FAILED-ROWS | ORG-OBJ-IMPORT-ROW | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-RETRY-FAILED-ROWS | ORG-OBJ-IMPORT-ROW | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | ORG-OBJ-IMPORT-ROW | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | ORG-OBJ-IMPORT-ROW | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | LOW | REQUIRED |
+| ORG-001 | ORG-ACT-DEACTIVATE-MEMBER | ORG-OBJ-STUDENT | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-DEACTIVATE-MEMBER | ORG-OBJ-STUDENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | WEB | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-RESOLVE-CONTEXT-SCOPE | ORG-OBJ-TERM | ALLOW | CURRENT_ACTOR | resolve only organization facts inside the active school identity | — | WEB | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-RESOLVE-CONTEXT-SCOPE | ORG-OBJ-TERM | DENY | ROLE-PLATFORM-OPS | platform operations cannot resolve school scope without authorization | — | WEB | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-VIEW-MY-TEACHING-SCOPE | ORG-OBJ-TEACHING-ASSIGNMENT | ALLOW | CURRENT_ACTOR | the current teacher may view only effective class and teaching relationships | — | APP | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-VIEW-MY-TEACHING-SCOPE | ORG-OBJ-TEACHING-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations cannot view teacher scope without school authorization | — | APP | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-VIEW-IMPORT-NOTIFICATION | ORG-OBJ-IMPORT-BATCH | ALLOW | CURRENT_ACTOR | the import operator may view the operator's own batch outcome notification | — | APP | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-VIEW-IMPORT-NOTIFICATION | ORG-OBJ-IMPORT-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations cannot view school import results without authorization | — | APP | READ | NOT_REQUIRED |
+| ORG-001 | ORG-ACT-CONFIRM-IMPORT-ANOMALY | ORG-OBJ-IMPORT-ROW | ALLOW | ROLE-ACADEMIC | academic staff acts inside the active school and term scope | — | APP | HIGH | REQUIRED |
+| ORG-001 | ORG-ACT-CONFIRM-IMPORT-ANOMALY | ORG-OBJ-IMPORT-ROW | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school organization without school authorization | — | APP | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-SYNC-ROLE-POLICY | IAM-OBJ-ROLE-POLICY | ALLOW | SYSTEM | the system accepts only a registered versioned role-policy snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-SYNC-ROLE-POLICY | IAM-OBJ-ROLE-POLICY | DENY | ROLE-PLATFORM-OPS | platform operations cannot synthesize or widen a role-policy snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-PREVIEW-SCOPE | IAM-OBJ-PERMISSION-DECISION | ALLOW | CURRENT_ACTOR | the actor may preview only the actor's effective school scope | — | WEB / APP | READ | REQUIRED |
+| IAM-001 | IAM-ACT-PREVIEW-SCOPE | IAM-OBJ-PERMISSION-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations cannot preview student detail without school authorization | — | WEB / APP | READ | REQUIRED |
+| IAM-001 | IAM-ACT-GRANT-DUTY | IAM-OBJ-DUTY-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-GRANT-DUTY | IAM-OBJ-DUTY-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-ACTIVATE-DUTY-GRANT | IAM-OBJ-DUTY-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-ACTIVATE-DUTY-GRANT | IAM-OBJ-DUTY-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EXPIRE-DUTY-GRANT | IAM-OBJ-DUTY-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EXPIRE-DUTY-GRANT | IAM-OBJ-DUTY-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-REVOKE-DUTY-GRANT | IAM-OBJ-DUTY-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-REVOKE-DUTY-GRANT | IAM-OBJ-DUTY-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-GRANT-SCOPE | IAM-OBJ-SCOPE-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-GRANT-SCOPE | IAM-OBJ-SCOPE-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-ACTIVATE-SCOPE-GRANT | IAM-OBJ-SCOPE-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-ACTIVATE-SCOPE-GRANT | IAM-OBJ-SCOPE-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EXPIRE-SCOPE-GRANT | IAM-OBJ-SCOPE-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EXPIRE-SCOPE-GRANT | IAM-OBJ-SCOPE-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-CREATE-TEMP-GRANT | IAM-OBJ-TEMP-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-CREATE-TEMP-GRANT | IAM-OBJ-TEMP-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-ACTIVATE-TEMP-GRANT | IAM-OBJ-TEMP-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-ACTIVATE-TEMP-GRANT | IAM-OBJ-TEMP-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-REVOKE-TEMP-GRANT | IAM-OBJ-TEMP-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-REVOKE-TEMP-GRANT | IAM-OBJ-TEMP-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-REVOKE-GRANT | IAM-OBJ-SCOPE-GRANT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator grants only duties and data scopes owned by the school | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-REVOKE-GRANT | IAM-OBJ-SCOPE-GRANT | DENY | ROLE-PLATFORM-OPS | platform operations has no default right to grant school or student-detail permissions | — | WEB | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EXPIRE-GRANT | IAM-OBJ-TEMP-GRANT | ALLOW | SYSTEM | the system expires grants at the mandatory deadline | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EXPIRE-GRANT | IAM-OBJ-TEMP-GRANT | DENY | CURRENT_ACTOR | a user cannot bypass or extend expiry without a new grant | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EVALUATE-PERMISSION | IAM-OBJ-PERMISSION-DECISION | ALLOW | SYSTEM | the system evaluates role, duty, object scope, action, time, and source versions | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-EVALUATE-PERMISSION | IAM-OBJ-PERMISSION-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations receives DENY for student detail without school authorization | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-MARK-PERMISSION-STALE | IAM-OBJ-PERMISSION-DECISION | ALLOW | SYSTEM | the system marks a decision stale when a bound source version changes | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-MARK-PERMISSION-STALE | IAM-OBJ-PERMISSION-DECISION | DENY | CURRENT_ACTOR | a user cannot keep using a decision with stale source versions | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| IAM-001 | IAM-ACT-REPLAY-DECISION | IAM-OBJ-PERMISSION-DECISION | ALLOW | ROLE-SCHOOL-ADMIN | school administrator may replay decisions inside school audit scope | — | WEB | READ | REQUIRED |
+| IAM-001 | IAM-ACT-REPLAY-DECISION | IAM-OBJ-PERMISSION-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations needs explicit school authorization to replay student-detail decisions | — | WEB | READ | REQUIRED |
+| IAM-001 | IAM-ACT-RECALCULATE-PERMISSIONS | IAM-OBJ-PERMISSION-DECISION | ALLOW | SYSTEM | organization source version change invalidates and recalculates affected decisions | — | FLOW_INTERNAL | LOW | REQUIRED |
+| IAM-001 | IAM-ACT-RECALCULATE-PERMISSIONS | IAM-OBJ-PERMISSION-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations cannot override the recalculated school scope | — | FLOW_INTERNAL | LOW | REQUIRED |
+| DGV-001 | DGV-ACT-SYNC-POLICY | DGV-OBJ-POLICY | ALLOW | SYSTEM | the system accepts only a registered versioned school-governance snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-SYNC-POLICY | DGV-OBJ-POLICY | DENY | ROLE-PLATFORM-OPS | platform operations cannot synthesize or replace a school-governance snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-VIEW-EXPLANATION | DGV-OBJ-POLICY | ALLOW | CURRENT_ACTOR | school members may view the active school explanation | — | WEB / APP | READ | NOT_REQUIRED |
+| DGV-001 | DGV-ACT-VIEW-EXPLANATION | DGV-OBJ-POLICY | DENY | ROLE-PLATFORM-OPS | platform operations cannot view student-detail governance data without school authorization | — | WEB / APP | READ | NOT_REQUIRED |
+| DGV-001 | DGV-ACT-CONFIGURE-RETENTION | DGV-OBJ-RETENTION | ALLOW | ROLE-SCHOOL-ADMIN | school administrator owns activation governance and explicit export authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-CONFIGURE-RETENTION | DGV-OBJ-RETENTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail export or AI use access without school authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-SUPERSEDE-RETENTION | DGV-OBJ-RETENTION | ALLOW | ROLE-SCHOOL-ADMIN | school administrator owns activation governance and explicit export authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-SUPERSEDE-RETENTION | DGV-OBJ-RETENTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail export or AI use access without school authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-CONFIGURE-AI-USE | DGV-OBJ-AI-RULE | ALLOW | ROLE-SCHOOL-ADMIN | school administrator owns activation governance and explicit export authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-CONFIGURE-AI-USE | DGV-OBJ-AI-RULE | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail export or AI use access without school authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-DISABLE-AI-USE | DGV-OBJ-AI-RULE | ALLOW | ROLE-SCHOOL-ADMIN | school administrator owns activation governance and explicit export authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-DISABLE-AI-USE | DGV-OBJ-AI-RULE | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail export or AI use access without school authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-SUPERSEDE-AI-RULE | DGV-OBJ-AI-RULE | ALLOW | ROLE-SCHOOL-ADMIN | school administrator owns activation governance and explicit export authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-SUPERSEDE-AI-RULE | DGV-OBJ-AI-RULE | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail export or AI use access without school authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-REQUEST-EXPORT | DGV-OBJ-EXPORT | ALLOW | CURRENT_ACTOR | requester may request only an authorized school object scope and purpose | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-REQUEST-EXPORT | DGV-OBJ-EXPORT | DENY | ROLE-PLATFORM-OPS | platform operations cannot request student-detail export by default | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-APPROVE-EXPORT | DGV-OBJ-EXPORT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator owns activation governance and explicit export authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-APPROVE-EXPORT | DGV-OBJ-EXPORT | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail export or AI use access without school authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-DENY-EXPORT | DGV-OBJ-EXPORT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator owns activation governance and explicit export authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-DENY-EXPORT | DGV-OBJ-EXPORT | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail export or AI use access without school authorization | — | WEB | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-GENERATE-EXPORT | DGV-OBJ-EXPORT | ALLOW | SYSTEM | system generates only the approved immutable scope and expiry | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-GENERATE-EXPORT | DGV-OBJ-EXPORT | DENY | ROLE-PLATFORM-OPS | platform operations cannot expand or regenerate student detail outside approval | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-COMPLETE-EXPORT | DGV-OBJ-EXPORT | ALLOW | SYSTEM | the system exposes only the completed approved export | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-COMPLETE-EXPORT | DGV-OBJ-EXPORT | DENY | ROLE-PLATFORM-OPS | platform operations cannot mark an incomplete export available | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-FAIL-EXPORT | DGV-OBJ-EXPORT | ALLOW | SYSTEM | the system records a failed generation without widening the approved scope | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-FAIL-EXPORT | DGV-OBJ-EXPORT | DENY | ROLE-PLATFORM-OPS | platform operations cannot replace a failed export with unapproved data | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-EXPIRE-EXPORT | DGV-OBJ-EXPORT | ALLOW | SYSTEM | system expires the file at its explicit deadline | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| DGV-001 | DGV-ACT-EXPIRE-EXPORT | DGV-OBJ-EXPORT | DENY | CURRENT_ACTOR | a user cannot extend an export file without a new request | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-APPEND-EVENT | AUD-OBJ-EVENT | ALLOW | SYSTEM | system append is mandatory for audited actions | — | SYSTEM_EVENT | HIGH | ATOMIC_SELF_RECORD |
+| AUD-001 | AUD-ACT-APPEND-EVENT | AUD-OBJ-EVENT | DENY | CURRENT_ACTOR | no user may update or delete an accepted immutable audit event | — | SYSTEM_EVENT | HIGH | ATOMIC_SELF_RECORD |
+| AUD-001 | AUD-ACT-ARCHIVE-EVENT | AUD-OBJ-EVENT | ALLOW | SYSTEM | the system archives an audit event only after its retention threshold | — | SYSTEM_EVENT | HIGH | ATOMIC_SELF_RECORD |
+| AUD-001 | AUD-ACT-ARCHIVE-EVENT | AUD-OBJ-EVENT | DENY | CURRENT_ACTOR | a user cannot archive or delete an audit event directly | — | SYSTEM_EVENT | HIGH | ATOMIC_SELF_RECORD |
+| AUD-001 | AUD-ACT-QUERY-AUDIT | AUD-OBJ-EVENT | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | READ | REQUIRED |
+| AUD-001 | AUD-ACT-QUERY-AUDIT | AUD-OBJ-EVENT | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | READ | REQUIRED |
+| AUD-001 | AUD-ACT-REQUEST-SENSITIVE | AUD-OBJ-ACCESS-REQUEST | ALLOW | ROLE-PLATFORM-OPS | platform operations may request but not self-approve explicitly limited school scope and time | — | WEB / APP | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-REQUEST-SENSITIVE | AUD-OBJ-ACCESS-REQUEST | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access without a school-approved request | — | WEB / APP | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-APPROVE-SENSITIVE | AUD-OBJ-ACCESS-REQUEST | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-APPROVE-SENSITIVE | AUD-OBJ-ACCESS-REQUEST | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-DENY-SENSITIVE | AUD-OBJ-ACCESS-REQUEST | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-DENY-SENSITIVE | AUD-OBJ-ACCESS-REQUEST | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-EXPIRE-ACCESS-REQUEST | AUD-OBJ-ACCESS-REQUEST | ALLOW | SYSTEM | the system expires an unexecutable request at its declared deadline | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-EXPIRE-ACCESS-REQUEST | AUD-OBJ-ACCESS-REQUEST | DENY | CURRENT_ACTOR | a user cannot extend a sensitive request without a new approval | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-OPEN-SESSION | AUD-OBJ-ACCESS-SESSION | ALLOW | SYSTEM | system atomically opens only the school-approved scope and time and requires immutable audit | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-OPEN-SESSION | AUD-OBJ-ACCESS-SESSION | DENY | ROLE-PLATFORM-OPS | platform operations cannot widen the approved student-detail scope | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-EXPIRE-SESSION | AUD-OBJ-ACCESS-SESSION | ALLOW | SYSTEM | system expires the session at the approved deadline | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-EXPIRE-SESSION | AUD-OBJ-ACCESS-SESSION | DENY | ROLE-PLATFORM-OPS | platform operations cannot extend a sensitive session directly | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-REVOKE-SESSION | AUD-OBJ-ACCESS-SESSION | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-REVOKE-SESSION | AUD-OBJ-ACCESS-SESSION | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-CREATE-REVIEW | AUD-OBJ-REVIEW | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-CREATE-REVIEW | AUD-OBJ-REVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-INVESTIGATE-REVIEW | AUD-OBJ-REVIEW | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-INVESTIGATE-REVIEW | AUD-OBJ-REVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-RESOLVE-REVIEW | AUD-OBJ-REVIEW | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-RESOLVE-REVIEW | AUD-OBJ-REVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-CLOSE-REVIEW | AUD-OBJ-REVIEW | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-CLOSE-REVIEW | AUD-OBJ-REVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-EXPORT-SUMMARY | AUD-OBJ-REVIEW | ALLOW | ROLE-SCHOOL-ADMIN | school administrator acts inside school audit scope | — | WEB | HIGH | REQUIRED |
+| AUD-001 | AUD-ACT-EXPORT-SUMMARY | AUD-OBJ-REVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail access and requires school authorization, limited scope and time | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-DRAFT | CURR-OBJ-CURRICULUM | ALLOW | ROLE-ACADEMIC | academic staff maintains curriculum facts inside school and subject scope | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-DRAFT | CURR-OBJ-CURRICULUM | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school curriculum facts by default | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-BEGIN-VALIDATION | CURR-OBJ-CURRICULUM | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-BEGIN-VALIDATION | CURR-OBJ-CURRICULUM | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-BEGIN-VALIDATION | CURR-OBJ-CURRICULUM | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-ADD-TEXTBOOK | CURR-OBJ-TEXTBOOK | ALLOW | ROLE-ACADEMIC | academic staff maintains curriculum facts inside school and subject scope | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ADD-TEXTBOOK | CURR-OBJ-TEXTBOOK | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school curriculum facts by default | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-TEXTBOOK | CURR-OBJ-TEXTBOOK | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-TEXTBOOK | CURR-OBJ-TEXTBOOK | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-TEXTBOOK | CURR-OBJ-TEXTBOOK | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-TEXTBOOK | CURR-OBJ-TEXTBOOK | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-TEXTBOOK | CURR-OBJ-TEXTBOOK | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-TEXTBOOK | CURR-OBJ-TEXTBOOK | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-CHAPTER | CURR-OBJ-CHAPTER | ALLOW | ROLE-ACADEMIC | academic staff maintains curriculum facts inside school and subject scope | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-CHAPTER | CURR-OBJ-CHAPTER | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school curriculum facts by default | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-REORDER-CHAPTER | CURR-OBJ-CHAPTER | ALLOW | ROLE-ACADEMIC | academic staff maintains curriculum facts inside school and subject scope | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-REORDER-CHAPTER | CURR-OBJ-CHAPTER | DENY | ROLE-PLATFORM-OPS | platform operations cannot change school curriculum facts by default | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-CHAPTER | CURR-OBJ-CHAPTER | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-CHAPTER | CURR-OBJ-CHAPTER | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-CHAPTER | CURR-OBJ-CHAPTER | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-CHAPTER | CURR-OBJ-CHAPTER | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-CHAPTER | CURR-OBJ-CHAPTER | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-CHAPTER | CURR-OBJ-CHAPTER | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | CURR-OBJ-KNOWLEDGE-POINT | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-MAPPING | CURR-OBJ-MAPPING | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-MAPPING | CURR-OBJ-MAPPING | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-CREATE-MAPPING | CURR-OBJ-MAPPING | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | LOW | REQUIRED |
+| CURR-001 | CURR-ACT-VALIDATE-MAPPING | CURR-OBJ-MAPPING | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-VALIDATE-MAPPING | CURR-OBJ-MAPPING | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-VALIDATE-MAPPING | CURR-OBJ-MAPPING | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-VALIDATE-VERSION | CURR-OBJ-CURRICULUM | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-VALIDATE-VERSION | CURR-OBJ-CURRICULUM | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-VALIDATE-VERSION | CURR-OBJ-CURRICULUM | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-PUBLISH-MAPPING | CURR-OBJ-MAPPING | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-PUBLISH-MAPPING | CURR-OBJ-MAPPING | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-PUBLISH-MAPPING | CURR-OBJ-MAPPING | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-PUBLISH-VERSION | CURR-OBJ-CURRICULUM | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-PUBLISH-VERSION | CURR-OBJ-CURRICULUM | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-PUBLISH-VERSION | CURR-OBJ-CURRICULUM | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-VERSION | CURR-OBJ-CURRICULUM | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-VERSION | CURR-OBJ-CURRICULUM | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-VERSION | CURR-OBJ-CURRICULUM | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-MAPPING | CURR-OBJ-MAPPING | ALLOW | DUTY-SUBJECT-LEAD | subject lead may validate and review only the assigned subject curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-MAPPING | CURR-OBJ-MAPPING | ALLOW | ROLE-ACADEMIC | academic staff may publish an approved school curriculum version | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-DEPRECATE-MAPPING | CURR-OBJ-MAPPING | DENY | ROLE-PLATFORM-OPS | platform operations cannot publish a school subject version without school authorization | — | WEB | HIGH | REQUIRED |
+| CURR-001 | CURR-ACT-VIEW-KNOWLEDGE-PATH | CURR-OBJ-MAPPING | ALLOW | CURRENT_ACTOR | student and teacher views resolve the historically referenced published mapping version | — | WEB / APP | READ | REQUIRED |
+| CURR-001 | CURR-ACT-VIEW-KNOWLEDGE-PATH | CURR-OBJ-MAPPING | DENY | ROLE-PLATFORM-OPS | platform operations cannot view student learning path detail without school authorization | — | WEB / APP | READ | REQUIRED |
+| TEA-001 | TEA-ACT-SYNC-TODO-VIEW | TEA-OBJ-TODO-VIEW | ALLOW | SYSTEM | the system accepts only a registered versioned teacher-todo projection | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| TEA-001 | TEA-ACT-SYNC-TODO-VIEW | TEA-OBJ-TODO-VIEW | DENY | ROLE-PLATFORM-OPS | platform operations cannot synthesize teacher or student work-detail projections | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| TEA-001 | TEA-ACT-QUERY-SUBJECT-TODOS | TEA-OBJ-TODO-VIEW | ALLOW | DUTY-SUBJECT-TEACHER | subject teacher reads referenced tasks only in assigned subject and class scope | — | WEB / APP | READ | NOT_REQUIRED |
+| TEA-001 | TEA-ACT-QUERY-SUBJECT-TODOS | TEA-OBJ-TODO-VIEW | ALLOW | DUTY-SUBJECT-LEAD | subject lead reads referenced subject-wide queue facts without changing teacher-owned facts | — | WEB / APP | READ | NOT_REQUIRED |
+| TEA-001 | TEA-ACT-QUERY-SUBJECT-TODOS | TEA-OBJ-TODO-VIEW | DENY | ROLE-PLATFORM-OPS | platform operations cannot read teacher or student work detail without school authorization | — | WEB / APP | READ | NOT_REQUIRED |
+| TEA-001 | TEA-ACT-QUERY-HOMEROOM-SUMMARY | TEA-OBJ-COORDINATION | ALLOW | DUTY-HOMEROOM | homeroom duty may read all-subject references for the assigned class | — | WEB / APP | READ | REQUIRED |
+| TEA-001 | TEA-ACT-QUERY-HOMEROOM-SUMMARY | TEA-OBJ-COORDINATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail or all-subject class access | — | WEB / APP | READ | REQUIRED |
+| TEA-001 | TEA-ACT-CREATE-COORDINATION | TEA-OBJ-COORDINATION | ALLOW | DUTY-HOMEROOM | homeroom duty may create coordination notes for the assigned class | — | WEB / APP | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-CREATE-COORDINATION | TEA-OBJ-COORDINATION | DENY | DUTY-HOMEROOM | homeroom duty cannot write another subject's professional facts, scores, evidence, or plans | — | WEB / APP | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-UPDATE-COORDINATION | TEA-OBJ-COORDINATION | ALLOW | DUTY-HOMEROOM | homeroom duty may update coordination-owned notes for the assigned class | — | WEB / APP | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-UPDATE-COORDINATION | TEA-OBJ-COORDINATION | DENY | DUTY-HOMEROOM | homeroom duty cannot write or overwrite other subject professional facts | — | WEB / APP | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-CLOSE-COORDINATION | TEA-OBJ-COORDINATION | ALLOW | DUTY-HOMEROOM | homeroom duty closes only coordination-owned items for the assigned class | — | WEB / APP | HIGH | REQUIRED |
+| TEA-001 | TEA-ACT-CLOSE-COORDINATION | TEA-OBJ-COORDINATION | DENY | DUTY-SUBJECT-TEACHER | subject teacher cannot close a homeroom coordination item but retains ownership of subject facts | — | WEB / APP | HIGH | REQUIRED |
+| TEA-001 | TEA-ACT-CANCEL-COORDINATION | TEA-OBJ-COORDINATION | ALLOW | DUTY-HOMEROOM | homeroom duty cancels only coordination-owned items for the assigned class | — | WEB / APP | HIGH | REQUIRED |
+| TEA-001 | TEA-ACT-CANCEL-COORDINATION | TEA-OBJ-COORDINATION | DENY | DUTY-SUBJECT-TEACHER | subject teacher cannot cancel a homeroom coordination item | — | WEB / APP | HIGH | REQUIRED |
+| TEA-001 | TEA-ACT-CREATE-PREFERENCE | TEA-OBJ-PREFERENCE | ALLOW | ROLE-TEACHER | teacher creates only the teacher's own workspace preference | — | WEB | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-CREATE-PREFERENCE | TEA-OBJ-PREFERENCE | DENY | ROLE-PLATFORM-OPS | platform operations cannot create a teacher's personal work preference | — | WEB | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-UPDATE-PREFERENCE | TEA-OBJ-PREFERENCE | ALLOW | ROLE-TEACHER | teacher updates only the teacher's own workspace preference | — | WEB | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-UPDATE-PREFERENCE | TEA-OBJ-PREFERENCE | DENY | ROLE-PLATFORM-OPS | platform operations cannot update a teacher's personal work preference | — | WEB | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-SUPERSEDE-PREFERENCE | TEA-OBJ-PREFERENCE | ALLOW | ROLE-TEACHER | teacher supersedes only the teacher's own prior workspace preference | — | WEB | LOW | REQUIRED |
+| TEA-001 | TEA-ACT-SUPERSEDE-PREFERENCE | TEA-OBJ-PREFERENCE | DENY | ROLE-PLATFORM-OPS | platform operations cannot supersede a teacher's personal preference | — | WEB | LOW | REQUIRED |
+| HW-001 | HW-ACT-SYNC-RUBRIC | HW-OBJ-RUBRIC | ALLOW | SYSTEM | the system accepts only a registered versioned subject-rubric snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| HW-001 | HW-ACT-SYNC-RUBRIC | HW-OBJ-RUBRIC | DENY | CURRENT_ACTOR | a user cannot synthesize or replace a published rubric snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| HW-001 | HW-ACT-CREATE-DRAFT | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-CREATE-DRAFT | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-CREATE-DRAFT | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-CREATE-ITEM | HW-OBJ-ITEM | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-CREATE-ITEM | HW-OBJ-ITEM | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-CREATE-ITEM | HW-OBJ-ITEM | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-EDIT-ITEM | HW-OBJ-ITEM | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-EDIT-ITEM | HW-OBJ-ITEM | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-EDIT-ITEM | HW-OBJ-ITEM | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-VALIDATE-ITEM | HW-OBJ-ITEM | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-VALIDATE-ITEM | HW-OBJ-ITEM | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-VALIDATE-ITEM | HW-OBJ-ITEM | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-VALIDATE | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-VALIDATE | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-VALIDATE | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-REVALIDATE-ITEM | HW-OBJ-ITEM | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-REVALIDATE-ITEM | HW-OBJ-ITEM | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-REVALIDATE-ITEM | HW-OBJ-ITEM | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-REVALIDATE-REVISION | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-REVALIDATE-REVISION | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-REVALIDATE-REVISION | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | LOW | REQUIRED |
+| HW-001 | HW-ACT-PREVIEW | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | READ | NOT_REQUIRED |
+| HW-001 | HW-ACT-PREVIEW | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | READ | NOT_REQUIRED |
+| HW-001 | HW-ACT-PREVIEW | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | READ | NOT_REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-ITEM | HW-OBJ-ITEM | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-ITEM | HW-OBJ-ITEM | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-ITEM | HW-OBJ-ITEM | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-NOW | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-NOW | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-NOW | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-SCHEDULE-PUBLISH | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-SCHEDULE-PUBLISH | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-SCHEDULE-PUBLISH | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-SCHEDULED | HW-OBJ-ASSIGNMENT | ALLOW | SYSTEM | the system publishes only the validated scheduled version at its configured open time | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| HW-001 | HW-ACT-PUBLISH-SCHEDULED | HW-OBJ-ASSIGNMENT | DENY | CURRENT_ACTOR | a user cannot bypass the scheduled publication time | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| HW-001 | HW-ACT-CLOSE | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-CLOSE | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-CLOSE | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-REVISE | HW-OBJ-ASSIGNMENT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-REVISE | HW-OBJ-ASSIGNMENT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-REVISE | HW-OBJ-ASSIGNMENT | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-REVISE-ITEM | HW-OBJ-ITEM | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-REVISE-ITEM | HW-OBJ-ITEM | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to change another subject's professional assignment facts | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-REVISE-ITEM | HW-OBJ-ITEM | DENY | ROLE-STUDENT | a student attempts to create, revise, publish, or close an assignment | — | WEB / APP | HIGH | REQUIRED |
+| HW-001 | HW-ACT-OPEN-PUBLISHED | HW-OBJ-ASSIGNMENT | ALLOW | ROLE-STUDENT | the student belongs to the published assignment class scope after the open time | — | WEB / APP | READ | NOT_REQUIRED |
+| HW-001 | HW-ACT-OPEN-PUBLISHED | HW-OBJ-ASSIGNMENT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student assignment content | — | WEB / APP | READ | NOT_REQUIRED |
+| HW-001 | HW-ACT-RESOLVE-GRADING-SNAPSHOT | HW-OBJ-ITEM | ALLOW | SYSTEM | DF-006 resolves the immutable published item and Rubric versions | — | FLOW_INTERNAL | READ | NOT_REQUIRED |
+| HW-001 | HW-ACT-RESOLVE-GRADING-SNAPSHOT | HW-OBJ-ITEM | DENY | CURRENT_ACTOR | users cannot invoke the internal grading snapshot handoff | — | FLOW_INTERNAL | READ | NOT_REQUIRED |
+| SUB-001 | SUB-ACT-SAVE-DRAFT | SUB-OBJ-DRAFT | ALLOW | ROLE-STUDENT | the student owns the draft and belongs to the assignment class scope | — | WEB / APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-SAVE-DRAFT | SUB-OBJ-DRAFT | DENY | ROLE-TEACHER | a teacher attempts to create or submit student work on the student's behalf | — | WEB / APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-SAVE-DRAFT | SUB-OBJ-DRAFT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student answer content | — | WEB / APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-UPLOAD-CHUNK | SUB-OBJ-DRAFT | ALLOW | ROLE-STUDENT | the student owns the draft and belongs to the assignment class scope | — | APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-UPLOAD-CHUNK | SUB-OBJ-DRAFT | DENY | ROLE-TEACHER | a teacher attempts to create or submit student work on the student's behalf | — | APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-UPLOAD-CHUNK | SUB-OBJ-DRAFT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student answer content | — | APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-RETRY-UPLOAD | SUB-OBJ-DRAFT | ALLOW | ROLE-STUDENT | the student owns the draft and belongs to the assignment class scope | — | APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-RETRY-UPLOAD | SUB-OBJ-DRAFT | DENY | ROLE-TEACHER | a teacher attempts to create or submit student work on the student's behalf | — | APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-RETRY-UPLOAD | SUB-OBJ-DRAFT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student answer content | — | APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-MARK-DRAFT-READY | SUB-OBJ-DRAFT | ALLOW | ROLE-STUDENT | the student owns the draft and belongs to the assignment class scope | — | WEB / APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-MARK-DRAFT-READY | SUB-OBJ-DRAFT | DENY | ROLE-TEACHER | a teacher attempts to create or submit student work on the student's behalf | — | WEB / APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-MARK-DRAFT-READY | SUB-OBJ-DRAFT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student answer content | — | WEB / APP | LOW | REQUIRED |
+| SUB-001 | SUB-ACT-SUBMIT | SUB-OBJ-ATTEMPT | ALLOW | ROLE-STUDENT | the student owns the draft and belongs to the assignment class scope | — | WEB / APP | HIGH | REQUIRED |
+| SUB-001 | SUB-ACT-SUBMIT | SUB-OBJ-ATTEMPT | DENY | ROLE-TEACHER | a teacher attempts to create or submit student work on the student's behalf | — | WEB / APP | HIGH | REQUIRED |
+| SUB-001 | SUB-ACT-SUBMIT | SUB-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student answer content | — | WEB / APP | HIGH | REQUIRED |
+| SUB-001 | SUB-ACT-RESUBMIT | SUB-OBJ-ATTEMPT | ALLOW | ROLE-STUDENT | the student owns the draft and belongs to the assignment class scope | — | WEB / APP | HIGH | REQUIRED |
+| SUB-001 | SUB-ACT-RESUBMIT | SUB-OBJ-ATTEMPT | DENY | ROLE-TEACHER | a teacher attempts to create or submit student work on the student's behalf | — | WEB / APP | HIGH | REQUIRED |
+| SUB-001 | SUB-ACT-RESUBMIT | SUB-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student answer content | — | WEB / APP | HIGH | REQUIRED |
+| SUB-001 | SUB-ACT-VIEW-RECEIPT | SUB-OBJ-ATTEMPT | ALLOW | ROLE-STUDENT | the student owns the draft and belongs to the assignment class scope | — | WEB / APP | READ | NOT_REQUIRED |
+| SUB-001 | SUB-ACT-VIEW-RECEIPT | SUB-OBJ-ATTEMPT | DENY | ROLE-TEACHER | a teacher attempts to create or submit student work on the student's behalf | — | WEB / APP | READ | NOT_REQUIRED |
+| SUB-001 | SUB-ACT-VIEW-RECEIPT | SUB-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student answer content | — | WEB / APP | READ | NOT_REQUIRED |
+| SUB-001 | SUB-ACT-HANDOFF-ACCEPTED | SUB-OBJ-ATTEMPT | ALLOW | SYSTEM | DF-006 reads an accepted submission carrying a server receipt | — | FLOW_INTERNAL | READ | NOT_REQUIRED |
+| SUB-001 | SUB-ACT-HANDOFF-ACCEPTED | SUB-OBJ-ATTEMPT | DENY | CURRENT_ACTOR | users cannot invoke the internal accepted-submission handoff | — | FLOW_INTERNAL | READ | NOT_REQUIRED |
+| GRD-001 | GRD-ACT-SYNC-CAPABILITY-RULE | GRD-OBJ-CAPABILITY-RULE | ALLOW | SYSTEM | the system accepts only a registered versioned grading-capability snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-SYNC-CAPABILITY-RULE | GRD-OBJ-CAPABILITY-RULE | DENY | CURRENT_ACTOR | a user cannot synthesize or replace a grading-capability rule snapshot | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-ENQUEUE | GRD-OBJ-DECISION | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ENQUEUE | GRD-OBJ-DECISION | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-PROCESS | GRD-OBJ-DECISION | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-PROCESS | GRD-OBJ-DECISION | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ROUTE | GRD-OBJ-DECISION | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ROUTE | GRD-OBJ-DECISION | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ROUTE-UNSUPPORTED | GRD-OBJ-DECISION | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ROUTE-UNSUPPORTED | GRD-OBJ-DECISION | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ROUTE-AI-UNAVAILABLE | GRD-OBJ-DECISION | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ROUTE-AI-UNAVAILABLE | GRD-OBJ-DECISION | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-CORRECT-RECOGNITION | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-CORRECT-RECOGNITION | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-CORRECT-RECOGNITION | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | LOW | REQUIRED |
+| GRD-001 | GRD-ACT-ACCEPT-SUGGESTION | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-ACCEPT-SUGGESTION | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-ACCEPT-SUGGESTION | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-OVERRIDE-SCORE | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-OVERRIDE-SCORE | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-OVERRIDE-SCORE | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-MANUAL-GRADE | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-MANUAL-GRADE | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-MANUAL-GRADE | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-BATCH-CONFIRM | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-BATCH-CONFIRM | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-BATCH-CONFIRM | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-OPEN-CONFIRMED-REVISION | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-OPEN-CONFIRMED-REVISION | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-OPEN-CONFIRMED-REVISION | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-CONFIRM-REVISION | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-CONFIRM-REVISION | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-CONFIRM-REVISION | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-RESOLVE-VERSION-CONFLICT | GRD-OBJ-DECISION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms the decision inside assigned course and student scope | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-RESOLVE-VERSION-CONFLICT | GRD-OBJ-DECISION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to confirm another subject or an unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| GRD-001 | GRD-ACT-RESOLVE-VERSION-CONFLICT | GRD-OBJ-DECISION | DENY | ROLE-PLATFORM-OPS | platform operations attempts to assign an official student score | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PREVIEW | PUB-OBJ-PREVIEW | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher publishes confirmed decisions inside assigned student scope | — | WEB / APP | LOW | REQUIRED |
+| PUB-001 | PUB-ACT-PREVIEW | PUB-OBJ-PREVIEW | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to publish another subject or any unconfirmed subjective score | — | WEB / APP | LOW | REQUIRED |
+| PUB-001 | PUB-ACT-PREVIEW | PUB-OBJ-PREVIEW | DENY | ROLE-PLATFORM-OPS | platform operations attempts to publish or correct student results | — | WEB / APP | LOW | REQUIRED |
+| PUB-001 | PUB-ACT-PREPARE-BATCH | PUB-OBJ-BATCH | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher publishes confirmed decisions inside assigned student scope | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PREPARE-BATCH | PUB-OBJ-BATCH | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to publish another subject or any unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PREPARE-BATCH | PUB-OBJ-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations attempts to publish or correct student results | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PUBLISH-SELECTED | PUB-OBJ-BATCH | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher publishes confirmed decisions inside assigned student scope | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PUBLISH-SELECTED | PUB-OBJ-BATCH | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to publish another subject or any unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PUBLISH-SELECTED | PUB-OBJ-BATCH | DENY | ROLE-PLATFORM-OPS | platform operations attempts to publish or correct student results | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-MATERIALIZE-RESULT | PUB-OBJ-RESULT | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-MATERIALIZE-RESULT | PUB-OBJ-RESULT | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PUBLISH-RESULT | PUB-OBJ-RESULT | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-PUBLISH-RESULT | PUB-OBJ-RESULT | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-FINALIZE-BATCH | PUB-OBJ-BATCH | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-FINALIZE-BATCH | PUB-OBJ-BATCH | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RETRY-FAILED | PUB-OBJ-RESULT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher publishes confirmed decisions inside assigned student scope | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RETRY-FAILED | PUB-OBJ-RESULT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to publish another subject or any unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RETRY-FAILED | PUB-OBJ-RESULT | DENY | ROLE-PLATFORM-OPS | platform operations attempts to publish or correct student results | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RECONCILE-BATCH | PUB-OBJ-BATCH | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RECONCILE-BATCH | PUB-OBJ-BATCH | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-VIEW-RESULT | PUB-OBJ-RESULT | ALLOW | ROLE-STUDENT | the student reads only the student's own published result after each configured visibility time | — | WEB / APP | READ | NOT_REQUIRED |
+| PUB-001 | PUB-ACT-VIEW-RESULT | PUB-OBJ-RESULT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to a student's answer, score, or feedback | — | WEB / APP | READ | NOT_REQUIRED |
+| PUB-001 | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT | PUB-OBJ-DEPENDENCY-SNAPSHOT | ALLOW | SYSTEM | the verified Flow invokes the versioned grading step | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PUB-001 | PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT | PUB-OBJ-DEPENDENCY-SNAPSHOT | DENY | CURRENT_ACTOR | a user attempts to invoke an internal grading step directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PUB-001 | PUB-ACT-CORRECT-RESULT | PUB-OBJ-RESULT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher publishes confirmed decisions inside assigned student scope | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-CORRECT-RESULT | PUB-OBJ-RESULT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to publish another subject or any unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-CORRECT-RESULT | PUB-OBJ-RESULT | DENY | ROLE-PLATFORM-OPS | platform operations attempts to publish or correct student results | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | PUB-OBJ-RESULT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher publishes confirmed decisions inside assigned student scope | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | PUB-OBJ-RESULT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to publish another subject or any unconfirmed subjective score | — | WEB / APP | HIGH | REQUIRED |
+| PUB-001 | PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION | PUB-OBJ-RESULT | DENY | ROLE-PLATFORM-OPS | platform operations attempts to publish or correct student results | — | WEB / APP | HIGH | REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-VIEW | SCO-OBJ-VIEW | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-VIEW | SCO-OBJ-VIEW | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-VIEW | SCO-OBJ-VIEW | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-VIEW | SCO-OBJ-VIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-READ-GRADEBOOK | SCO-OBJ-VIEW | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher reads only the assigned subject, class, and student scope | — | WEB / APP | READ | NOT_REQUIRED |
+| SCO-001 | SCO-ACT-READ-GRADEBOOK | SCO-OBJ-VIEW | ALLOW | DUTY-HOMEROOM | the homeroom teacher reads the assigned class across subjects for read-only coordination | — | WEB / APP | READ | NOT_REQUIRED |
+| SCO-001 | SCO-ACT-READ-GRADEBOOK | SCO-OBJ-VIEW | DENY | ROLE-SCHOOL-ADMIN | a school administrator has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| SCO-001 | SCO-ACT-READ-GRADEBOOK | SCO-OBJ-VIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-CREATE-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| SCO-001 | SCO-ACT-VIEW-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher reads only the assigned subject, class, and student scope | — | WEB / APP | READ | NOT_REQUIRED |
+| SCO-001 | SCO-ACT-VIEW-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | ALLOW | DUTY-HOMEROOM | the homeroom teacher reads the assigned class across subjects for read-only coordination | — | WEB / APP | READ | NOT_REQUIRED |
+| SCO-001 | SCO-ACT-VIEW-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | DENY | ROLE-SCHOOL-ADMIN | a school administrator has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| SCO-001 | SCO-ACT-VIEW-FOLLOW-UP | SCO-OBJ-FOLLOW-UP | DENY | ROLE-PLATFORM-OPS | platform operations has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| INS-001 | INS-ACT-CREATE-CANDIDATE | INS-OBJ-EVIDENCE | ALLOW | SYSTEM | the verified correction Flow creates or invalidates only versioned evidence candidates | — | FLOW_INTERNAL | LOW | REQUIRED |
+| INS-001 | INS-ACT-CREATE-CANDIDATE | INS-OBJ-EVIDENCE | DENY | AI | AI cannot directly confirm evidence or publish a student-visible mastery interpretation | — | FLOW_INTERNAL | LOW | REQUIRED |
+| INS-001 | INS-ACT-CREATE-CANDIDATE | INS-OBJ-EVIDENCE | DENY | CURRENT_ACTOR | a user cannot invoke an internal evidence candidate or invalidation step directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| INS-001 | INS-ACT-MARK-STALE | INS-OBJ-EVIDENCE | ALLOW | SYSTEM | the verified correction Flow creates or invalidates only versioned evidence candidates | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| INS-001 | INS-ACT-MARK-STALE | INS-OBJ-EVIDENCE | DENY | AI | AI cannot directly confirm evidence or publish a student-visible mastery interpretation | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| INS-001 | INS-ACT-MARK-STALE | INS-OBJ-EVIDENCE | DENY | CURRENT_ACTOR | a user cannot invoke an internal evidence candidate or invalidation step directly | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| INS-001 | INS-ACT-CONFIRM-MASTERY | INS-OBJ-EVIDENCE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-CONFIRM-MASTERY | INS-OBJ-EVIDENCE | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-CONFIRM-MASTERY | INS-OBJ-EVIDENCE | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-CONFIRM-MASTERY | INS-OBJ-EVIDENCE | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-CONFIRM-MASTERY | INS-OBJ-EVIDENCE | DENY | AI | AI may create only an attribution or mastery candidate and cannot confirm or publish the student-visible interpretation | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-PUBLISH-INTERPRETATION | INS-OBJ-EVIDENCE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-PUBLISH-INTERPRETATION | INS-OBJ-EVIDENCE | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-PUBLISH-INTERPRETATION | INS-OBJ-EVIDENCE | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-PUBLISH-INTERPRETATION | INS-OBJ-EVIDENCE | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-PUBLISH-INTERPRETATION | INS-OBJ-EVIDENCE | DENY | AI | AI may create only an attribution or mastery candidate and cannot confirm or publish the student-visible interpretation | — | WEB / APP | HIGH | REQUIRED |
+| INS-001 | INS-ACT-READ-CONFIRMED-EVIDENCE | INS-OBJ-EVIDENCE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher reads only the assigned subject, class, and student scope | — | WEB / APP | READ | NOT_REQUIRED |
+| INS-001 | INS-ACT-READ-CONFIRMED-EVIDENCE | INS-OBJ-EVIDENCE | ALLOW | DUTY-HOMEROOM | the homeroom teacher reads the assigned class across subjects for read-only coordination | — | WEB / APP | READ | NOT_REQUIRED |
+| INS-001 | INS-ACT-READ-CONFIRMED-EVIDENCE | INS-OBJ-EVIDENCE | DENY | ROLE-SCHOOL-ADMIN | a school administrator has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| INS-001 | INS-ACT-READ-CONFIRMED-EVIDENCE | INS-OBJ-EVIDENCE | DENY | ROLE-PLATFORM-OPS | platform operations has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| INS-001 | INS-ACT-VIEW-MASTERY | INS-OBJ-EVIDENCE | ALLOW | ROLE-STUDENT | the student reads only the student's own teacher-confirmed interpretation after its release time | — | WEB / APP | READ | NOT_REQUIRED |
+| INS-001 | INS-ACT-VIEW-MASTERY | INS-OBJ-EVIDENCE | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student evidence or mastery interpretation | — | WEB / APP | READ | NOT_REQUIRED |
+| PLN-001 | PLN-ACT-CREATE-CANDIDATE | PLN-OBJ-PLAN | ALLOW | SYSTEM | the verified improvement Flow creates the candidate and explicit synchronization outputs | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-CREATE-CANDIDATE | PLN-OBJ-PLAN | DENY | CURRENT_ACTOR | a user cannot invoke internal plan materialization or synchronization directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-CONFIRM-PLAN | PLN-OBJ-PLAN | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-CONFIRM-PLAN | PLN-OBJ-PLAN | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-CONFIRM-PLAN | PLN-OBJ-PLAN | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-CONFIRM-PLAN | PLN-OBJ-PLAN | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-SYNC-SUBJECT-TEACHER | PLN-OBJ-SUBJECT-SYNC | ALLOW | SYSTEM | the verified improvement Flow creates the candidate and explicit synchronization outputs | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-SYNC-SUBJECT-TEACHER | PLN-OBJ-SUBJECT-SYNC | DENY | CURRENT_ACTOR | a user cannot invoke internal plan materialization or synchronization directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-SYNC-HOMEROOM-COORDINATION | PLN-OBJ-HOMEROOM-COORDINATION | ALLOW | SYSTEM | the verified improvement Flow creates the candidate and explicit synchronization outputs | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-SYNC-HOMEROOM-COORDINATION | PLN-OBJ-HOMEROOM-COORDINATION | DENY | CURRENT_ACTOR | a user cannot invoke internal plan materialization or synchronization directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-ADJUST-PLAN | PLN-OBJ-PLAN | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-ADJUST-PLAN | PLN-OBJ-PLAN | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-ADJUST-PLAN | PLN-OBJ-PLAN | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-ADJUST-PLAN | PLN-OBJ-PLAN | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-CLOSE-PLAN | PLN-OBJ-PLAN | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-CLOSE-PLAN | PLN-OBJ-PLAN | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-CLOSE-PLAN | PLN-OBJ-PLAN | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-CLOSE-PLAN | PLN-OBJ-PLAN | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | HIGH | REQUIRED |
+| PLN-001 | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | PLN-OBJ-PLAN | ALLOW | SYSTEM | the verified improvement Flow creates the candidate and explicit synchronization outputs | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM | PLN-OBJ-PLAN | DENY | CURRENT_ACTOR | a user cannot invoke internal plan materialization or synchronization directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| PLN-001 | PLN-ACT-VIEW-HOMEROOM-COORDINATION | PLN-OBJ-HOMEROOM-COORDINATION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher reads only the assigned subject, class, and student scope | — | WEB / APP | READ | NOT_REQUIRED |
+| PLN-001 | PLN-ACT-VIEW-HOMEROOM-COORDINATION | PLN-OBJ-HOMEROOM-COORDINATION | ALLOW | DUTY-HOMEROOM | the homeroom teacher reads the assigned class across subjects for read-only coordination | — | WEB / APP | READ | NOT_REQUIRED |
+| PLN-001 | PLN-ACT-VIEW-HOMEROOM-COORDINATION | PLN-OBJ-HOMEROOM-COORDINATION | DENY | ROLE-SCHOOL-ADMIN | a school administrator has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| PLN-001 | PLN-ACT-VIEW-HOMEROOM-COORDINATION | PLN-OBJ-HOMEROOM-COORDINATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| APP-001 | APP-ACT-CREATE-PLAN-TODO | APP-OBJ-TODO | ALLOW | SYSTEM | the verified Flow materializes or refreshes only source-pinned todo links | — | FLOW_INTERNAL | LOW | REQUIRED |
+| APP-001 | APP-ACT-CREATE-PLAN-TODO | APP-OBJ-TODO | DENY | CURRENT_ACTOR | a user cannot invoke internal todo aggregation directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| APP-001 | APP-ACT-CREATE-HOMEWORK-TODO | APP-OBJ-TODO | ALLOW | SYSTEM | the verified Flow materializes or refreshes only source-pinned todo links | — | FLOW_INTERNAL | LOW | REQUIRED |
+| APP-001 | APP-ACT-CREATE-HOMEWORK-TODO | APP-OBJ-TODO | DENY | CURRENT_ACTOR | a user cannot invoke internal todo aggregation directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| APP-001 | APP-ACT-REFRESH-TODOS | APP-OBJ-TODO | ALLOW | SYSTEM | the verified Flow materializes or refreshes only source-pinned todo links | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| APP-001 | APP-ACT-REFRESH-TODOS | APP-OBJ-TODO | DENY | CURRENT_ACTOR | a user cannot invoke internal todo aggregation directly | — | FLOW_INTERNAL | HIGH | REQUIRED |
+| APP-001 | APP-ACT-VIEW-TODOS | APP-OBJ-TODO | ALLOW | ROLE-STUDENT | the student reads only the student's own released todo aggregation | — | WEB / APP | READ | NOT_REQUIRED |
+| APP-001 | APP-ACT-VIEW-TODOS | APP-OBJ-TODO | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student todo execution detail | — | WEB / APP | READ | NOT_REQUIRED |
+| APP-001 | APP-ACT-UPDATE-LOCAL-PROGRESS | APP-OBJ-TODO | ALLOW | ROLE-STUDENT | the student reads or updates only local progress, completion evidence, and difficulty feedback on the student's own todo | — | WEB / APP | LOW | REQUIRED |
+| APP-001 | APP-ACT-UPDATE-LOCAL-PROGRESS | APP-OBJ-TODO | DENY | DUTY-SUBJECT-TEACHER | a teacher cannot submit or rewrite student-local execution state on the student's behalf | — | WEB / APP | LOW | REQUIRED |
+| APP-001 | APP-ACT-UPDATE-LOCAL-PROGRESS | APP-OBJ-TODO | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student todo execution detail | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-CREATE-TASK | CORR-OBJ-TASK | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher creates a correction task for an assigned student's published result | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-CREATE-TASK | CORR-OBJ-TASK | DENY | ROLE-STUDENT | a student cannot create or self-assign a correction task | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-CREATE-TASK | CORR-OBJ-TASK | DENY | DUTY-HOMEROOM | a homeroom teacher cannot create another subject's correction task | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-CREATE-TASK | CORR-OBJ-TASK | DENY | AI | AI cannot create or assign a correction task | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-CREATE-TASK | CORR-OBJ-TASK | DENY | ROLE-PLATFORM-OPS | platform operations cannot create correction tasks by default | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-AUTO-CREATE-TASK | CORR-OBJ-TASK | ALLOW | SYSTEM | the verified result publication Flow creates a correction task only when the published result requires correction | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-AUTO-CREATE-TASK | CORR-OBJ-TASK | DENY | CURRENT_ACTOR | a user cannot invoke automatic correction task creation directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-MARK-OVERDUE | CORR-OBJ-TASK | ALLOW | SYSTEM | the system marks only an OPEN correction task overdue at its due time | — | SYSTEM_EVENT | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-MARK-OVERDUE | CORR-OBJ-TASK | DENY | CURRENT_ACTOR | a user cannot force a correction task into the overdue state | — | SYSTEM_EVENT | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-INITIAL | CORR-OBJ-ATTEMPT | ALLOW | ROLE-STUDENT | the student submits or resubmits only the student's own correction answer against a visible result version | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-INITIAL | CORR-OBJ-ATTEMPT | DENY | DUTY-SUBJECT-TEACHER | a teacher cannot submit a correction answer on the student's behalf | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-INITIAL | CORR-OBJ-ATTEMPT | DENY | AI | AI may suggest a correction but cannot submit it or confirm the formal judgment | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-INITIAL | CORR-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to correction answers | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-LATE | CORR-OBJ-ATTEMPT | ALLOW | ROLE-STUDENT | the student submits or resubmits only the student's own correction answer against a visible result version | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-LATE | CORR-OBJ-ATTEMPT | DENY | DUTY-SUBJECT-TEACHER | a teacher cannot submit a correction answer on the student's behalf | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-LATE | CORR-OBJ-ATTEMPT | DENY | AI | AI may suggest a correction but cannot submit it or confirm the formal judgment | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-SUBMIT-LATE | CORR-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to correction answers | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-CONFIRM-JUDGMENT | CORR-OBJ-ATTEMPT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-CONFIRM-JUDGMENT | CORR-OBJ-ATTEMPT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-CONFIRM-JUDGMENT | CORR-OBJ-ATTEMPT | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-CONFIRM-JUDGMENT | CORR-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-CONFIRM-JUDGMENT | CORR-OBJ-ATTEMPT | DENY | AI | AI may suggest a judgment but cannot confirm the formal correction decision | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-REQUEST-RETRY | CORR-OBJ-ATTEMPT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-REQUEST-RETRY | CORR-OBJ-ATTEMPT | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-REQUEST-RETRY | CORR-OBJ-ATTEMPT | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-REQUEST-RETRY | CORR-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-REQUEST-RETRY | CORR-OBJ-ATTEMPT | DENY | AI | AI may suggest a judgment but cannot confirm the formal correction decision | — | WEB / APP | HIGH | REQUIRED |
+| CORR-001 | CORR-ACT-MARK-TASK-AWAITING-RETRY | CORR-OBJ-TASK | ALLOW | SYSTEM | the verified correction judgment Flow updates only the guarded correction Task version | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-MARK-TASK-AWAITING-RETRY | CORR-OBJ-TASK | DENY | CURRENT_ACTOR | a user cannot bypass the formal judgment to update correction Task state directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-COMPLETE-TASK | CORR-OBJ-TASK | ALLOW | SYSTEM | the verified correction judgment Flow updates only the guarded correction Task version | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-COMPLETE-TASK | CORR-OBJ-TASK | DENY | CURRENT_ACTOR | a user cannot bypass the formal judgment to update correction Task state directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-RESUBMIT | CORR-OBJ-ATTEMPT | ALLOW | ROLE-STUDENT | the student submits or resubmits only the student's own correction answer against a visible result version | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-RESUBMIT | CORR-OBJ-ATTEMPT | DENY | DUTY-SUBJECT-TEACHER | a teacher cannot submit a correction answer on the student's behalf | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-RESUBMIT | CORR-OBJ-ATTEMPT | DENY | AI | AI may suggest a correction but cannot submit it or confirm the formal judgment | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-RESUBMIT | CORR-OBJ-ATTEMPT | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to correction answers | — | WEB / APP | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-NORMALIZE-SUBMISSION | CORR-OBJ-ATTEMPT | ALLOW | SYSTEM | the verified correction Flow normalizes one accepted student submission branch | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-NORMALIZE-SUBMISSION | CORR-OBJ-ATTEMPT | DENY | CURRENT_ACTOR | a user cannot invoke internal correction submission normalization directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-RECORD-INVALIDATION | CORR-OBJ-INVALIDATION | ALLOW | SYSTEM | the verified correction Flow records the object-level invalidation chain and retry provenance | — | FLOW_INTERNAL | LOW | REQUIRED |
+| CORR-001 | CORR-ACT-RECORD-INVALIDATION | CORR-OBJ-INVALIDATION | DENY | CURRENT_ACTOR | a user cannot bypass the correction judgment to create invalidation records directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| STU-001 | STU-ACT-BUILD-PROFILE | STU-OBJ-PROFILE | ALLOW | SYSTEM | the verified aggregation Flow builds only source-pinned profile view definitions | — | FLOW_INTERNAL | LOW | REQUIRED |
+| STU-001 | STU-ACT-BUILD-PROFILE | STU-OBJ-PROFILE | DENY | CURRENT_ACTOR | a user cannot invoke internal student profile materialization directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| STU-001 | STU-ACT-OPEN-PROFILE | STU-OBJ-PROFILE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher reads only the assigned subject, class, and student scope | — | WEB / APP | READ | NOT_REQUIRED |
+| STU-001 | STU-ACT-OPEN-PROFILE | STU-OBJ-PROFILE | ALLOW | DUTY-HOMEROOM | the homeroom teacher reads the assigned class across subjects for read-only coordination | — | WEB / APP | READ | NOT_REQUIRED |
+| STU-001 | STU-ACT-OPEN-PROFILE | STU-OBJ-PROFILE | DENY | ROLE-SCHOOL-ADMIN | a school administrator has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| STU-001 | STU-ACT-OPEN-PROFILE | STU-OBJ-PROFILE | DENY | ROLE-PLATFORM-OPS | platform operations has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| STU-001 | STU-ACT-SAVE-VIEW | STU-OBJ-PROFILE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-SAVE-VIEW | STU-OBJ-PROFILE | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-SAVE-VIEW | STU-OBJ-PROFILE | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-SAVE-VIEW | STU-OBJ-PROFILE | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-CREATE-ATTENTION | STU-OBJ-ATTENTION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher writes only inside the assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-CREATE-ATTENTION | STU-OBJ-ATTENTION | DENY | DUTY-HOMEROOM | a homeroom teacher attempts to mutate another subject's score, evidence, plan, correction, or follow-up facts | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-CREATE-ATTENTION | STU-OBJ-ATTENTION | DENY | ROLE-SCHOOL-ADMIN | a school administrator attempts to read or mutate student learning detail without a separately authorized case | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-CREATE-ATTENTION | STU-OBJ-ATTENTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| STU-001 | STU-ACT-VIEW-ATTENTION | STU-OBJ-ATTENTION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher reads only the assigned subject, class, and student scope | — | WEB / APP | READ | NOT_REQUIRED |
+| STU-001 | STU-ACT-VIEW-ATTENTION | STU-OBJ-ATTENTION | ALLOW | DUTY-HOMEROOM | the homeroom teacher reads the assigned class across subjects for read-only coordination | — | WEB / APP | READ | NOT_REQUIRED |
+| STU-001 | STU-ACT-VIEW-ATTENTION | STU-OBJ-ATTENTION | DENY | ROLE-SCHOOL-ADMIN | a school administrator has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| STU-001 | STU-ACT-VIEW-ATTENTION | STU-OBJ-ATTENTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default permission to read student learning detail | — | WEB / APP | READ | NOT_REQUIRED |
+| AIX-001 | AIX-ACT-PREPARE-TASK-PREVIEW | AIX-OBJ-TASK-PREVIEW | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-PREPARE-TASK-PREVIEW | AIX-OBJ-TASK-PREVIEW | DENY | ROLE-STUDENT | a student attempts to create or manage a teacher-owned definition or reminder | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-PREPARE-TASK-PREVIEW | AIX-OBJ-TASK-PREVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | AIX-OBJ-TASK-PREVIEW | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | AIX-OBJ-TASK-PREVIEW | DENY | ROLE-STUDENT | a student attempts to create or manage a teacher-owned definition or reminder | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW | AIX-OBJ-TASK-PREVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | AIX-OBJ-TASK-PREVIEW | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | AIX-OBJ-TASK-PREVIEW | DENY | ROLE-STUDENT | a student attempts to create or manage a teacher-owned definition or reminder | — | WEB / APP | LOW | REQUIRED |
+| AIX-001 | AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW | AIX-OBJ-TASK-PREVIEW | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-AD-HOC-DEFINITION | RPT-OBJ-DEFINITION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts only inside assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-AD-HOC-DEFINITION | RPT-OBJ-DEFINITION | DENY | DUTY-HOMEROOM | homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-AD-HOC-DEFINITION | RPT-OBJ-DEFINITION | DENY | ROLE-ACADEMIC | academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-AD-HOC-DEFINITION | RPT-OBJ-DEFINITION | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail or aggregate report access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-HOMEROOM-DEFINITION | RPT-OBJ-DEFINITION | ALLOW | DUTY-HOMEROOM | homeroom duty acts only on aggregate data for the assigned homeroom class across subjects | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-HOMEROOM-DEFINITION | RPT-OBJ-DEFINITION | DENY | ROLE-PLATFORM-OPS | platform operations has no default homeroom aggregate report access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-ACADEMIC-DEFINITION | RPT-OBJ-DEFINITION | ALLOW | ROLE-ACADEMIC | academic staff acts only on aggregate data covered by an active authorized scope grant | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-ACADEMIC-DEFINITION | RPT-OBJ-DEFINITION | DENY | ROLE-PLATFORM-OPS | platform operations has no default academic aggregate report access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts only inside assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | DUTY-HOMEROOM | homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | ROLE-ACADEMIC | academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default student-detail or aggregate report access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | ALLOW | DUTY-HOMEROOM | homeroom duty acts only on aggregate data for the assigned homeroom class across subjects | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default homeroom aggregate report access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | ALLOW | ROLE-ACADEMIC | academic staff acts only on aggregate data covered by an active authorized scope grant | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default academic aggregate report access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-UPDATE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | ALLOW | CURRENT_ACTOR | the authenticated actor manages only the subscription created by that actor | OWN_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-UPDATE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | CURRENT_ACTOR | the authenticated actor cannot manage a subscription created by another actor or role | OTHER_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-UPDATE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default report subscription access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-PAUSE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | ALLOW | CURRENT_ACTOR | the authenticated actor manages only the subscription created by that actor | OWN_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-PAUSE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | CURRENT_ACTOR | the authenticated actor cannot manage a subscription created by another actor or role | OTHER_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-PAUSE-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default report subscription access | — | WEB / APP | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CANCEL-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | ALLOW | CURRENT_ACTOR | the authenticated actor manages only the subscription created by that actor | OWN_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF | WEB / APP | HIGH | REQUIRED |
+| RPT-001 | RPT-ACT-CANCEL-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | CURRENT_ACTOR | the authenticated actor cannot manage a subscription created by another actor or role | OTHER_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF | WEB / APP | HIGH | REQUIRED |
+| RPT-001 | RPT-ACT-CANCEL-SUBSCRIPTION | RPT-OBJ-SUBSCRIPTION | DENY | ROLE-PLATFORM-OPS | platform operations has no default report subscription access | — | WEB / APP | HIGH | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-AD-HOC-RUN | RPT-OBJ-RUN | ALLOW | SYSTEM | the verified report Flow writes only authorized source-pinned report records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-AD-HOC-RUN | RPT-OBJ-RUN | DENY | CURRENT_ACTOR | a user cannot invoke an internal report materialization action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-RUN | RPT-OBJ-RUN | ALLOW | SYSTEM | the verified report Flow writes only authorized source-pinned report records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-RUN | RPT-OBJ-RUN | DENY | CURRENT_ACTOR | a user cannot invoke an internal report materialization action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-START-RUN | RPT-OBJ-RUN | ALLOW | SYSTEM | the verified report Flow writes only authorized source-pinned report records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-START-RUN | RPT-OBJ-RUN | DENY | CURRENT_ACTOR | a user cannot invoke an internal report materialization action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-COMPLETE-RUN | RPT-OBJ-RUN | ALLOW | SYSTEM | the verified report Flow writes only authorized source-pinned report records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-COMPLETE-RUN | RPT-OBJ-RUN | DENY | CURRENT_ACTOR | a user cannot invoke an internal report materialization action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-FAIL-RUN | RPT-OBJ-RUN | ALLOW | SYSTEM | the verified report event updates only the target run or delivery | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-FAIL-RUN | RPT-OBJ-RUN | DENY | CURRENT_ACTOR | a user cannot invoke report state events directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-BLOCK-RUN-PERMISSION | RPT-OBJ-RUN | ALLOW | SYSTEM | the verified report event updates only the target run or delivery | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-BLOCK-RUN-PERMISSION | RPT-OBJ-RUN | DENY | CURRENT_ACTOR | a user cannot invoke report state events directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-MATERIALIZE-SNAPSHOT | RPT-OBJ-SNAPSHOT | ALLOW | SYSTEM | the verified report Flow writes only authorized source-pinned report records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-MATERIALIZE-SNAPSHOT | RPT-OBJ-SNAPSHOT | DENY | CURRENT_ACTOR | a user cannot invoke an internal report materialization action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-DELIVERY | RPT-OBJ-DELIVERY | ALLOW | SYSTEM | the verified report Flow writes only authorized source-pinned report records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-CREATE-DELIVERY | RPT-OBJ-DELIVERY | DENY | CURRENT_ACTOR | a user cannot invoke an internal report materialization action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-MARK-DELIVERED | RPT-OBJ-DELIVERY | ALLOW | SYSTEM | the verified report event updates only the target run or delivery | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-MARK-DELIVERED | RPT-OBJ-DELIVERY | DENY | CURRENT_ACTOR | a user cannot invoke report state events directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-FAIL-DELIVERY | RPT-OBJ-DELIVERY | ALLOW | SYSTEM | the verified report event updates only the target run or delivery | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-FAIL-DELIVERY | RPT-OBJ-DELIVERY | DENY | CURRENT_ACTOR | a user cannot invoke report state events directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-RETRY-DELIVERY | RPT-OBJ-DELIVERY | ALLOW | SYSTEM | the verified report event updates only the target run or delivery | — | SYSTEM_EVENT | LOW | REQUIRED |
+| RPT-001 | RPT-ACT-RETRY-DELIVERY | RPT-OBJ-DELIVERY | DENY | CURRENT_ACTOR | a user cannot invoke report state events directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | ALLOW | SYSTEM | the verified Flow writes only version-pinned derived records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | DENY | CURRENT_ACTOR | a user cannot invoke an internal Flow action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-EVIDENCE-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | ALLOW | SYSTEM | the verified Flow writes only version-pinned derived records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-EVIDENCE-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | DENY | CURRENT_ACTOR | a user cannot invoke an internal Flow action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-CORRECTION-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | ALLOW | SYSTEM | the verified Flow writes only version-pinned derived records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-CORRECTION-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | DENY | CURRENT_ACTOR | a user cannot invoke an internal Flow action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | ALLOW | SYSTEM | the verified Flow writes only version-pinned derived records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | DENY | CURRENT_ACTOR | a user cannot invoke an internal Flow action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | ALLOW | SYSTEM | the verified Flow writes only version-pinned derived records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE | LPATH-OBJ-TIMELINE-ENTRY | DENY | CURRENT_ACTOR | a user cannot invoke an internal Flow action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | LPATH-OBJ-INTERPRETATION | ALLOW | SYSTEM | the verified Flow writes only version-pinned derived records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE | LPATH-OBJ-INTERPRETATION | DENY | CURRENT_ACTOR | a user cannot invoke an internal Flow action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| LPATH-001 | LPATH-ACT-CONFIRM-INTERPRETATION | LPATH-OBJ-INTERPRETATION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms only the assigned subject interpretation | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-CONFIRM-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | DUTY-HOMEROOM | a homeroom teacher cannot confirm or replace another subject's professional interpretation | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-CONFIRM-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | AI | AI may propose an explanation but cannot confirm or publish it | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-CONFIRM-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to learning path detail | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-SUPERSEDE-INTERPRETATION | LPATH-OBJ-INTERPRETATION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms only the assigned subject interpretation | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-SUPERSEDE-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | DUTY-HOMEROOM | a homeroom teacher cannot confirm or replace another subject's professional interpretation | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-SUPERSEDE-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | AI | AI may propose an explanation but cannot confirm or publish it | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-SUPERSEDE-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to learning path detail | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-MARK-INTERPRETATION-STALE | LPATH-OBJ-INTERPRETATION | ALLOW | SYSTEM | the verified Flow writes only version-pinned derived records | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-MARK-INTERPRETATION-STALE | LPATH-OBJ-INTERPRETATION | DENY | CURRENT_ACTOR | a user cannot invoke an internal Flow action directly | — | SYSTEM_EVENT | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-PUBLISH-INTERPRETATION | LPATH-OBJ-INTERPRETATION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher confirms only the assigned subject interpretation | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-PUBLISH-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | DUTY-HOMEROOM | a homeroom teacher cannot confirm or replace another subject's professional interpretation | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-PUBLISH-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | AI | AI may propose an explanation but cannot confirm or publish it | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-PUBLISH-INTERPRETATION | LPATH-OBJ-INTERPRETATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to learning path detail | — | WEB / APP | HIGH | REQUIRED |
+| LPATH-001 | LPATH-ACT-VIEW-PATH | LPATH-OBJ-TIMELINE-ENTRY | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher reads assigned subject paths | — | WEB / APP | READ | NOT_REQUIRED |
+| LPATH-001 | LPATH-ACT-VIEW-PATH | LPATH-OBJ-TIMELINE-ENTRY | ALLOW | DUTY-HOMEROOM | the homeroom teacher reads the assigned class across subjects without professional write permission | — | WEB / APP | READ | NOT_REQUIRED |
+| LPATH-001 | LPATH-ACT-VIEW-PATH | LPATH-OBJ-TIMELINE-ENTRY | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to learning path detail | — | WEB / APP | READ | NOT_REQUIRED |
+| NOTI-001 | NOTI-ACT-CREATE-REMINDER | NOTI-OBJ-NOTIFICATION | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned subject, class, and student scope | — | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-CREATE-REMINDER | NOTI-OBJ-NOTIFICATION | DENY | ROLE-STUDENT | a student attempts to create or manage a teacher-owned definition or reminder | — | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-CREATE-REMINDER | NOTI-OBJ-NOTIFICATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student learning detail | — | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-CREATE-REPORT-NOTIFICATION | NOTI-OBJ-NOTIFICATION | ALLOW | SYSTEM | the verified report Flow writes only authorized source-pinned report records | — | FLOW_INTERNAL | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-CREATE-REPORT-NOTIFICATION | NOTI-OBJ-NOTIFICATION | DENY | CURRENT_ACTOR | a user cannot invoke an internal report materialization action directly | — | FLOW_INTERNAL | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-DELIVER | NOTI-OBJ-NOTIFICATION | ALLOW | SYSTEM | the verified delivery event updates only the target notification | — | SYSTEM_EVENT | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-DELIVER | NOTI-OBJ-NOTIFICATION | DENY | CURRENT_ACTOR | a user cannot invoke notification delivery state changes directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-FAIL-DELIVERY | NOTI-OBJ-NOTIFICATION | ALLOW | SYSTEM | the verified delivery event updates only the target notification | — | SYSTEM_EVENT | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-FAIL-DELIVERY | NOTI-OBJ-NOTIFICATION | DENY | CURRENT_ACTOR | a user cannot invoke notification delivery state changes directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-RETRY-DELIVERY | NOTI-OBJ-NOTIFICATION | ALLOW | SYSTEM | the verified delivery event updates only the target notification | — | SYSTEM_EVENT | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-RETRY-DELIVERY | NOTI-OBJ-NOTIFICATION | DENY | CURRENT_ACTOR | a user cannot invoke notification delivery state changes directly | — | SYSTEM_EVENT | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-MARK-READ | NOTI-OBJ-NOTIFICATION | ALLOW | CURRENT_ACTOR | the authenticated recipient is acting on the recipient's own notification | OWN_RECORD:NOTI-NOTIFICATION-F-RECIPIENT | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-MARK-READ | NOTI-OBJ-NOTIFICATION | DENY | CURRENT_ACTOR | the authenticated actor is not the notification recipient | OTHER_RECORD:NOTI-NOTIFICATION-F-RECIPIENT | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-MARK-READ | NOTI-OBJ-NOTIFICATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student notifications | — | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-MARK-HANDLED | NOTI-OBJ-NOTIFICATION | ALLOW | CURRENT_ACTOR | the authenticated recipient is acting on the recipient's own notification | OWN_RECORD:NOTI-NOTIFICATION-F-RECIPIENT | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-MARK-HANDLED | NOTI-OBJ-NOTIFICATION | DENY | CURRENT_ACTOR | the authenticated actor is not the notification recipient | OTHER_RECORD:NOTI-NOTIFICATION-F-RECIPIENT | WEB / APP | LOW | REQUIRED |
+| NOTI-001 | NOTI-ACT-MARK-HANDLED | NOTI-OBJ-NOTIFICATION | DENY | ROLE-PLATFORM-OPS | platform operations has no default access to student notifications | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CREATE-LESSON-PLAN | PREP-OBJ-LESSON-PLAN | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CREATE-LESSON-PLAN | PREP-OBJ-LESSON-PLAN | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CREATE-LESSON-PLAN | PREP-OBJ-LESSON-PLAN | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CONFIRM-LESSON-PLAN | PREP-OBJ-LESSON-PLAN | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CONFIRM-LESSON-PLAN | PREP-OBJ-LESSON-PLAN | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CONFIRM-LESSON-PLAN | PREP-OBJ-LESSON-PLAN | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-REFERENCE-MATERIAL | PREP-OBJ-MATERIAL-REF | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-REFERENCE-MATERIAL | PREP-OBJ-MATERIAL-REF | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-REFERENCE-MATERIAL | PREP-OBJ-MATERIAL-REF | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-VERIFY-MATERIAL-LICENSE | PREP-OBJ-MATERIAL-REF | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-VERIFY-MATERIAL-LICENSE | PREP-OBJ-MATERIAL-REF | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-VERIFY-MATERIAL-LICENSE | PREP-OBJ-MATERIAL-REF | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | PREP-OBJ-CLASSROOM-ACTIVITY | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | PREP-OBJ-CLASSROOM-ACTIVITY | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-PLAN-CLASSROOM-ACTIVITY | PREP-OBJ-CLASSROOM-ACTIVITY | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-RECORD-CLASSROOM-ACTIVITY | PREP-OBJ-CLASSROOM-ACTIVITY | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-RECORD-CLASSROOM-ACTIVITY | PREP-OBJ-CLASSROOM-ACTIVITY | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-RECORD-CLASSROOM-ACTIVITY | PREP-OBJ-CLASSROOM-ACTIVITY | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | PREP-OBJ-ASSIGNMENT-DRAFT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | PREP-OBJ-ASSIGNMENT-DRAFT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-GENERATE-ASSIGNMENT-DRAFT | PREP-OBJ-ASSIGNMENT-DRAFT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | PREP-OBJ-ASSIGNMENT-DRAFT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | PREP-OBJ-ASSIGNMENT-DRAFT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT | PREP-OBJ-ASSIGNMENT-DRAFT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | PREP-OBJ-ASSIGNMENT-DRAFT | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | PREP-OBJ-ASSIGNMENT-DRAFT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| PREP-001 | PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF | PREP-OBJ-ASSIGNMENT-DRAFT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-QUESTION-VERSION | CONTENT-OBJ-QUESTION-VERSION | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-QUESTION-VERSION | CONTENT-OBJ-QUESTION-VERSION | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-QUESTION-VERSION | CONTENT-OBJ-QUESTION-VERSION | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-PUBLISH-QUESTION-VERSION | CONTENT-OBJ-QUESTION-VERSION | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-PUBLISH-QUESTION-VERSION | CONTENT-OBJ-QUESTION-VERSION | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-PUBLISH-QUESTION-VERSION | CONTENT-OBJ-QUESTION-VERSION | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-LICENSE | CONTENT-OBJ-LICENSE | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-LICENSE | CONTENT-OBJ-LICENSE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-LICENSE | CONTENT-OBJ-LICENSE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-ACTIVATE-LICENSE | CONTENT-OBJ-LICENSE | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-ACTIVATE-LICENSE | CONTENT-OBJ-LICENSE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-ACTIVATE-LICENSE | CONTENT-OBJ-LICENSE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-SCHOOL-PERMISSION | CONTENT-OBJ-PERMISSION | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-SCHOOL-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-SCHOOL-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-SUBJECT-PERMISSION | CONTENT-OBJ-PERMISSION | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-SUBJECT-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-SUBJECT-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-COURSE-PERMISSION | CONTENT-OBJ-PERMISSION | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-COURSE-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-CREATE-COURSE-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-ACTIVATE-PERMISSION | CONTENT-OBJ-PERMISSION | ALLOW | DUTY-SUBJECT-LEAD | the subject lead acts inside the assigned subject content-governance scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-ACTIVATE-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| CONTENT-001 | CONTENT-ACT-ACTIVATE-PERMISSION | CONTENT-OBJ-PERMISSION | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-EVENT | EXM-OBJ-EXAM-EVENT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-EVENT | EXM-OBJ-EXAM-EVENT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-EVENT | EXM-OBJ-EXAM-EVENT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-PUBLISH-EVENT | EXM-OBJ-EXAM-EVENT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-PUBLISH-EVENT | EXM-OBJ-EXAM-EVENT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-PUBLISH-EVENT | EXM-OBJ-EXAM-EVENT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-OPEN-CORRECTION | EXM-OBJ-EXAM-EVENT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-OPEN-CORRECTION | EXM-OBJ-EXAM-EVENT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-OPEN-CORRECTION | EXM-OBJ-EXAM-EVENT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-IMPORT-SCORES | EXM-OBJ-SCORE-IMPORT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-IMPORT-SCORES | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-IMPORT-SCORES | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-VALIDATE-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-VALIDATE-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-VALIDATE-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REJECT-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REJECT-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REJECT-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REVISE-REJECTED-IMPORT | EXM-OBJ-SCORE-IMPORT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REVISE-REJECTED-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REVISE-REJECTED-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-ACCEPT-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-ACCEPT-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-ACCEPT-SCORE-IMPORT | EXM-OBJ-SCORE-IMPORT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-AGGREGATE-RULE | EXM-OBJ-AGGREGATE-RULE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-AGGREGATE-RULE | EXM-OBJ-AGGREGATE-RULE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-AGGREGATE-RULE | EXM-OBJ-AGGREGATE-RULE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-ACTIVATE-AGGREGATE-RULE | EXM-OBJ-AGGREGATE-RULE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-ACTIVATE-AGGREGATE-RULE | EXM-OBJ-AGGREGATE-RULE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-ACTIVATE-AGGREGATE-RULE | EXM-OBJ-AGGREGATE-RULE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CREATE-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CONFIRM-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CONFIRM-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CONFIRM-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REJECT-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REJECT-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REJECT-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-PUBLISH-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-PUBLISH-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-PUBLISH-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CORRECT-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | DUTY-SUBJECT-TEACHER | the corresponding subject teacher acts inside assigned course and class scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CORRECT-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-CORRECT-SUBJECT-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REPUBLISH-CORRECTED-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REPUBLISH-CORRECTED-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-REPUBLISH-CORRECTED-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| EXM-001 | EXM-ACT-VIEW-PUBLISHED-SCORE | EXM-OBJ-SUBJECT-SCORE | ALLOW | ROLE-STUDENT | the student reads only the student's own score after the score reaches PUBLISHED and visibleAt opens | — | WEB / APP | READ | NOT_REQUIRED |
+| EXM-001 | EXM-ACT-VIEW-PUBLISHED-SCORE | EXM-OBJ-SUBJECT-SCORE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | READ | NOT_REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CALENDAR | SCH-OBJ-CALENDAR | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CALENDAR | SCH-OBJ-CALENDAR | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CALENDAR | SCH-OBJ-CALENDAR | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-PUBLISH-CALENDAR | SCH-OBJ-CALENDAR | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-PUBLISH-CALENDAR | SCH-OBJ-CALENDAR | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-PUBLISH-CALENDAR | SCH-OBJ-CALENDAR | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | SCH-OBJ-CONSTRAINT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | SCH-OBJ-CONSTRAINT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | SCH-OBJ-CONSTRAINT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | SCH-OBJ-CONSTRAINT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-ACTIVATE-CONSTRAINT | SCH-OBJ-CONSTRAINT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-ACTIVATE-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-ACTIVATE-CONSTRAINT | SCH-OBJ-CONSTRAINT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT | SCH-OBJ-CONSTRAINT-SNAPSHOT | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-GENERATE-CANDIDATE | SCH-OBJ-CANDIDATE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-GENERATE-CANDIDATE | SCH-OBJ-CANDIDATE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-GENERATE-CANDIDATE | SCH-OBJ-CANDIDATE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-REVIEW-CONFLICTS | SCH-OBJ-CANDIDATE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB / APP | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-REVIEW-CONFLICTS | SCH-OBJ-CANDIDATE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-REVIEW-CONFLICTS | SCH-OBJ-CANDIDATE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB / APP | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CONFIRM-CANDIDATE | SCH-OBJ-CANDIDATE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CONFIRM-CANDIDATE | SCH-OBJ-CANDIDATE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-CONFIRM-CANDIDATE | SCH-OBJ-CANDIDATE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-PUBLISH-CANDIDATE | SCH-OBJ-CANDIDATE | ALLOW | ROLE-ACADEMIC | academic administration acts inside the authorized school and term scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-PUBLISH-CANDIDATE | SCH-OBJ-CANDIDATE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-PUBLISH-CANDIDATE | SCH-OBJ-CANDIDATE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-MARK-CANDIDATE-STALE | SCH-OBJ-CANDIDATE | ALLOW | SYSTEM | the registered source-version event marks every affected candidate stale | — | SYSTEM_EVENT | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-MARK-CANDIDATE-STALE | SCH-OBJ-CANDIDATE | DENY | ROLE-ACADEMIC | ROLE-ACADEMIC is outside the task-specific owner and authorized object scope | — | SYSTEM_EVENT | LOW | REQUIRED |
+| SCH-001 | SCH-ACT-MARK-CANDIDATE-STALE | SCH-OBJ-CANDIDATE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | SYSTEM_EVENT | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-ONBOARDING-CASE | PLAT-OBJ-ONBOARDING-CASE | ALLOW | ROLE-PLATFORM-OPS | platform operations manages service metadata without opening student-level learning detail | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-ONBOARDING-CASE | PLAT-OBJ-ONBOARDING-CASE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-ONBOARDING-CASE | PLAT-OBJ-ONBOARDING-CASE | DENY | ROLE-TEACHER | ROLE-TEACHER is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-ONBOARDING-CASE | PLAT-OBJ-ONBOARDING-CASE | ALLOW | ROLE-SCHOOL-ADMIN | the school administrator controls the school's explicit time-bound support access | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-ONBOARDING-CASE | PLAT-OBJ-ONBOARDING-CASE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-ONBOARDING-CASE | PLAT-OBJ-ONBOARDING-CASE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | ALLOW | ROLE-PLATFORM-OPS | platform operations manages service metadata without opening student-level learning detail | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | DENY | ROLE-TEACHER | ROLE-TEACHER is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | ALLOW | ROLE-SCHOOL-ADMIN | the school administrator controls the school's explicit time-bound support access | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-ACTIVATE-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | ALLOW | ROLE-PLATFORM-OPS | platform operations manages service metadata without opening student-level learning detail | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-ACTIVATE-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-ACTIVATE-SERVICE-PLAN | PLAT-OBJ-SERVICE-PLAN | DENY | ROLE-TEACHER | ROLE-TEACHER is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | ALLOW | ROLE-PLATFORM-OPS | platform operations manages service metadata without opening student-level learning detail | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | DENY | ROLE-TEACHER | ROLE-TEACHER is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | ALLOW | ROLE-SCHOOL-ADMIN | the school administrator controls the school's explicit time-bound support access | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | DENY | ROLE-PLATFORM-OPS | ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | ALLOW | ROLE-PLATFORM-OPS | platform operations manages service metadata without opening student-level learning detail | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | PLAT-OBJ-POLICY-TEMPLATE | DENY | ROLE-TEACHER | ROLE-TEACHER is outside the task-specific owner and authorized object scope | — | WEB | LOW | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-SUPPORT-CASE | PLAT-OBJ-SUPPORT-CASE | ALLOW | ROLE-PLATFORM-OPS | platform operations manages service metadata without opening student-level learning detail | — | WEB / APP | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-SUPPORT-CASE | PLAT-OBJ-SUPPORT-CASE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB / APP | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-CREATE-SUPPORT-CASE | PLAT-OBJ-SUPPORT-CASE | DENY | ROLE-TEACHER | ROLE-TEACHER is outside the task-specific owner and authorized object scope | — | WEB / APP | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-CLOSE-SUPPORT-CASE | PLAT-OBJ-SUPPORT-CASE | ALLOW | ROLE-PLATFORM-OPS | platform operations manages service metadata without opening student-level learning detail | — | WEB | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-CLOSE-SUPPORT-CASE | PLAT-OBJ-SUPPORT-CASE | DENY | ROLE-STUDENT | ROLE-STUDENT is outside the task-specific owner and authorized object scope | — | WEB | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-CLOSE-SUPPORT-CASE | PLAT-OBJ-SUPPORT-CASE | DENY | ROLE-TEACHER | ROLE-TEACHER is outside the task-specific owner and authorized object scope | — | WEB | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-USE-SUPPORT-ACCESS | PLAT-OBJ-SUPPORT-CASE | ALLOW | ROLE-PLATFORM-OPS | the current platform operator equals the operator on the pinned active AUD session | OWN_RECORD:PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID | WEB | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-USE-SUPPORT-ACCESS | PLAT-OBJ-SUPPORT-CASE | DENY | ROLE-PLATFORM-OPS | the platform operator attempts to use another operator's AUD session | OTHER_RECORD:PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID | WEB | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-USE-SUPPORT-ACCESS | PLAT-OBJ-SUPPORT-CASE | DENY | ROLE-PLATFORM-OPS | the pinned AUD session is expired, revoked, or not ACTIVE | OWN_RECORD:PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID | WEB | HIGH | REQUIRED |
+| PLAT-001 | PLAT-ACT-USE-SUPPORT-ACCESS | PLAT-OBJ-SUPPORT-CASE | DENY | ROLE-STUDENT | students cannot invoke school support access | — | WEB | HIGH | REQUIRED |

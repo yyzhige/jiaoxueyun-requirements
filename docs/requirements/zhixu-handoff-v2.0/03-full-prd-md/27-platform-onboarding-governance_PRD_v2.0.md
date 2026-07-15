@@ -1,139 +1,212 @@
-# PLAT-001 平台学校入驻与运营治理 PRD v2.0
+# PLAT-001 School Onboarding Service and Support Access PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 优先级 | P3 |
-| 状态 | v2.0 重构基线 |
-| 适用端 | Web、App |
-| 主要角色 | 平台运营、学校管理员 |
-| 关联线框 | [27-platform-onboarding-governance-wireframe.zh-CN.md](../05-wireframe-contracts/27-platform-onboarding-governance-wireframe.zh-CN.md) |
-
-## 0. 产品评审摘要
-
-管理学校入驻、服务状态、策略模板和运营审计；平台运营默认不接触学生明细。
-
-本模块拥有的权威对象如下。模块外对象只能引用 Data ID 和版本，不能复制第二套事实。
-
-| Data ID | 对象 | 业务 Owner | 数据主体 | 产生者 | 确认者 | Steward | 敏感级别 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DAT-PLAT-01 | School Onboarding Case | 平台运营 | 学校入驻工单 | 平台运营 | 平台运营 | 平台运营 | S2 教学业务数据 |
-| DAT-PLAT-02 | Service Plan | 平台运营 | 服务方案 | 平台运营 | 平台运营 | 平台运营 | S2 教学业务数据 |
-| DAT-PLAT-03 | Tenant Policy Template | 平台运营 | 租户策略模板 | 平台运营 | 平台运营 | 平台运营 | S2 教学业务数据 |
-| DAT-PLAT-04 | Support Access Request | 学校管理员 | 支持访问申请 | 学校管理员 | 学校管理员 | 学校管理员 | S2 教学业务数据 |
-
-## 1. 范围
-
-### 1.1 目标用户与价值
-
-- 目标用户: 平台运营、学校管理员
-- 解决问题: 管理学校入驻、服务状态、策略模板和运营审计；平台运营默认不接触学生明细。
-- 成功标准: 源对象、字段、权限、状态、Flow 和验收标准均可追溯；AI 或批处理不越过人工确认门禁。
-
-### 1.2 本模块负责
-
-- DAT-PLAT-01 School Onboarding Case
-- DAT-PLAT-02 Service Plan
-- DAT-PLAT-03 Tenant Policy Template
-- DAT-PLAT-04 Support Access Request
-
-### 1.3 本模块不负责
-
-- 不拥有其他模块权威对象，只通过 Data ID、源版本和权限结果引用。
-- 不把 AI 建议或派生视图升级为正式业务事实。
-- 不通过前端隐藏控件替代服务端权限校验。
-
-## 2. Web/App Capability Matrix
-
-| 能力 | Web | App | 差异原则 |
-| --- | --- | --- | --- |
-| 完整业务处理 | 学校入驻、服务状态、策略模板、支持访问审批、运营审计 | 无独立平台 App；学校管理员可在 App 查看服务通知 | Web 承载复杂配置、批量表格和完整处理；App 承载高频、移动、提醒和必要确认。 |
-| AI 一句话入口 | 支持查询、分析、草稿、临时报表、受控执行和定期任务配置 | 支持移动查询、摘要、学习助手和必要确认 | 端不是权限边界，AI 必须继承当前学校、身份、学期和数据范围。 |
-| 批量/复杂操作 | 允许在预览、校验、确认、审计后执行 | 仅提供低风险或必要确认，不要求复制所有批量能力 | App 缺省能力必须登记，不能由前端自行删除。 |
-
-## 3. 字段与选项合同
-
-| Field ID | 字段 | 控件 | Option Set | 必填/默认 | 联动与校验 | 可见性 | 可变性 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| PLAT-F001 | 学校 | 自动完成 | OPT-COM-002 | 是 | 入驻或服务范围 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F002 | 地区 | 级联选择 | OPT-COM-001 | 是 | 试点为石家庄 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F003 | 服务状态 | 单选 | OPT-ENUM-001 | 是 | 启用/暂停/终止另有状态 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F004 | 权限范围对象 | 级联选择 | OPT-COM-015 | 支持访问必填 | 学校授权，限时 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-| PLAT-F005 | 审计结果 | 只读 | OPT-ENUM-024 | 系统生成 | 平台操作全部审计 | 按角色和数据范围过滤 | 未发布可改，发布后新版本 |
-
-## 4. 状态机
-
-| 状态 | 含义/要求 |
 | --- | --- |
-| LEAD | 待入驻 |
-| ONBOARDING | 入驻中 |
-| ACTIVE | 服务中 |
-| SUSPENDED | 暂停 |
-| TERMINATED | 终止 |
+| 阶段 | 1 |
+| 优先级 | P0 |
+| 目标 | Operate school onboarding and service metadata while requiring school confirmation and expiring audited support access |
+| 基线决策 | `BASE-001`、`BASE-007` |
+| NFR | `NFR-003`、`NFR-006`、`NFR-008` |
+| 进入条件 | the school has authorized a service onboarding context |
+| 退出条件 | service state is school-confirmed and every support access is scoped expiring and auditable |
 
-状态通用规则：
+## 1. 范围与事实边界
 
-- 状态跳转必须由明确用户动作、系统任务完成或授权变更触发。
-- 发布、确认、导出、授权和 AI 执行类跳转必须写入审计。
-- 源版本变化时，下游派生视图进入过期或待重新确认，不能静默覆盖。
+- 本模块权威拥有 4 个对象、11 个动作。
+- 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
+- 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
+- AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
 
-## 5. 权限与责任
+## 2. 权威对象与字段合同
 
-| 角色/职责 | 读权限 | 写权限 | 限制 |
+### PLAT-OBJ-ONBOARDING-CASE School Onboarding Case
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_SERVICE_CONFIGURATION | SCHOOL | ROLE-PLATFORM-OPS | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | OPEN / SCHOOL_CONFIRMED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLAT-CASE-F-ID | School Onboarding Case ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-CASE-F-SCHOOL | Onboarding School | ID | 是 | OPTION_SET: OPT-COM-002 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-CASE-F-IMPLEMENTATION-NOTES | Onboarding Implementation Notes | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-CASE-F-STATUS | Onboarding Case Status | STRING | 是 | OPTION_SET: OPT-EXT-015 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### PLAT-OBJ-SERVICE-PLAN School Service Plan
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_SERVICE_CONFIGURATION | SCHOOL | ROLE-PLATFORM-OPS | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | DRAFT / CONFIRMED / ACTIVE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLAT-PLAN-F-ID | School Service Plan ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-PLAN-F-SCOPE | School Service Plan Scope | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-PLAN-F-SERVICE-STATE | School Service State | STRING | 是 | OPTION_SET: OPT-EXT-008 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-PLAN-F-SCHOOL-CONFIRMED-AT | School Confirmation Time | DATETIME | required only when the school confirms the service plan；状态=CONFIRMED；动作=PLAT-ACT-CONFIRM-SERVICE-PLAN | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### PLAT-OBJ-POLICY-TEMPLATE School Policy Template Version
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_SERVICE_CONFIGURATION | SCHOOL | ROLE-PLATFORM-OPS | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-003 | S2 | AUTHORIZED | DRAFT / CONFIRMED / ACTIVE |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLAT-POLICY-F-ID | School Policy Template Version ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-POLICY-F-CONTENT | School Policy Template Content | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-POLICY-F-VERSION | Policy Template Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-POLICY-F-STATUS | Policy Template Status | STRING | 是 | OPTION_SET: OPT-EXT-016 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+### PLAT-OBJ-SUPPORT-CASE Audited School Support Case
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUDIT_PINNED_SUPPORT_CASE | SCHOOL | ROLE-PLATFORM-OPS | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-001 | S4 | AUTHORIZED | OPEN / CLOSED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLAT-SUPPORT-CASE-F-ID | Audited School Support Case ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-SUPPORT-CASE-F-PURPOSE | Support Case Purpose | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE | Requested Support Scope | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-SUPPORT-CASE-F-AUDIT-REASON | Support Case Audit Reason | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-SUPPORT-CASE-F-AUD-SESSION-REF | Pinned Audited Access Session | ID | 是 | OBJECT_REF: AUD-OBJ-ACCESS-SESSION | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION | Pinned Audited Session Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID | Authorized Session Operator Projection | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+| PLAT-SUPPORT-CASE-F-STATUS | Support Case Status | STRING | 是 | OPTION_SET: OPT-EXT-009 | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared task-specific data type and authorized school scope | retain the accepted value with actor, time, and version provenance |
+
+## 3. 对象关系
+
+| Relationship ID | 源对象 | 关系 | 目标对象 | 基数 | 所有权范围 | 源失效处理 |
+| --- | --- | --- | --- | --- | --- | --- |
+
+## 4. 可执行动作合同
+
+| Action ID | 动作 | 目标对象 | 操作 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLAT-ACT-CREATE-ONBOARDING-CASE | Create School Onboarding Case | PLAT-OBJ-ONBOARDING-CASE | CREATE | PLAT-CASE-F-SCHOOL<br>PLAT-CASE-F-IMPLEMENTATION-NOTES | PLAT-CASE-F-ID<br>PLAT-CASE-F-STATUS | CREATE（成功状态由 PLAT-ACT-CREATE-ONBOARDING-CASE-SCN-SUCCESS 定义） | ALLOW:ROLE-PLATFORM-OPS — platform operations manages service metadata without opening student-level learning detail<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-TEACHER — ROLE-TEACHER is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-CREATE-ONBOARDING-CASE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-CONFIRM-ONBOARDING-CASE | Record School Onboarding Confirmation | PLAT-OBJ-ONBOARDING-CASE | UPDATE |  | PLAT-CASE-F-STATUS | OPEN → SCHOOL_CONFIRMED | ALLOW:ROLE-SCHOOL-ADMIN — the school administrator controls the school's explicit time-bound support access<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-CONFIRM-ONBOARDING-CASE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-CREATE-SERVICE-PLAN | Create School Service Plan | PLAT-OBJ-SERVICE-PLAN | CREATE | PLAT-PLAN-F-SCOPE | PLAT-PLAN-F-ID<br>PLAT-PLAN-F-SERVICE-STATE | CREATE（成功状态由 PLAT-ACT-CREATE-SERVICE-PLAN-SCN-SUCCESS 定义） | ALLOW:ROLE-PLATFORM-OPS — platform operations manages service metadata without opening student-level learning detail<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-TEACHER — ROLE-TEACHER is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-CREATE-SERVICE-PLAN:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-CONFIRM-SERVICE-PLAN | Confirm School Service Plan | PLAT-OBJ-SERVICE-PLAN | UPDATE |  | PLAT-PLAN-F-SERVICE-STATE<br>PLAT-PLAN-F-SCHOOL-CONFIRMED-AT | DRAFT → CONFIRMED | ALLOW:ROLE-SCHOOL-ADMIN — the school administrator controls the school's explicit time-bound support access<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-CONFIRM-SERVICE-PLAN:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-ACTIVATE-SERVICE-PLAN | Activate Confirmed School Service Plan | PLAT-OBJ-SERVICE-PLAN | UPDATE |  | PLAT-PLAN-F-SERVICE-STATE | CONFIRMED → ACTIVE | ALLOW:ROLE-PLATFORM-OPS — platform operations manages service metadata without opening student-level learning detail<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-TEACHER — ROLE-TEACHER is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-ACTIVATE-SERVICE-PLAN:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-CREATE-POLICY-TEMPLATE | Create School Policy Template Version | PLAT-OBJ-POLICY-TEMPLATE | CREATE | PLAT-POLICY-F-CONTENT | PLAT-POLICY-F-ID<br>PLAT-POLICY-F-VERSION<br>PLAT-POLICY-F-STATUS | CREATE（成功状态由 PLAT-ACT-CREATE-POLICY-TEMPLATE-SCN-SUCCESS 定义） | ALLOW:ROLE-PLATFORM-OPS — platform operations manages service metadata without opening student-level learning detail<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-TEACHER — ROLE-TEACHER is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-CREATE-POLICY-TEMPLATE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-CONFIRM-POLICY-TEMPLATE | Confirm School Policy Template Version | PLAT-OBJ-POLICY-TEMPLATE | UPDATE |  | PLAT-POLICY-F-VERSION<br>PLAT-POLICY-F-STATUS | DRAFT → CONFIRMED | ALLOW:ROLE-SCHOOL-ADMIN — the school administrator controls the school's explicit time-bound support access<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-PLATFORM-OPS — ROLE-PLATFORM-OPS is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-CONFIRM-POLICY-TEMPLATE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | Activate Confirmed School Policy Template | PLAT-OBJ-POLICY-TEMPLATE | UPDATE |  | PLAT-POLICY-F-VERSION<br>PLAT-POLICY-F-STATUS | CONFIRMED → ACTIVE | ALLOW:ROLE-PLATFORM-OPS — platform operations manages service metadata without opening student-level learning detail<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-TEACHER — ROLE-TEACHER is outside the task-specific owner and authorized object scope | WEB | LOW | REQUIRED | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| PLAT-ACT-CREATE-SUPPORT-CASE | Create an AUD-authorized Support Case | PLAT-OBJ-SUPPORT-CASE | CREATE | PLAT-SUPPORT-CASE-F-PURPOSE<br>PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE<br>PLAT-SUPPORT-CASE-F-AUDIT-REASON<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-REF | PLAT-SUPPORT-CASE-F-ID<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION<br>PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID<br>PLAT-SUPPORT-CASE-F-STATUS | CREATE（成功状态由 PLAT-ACT-CREATE-SUPPORT-CASE-SCN-SUCCESS 定义） | ALLOW:ROLE-PLATFORM-OPS — platform operations manages service metadata without opening student-level learning detail<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-TEACHER — ROLE-TEACHER is outside the task-specific owner and authorized object scope | WEB / APP | HIGH | REQUIRED | PLAT-ACT-CREATE-SUPPORT-CASE:school:object-version:request-id | PERMISSION_DENIED / ACCESS_INACTIVE / ACCESS_EXPIRED / ACCESS_OTHER_RECORD / ACCESS_SCOPE_DENIED / SOURCE_VERSION_STALE / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| PLAT-ACT-CLOSE-SUPPORT-CASE | Close an Audited Support Case | PLAT-OBJ-SUPPORT-CASE | UPDATE |  | PLAT-SUPPORT-CASE-F-STATUS | OPEN → CLOSED | ALLOW:ROLE-PLATFORM-OPS — platform operations manages service metadata without opening student-level learning detail<br>DENY:ROLE-STUDENT — ROLE-STUDENT is outside the task-specific owner and authorized object scope<br>DENY:ROLE-TEACHER — ROLE-TEACHER is outside the task-specific owner and authorized object scope | WEB | HIGH | REQUIRED | PLAT-ACT-CLOSE-SUPPORT-CASE:school:object-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| PLAT-ACT-USE-SUPPORT-ACCESS | Use an Active AUD-authorized Support Session | PLAT-OBJ-SUPPORT-CASE | READ | PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE | PLAT-SUPPORT-CASE-F-PURPOSE<br>PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE<br>PLAT-SUPPORT-CASE-F-AUDIT-REASON<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-REF<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION<br>PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID<br>PLAT-SUPPORT-CASE-F-STATUS | UNCHANGED | ALLOW:ROLE-PLATFORM-OPS — the current platform operator equals the operator on the pinned active AUD session<br>DENY:ROLE-PLATFORM-OPS — the platform operator attempts to use another operator's AUD session<br>DENY:ROLE-PLATFORM-OPS — the pinned AUD session is expired, revoked, or not ACTIVE<br>DENY:ROLE-STUDENT — students cannot invoke school support access | WEB | HIGH | REQUIRED | — | PERMISSION_DENIED / NOT_FOUND / ACCESS_INACTIVE / ACCESS_EXPIRED / ACCESS_OTHER_RECORD / ACCESS_SCOPE_DENIED / SOURCE_VERSION_STALE / AUDIT_FAILED |
+
+## 5. 业务失败因果语义
+
+| Action ID | 失败码 | 因果谓词 | Given | When | Expected Data |
+| --- | --- | --- | --- | --- | --- |
+| PLAT-ACT-CREATE-SUPPORT-CASE | ACCESS_INACTIVE | auditSession.state !== ACTIVE | the pinned AUD session is pending, revoked, expired, or otherwise not ACTIVE | the platform operator creates a support case under the pinned AUD session | ACCESS_INACTIVE creates no support case and returns no student-detail data |
+| PLAT-ACT-CREATE-SUPPORT-CASE | ACCESS_EXPIRED | currentTime >= auditSession.expiresAt | the current time is at or after the pinned AUD session expiry | the platform operator creates a support case under the pinned AUD session | ACCESS_EXPIRED creates no support case and returns the session expiry boundary |
+| PLAT-ACT-CREATE-SUPPORT-CASE | ACCESS_OTHER_RECORD | currentActor.id !== auditSession.authorizedOperatorId | the current platform operator is not the operator authorized by the pinned AUD session | the platform operator creates a support case under the pinned AUD session | ACCESS_OTHER_RECORD creates no support case and discloses no other operator's authorized data |
+| PLAT-ACT-CREATE-SUPPORT-CASE | ACCESS_SCOPE_DENIED | !auditSession.scope.contains(requestedScope) | the requested support scope is outside the scope approved on the pinned AUD session | the platform operator creates a support case under the pinned AUD session | ACCESS_SCOPE_DENIED creates no support case and returns only the rejected requested scope |
+| PLAT-ACT-USE-SUPPORT-ACCESS | ACCESS_INACTIVE | auditSession.state !== ACTIVE | the support case's pinned AUD session is pending, revoked, expired, or otherwise not ACTIVE | the authorized platform operator uses the support case access | ACCESS_INACTIVE returns no support data and records no successful access |
+| PLAT-ACT-USE-SUPPORT-ACCESS | ACCESS_EXPIRED | currentTime >= auditSession.expiresAt | the current time is at or after the support case's pinned AUD session expiry | the authorized platform operator uses the support case access | ACCESS_EXPIRED returns no support data and exposes only the expiry boundary |
+| PLAT-ACT-USE-SUPPORT-ACCESS | ACCESS_OTHER_RECORD | currentActor.id !== auditSession.authorizedOperatorId | the current platform operator is not the operator authorized by the support case's pinned AUD session | the platform operator uses the support case access | ACCESS_OTHER_RECORD returns no support data from another operator's case |
+| PLAT-ACT-USE-SUPPORT-ACCESS | ACCESS_SCOPE_DENIED | !auditSession.scope.contains(requestedScope) | the requested support scope is outside the support case's active AUD session scope | the authorized platform operator uses the support case access | ACCESS_SCOPE_DENIED returns no support data outside the approved scope |
+| PLAT-ACT-USE-SUPPORT-ACCESS | AUDIT_FAILED | appendAuditEventBeforeDataReturn !== SUCCESS | the immutable AUD event cannot be appended before protected support data would be returned | the authorized platform operator uses the support case access | AUDIT_FAILED returns no protected support data and preserves the business objects unchanged |
+
+## 6. 状态可达性
+
+| Object ID | 状态 | 进入动作 | 离开动作 |
 | --- | --- | --- | --- |
-| 学生 | 本人已发布或本人产生的数据 | 本人作答、提交、反馈和允许的学习动作 | 不能查看未发布成绩、他人数据、教师私密备注。 |
-| 任课教师 | 本人任课班级、本学科、授权学生 | 本学科专业判断、评分、反馈、计划和确认 | 不能修改非任教学科专业结论。 |
-| 班主任 | 本班全学科摘要、学生详情和协调视图 | 班主任跟进与全科协调事项 | 不能代替学科教师确认评分、掌握和学科计划。 |
-| 教务 | 授权年级、班级、课程和汇总教学数据 | 组织、课程、考试、排课等教务对象 | 明细专业判断需额外授权。 |
-| 学校管理员 | 配置和审计所需范围 | 账号、身份、策略、数据治理配置 | 不默认拥有所有学生内容浏览权。 |
+| PLAT-OBJ-ONBOARDING-CASE | OPEN | PLAT-ACT-CREATE-ONBOARDING-CASE | PLAT-ACT-CONFIRM-ONBOARDING-CASE |
+| PLAT-OBJ-ONBOARDING-CASE | SCHOOL_CONFIRMED | PLAT-ACT-CONFIRM-ONBOARDING-CASE |  |
+| PLAT-OBJ-SERVICE-PLAN | DRAFT | PLAT-ACT-CREATE-SERVICE-PLAN | PLAT-ACT-CONFIRM-SERVICE-PLAN |
+| PLAT-OBJ-SERVICE-PLAN | CONFIRMED | PLAT-ACT-CONFIRM-SERVICE-PLAN | PLAT-ACT-ACTIVATE-SERVICE-PLAN |
+| PLAT-OBJ-SERVICE-PLAN | ACTIVE | PLAT-ACT-ACTIVATE-SERVICE-PLAN |  |
+| PLAT-OBJ-POLICY-TEMPLATE | DRAFT | PLAT-ACT-CREATE-POLICY-TEMPLATE | PLAT-ACT-CONFIRM-POLICY-TEMPLATE |
+| PLAT-OBJ-POLICY-TEMPLATE | CONFIRMED | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE |
+| PLAT-OBJ-POLICY-TEMPLATE | ACTIVE | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE |  |
+| PLAT-OBJ-SUPPORT-CASE | OPEN | PLAT-ACT-CREATE-SUPPORT-CASE | PLAT-ACT-CLOSE-SUPPORT-CASE |
+| PLAT-OBJ-SUPPORT-CASE | CLOSED | PLAT-ACT-CLOSE-SUPPORT-CASE |  |
 
-## 6. 主流程
+## 7. 参与数据流
 
-1. 平台运营创建学校入驻工单和服务方案。
-2. 学校管理员确认学校空间和策略。
-3. 平台默认只能看运营状态和汇总信息。
-4. 技术支持访问学生明细必须由学校授权、限时并审计。
+| Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
+| --- | --- | --- | --- | --- | --- |
 
-关联 Flow: `DF-301`、`DF-001`、`DF-019`。
+## 8. 页面任务合同
 
-### 6.1 功能需求
-
-| 需求 ID | 功能 | 输入 | 处理 | 输出 | 异常 | 优先级 | 验收映射 |
+| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PLAT-FR-01 | 对象查询与范围筛选 | PLAT-F001、PLAT-F002、PLAT-F003、PLAT-F004、PLAT-F005 | 按当前学校、身份、学期、职责和字段权限过滤；不使用前端隐藏作为权限控制 | 授权范围内列表、统计、空状态和无权限状态 | 无可选项时展示原因；权限失效进入上下文失效 | P3 | PLAT-AC-01 |
-| PLAT-FR-02 | 详情查看与版本追踪 | DAT-PLAT-01、DAT-PLAT-02、DAT-PLAT-03、DAT-PLAT-04 | 读取源对象当前版本、历史版本、状态和审计摘要 | 详情页、版本差异、源对象引用 | 源版本过期时标记 stale，不静默覆盖 | P3 | PLAT-AC-02 |
-| PLAT-FR-03 | 创建/修改/确认主动作 | PLAT-F001、PLAT-F002、PLAT-F003、PLAT-F004、PLAT-F005 | 校验必填、Option Set、状态跳转、Owner、确认者和业务幂等键 | 新对象、新版本或确认记录 | 部分成功返回对象级结果和重试入口 | P3 | PLAT-AC-03 |
-| PLAT-FR-04 | AI 对话与草稿/执行 | 自然语言意图、Active Work Context、目标对象 | 解析意图，生成查询、分析、草稿或执行预览；写入前二次确认 | 结构化结果、草稿、任务运行记录 | AI 不可用时保留人工路径；上下文变化后任务失效 | P3 | PLAT-AC-04 |
-| PLAT-FR-05 | 审计、通知与下游失效 | DF-301、DF-001、DF-019 | 写入审计；按 Flow 刷新派生视图、通知接收者、标记下游失效 | 审计事件、通知记录、下游刷新或失效标记 | 审计失败时高风险写入失败关闭；通知失败不回滚源事实 | P3 | PLAT-AC-05 |
+| PLAT-PAGE-SCHOOL-SERVICE-OPERATIONS | Web School Service and Support Access Workspace | WEB | PLAT-OBJ-ONBOARDING-CASE<br>PLAT-OBJ-SERVICE-PLAN<br>PLAT-OBJ-POLICY-TEMPLATE<br>PLAT-OBJ-SUPPORT-CASE | PLAT-CASE-F-ID<br>PLAT-CASE-F-SCHOOL<br>PLAT-CASE-F-IMPLEMENTATION-NOTES<br>PLAT-CASE-F-STATUS<br>PLAT-PLAN-F-ID<br>PLAT-PLAN-F-SCOPE<br>PLAT-PLAN-F-SERVICE-STATE<br>PLAT-PLAN-F-SCHOOL-CONFIRMED-AT<br>PLAT-POLICY-F-ID<br>PLAT-POLICY-F-CONTENT<br>PLAT-POLICY-F-VERSION<br>PLAT-POLICY-F-STATUS<br>PLAT-SUPPORT-CASE-F-ID<br>PLAT-SUPPORT-CASE-F-PURPOSE<br>PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE<br>PLAT-SUPPORT-CASE-F-AUDIT-REASON<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-REF<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION<br>PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID<br>PLAT-SUPPORT-CASE-F-STATUS | PLAT-ACT-CREATE-ONBOARDING-CASE<br>PLAT-ACT-CONFIRM-ONBOARDING-CASE<br>PLAT-ACT-CREATE-SERVICE-PLAN<br>PLAT-ACT-CONFIRM-SERVICE-PLAN<br>PLAT-ACT-ACTIVATE-SERVICE-PLAN<br>PLAT-ACT-CREATE-POLICY-TEMPLATE<br>PLAT-ACT-CONFIRM-POLICY-TEMPLATE<br>PLAT-ACT-ACTIVATE-POLICY-TEMPLATE<br>PLAT-ACT-CREATE-SUPPORT-CASE<br>PLAT-ACT-CLOSE-SUPPORT-CASE<br>PLAT-ACT-USE-SUPPORT-ACCESS | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| PLAT-PAGE-MOBILE-SUPPORT-CASE | Mobile AUD-authorized Support Case | APP | PLAT-OBJ-SUPPORT-CASE | PLAT-SUPPORT-CASE-F-PURPOSE<br>PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE<br>PLAT-SUPPORT-CASE-F-AUDIT-REASON<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-REF<br>PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION<br>PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID<br>PLAT-SUPPORT-CASE-F-STATUS | PLAT-ACT-CREATE-SUPPORT-CASE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
-## 7. 异常、幂等与补偿
+## 9. 验收场景
 
-- 权限、上下文、源版本或审计门禁失败时，写入动作失败关闭。
-- 同一业务动作重复提交时，按业务幂等键返回同一结果或对象级结果，不重复生成正式业务事实。
-- 部分成功必须展示成功对象、失败对象、失败原因和重试入口。
-- AI 不可用时，主教学闭环必须保留人工路径。
-- 学校、身份、学期切换后，未执行 AI 任务、筛选缓存和批量预览全部失效。
+| Scenario ID | 类型 | Action ID | Given | When | Expected Data | Expected State | Permission | 失败码 / 谓词 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PLAT-ACT-CREATE-ONBOARDING-CASE-SCN-SUCCESS | SUCCESS | PLAT-ACT-CREATE-ONBOARDING-CASE | the authorized actor satisfies the task-specific entry conditions for Create School Onboarding Case | the actor requests Create School Onboarding Case | Create School Onboarding Case returns the accepted versioned task result without widening scope | OPEN | ALLOW |  |
+| PLAT-ACT-CREATE-ONBOARDING-CASE-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CREATE-ONBOARDING-CASE | PERMISSION_DENIED blocks Create School Onboarding Case | the actor requests Create School Onboarding Case | Create School Onboarding Case returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CREATE-ONBOARDING-CASE-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CREATE-ONBOARDING-CASE | VALIDATION_FAILED blocks Create School Onboarding Case | the actor requests Create School Onboarding Case | Create School Onboarding Case returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CREATE-ONBOARDING-CASE-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CREATE-ONBOARDING-CASE | VERSION_CONFLICT blocks Create School Onboarding Case | the actor requests Create School Onboarding Case | Create School Onboarding Case returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CONFIRM-ONBOARDING-CASE-SCN-SUCCESS | SUCCESS | PLAT-ACT-CONFIRM-ONBOARDING-CASE | the authorized actor satisfies the task-specific entry conditions for Record School Onboarding Confirmation | the actor requests Record School Onboarding Confirmation | Record School Onboarding Confirmation returns the accepted versioned task result without widening scope | SCHOOL_CONFIRMED | ALLOW |  |
+| PLAT-ACT-CONFIRM-ONBOARDING-CASE-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CONFIRM-ONBOARDING-CASE | PERMISSION_DENIED blocks Record School Onboarding Confirmation | the actor requests Record School Onboarding Confirmation | Record School Onboarding Confirmation returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CONFIRM-ONBOARDING-CASE-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CONFIRM-ONBOARDING-CASE | VALIDATION_FAILED blocks Record School Onboarding Confirmation | the actor requests Record School Onboarding Confirmation | Record School Onboarding Confirmation returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CONFIRM-ONBOARDING-CASE-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CONFIRM-ONBOARDING-CASE | VERSION_CONFLICT blocks Record School Onboarding Confirmation | the actor requests Record School Onboarding Confirmation | Record School Onboarding Confirmation returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CREATE-SERVICE-PLAN-SCN-SUCCESS | SUCCESS | PLAT-ACT-CREATE-SERVICE-PLAN | the authorized actor satisfies the task-specific entry conditions for Create School Service Plan | the actor requests Create School Service Plan | Create School Service Plan returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| PLAT-ACT-CREATE-SERVICE-PLAN-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CREATE-SERVICE-PLAN | PERMISSION_DENIED blocks Create School Service Plan | the actor requests Create School Service Plan | Create School Service Plan returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CREATE-SERVICE-PLAN-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CREATE-SERVICE-PLAN | VALIDATION_FAILED blocks Create School Service Plan | the actor requests Create School Service Plan | Create School Service Plan returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CREATE-SERVICE-PLAN-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CREATE-SERVICE-PLAN | VERSION_CONFLICT blocks Create School Service Plan | the actor requests Create School Service Plan | Create School Service Plan returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CONFIRM-SERVICE-PLAN-SCN-SUCCESS | SUCCESS | PLAT-ACT-CONFIRM-SERVICE-PLAN | the authorized actor satisfies the task-specific entry conditions for Confirm School Service Plan | the actor requests Confirm School Service Plan | Confirm School Service Plan returns the accepted versioned task result without widening scope | CONFIRMED | ALLOW |  |
+| PLAT-ACT-CONFIRM-SERVICE-PLAN-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CONFIRM-SERVICE-PLAN | PERMISSION_DENIED blocks Confirm School Service Plan | the actor requests Confirm School Service Plan | Confirm School Service Plan returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CONFIRM-SERVICE-PLAN-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CONFIRM-SERVICE-PLAN | VALIDATION_FAILED blocks Confirm School Service Plan | the actor requests Confirm School Service Plan | Confirm School Service Plan returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CONFIRM-SERVICE-PLAN-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CONFIRM-SERVICE-PLAN | VERSION_CONFLICT blocks Confirm School Service Plan | the actor requests Confirm School Service Plan | Confirm School Service Plan returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-ACTIVATE-SERVICE-PLAN-SCN-SUCCESS | SUCCESS | PLAT-ACT-ACTIVATE-SERVICE-PLAN | the authorized actor satisfies the task-specific entry conditions for Activate Confirmed School Service Plan | the actor requests Activate Confirmed School Service Plan | Activate Confirmed School Service Plan returns the accepted versioned task result without widening scope | ACTIVE | ALLOW |  |
+| PLAT-ACT-ACTIVATE-SERVICE-PLAN-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-ACTIVATE-SERVICE-PLAN | PERMISSION_DENIED blocks Activate Confirmed School Service Plan | the actor requests Activate Confirmed School Service Plan | Activate Confirmed School Service Plan returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-ACTIVATE-SERVICE-PLAN-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-ACTIVATE-SERVICE-PLAN | VALIDATION_FAILED blocks Activate Confirmed School Service Plan | the actor requests Activate Confirmed School Service Plan | Activate Confirmed School Service Plan returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-ACTIVATE-SERVICE-PLAN-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-ACTIVATE-SERVICE-PLAN | VERSION_CONFLICT blocks Activate Confirmed School Service Plan | the actor requests Activate Confirmed School Service Plan | Activate Confirmed School Service Plan returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CREATE-POLICY-TEMPLATE-SCN-SUCCESS | SUCCESS | PLAT-ACT-CREATE-POLICY-TEMPLATE | the authorized actor satisfies the task-specific entry conditions for Create School Policy Template Version | the actor requests Create School Policy Template Version | Create School Policy Template Version returns the accepted versioned task result without widening scope | DRAFT | ALLOW |  |
+| PLAT-ACT-CREATE-POLICY-TEMPLATE-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CREATE-POLICY-TEMPLATE | PERMISSION_DENIED blocks Create School Policy Template Version | the actor requests Create School Policy Template Version | Create School Policy Template Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CREATE-POLICY-TEMPLATE-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CREATE-POLICY-TEMPLATE | VALIDATION_FAILED blocks Create School Policy Template Version | the actor requests Create School Policy Template Version | Create School Policy Template Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CREATE-POLICY-TEMPLATE-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CREATE-POLICY-TEMPLATE | VERSION_CONFLICT blocks Create School Policy Template Version | the actor requests Create School Policy Template Version | Create School Policy Template Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CONFIRM-POLICY-TEMPLATE-SCN-SUCCESS | SUCCESS | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | the authorized actor satisfies the task-specific entry conditions for Confirm School Policy Template Version | the actor requests Confirm School Policy Template Version | Confirm School Policy Template Version returns the accepted versioned task result without widening scope | CONFIRMED | ALLOW |  |
+| PLAT-ACT-CONFIRM-POLICY-TEMPLATE-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | PERMISSION_DENIED blocks Confirm School Policy Template Version | the actor requests Confirm School Policy Template Version | Confirm School Policy Template Version returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CONFIRM-POLICY-TEMPLATE-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | VALIDATION_FAILED blocks Confirm School Policy Template Version | the actor requests Confirm School Policy Template Version | Confirm School Policy Template Version returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CONFIRM-POLICY-TEMPLATE-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CONFIRM-POLICY-TEMPLATE | VERSION_CONFLICT blocks Confirm School Policy Template Version | the actor requests Confirm School Policy Template Version | Confirm School Policy Template Version returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-ACTIVATE-POLICY-TEMPLATE-SCN-SUCCESS | SUCCESS | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | the authorized actor satisfies the task-specific entry conditions for Activate Confirmed School Policy Template | the actor requests Activate Confirmed School Policy Template | Activate Confirmed School Policy Template returns the accepted versioned task result without widening scope | ACTIVE | ALLOW |  |
+| PLAT-ACT-ACTIVATE-POLICY-TEMPLATE-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | PERMISSION_DENIED blocks Activate Confirmed School Policy Template | the actor requests Activate Confirmed School Policy Template | Activate Confirmed School Policy Template returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-ACTIVATE-POLICY-TEMPLATE-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | VALIDATION_FAILED blocks Activate Confirmed School Policy Template | the actor requests Activate Confirmed School Policy Template | Activate Confirmed School Policy Template returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-ACTIVATE-POLICY-TEMPLATE-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-ACTIVATE-POLICY-TEMPLATE | VERSION_CONFLICT blocks Activate Confirmed School Policy Template | the actor requests Activate Confirmed School Policy Template | Activate Confirmed School Policy Template returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-SUCCESS | SUCCESS | PLAT-ACT-CREATE-SUPPORT-CASE | the authorized actor satisfies the task-specific entry conditions for Create an AUD-authorized Support Case | the actor requests Create an AUD-authorized Support Case | Create an AUD-authorized Support Case returns the accepted versioned task result without widening scope | OPEN | ALLOW |  |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | PERMISSION_DENIED blocks Create an AUD-authorized Support Case | the actor requests Create an AUD-authorized Support Case | Create an AUD-authorized Support Case returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-ACCESS_INACTIVE | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | the pinned AUD session is pending, revoked, expired, or otherwise not ACTIVE | the platform operator creates a support case under the pinned AUD session | ACCESS_INACTIVE creates no support case and returns no student-detail data | UNCHANGED | DENY | ACCESS_INACTIVE — auditSession.state !== ACTIVE |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-ACCESS_EXPIRED | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | the current time is at or after the pinned AUD session expiry | the platform operator creates a support case under the pinned AUD session | ACCESS_EXPIRED creates no support case and returns the session expiry boundary | UNCHANGED | DENY | ACCESS_EXPIRED — currentTime >= auditSession.expiresAt |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-ACCESS_OTHER_RECORD | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | the current platform operator is not the operator authorized by the pinned AUD session | the platform operator creates a support case under the pinned AUD session | ACCESS_OTHER_RECORD creates no support case and discloses no other operator's authorized data | UNCHANGED | DENY | ACCESS_OTHER_RECORD — currentActor.id !== auditSession.authorizedOperatorId |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-ACCESS_SCOPE_DENIED | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | the requested support scope is outside the scope approved on the pinned AUD session | the platform operator creates a support case under the pinned AUD session | ACCESS_SCOPE_DENIED creates no support case and returns only the rejected requested scope | UNCHANGED | DENY | ACCESS_SCOPE_DENIED — !auditSession.scope.contains(requestedScope) |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-SOURCE_VERSION_STALE | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | SOURCE_VERSION_STALE blocks Create an AUD-authorized Support Case | the actor requests Create an AUD-authorized Support Case | Create an AUD-authorized Support Case returns SOURCE_VERSION_STALE and performs no hidden write | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | VALIDATION_FAILED blocks Create an AUD-authorized Support Case | the actor requests Create an AUD-authorized Support Case | Create an AUD-authorized Support Case returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | VERSION_CONFLICT blocks Create an AUD-authorized Support Case | the actor requests Create an AUD-authorized Support Case | Create an AUD-authorized Support Case returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CREATE-SUPPORT-CASE-SCN-AUDIT_FAILED | FAILURE | PLAT-ACT-CREATE-SUPPORT-CASE | AUDIT_FAILED blocks Create an AUD-authorized Support Case | the actor requests Create an AUD-authorized Support Case | Create an AUD-authorized Support Case returns AUDIT_FAILED and performs no hidden write | UNCHANGED | DENY | AUDIT_FAILED |
+| PLAT-ACT-CLOSE-SUPPORT-CASE-SCN-SUCCESS | SUCCESS | PLAT-ACT-CLOSE-SUPPORT-CASE | the authorized actor satisfies the task-specific entry conditions for Close an Audited Support Case | the actor requests Close an Audited Support Case | Close an Audited Support Case returns the accepted versioned task result without widening scope | CLOSED | ALLOW |  |
+| PLAT-ACT-CLOSE-SUPPORT-CASE-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-CLOSE-SUPPORT-CASE | PERMISSION_DENIED blocks Close an Audited Support Case | the actor requests Close an Audited Support Case | Close an Audited Support Case returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-CLOSE-SUPPORT-CASE-SCN-VALIDATION_FAILED | FAILURE | PLAT-ACT-CLOSE-SUPPORT-CASE | VALIDATION_FAILED blocks Close an Audited Support Case | the actor requests Close an Audited Support Case | Close an Audited Support Case returns VALIDATION_FAILED and performs no hidden write | UNCHANGED | DENY | VALIDATION_FAILED |
+| PLAT-ACT-CLOSE-SUPPORT-CASE-SCN-VERSION_CONFLICT | FAILURE | PLAT-ACT-CLOSE-SUPPORT-CASE | VERSION_CONFLICT blocks Close an Audited Support Case | the actor requests Close an Audited Support Case | Close an Audited Support Case returns VERSION_CONFLICT and performs no hidden write | UNCHANGED | DENY | VERSION_CONFLICT |
+| PLAT-ACT-CLOSE-SUPPORT-CASE-SCN-AUDIT_FAILED | FAILURE | PLAT-ACT-CLOSE-SUPPORT-CASE | AUDIT_FAILED blocks Close an Audited Support Case | the actor requests Close an Audited Support Case | Close an Audited Support Case returns AUDIT_FAILED and performs no hidden write | UNCHANGED | DENY | AUDIT_FAILED |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-SUCCESS | SUCCESS | PLAT-ACT-USE-SUPPORT-ACCESS | the authorized actor satisfies the task-specific entry conditions for Use an Active AUD-authorized Support Session | the actor requests Use an Active AUD-authorized Support Session | Use an Active AUD-authorized Support Session returns the accepted versioned task result without widening scope | UNCHANGED | ALLOW |  |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-PERMISSION_DENIED | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | PERMISSION_DENIED blocks Use an Active AUD-authorized Support Session | the actor requests Use an Active AUD-authorized Support Session | Use an Active AUD-authorized Support Session returns PERMISSION_DENIED and performs no hidden write | UNCHANGED | DENY | PERMISSION_DENIED |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-NOT_FOUND | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | NOT_FOUND blocks Use an Active AUD-authorized Support Session | the actor requests Use an Active AUD-authorized Support Session | Use an Active AUD-authorized Support Session returns NOT_FOUND and performs no hidden write | UNCHANGED | DENY | NOT_FOUND |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-ACCESS_INACTIVE | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | the support case's pinned AUD session is pending, revoked, expired, or otherwise not ACTIVE | the authorized platform operator uses the support case access | ACCESS_INACTIVE returns no support data and records no successful access | UNCHANGED | DENY | ACCESS_INACTIVE — auditSession.state !== ACTIVE |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-ACCESS_EXPIRED | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | the current time is at or after the support case's pinned AUD session expiry | the authorized platform operator uses the support case access | ACCESS_EXPIRED returns no support data and exposes only the expiry boundary | UNCHANGED | DENY | ACCESS_EXPIRED — currentTime >= auditSession.expiresAt |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-ACCESS_OTHER_RECORD | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | the current platform operator is not the operator authorized by the support case's pinned AUD session | the platform operator uses the support case access | ACCESS_OTHER_RECORD returns no support data from another operator's case | UNCHANGED | DENY | ACCESS_OTHER_RECORD — currentActor.id !== auditSession.authorizedOperatorId |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-ACCESS_SCOPE_DENIED | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | the requested support scope is outside the support case's active AUD session scope | the authorized platform operator uses the support case access | ACCESS_SCOPE_DENIED returns no support data outside the approved scope | UNCHANGED | DENY | ACCESS_SCOPE_DENIED — !auditSession.scope.contains(requestedScope) |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-SOURCE_VERSION_STALE | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | SOURCE_VERSION_STALE blocks Use an Active AUD-authorized Support Session | the actor requests Use an Active AUD-authorized Support Session | Use an Active AUD-authorized Support Session returns SOURCE_VERSION_STALE and performs no hidden write | UNCHANGED | DENY | SOURCE_VERSION_STALE |
+| PLAT-ACT-USE-SUPPORT-ACCESS-SCN-AUDIT_FAILED | FAILURE | PLAT-ACT-USE-SUPPORT-ACCESS | the immutable AUD event cannot be appended before protected support data would be returned | the authorized platform operator uses the support case access | AUDIT_FAILED returns no protected support data and preserves the business objects unchanged | UNCHANGED | DENY | AUDIT_FAILED — appendAuditEventBeforeDataReturn !== SUCCESS |
 
-## 8. AI 对话与任务执行
+## 10. AI 任务映射
 
-- 查询类: 只能返回当前权限内数据，并展示数据范围、时间范围和来源版本。
-- 分析类: 可以生成解释和限制说明，但解释性结论进入学生可见前必须按模块规则确认。
-- 草稿类: 可以生成作业、评语、计划、报告定义等草稿，草稿不是正式事实。
-- 执行类: 必须展示结构化预览、影响对象、字段变化、权限结果、幂等键和审计摘要。
-- 定期任务: 必须保存订阅定义、运行快照、接收范围和每次运行权限结果。
+| Task ID | 任务 | 类型 | 目标 Action | 受众 | 确认者 | 预览字段 | 失败行为 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-## 9. 验收标准
+## 11. 研发与测试就绪门禁
 
-| ID | 验收标准 |
-| --- | --- |
-| PLAT-AC-01 | 平台运营默认无学生明细权限。 |
-| PLAT-AC-02 | 学校为数据治理主体。 |
-| PLAT-AC-03 | 支持访问必须有学校授权和到期时间。 |
-| PLAT-AC-04 | 服务状态变化不删除学校历史数据。 |
-| PLAT-AC-05 | P3 不影响试点主闭环交付。 |
-
-## 10. 依赖、非范围与就绪门禁
-
-- 依赖: `DF-301`、`DF-001`、`DF-019`；中央数据合同、权限矩阵、字段选项字典。
-- 非范围: 第二阶段第三方通知、AI 讲题视频、AI 教学视频不在本模块第一阶段详细设计内。
-- 就绪门禁: Data ID 有 Owner；Field ID 有 Option Set；状态有合法跳转；Flow 有源版本、目标版本、失败补偿；验收标准可测试。
+- 实现不得发明未登记的 Object、Field、Action、状态、失败码或 Option Set 值。
+- 所有选择字段必须调用其 valueSource 指定的静态 Option Set 或授权运行时查询。
+- 每个写入动作按 idempotencyKey、对象当前版本、权限、状态和审计模式失败关闭。
+- 每个 Scenario 都应转化为可执行测试；失败场景必须验证对象状态不变和越权数据不返回。
+- Web/App 只共享事实与权限合同；页面布局和高频能力可以按端差异化。
