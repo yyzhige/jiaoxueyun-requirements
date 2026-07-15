@@ -176,9 +176,37 @@ test("renders declared professional write authorization boundaries", () => {
   ]) {
     assert.match(
       output,
-      /GRD-ACT-OVERRIDE-SCORE[^\n]*SUBJECT_COURSE_PROFESSIONAL_WRITE/,
+      /GRD-ACT-OVERRIDE-SCORE[^\n]*authorizationBoundary:kind=SUBJECT_COURSE_PROFESSIONAL_WRITE/,
     );
   }
+});
+
+test("renders explicit non-professional write exceptions in authorization columns", () => {
+  for (const output of [
+    renderPermissionsMatrix(requirementModel),
+    renderModulePrd(moduleById("CORR-001"), requirementModel),
+  ]) {
+    assert.match(
+      output,
+      /CORR-ACT-SUBMIT-INITIAL[^\n]*professionalWriteException:kind=NON_PROFESSIONAL_PROTECTED_OBJECT_WRITE;contract=STUDENT_SUBMISSION/,
+    );
+  }
+});
+
+test("blocks scoped non-professional exceptions before building artifacts", () => {
+  const model = structuredClone(requirementModel);
+  const correction = model.modules.find(({ id }) => id === "CORR-001");
+  const action = correction.actions.find(({ id }) => id === "CORR-ACT-SUBMIT-INITIAL");
+  action.permissions = action.permissions.map((permission) => structuredClone(permission));
+  action.permissions.find(({ effect }) => effect === "ALLOW").scope = {
+    kind: "OTHER_RECORD",
+    subjectFieldId: "CORR-ATTEMPT-F-STUDENT-REF",
+  };
+
+  assert.throws(
+    () => buildRequirementArtifacts(model),
+    /INVALID_ACADEMIC_ACCESS_BOUNDARY CORR-ACT-SUBMIT-INITIAL/,
+  );
 });
 
 test("blocks unauthorized access exceptions before rendering artifacts", () => {

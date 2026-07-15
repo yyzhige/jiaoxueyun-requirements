@@ -60,6 +60,20 @@ export function permissionScopeText(scope) {
   return JSON.stringify(scope);
 }
 
+export function professionalAuthorizationText(action) {
+  if (!action || typeof action !== "object") return "—";
+  if (action.authorizationBoundary) {
+    return `authorizationBoundary:kind=${action.authorizationBoundary.kind}`;
+  }
+  if (action.professionalWriteException) {
+    return [
+      `professionalWriteException:kind=${action.professionalWriteException.kind}`,
+      `contract=${action.professionalWriteException.purpose}`,
+    ].join(";");
+  }
+  return "—";
+}
+
 export function requiredText(required) {
   if (required === true) return "是";
   if (required === false) return "否";

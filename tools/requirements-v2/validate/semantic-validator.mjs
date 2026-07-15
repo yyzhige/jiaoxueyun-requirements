@@ -377,6 +377,7 @@ function academicAccessBoundaryErrors(index) {
     const module = index.moduleById.get(moduleId)?.value;
     if (module?.phase !== 1) continue;
     const permissions = records(action?.permissions);
+    const allows = permissions.filter(({ effect }) => effect === "ALLOW");
     const subjectTeacherAllows = permissions.filter(({ effect, dutyRef }) => (
       effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
     ));
@@ -423,6 +424,7 @@ function academicAccessBoundaryErrors(index) {
     const valid = isUserWrite
       && isProfessionalWriteAuthorizationBoundary(action.authorizationBoundary)
       && registeredTarget
+      && allows.length === 1
       && subjectTeacherAllows.length === 1
       && hasExactKeys(allowScope, ["kind", "subjectMatch", "courseMatch"])
       && allowScope.kind === "ASSIGNED_SUBJECT_COURSE"

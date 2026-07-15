@@ -66,6 +66,7 @@ const studentSubmissionPermissionSignature = {
   denyRoleRefs: ["ROLE-PLATFORM-OPS"],
   denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
   denyActorRefs: ["AI"],
+  scopePolicy: "NO_SCOPE",
 };
 
 const academicScoreAdministrationPermissionSignature = {
@@ -73,6 +74,7 @@ const academicScoreAdministrationPermissionSignature = {
   denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
   denyDutyRefs: [],
   denyActorRefs: [],
+  scopePolicy: "NO_SCOPE",
 };
 
 const professionalWriteExceptionRegistry = new Map([
@@ -173,6 +175,7 @@ export function resolveProfessionalWriteException(action) {
         denyRoleRefs: [...permissionSignature.denyRoleRefs],
         denyDutyRefs: [...permissionSignature.denyDutyRefs],
         denyActorRefs: [...permissionSignature.denyActorRefs],
+        scopePolicy: permissionSignature.scopePolicy,
       },
     },
   };
@@ -196,11 +199,12 @@ export function matchesRegisteredProfessionalWriteException(action) {
     && exception.kind === registered.declaration.kind
     && exception.purpose === registered.declaration.purpose
     && isRecord(signature)
-    && Object.keys(signature).length === 4
+    && Object.keys(signature).length === 5
     && signature.allowRoleRef === expectedSignature.allowRoleRef
     && sameStringArray(signature.denyRoleRefs, expectedSignature.denyRoleRefs)
     && sameStringArray(signature.denyDutyRefs, expectedSignature.denyDutyRefs)
-    && sameStringArray(signature.denyActorRefs, expectedSignature.denyActorRefs);
+    && sameStringArray(signature.denyActorRefs, expectedSignature.denyActorRefs)
+    && signature.scopePolicy === expectedSignature.scopePolicy;
 }
 
 function permissionSubjectKey(permission) {
@@ -209,7 +213,8 @@ function permissionSubjectKey(permission) {
     .filter((key) => typeof permission[key] === "string" && permission[key] !== "");
   if (refKeys.length !== 1) return null;
   const refKey = refKeys[0];
-  return `${permission.effect}:${refKey}:${permission[refKey]}`;
+  const scopePolicy = Object.hasOwn(permission, "scope") ? "SCOPED" : "NO_SCOPE";
+  return `${permission.effect}:${refKey}:${permission[refKey]}:${scopePolicy}`;
 }
 
 export function matchesRegisteredProfessionalWriteExceptionPermissions(action) {
@@ -217,10 +222,10 @@ export function matchesRegisteredProfessionalWriteExceptionPermissions(action) {
   if (!registered || !Array.isArray(action?.permissions)) return false;
   const signature = registered.declaration.permissionSignature;
   const expected = [
-    `ALLOW:roleRef:${signature.allowRoleRef}`,
-    ...signature.denyRoleRefs.map((ref) => `DENY:roleRef:${ref}`),
-    ...signature.denyDutyRefs.map((ref) => `DENY:dutyRef:${ref}`),
-    ...signature.denyActorRefs.map((ref) => `DENY:actorRef:${ref}`),
+    `ALLOW:roleRef:${signature.allowRoleRef}:${signature.scopePolicy}`,
+    ...signature.denyRoleRefs.map((ref) => `DENY:roleRef:${ref}:${signature.scopePolicy}`),
+    ...signature.denyDutyRefs.map((ref) => `DENY:dutyRef:${ref}:${signature.scopePolicy}`),
+    ...signature.denyActorRefs.map((ref) => `DENY:actorRef:${ref}:${signature.scopePolicy}`),
   ];
   const actual = action.permissions.map(permissionSubjectKey);
   return actual.every((key) => key !== null)

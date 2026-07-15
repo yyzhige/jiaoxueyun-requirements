@@ -7604,6 +7604,7 @@ test("declares every protected-object non-professional write as a closed registr
           denyRoleRefs: ["ROLE-PLATFORM-OPS"],
           denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
           denyActorRefs: ["AI"],
+          scopePolicy: "NO_SCOPE",
         },
       },
       "CORR-ACT-SUBMIT-LATE": {
@@ -7615,6 +7616,7 @@ test("declares every protected-object non-professional write as a closed registr
           denyRoleRefs: ["ROLE-PLATFORM-OPS"],
           denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
           denyActorRefs: ["AI"],
+          scopePolicy: "NO_SCOPE",
         },
       },
       "CORR-ACT-RESUBMIT": {
@@ -7626,6 +7628,7 @@ test("declares every protected-object non-professional write as a closed registr
           denyRoleRefs: ["ROLE-PLATFORM-OPS"],
           denyDutyRefs: ["DUTY-SUBJECT-TEACHER"],
           denyActorRefs: ["AI"],
+          scopePolicy: "NO_SCOPE",
         },
       },
       "EXM-ACT-CREATE-SUBJECT-SCORE": {
@@ -7637,6 +7640,7 @@ test("declares every protected-object non-professional write as a closed registr
           denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
           denyDutyRefs: [],
           denyActorRefs: [],
+          scopePolicy: "NO_SCOPE",
         },
       },
       "EXM-ACT-PUBLISH-SUBJECT-SCORE": {
@@ -7648,6 +7652,7 @@ test("declares every protected-object non-professional write as a closed registr
           denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
           denyDutyRefs: [],
           denyActorRefs: [],
+          scopePolicy: "NO_SCOPE",
         },
       },
       "EXM-ACT-REPUBLISH-CORRECTED-SCORE": {
@@ -7659,6 +7664,7 @@ test("declares every protected-object non-professional write as a closed registr
           denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
           denyDutyRefs: [],
           denyActorRefs: [],
+          scopePolicy: "NO_SCOPE",
         },
       },
     },
@@ -7730,6 +7736,36 @@ test("rejects any missing extra or rebound exception permission subject", () => 
     assert.equal(errors.length, 1, name);
     assert.match(errors[0], /^INVALID_ACADEMIC_ACCESS_BOUNDARY /, name);
     assert.match(errors[0], new RegExp(family.actionId), name);
+  }
+});
+
+test("rejects record scopes on every non-professional exception permission", () => {
+  const mutations = [
+    ["CORR-001", "CORR-ACT-SUBMIT-INITIAL", "ALLOW", "roleRef", "ROLE-STUDENT", {
+      kind: "OTHER_RECORD",
+      subjectFieldId: "CORR-ATTEMPT-F-STUDENT-REF",
+    }],
+    ["EXM-001", "EXM-ACT-CREATE-SUBJECT-SCORE", "ALLOW", "roleRef", "ROLE-ACADEMIC", {
+      kind: "OWN_RECORD",
+      subjectFieldId: "EXM-SCORE-F-STUDENT-ID",
+    }],
+    ["CORR-001", "CORR-ACT-SUBMIT-INITIAL", "DENY", "roleRef", "ROLE-PLATFORM-OPS", {
+      kind: "OTHER_RECORD",
+      subjectFieldId: "CORR-ATTEMPT-F-STUDENT-REF",
+    }],
+  ];
+
+  for (const [moduleId, actionId, effect, refKey, ref, scope] of mutations) {
+    const model = structuredClone(requirementModel);
+    const action = moduleById(model, moduleId).actions.find(({ id }) => id === actionId);
+    copyActionPermissions(action);
+    action.permissions.find((permission) => (
+      permission.effect === effect && permission[refKey] === ref
+    )).scope = structuredClone(scope);
+    const errors = validateRequirementModel(model);
+    assert.equal(errors.length, 1, `${actionId}:${effect}:${scope.kind}`);
+    assert.match(errors[0], /^INVALID_ACADEMIC_ACCESS_BOUNDARY /);
+    assert.match(errors[0], new RegExp(actionId));
   }
 });
 
@@ -7956,6 +7992,29 @@ test("rejects a registered professional write after coordinated duty and declara
   );
   assert.equal(boundaryErrors.length, 1);
   assert.match(boundaryErrors[0], /STU-ACT-SAVE-VIEW/);
+});
+
+test("rejects every additional ALLOW subject on a professional write", () => {
+  const extraAllows = [
+    { dutyRef: "DUTY-SUBJECT-LEAD" },
+    { roleRef: "ROLE-SCHOOL-ADMIN" },
+    { roleRef: "ROLE-ACADEMIC" },
+  ];
+  for (const subject of extraAllows) {
+    const model = structuredClone(requirementModel);
+    const action = moduleById(model, "STU-001").actions
+      .find(({ id }) => id === "STU-ACT-SAVE-VIEW");
+    copyActionPermissions(action);
+    action.permissions.push({
+      effect: "ALLOW",
+      ...subject,
+      condition: "the extra actor attempts to widen professional write access",
+    });
+    const errors = validateRequirementModel(model);
+    assert.equal(errors.length, 1, JSON.stringify(subject));
+    assert.match(errors[0], /^INVALID_ACADEMIC_ACCESS_BOUNDARY /);
+    assert.match(errors[0], /STU-ACT-SAVE-VIEW/);
+  }
 });
 
 test("rejects a new policy-targeted professional write with the wrong duty ALLOW", () => {
