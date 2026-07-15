@@ -1,5 +1,9 @@
 import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
 import {
+  withProfessionalWriteAuthorization,
+  withProfessionalWritePolicy,
+} from "./professional-write-authorization.mjs";
+import {
   STUDENT_DATA_KIND,
   withStudentDataClassification,
 } from "./student-data-classification.mjs";
@@ -180,7 +184,7 @@ function domainObject({
   overrides = {},
 }) {
   const { studentDataKind, ...objectOverrides } = overrides;
-  return withStudentDataClassification({
+  return withProfessionalWritePolicy(withStudentDataClassification({
     id,
     label,
     ...responsibility,
@@ -191,7 +195,7 @@ function domainObject({
     states,
     fields: [identityField(identityFieldId, `${label} ID`), ...fields],
     ...objectOverrides,
-  }, studentDataKind);
+  }, studentDataKind));
 }
 
 function failureSemantic(resultCode, predicate, given, when, expectedData) {
@@ -474,7 +478,7 @@ function action({
     };
   });
   return {
-    value: {
+    value: withProfessionalWriteAuthorization({
       id,
       label,
       targetObjectId,
@@ -495,7 +499,7 @@ function action({
         ? { failureSemantics: structuredClone(authoredFailureSemantics) }
         : {}),
       ...extras,
-    },
+    }),
     scenarios: [successScenario, ...failureScenarios],
   };
 }

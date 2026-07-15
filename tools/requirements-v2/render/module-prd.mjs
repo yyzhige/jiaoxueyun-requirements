@@ -174,12 +174,13 @@ export function renderModulePrd(module, model) {
     ),
     "## 4. 可执行动作合同",
     markdownTable(
-      ["Action ID", "动作", "目标对象", "操作", "访问例外", "输入 Field", "输出 Field", "状态效果", "ALLOW / DENY", "端 / 执行模式", "风险", "审计", "幂等键", "失败结果"],
+      ["Action ID", "动作", "目标对象", "操作", "授权边界", "访问例外", "输入 Field", "输出 Field", "状态效果", "ALLOW / DENY", "端 / 执行模式", "风险", "审计", "幂等键", "失败结果"],
       list(module.actions).map((action) => [
         action.id,
         action.label,
         action.targetObjectId,
         action.operationKind,
+        action.authorizationBoundary?.kind ?? "—",
         action.accessGuard?.exceptionKind ?? "—",
         list(action.inputFieldIds).join("<br>"),
         list(action.outputFieldIds).join("<br>"),

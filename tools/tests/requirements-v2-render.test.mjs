@@ -169,6 +169,18 @@ test("renders student-data classification and the AUD access exception", () => {
   }
 });
 
+test("renders declared professional write authorization boundaries", () => {
+  for (const output of [
+    renderPermissionsMatrix(requirementModel),
+    renderModulePrd(moduleById("GRD-001"), requirementModel),
+  ]) {
+    assert.match(
+      output,
+      /GRD-ACT-OVERRIDE-SCORE[^\n]*SUBJECT_COURSE_PROFESSIONAL_WRITE/,
+    );
+  }
+});
+
 test("blocks unauthorized access exceptions before rendering artifacts", () => {
   const model = structuredClone(requirementModel);
   const platform = model.modules.find(({ id }) => id === "PLAT-001");

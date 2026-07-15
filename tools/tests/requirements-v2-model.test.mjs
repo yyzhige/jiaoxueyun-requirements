@@ -827,6 +827,95 @@ function addCompletePrivilegedRead(model, {
   return actionId;
 }
 
+function copyActionPermissions(action) {
+  action.permissions = action.permissions.map((permission) => structuredClone(permission));
+  return action.permissions;
+}
+
+function addCompleteGradingProfessionalWrite(model, { declareBoundary }) {
+  const module = moduleById(model, "GRD-001");
+  const actionId = declareBoundary
+    ? "TEST-GRD-ACT-DECLARED-PROFESSIONAL-WRITE"
+    : "TEST-GRD-ACT-UNDECLARED-PROFESSIONAL-WRITE";
+  const pageId = `${actionId}-PAGE`;
+  const successScenarioId = `${actionId}-SCN-SUCCESS`;
+  const failureResults = ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT"];
+  module.actions.push({
+    id: actionId,
+    label: "Record a subject-teacher professional grading decision",
+    targetObjectId: "GRD-OBJ-DECISION",
+    inputFieldIds: ["GRD-DECISION-F-ID"],
+    outputFieldIds: ["GRD-DECISION-F-ROUTE"],
+    transition: { from: "ROUTED_MANUAL", to: "ROUTED_MANUAL" },
+    operationKind: "UPDATE",
+    writes: true,
+    risk: RISK.LOW,
+    executionMode: "USER_TASK",
+    clients: [CLIENT.WEB],
+    permissions: [
+      {
+        effect: "ALLOW",
+        dutyRef: "DUTY-SUBJECT-TEACHER",
+        condition: "the assigned subject teacher records a professional grading decision",
+      },
+      {
+        effect: "DENY",
+        dutyRef: "DUTY-HOMEROOM",
+        condition: "homeroom duty cannot mutate another subject's grading decision",
+      },
+    ],
+    ...(declareBoundary ? {
+      authorizationBoundary: { kind: "SUBJECT_COURSE_PROFESSIONAL_WRITE" },
+    } : {}),
+    scenarioIds: [
+      successScenarioId,
+      ...failureResults.map((resultCode) => `${actionId}-SCN-${resultCode}`),
+    ],
+    idempotencyKey: `${actionId}:decision-version:request-id`,
+    auditMode: "REQUIRED",
+    failureResults,
+  });
+  module.pages.push({
+    id: pageId,
+    label: "Professional Grading Decision Fixture",
+    clients: [CLIENT.WEB],
+    objectIds: ["GRD-OBJ-DECISION"],
+    fieldIds: ["GRD-DECISION-F-ID", "GRD-DECISION-F-ROUTE"],
+    actionIds: [actionId],
+    regions: ["CONTEXT_HEADER", "TASK_WORK_AREA", "RESULT_AND_FAILURE_STATUS"],
+    viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN"],
+  });
+  module.scenarios.push({
+    id: successScenarioId,
+    kind: "SUCCESS",
+    actionId,
+    pageId,
+    given: "the subject teacher has an assigned grading decision",
+    when: "the subject teacher records the professional decision",
+    then: {
+      expectedData: "the professional grading route is retained",
+      expectedState: { mode: "STATE", value: "ROUTED_MANUAL" },
+      expectedPermission: "ALLOW",
+      expectedVisibility: "assigned subject-course scope only",
+    },
+  }, ...failureResults.map((resultCode) => ({
+    id: `${actionId}-SCN-${resultCode}`,
+    kind: "FAILURE",
+    resultCode,
+    actionId,
+    pageId,
+    given: `${resultCode} applies to the professional grading write`,
+    when: "the subject teacher records the professional decision",
+    then: {
+      expectedData: `${resultCode} returns no professional grading mutation`,
+      expectedState: { mode: "UNCHANGED" },
+      expectedPermission: "DENY",
+      expectedVisibility: "no data outside the assigned subject-course scope",
+    },
+  })));
+  return actionId;
+}
+
 function errorCodes(errors) {
   return errors.map((error) => error.split(" ", 1)[0]);
 }
@@ -7435,39 +7524,37 @@ test("enforces subject-teacher mutation and homeroom read-only coordination boun
   )), false);
 });
 
-test("binds score mastery and improvement-plan writes to assigned subject-course scope", () => {
-  const professionalMutationActionIds = [
-    "GRD-ACT-CORRECT-RECOGNITION",
-    "GRD-ACT-ACCEPT-SUGGESTION",
-    "GRD-ACT-OVERRIDE-SCORE",
-    "GRD-ACT-MANUAL-GRADE",
-    "GRD-ACT-BATCH-CONFIRM",
-    "GRD-ACT-OPEN-CONFIRMED-REVISION",
-    "GRD-ACT-CONFIRM-REVISION",
-    "GRD-ACT-RESOLVE-VERSION-CONFLICT",
-    "PUB-ACT-PREVIEW",
-    "PUB-ACT-PREPARE-BATCH",
-    "PUB-ACT-PUBLISH-SELECTED",
-    "PUB-ACT-RETRY-FAILED",
-    "PUB-ACT-CORRECT-RESULT",
-    "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
-    "INS-ACT-CONFIRM-MASTERY",
-    "INS-ACT-PUBLISH-INTERPRETATION",
-    "PLN-ACT-CONFIRM-PLAN",
-    "PLN-ACT-ADJUST-PLAN",
-    "PLN-ACT-CLOSE-PLAN",
-    "EXM-ACT-CONFIRM-SUBJECT-SCORE",
-    "EXM-ACT-REJECT-SUBJECT-SCORE",
-    "EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE",
-    "EXM-ACT-CORRECT-SUBJECT-SCORE",
-  ];
-  const actionById = new Map(modules.flatMap((module) => (
-    module.actions.map((action) => [action.id, action])
-  )));
+test("binds every declared professional write to assigned subject-course scope", () => {
+  const declaredActions = modules.flatMap((module) => module.actions
+    .filter(({ authorizationBoundary }) => (
+      authorizationBoundary?.kind === "SUBJECT_COURSE_PROFESSIONAL_WRITE"
+    ))
+    .map((action) => ({ moduleId: module.id, action })));
+  assert.equal(declaredActions.length, 38);
+  assert.deepEqual(
+    Object.fromEntries([...Map.groupBy(declaredActions, ({ moduleId }) => moduleId)]
+      .map(([moduleId, entries]) => [moduleId, entries.length])),
+    {
+      "GRD-001": 8,
+      "PUB-001": 6,
+      "SCO-001": 2,
+      "INS-001": 2,
+      "PLN-001": 3,
+      "CORR-001": 2,
+      "STU-001": 2,
+      "PREP-001": 9,
+      "EXM-001": 4,
+    },
+  );
+  const policyObjects = modules.flatMap((module) => module.objects)
+    .filter(({ professionalWritePolicy }) => (
+      professionalWritePolicy?.requiredAuthorizationBoundaryKind
+        === "SUBJECT_COURSE_PROFESSIONAL_WRITE"
+    ));
+  assert.equal(policyObjects.length, 16);
 
-  for (const actionId of professionalMutationActionIds) {
-    const action = actionById.get(actionId);
-    assert.ok(action, actionId);
+  for (const { action } of declaredActions) {
+    const actionId = action.id;
     assert.notEqual(action.operationKind, "READ", actionId);
     assert.deepEqual(
       action.permissions.find(({ effect, dutyRef }) => (
@@ -7490,6 +7577,26 @@ test("binds score mastery and improvement-plan writes to assigned subject-course
       ));
     assert.deepEqual(deniedScenario?.then.expectedPermission, "DENY", actionId);
     assert.deepEqual(deniedScenario?.then.expectedState, { mode: "UNCHANGED" }, actionId);
+  }
+});
+
+test("rejects malformed professional write declarations and object policies", () => {
+  const mutations = [
+    ["action boundary", (model) => {
+      moduleById(model, "GRD-001").actions
+        .find(({ id }) => id === "GRD-ACT-OVERRIDE-SCORE")
+        .authorizationBoundary.extra = true;
+    }, "INVALID_ACTION_CONTRACT"],
+    ["object policy", (model) => {
+      moduleById(model, "GRD-001").objects
+        .find(({ id }) => id === "GRD-OBJ-DECISION")
+        .professionalWritePolicy.requiredAuthorizationBoundaryKind = "UNSCOPED_WRITE";
+    }, "INVALID_OBJECT_CONTRACT"],
+  ];
+  for (const [name, mutate, code] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), code, name);
   }
 });
 
@@ -7550,50 +7657,94 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
   }
 });
 
+for (const [moduleId, actionId] of [
+  ["SCO-001", "SCO-ACT-CREATE-VIEW"],
+  ["CORR-001", "CORR-ACT-CONFIRM-JUDGMENT"],
+  ["STU-001", "STU-ACT-SAVE-VIEW"],
+  ["PREP-001", "PREP-ACT-CREATE-LESSON-PLAN"],
+]) {
+  test(`rejects missing professional scope on ${actionId}`, () => {
+    const model = structuredClone(requirementModel);
+    const action = moduleById(model, moduleId).actions.find(({ id }) => id === actionId);
+    copyActionPermissions(action);
+    const allow = action.permissions.find(({ effect, dutyRef }) => (
+      effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+    ));
+    delete allow.scope;
+    const boundaryErrors = validateRequirementModel(model)
+      .filter((error) => error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY"));
+    assert.equal(boundaryErrors.length, 1);
+    assert.match(boundaryErrors[0], new RegExp(actionId));
+  });
+}
+
+for (const declareBoundary of [true, false]) {
+  test(`rejects a new GRD professional write ${declareBoundary ? "with invalid scope" : "without a boundary declaration"}`, () => {
+    const model = structuredClone(requirementModel);
+    const actionId = addCompleteGradingProfessionalWrite(model, { declareBoundary });
+    const errors = validateRequirementModel(model);
+    const boundaryErrors = errors
+      .filter((error) => error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY"));
+    assert.deepEqual(
+      errors.filter((error) => !error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY")),
+      [],
+    );
+    assert.equal(boundaryErrors.length, 1);
+    assert.match(boundaryErrors[0], new RegExp(actionId));
+  });
+}
+
 test("rejects fail-open professional subject-course mutation boundaries", () => {
   const mutations = [
     ["missing assigned scope", (model) => {
       const action = moduleById(model, "GRD-001").actions
         .find(({ id }) => id === "GRD-ACT-OVERRIDE-SCORE");
+      copyActionPermissions(action);
       const allow = action.permissions.find(({ effect, dutyRef }) => (
         effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
       ));
       delete allow.scope;
+      return action.id;
     }],
     ["missing homeroom deny", (model) => {
       const action = moduleById(model, "INS-001").actions
         .find(({ id }) => id === "INS-ACT-CONFIRM-MASTERY");
+      copyActionPermissions(action);
       action.permissions = action.permissions.filter(({ effect, dutyRef }) => (
         effect !== "DENY" || dutyRef !== "DUTY-HOMEROOM"
       ));
+      return action.id;
     }],
     ["missing publication subject-course scope", (model) => {
       const action = moduleById(model, "PUB-001").actions
         .find(({ id }) => id === "PUB-ACT-CORRECT-RESULT");
+      copyActionPermissions(action);
       const allow = action.permissions.find(({ effect, dutyRef }) => (
         effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
       ));
       delete allow.scope;
+      return action.id;
     }],
     ["homeroom write allow", (model) => {
       const action = moduleById(model, "PLN-001").actions
         .find(({ id }) => id === "PLN-ACT-ADJUST-PLAN");
+      copyActionPermissions(action);
       action.permissions.push({
         effect: "ALLOW",
         dutyRef: "DUTY-HOMEROOM",
         condition: "homeroom duty writes a subject plan",
       });
+      return action.id;
     }],
   ];
 
   for (const [name, mutate] of mutations) {
     const model = structuredClone(requirementModel);
-    mutate(model);
-    assertHasCode(
-      validateRequirementModel(model),
-      "INVALID_ACADEMIC_ACCESS_BOUNDARY",
-      name,
-    );
+    const actionId = mutate(model);
+    const boundaryErrors = validateRequirementModel(model)
+      .filter((error) => error.startsWith("INVALID_ACADEMIC_ACCESS_BOUNDARY"));
+    assert.equal(boundaryErrors.length, 1, name);
+    assert.match(boundaryErrors[0], new RegExp(actionId), name);
   }
 });
 

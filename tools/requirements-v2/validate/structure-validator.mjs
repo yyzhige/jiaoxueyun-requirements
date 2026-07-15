@@ -1,6 +1,7 @@
 import { MODEL_COLLECTIONS } from "../model.mjs";
 import { studentDataClassificationMatchesRegistry } from "../facts/student-data-classification.mjs";
 import { STUDENT_DETAIL_ACCESS_EXCEPTION_KIND } from "../facts/student-detail-access-exceptions.mjs";
+import { PROFESSIONAL_WRITE_BOUNDARY_KIND } from "../facts/professional-write-authorization.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 
@@ -678,6 +679,18 @@ function validateObject(errors, object, path, strict) {
         `INVALID_STUDENT_DATA_CLASSIFICATION ${path}.studentDataClassification must exactly match the registered dataSubject and object classification`,
       );
     }
+    if (Object.hasOwn(object, "professionalWritePolicy")) {
+      const policy = object.professionalWritePolicy;
+      if (
+        !isRecord(policy)
+        || Object.keys(policy).length !== 1
+        || policy.requiredAuthorizationBoundaryKind !== PROFESSIONAL_WRITE_BOUNDARY_KIND
+      ) {
+        errors.push(
+          `INVALID_OBJECT_CONTRACT ${path}.professionalWritePolicy must use the closed ${PROFESSIONAL_WRITE_BOUNDARY_KIND} shape`,
+        );
+      }
+    }
     const reachability = object.stateReachability;
     if (!isRecord(reachability)) {
       errors.push(
@@ -1322,6 +1335,18 @@ function validateAction(errors, action, path, strict) {
           `INVALID_ACTION_CONTRACT ${guardPath}.exceptionKind must be ${STUDENT_DETAIL_ACCESS_EXCEPTION_KIND}`,
         );
       }
+    }
+  }
+  if (Object.hasOwn(action, "authorizationBoundary")) {
+    const boundary = action.authorizationBoundary;
+    if (
+      !isRecord(boundary)
+      || Object.keys(boundary).length !== 1
+      || boundary.kind !== PROFESSIONAL_WRITE_BOUNDARY_KIND
+    ) {
+      errors.push(
+        `INVALID_ACTION_CONTRACT ${path}.authorizationBoundary must use the closed ${PROFESSIONAL_WRITE_BOUNDARY_KIND} shape`,
+      );
     }
   }
   if (!EXECUTION_MODES.has(action.executionMode)) {

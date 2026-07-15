@@ -171,12 +171,13 @@ export function renderPermissionsMatrix(model) {
     "# Action 级权限矩阵",
     "每一行均为可执行动作的显式 ALLOW 或 DENY 决策；客户端可见性不能替代服务端权限判断。",
     markdownTable(
-      ["模块", "Action ID", "目标对象", "访问例外", "效果", "主体", "条件", "记录范围", "端", "风险", "审计"],
+      ["模块", "Action ID", "目标对象", "授权边界", "访问例外", "效果", "主体", "条件", "记录范围", "端", "风险", "审计"],
       allActions(model).flatMap(({ module, action }) => (
         list(action.permissions).map((permission) => [
           module.id,
           action.id,
           action.targetObjectId,
+          action.authorizationBoundary?.kind ?? "—",
           action.accessGuard?.exceptionKind ?? "—",
           permission.effect,
           actorText(permission),

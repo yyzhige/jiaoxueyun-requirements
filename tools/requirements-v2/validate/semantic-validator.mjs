@@ -5,6 +5,7 @@ import {
   STUDENT_DETAIL_ACCESS_EXCEPTION_KIND,
   resolveStudentDetailAccessException,
 } from "../facts/student-detail-access-exceptions.mjs";
+import { PROFESSIONAL_WRITE_BOUNDARY_KIND } from "../facts/professional-write-authorization.mjs";
 
 const FORBIDDEN_ACTION_NAMES = new Set([
   "对象查询与范围筛选",
@@ -54,32 +55,6 @@ const PERIODIC_REPORT_ACTION_IDS = new Set([
   "RPT-ACT-UPDATE-SUBSCRIPTION",
   "RPT-ACT-PAUSE-SUBSCRIPTION",
   "RPT-ACT-CANCEL-SUBSCRIPTION",
-]);
-
-const PROFESSIONAL_SUBJECT_MUTATION_ACTION_IDS = new Set([
-  "GRD-ACT-CORRECT-RECOGNITION",
-  "GRD-ACT-ACCEPT-SUGGESTION",
-  "GRD-ACT-OVERRIDE-SCORE",
-  "GRD-ACT-MANUAL-GRADE",
-  "GRD-ACT-BATCH-CONFIRM",
-  "GRD-ACT-OPEN-CONFIRMED-REVISION",
-  "GRD-ACT-CONFIRM-REVISION",
-  "GRD-ACT-RESOLVE-VERSION-CONFLICT",
-  "PUB-ACT-PREVIEW",
-  "PUB-ACT-PREPARE-BATCH",
-  "PUB-ACT-PUBLISH-SELECTED",
-  "PUB-ACT-RETRY-FAILED",
-  "PUB-ACT-CORRECT-RESULT",
-  "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
-  "INS-ACT-CONFIRM-MASTERY",
-  "INS-ACT-PUBLISH-INTERPRETATION",
-  "PLN-ACT-CONFIRM-PLAN",
-  "PLN-ACT-ADJUST-PLAN",
-  "PLN-ACT-CLOSE-PLAN",
-  "EXM-ACT-CONFIRM-SUBJECT-SCORE",
-  "EXM-ACT-REJECT-SUBJECT-SCORE",
-  "EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE",
-  "EXM-ACT-CORRECT-SUBJECT-SCORE",
 ]);
 
 const TASK8_MODULE_MANIFEST = new Map([
@@ -390,19 +365,33 @@ function hasExactKeys(value, expectedKeys) {
 }
 
 function academicAccessBoundaryErrors(index) {
-  const enabled = [...PROFESSIONAL_SUBJECT_MUTATION_ACTION_IDS]
-    .some((actionId) => index.actionById.has(actionId));
-  if (!enabled) return [];
   const errors = [];
-  for (const actionId of PROFESSIONAL_SUBJECT_MUTATION_ACTION_IDS) {
-    const action = index.actionById.get(actionId)?.value;
+  for (const { moduleId, value: action } of index.actions) {
+    const module = index.moduleById.get(moduleId)?.value;
+    if (module?.phase !== 1) continue;
     const permissions = records(action?.permissions);
     const subjectTeacherAllows = permissions.filter(({ effect, dutyRef }) => (
       effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
     ));
     const allowScope = subjectTeacherAllows[0]?.scope;
-    const valid = action?.writes === true
+    const targetObject = index.objectById.get(action?.targetObjectId)?.value;
+    const targetRequiresBoundary = targetObject?.professionalWritePolicy
+      ?.requiredAuthorizationBoundaryKind === PROFESSIONAL_WRITE_BOUNDARY_KIND;
+    const hasAssignedScope = subjectTeacherAllows.some(({ scope }) => (
+      scope?.kind === "ASSIGNED_SUBJECT_COURSE"
+    ));
+    const isUserWrite = action?.executionMode === "USER_TASK"
       && action?.operationKind !== "READ"
+      && action?.writes === true;
+    const hasBoundaryDeclaration = Object.hasOwn(action ?? {}, "authorizationBoundary");
+    const isProfessionalCandidate = isUserWrite
+      && subjectTeacherAllows.length > 0
+      && (targetRequiresBoundary || hasAssignedScope);
+    if (!hasBoundaryDeclaration && !isProfessionalCandidate) continue;
+    const valid = isUserWrite
+      && hasExactKeys(action.authorizationBoundary, ["kind"])
+      && action.authorizationBoundary.kind === PROFESSIONAL_WRITE_BOUNDARY_KIND
+      && targetRequiresBoundary
       && subjectTeacherAllows.length === 1
       && hasExactKeys(allowScope, ["kind", "subjectMatch", "courseMatch"])
       && allowScope.kind === "ASSIGNED_SUBJECT_COURSE"
@@ -415,14 +404,14 @@ function academicAccessBoundaryErrors(index) {
         effect === "ALLOW" && dutyRef === "DUTY-HOMEROOM"
       ))
       && index.scenarios.some(({ value: scenario }) => (
-        scenario?.actionId === actionId
+        scenario?.actionId === action.id
         && scenario?.resultCode === "PERMISSION_DENIED"
         && scenario?.then?.expectedPermission === "DENY"
         && scenario?.then?.expectedState?.mode === "UNCHANGED"
       ));
     if (!valid) {
       errors.push(
-        `INVALID_ACADEMIC_ACCESS_BOUNDARY ${actionId} requires assigned subject-course scope and homeroom default deny`,
+        `INVALID_ACADEMIC_ACCESS_BOUNDARY ${action.id} requires a declared professional-write boundary, assigned subject-course scope, and homeroom default deny`,
       );
     }
   }

@@ -1,4 +1,8 @@
 import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import {
+  withProfessionalWriteAuthorization,
+  withProfessionalWritePolicy,
+} from "./professional-write-authorization.mjs";
 import { withStudentDataClassification } from "./student-data-classification.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
@@ -63,7 +67,7 @@ function object(
   ) {
     throw new Error(`${id} requires one explicitly declared identity field`);
   }
-  return withStudentDataClassification({
+  return withProfessionalWritePolicy(withStudentDataClassification({
     id,
     label,
     ...responsibility,
@@ -80,7 +84,7 @@ function object(
       idempotencyRole: "OBJECT_ID",
     } : fieldValue),
     ...objectOverrides,
-  }, studentDataKind);
+  }, studentDataKind));
 }
 
 function actorReference(actorRef) {
@@ -202,7 +206,7 @@ function action({
     };
   });
   return {
-    action: {
+    action: withProfessionalWriteAuthorization({
       id,
       label,
       targetObjectId,
@@ -226,7 +230,7 @@ function action({
       ...(effectiveWrites ? { idempotencyKey } : {}),
       auditMode: effectiveWrites ? AUDIT_REQUIRED : AUDIT_NOT_REQUIRED,
       failureResults: effectiveFailureResults,
-    },
+    }),
     scenarios: [...successScenarios, ...failureScenarios],
   };
 }
