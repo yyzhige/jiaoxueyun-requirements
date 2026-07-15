@@ -51,6 +51,235 @@ const PERIODIC_REPORT_ACTION_IDS = new Set([
   "RPT-ACT-CANCEL-SUBSCRIPTION",
 ]);
 
+const TASK8_MODULE_MANIFEST = new Map([
+  ["PREP-001", {
+    objectIds: [
+      "PREP-OBJ-LESSON-PLAN",
+      "PREP-OBJ-MATERIAL-REF",
+      "PREP-OBJ-CLASSROOM-ACTIVITY",
+      "PREP-OBJ-ASSIGNMENT-DRAFT",
+    ],
+    actionTargets: [
+      ["PREP-ACT-CREATE-LESSON-PLAN", "PREP-OBJ-LESSON-PLAN"],
+      ["PREP-ACT-CONFIRM-LESSON-PLAN", "PREP-OBJ-LESSON-PLAN"],
+      ["PREP-ACT-REFERENCE-MATERIAL", "PREP-OBJ-MATERIAL-REF"],
+      ["PREP-ACT-VERIFY-MATERIAL-LICENSE", "PREP-OBJ-MATERIAL-REF"],
+      ["PREP-ACT-PLAN-CLASSROOM-ACTIVITY", "PREP-OBJ-CLASSROOM-ACTIVITY"],
+      ["PREP-ACT-RECORD-CLASSROOM-ACTIVITY", "PREP-OBJ-CLASSROOM-ACTIVITY"],
+      ["PREP-ACT-GENERATE-ASSIGNMENT-DRAFT", "PREP-OBJ-ASSIGNMENT-DRAFT"],
+      ["PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT", "PREP-OBJ-ASSIGNMENT-DRAFT"],
+      ["PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF", "PREP-OBJ-ASSIGNMENT-DRAFT"],
+    ],
+    pageIds: ["PREP-PAGE-LESSON-WORKSPACE", "PREP-PAGE-MOBILE-CLASSROOM"],
+  }],
+  ["CONTENT-001", {
+    objectIds: [
+      "CONTENT-OBJ-QUESTION-VERSION",
+      "CONTENT-OBJ-LICENSE",
+      "CONTENT-OBJ-PERMISSION",
+    ],
+    actionTargets: [
+      ["CONTENT-ACT-CREATE-QUESTION-VERSION", "CONTENT-OBJ-QUESTION-VERSION"],
+      ["CONTENT-ACT-PUBLISH-QUESTION-VERSION", "CONTENT-OBJ-QUESTION-VERSION"],
+      ["CONTENT-ACT-CREATE-LICENSE", "CONTENT-OBJ-LICENSE"],
+      ["CONTENT-ACT-ACTIVATE-LICENSE", "CONTENT-OBJ-LICENSE"],
+      ["CONTENT-ACT-CREATE-SCHOOL-PERMISSION", "CONTENT-OBJ-PERMISSION"],
+      ["CONTENT-ACT-CREATE-SUBJECT-PERMISSION", "CONTENT-OBJ-PERMISSION"],
+      ["CONTENT-ACT-CREATE-COURSE-PERMISSION", "CONTENT-OBJ-PERMISSION"],
+      ["CONTENT-ACT-ACTIVATE-PERMISSION", "CONTENT-OBJ-PERMISSION"],
+    ],
+    pageIds: ["CONTENT-PAGE-GOVERNANCE"],
+  }],
+  ["EXM-001", {
+    objectIds: [
+      "EXM-OBJ-EXAM-EVENT",
+      "EXM-OBJ-SCORE-IMPORT",
+      "EXM-OBJ-AGGREGATE-RULE",
+      "EXM-OBJ-SUBJECT-SCORE",
+    ],
+    actionTargets: [
+      ["EXM-ACT-CREATE-EVENT", "EXM-OBJ-EXAM-EVENT"],
+      ["EXM-ACT-PUBLISH-EVENT", "EXM-OBJ-EXAM-EVENT"],
+      ["EXM-ACT-OPEN-CORRECTION", "EXM-OBJ-EXAM-EVENT"],
+      ["EXM-ACT-IMPORT-SCORES", "EXM-OBJ-SCORE-IMPORT"],
+      ["EXM-ACT-VALIDATE-SCORE-IMPORT", "EXM-OBJ-SCORE-IMPORT"],
+      ["EXM-ACT-REJECT-SCORE-IMPORT", "EXM-OBJ-SCORE-IMPORT"],
+      ["EXM-ACT-REVISE-REJECTED-IMPORT", "EXM-OBJ-SCORE-IMPORT"],
+      ["EXM-ACT-ACCEPT-SCORE-IMPORT", "EXM-OBJ-SCORE-IMPORT"],
+      ["EXM-ACT-CREATE-AGGREGATE-RULE", "EXM-OBJ-AGGREGATE-RULE"],
+      ["EXM-ACT-ACTIVATE-AGGREGATE-RULE", "EXM-OBJ-AGGREGATE-RULE"],
+      ["EXM-ACT-CREATE-SUBJECT-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+      ["EXM-ACT-CONFIRM-SUBJECT-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+      ["EXM-ACT-REJECT-SUBJECT-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+      ["EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+      ["EXM-ACT-PUBLISH-SUBJECT-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+      ["EXM-ACT-CORRECT-SUBJECT-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+      ["EXM-ACT-REPUBLISH-CORRECTED-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+      ["EXM-ACT-VIEW-PUBLISHED-SCORE", "EXM-OBJ-SUBJECT-SCORE"],
+    ],
+    pageIds: [
+      "EXM-PAGE-ACADEMIC-OPERATIONS",
+      "EXM-PAGE-MOBILE-ACADEMIC-REVIEW",
+      "EXM-PAGE-STUDENT-PUBLISHED-SCORE",
+    ],
+  }],
+  ["SCH-001", {
+    objectIds: [
+      "SCH-OBJ-CALENDAR",
+      "SCH-OBJ-CONSTRAINT",
+      "SCH-OBJ-CONSTRAINT-SNAPSHOT",
+      "SCH-OBJ-CANDIDATE",
+    ],
+    actionTargets: [
+      ["SCH-ACT-CREATE-CALENDAR", "SCH-OBJ-CALENDAR"],
+      ["SCH-ACT-PUBLISH-CALENDAR", "SCH-OBJ-CALENDAR"],
+      ["SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT", "SCH-OBJ-CONSTRAINT"],
+      ["SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT", "SCH-OBJ-CONSTRAINT"],
+      ["SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT", "SCH-OBJ-CONSTRAINT"],
+      ["SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT", "SCH-OBJ-CONSTRAINT"],
+      ["SCH-ACT-ACTIVATE-CONSTRAINT", "SCH-OBJ-CONSTRAINT"],
+      ["SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT", "SCH-OBJ-CONSTRAINT-SNAPSHOT"],
+      ["SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT", "SCH-OBJ-CONSTRAINT-SNAPSHOT"],
+      ["SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT", "SCH-OBJ-CONSTRAINT-SNAPSHOT"],
+      ["SCH-ACT-GENERATE-CANDIDATE", "SCH-OBJ-CANDIDATE"],
+      ["SCH-ACT-REVIEW-CONFLICTS", "SCH-OBJ-CANDIDATE"],
+      ["SCH-ACT-CONFIRM-CANDIDATE", "SCH-OBJ-CANDIDATE"],
+      ["SCH-ACT-PUBLISH-CANDIDATE", "SCH-OBJ-CANDIDATE"],
+      ["SCH-ACT-MARK-CANDIDATE-STALE", "SCH-OBJ-CANDIDATE"],
+    ],
+    pageIds: ["SCH-PAGE-SCHEDULE-OPERATIONS", "SCH-PAGE-MOBILE-CONFLICT-REVIEW"],
+  }],
+  ["PLAT-001", {
+    objectIds: [
+      "PLAT-OBJ-ONBOARDING-CASE",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "PLAT-OBJ-POLICY-TEMPLATE",
+      "PLAT-OBJ-SUPPORT-CASE",
+    ],
+    actionTargets: [
+      ["PLAT-ACT-CREATE-ONBOARDING-CASE", "PLAT-OBJ-ONBOARDING-CASE"],
+      ["PLAT-ACT-CONFIRM-ONBOARDING-CASE", "PLAT-OBJ-ONBOARDING-CASE"],
+      ["PLAT-ACT-CREATE-SERVICE-PLAN", "PLAT-OBJ-SERVICE-PLAN"],
+      ["PLAT-ACT-CONFIRM-SERVICE-PLAN", "PLAT-OBJ-SERVICE-PLAN"],
+      ["PLAT-ACT-ACTIVATE-SERVICE-PLAN", "PLAT-OBJ-SERVICE-PLAN"],
+      ["PLAT-ACT-CREATE-POLICY-TEMPLATE", "PLAT-OBJ-POLICY-TEMPLATE"],
+      ["PLAT-ACT-CONFIRM-POLICY-TEMPLATE", "PLAT-OBJ-POLICY-TEMPLATE"],
+      ["PLAT-ACT-ACTIVATE-POLICY-TEMPLATE", "PLAT-OBJ-POLICY-TEMPLATE"],
+      ["PLAT-ACT-CREATE-SUPPORT-CASE", "PLAT-OBJ-SUPPORT-CASE"],
+      ["PLAT-ACT-CLOSE-SUPPORT-CASE", "PLAT-OBJ-SUPPORT-CASE"],
+      ["PLAT-ACT-USE-SUPPORT-ACCESS", "PLAT-OBJ-SUPPORT-CASE"],
+    ],
+    pageIds: [
+      "PLAT-PAGE-SCHOOL-SERVICE-OPERATIONS",
+      "PLAT-PAGE-MOBILE-SUPPORT-CASE",
+    ],
+  }],
+  ["REPORT-001", {
+    objectIds: ["REPORT-OBJ-FUTURE-CONTRACT"],
+    actionTargets: [],
+    pageIds: [],
+  }],
+]);
+
+const TASK8_OPTION_SET_IDS = Array.from(
+  { length: 18 },
+  (_, index) => `OPT-EXT-${String(index + 1).padStart(3, "0")}`,
+);
+
+const TASK8_EVENT_IDS = [
+  "EVT-EXM-SCORE-PUBLISHED",
+  "EVT-SCH-SOURCE-VERSION-CHANGED",
+];
+
+const ZHIXU_PRODUCTION_MARKER_MODULE_IDS = new Set([
+  "ACC-001",
+  "ORG-001",
+  "IAM-001",
+  "DGV-001",
+  "AUD-001",
+]);
+
+const TASK8_BUSINESS_FAILURES = new Map([
+  ["CONTENT-ACT-PUBLISH-QUESTION-VERSION", [
+    "LICENSE_INACTIVE",
+    "CONTENT_PERMISSION_INACTIVE",
+  ]],
+  ["EXM-ACT-VALIDATE-SCORE-IMPORT", ["IMPORT_REJECTED"]],
+  ["EXM-ACT-ACCEPT-SCORE-IMPORT", ["IMPORT_REJECTED"]],
+  ["EXM-ACT-CREATE-SUBJECT-SCORE", ["IMPORT_REJECTED"]],
+  ["EXM-ACT-CONFIRM-SUBJECT-SCORE", ["SCORE_REJECTED"]],
+  ["EXM-ACT-PUBLISH-SUBJECT-SCORE", [
+    "SCORE_REJECTED",
+    "TEACHER_CONFIRMATION_REQUIRED",
+  ]],
+  ["EXM-ACT-VIEW-PUBLISHED-SCORE", [
+    "RESULT_NOT_PUBLISHED",
+    "RESULT_NOT_VISIBLE",
+  ]],
+  ["SCH-ACT-GENERATE-CANDIDATE", ["SOURCE_VERSION_STALE"]],
+  ["SCH-ACT-CONFIRM-CANDIDATE", [
+    "HARD_CONSTRAINT_FAILED",
+    "SOURCE_VERSION_STALE",
+  ]],
+  ["SCH-ACT-PUBLISH-CANDIDATE", ["SOURCE_VERSION_STALE"]],
+  ["PREP-ACT-GENERATE-ASSIGNMENT-DRAFT", ["LESSON_STALE"]],
+  ["PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF", [
+    "LESSON_STALE",
+    "HANDOFF_INCOMPLETE",
+  ]],
+  ["PLAT-ACT-CREATE-SUPPORT-CASE", [
+    "ACCESS_INACTIVE",
+    "ACCESS_EXPIRED",
+    "ACCESS_OTHER_RECORD",
+    "ACCESS_SCOPE_DENIED",
+  ]],
+  ["PLAT-ACT-USE-SUPPORT-ACCESS", [
+    "ACCESS_INACTIVE",
+    "ACCESS_EXPIRED",
+    "ACCESS_OTHER_RECORD",
+    "ACCESS_SCOPE_DENIED",
+    "AUDIT_FAILED",
+  ]],
+]);
+
+const TASK8_GENERIC_FAILURE_CODES = new Set([
+  "PERMISSION_DENIED",
+  "NOT_FOUND",
+  "VALIDATION_FAILED",
+  "VERSION_CONFLICT",
+  "SOURCE_VERSION_STALE",
+  "AUDIT_FAILED",
+]);
+
+const TASK8_BUSINESS_FAILURE_PREDICATES = new Map([
+  ["CONTENT-ACT-PUBLISH-QUESTION-VERSION:LICENSE_INACTIVE", "license.state !== ACTIVE || license.version !== pinnedLicenseVersion"],
+  ["CONTENT-ACT-PUBLISH-QUESTION-VERSION:CONTENT_PERMISSION_INACTIVE", "contentPermission.state !== ACTIVE || currentTime >= contentPermission.expiresAt || !contentPermission.covers(questionContext, currentActor)"],
+  ["EXM-ACT-VALIDATE-SCORE-IMPORT:IMPORT_REJECTED", "blockingImportValidationErrors.length > 0"],
+  ["EXM-ACT-ACCEPT-SCORE-IMPORT:IMPORT_REJECTED", "scoreImport.state !== PASSED || blockingImportValidationErrors.length > 0"],
+  ["EXM-ACT-CREATE-SUBJECT-SCORE:IMPORT_REJECTED", "scoreImport.state !== ACCEPTED"],
+  ["EXM-ACT-CONFIRM-SUBJECT-SCORE:SCORE_REJECTED", "confirmationDecision !== CONFIRM || subjectScore.state === REJECTED"],
+  ["EXM-ACT-PUBLISH-SUBJECT-SCORE:SCORE_REJECTED", "subjectScore.state === REJECTED"],
+  ["EXM-ACT-PUBLISH-SUBJECT-SCORE:TEACHER_CONFIRMATION_REQUIRED", "subjectScore.state !== TEACHER_CONFIRMED || teacherConfirmedAt == null"],
+  ["EXM-ACT-VIEW-PUBLISHED-SCORE:RESULT_NOT_PUBLISHED", "subjectScore.state !== PUBLISHED"],
+  ["EXM-ACT-VIEW-PUBLISHED-SCORE:RESULT_NOT_VISIBLE", "subjectScore.state === PUBLISHED && currentTime < visibleAt"],
+  ["SCH-ACT-GENERATE-CANDIDATE:SOURCE_VERSION_STALE", "calendar.state !== PUBLISHED || constraintSnapshot.state !== ACTIVE || sourceVersionChangedDuringGeneration === true"],
+  ["SCH-ACT-CONFIRM-CANDIDATE:HARD_CONSTRAINT_FAILED", "candidate.hardConstraintCheck !== PASS"],
+  ["SCH-ACT-CONFIRM-CANDIDATE:SOURCE_VERSION_STALE", "candidate.calendarVersion !== calendar.version || candidate.constraintSnapshotVersion !== constraintSnapshot.version || calendar.state !== PUBLISHED || constraintSnapshot.state !== ACTIVE"],
+  ["SCH-ACT-PUBLISH-CANDIDATE:SOURCE_VERSION_STALE", "candidate.calendarVersion !== calendar.version || candidate.constraintSnapshotVersion !== constraintSnapshot.version || calendar.state !== PUBLISHED || constraintSnapshot.state !== ACTIVE"],
+  ["PREP-ACT-GENERATE-ASSIGNMENT-DRAFT:LESSON_STALE", "lessonPlan.state !== CONFIRMED || sourceLessonVersionCapture !== lessonPlan.version"],
+  ["PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF:LESSON_STALE", "draft.sourceLessonVersion !== lessonPlan.version || lessonPlan.state !== CONFIRMED"],
+  ["PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF:HANDOFF_INCOMPLETE", "completedBindingCount !== 15 || missingTeacherRequiredPayloadPaths.length > 0 || unknownPayloadPaths.length > 0"],
+  ["PLAT-ACT-CREATE-SUPPORT-CASE:ACCESS_INACTIVE", "auditSession.state !== ACTIVE"],
+  ["PLAT-ACT-CREATE-SUPPORT-CASE:ACCESS_EXPIRED", "currentTime >= auditSession.expiresAt"],
+  ["PLAT-ACT-CREATE-SUPPORT-CASE:ACCESS_OTHER_RECORD", "currentActor.id !== auditSession.authorizedOperatorId"],
+  ["PLAT-ACT-CREATE-SUPPORT-CASE:ACCESS_SCOPE_DENIED", "!auditSession.scope.contains(requestedScope)"],
+  ["PLAT-ACT-USE-SUPPORT-ACCESS:ACCESS_INACTIVE", "auditSession.state !== ACTIVE"],
+  ["PLAT-ACT-USE-SUPPORT-ACCESS:ACCESS_EXPIRED", "currentTime >= auditSession.expiresAt"],
+  ["PLAT-ACT-USE-SUPPORT-ACCESS:ACCESS_OTHER_RECORD", "currentActor.id !== auditSession.authorizedOperatorId"],
+  ["PLAT-ACT-USE-SUPPORT-ACCESS:ACCESS_SCOPE_DENIED", "!auditSession.scope.contains(requestedScope)"],
+  ["PLAT-ACT-USE-SUPPORT-ACCESS:AUDIT_FAILED", "appendAuditEventBeforeDataReturn !== SUCCESS"],
+]);
+
 const AI_TASK_CAPABILITIES = new Map([
   ["QUERY", "QUERY"],
   ["ANALYSIS", "ANALYSIS"],
@@ -100,6 +329,11 @@ function records(value) {
   return list(value).filter(isRecord);
 }
 
+function task8ProfileEnabled(index) {
+  return index.modelProfile === "ZHIXU_V2"
+    || index.modules.some(({ value }) => ZHIXU_PRODUCTION_MARKER_MODULE_IDS.has(value?.id));
+}
+
 function isPresent(value) {
   return value !== undefined
     && value !== null
@@ -115,9 +349,20 @@ function setEquals(left, right) {
   return [...left].every((value) => right.has(value));
 }
 
+function sameStringSet(left, right) {
+  return setEquals(new Set(list(left)), new Set(list(right)));
+}
+
 function hasExactKeys(value, expectedKeys) {
   return isRecord(value)
     && setEquals(new Set(Object.keys(value)), new Set(expectedKeys));
+}
+
+function hasExactValues(value, expected) {
+  return hasExactKeys(value, Object.keys(expected))
+    && Object.entries(expected).every(([property, expectedValue]) => (
+      value[property] === expectedValue
+    ));
 }
 
 function hasStableIdempotencyRole(index, fieldId, allowedRoles) {
@@ -2740,9 +2985,18 @@ function phaseAndTemplateErrors(index) {
   const errors = [];
   for (const moduleEntry of index.modules) {
     const module = moduleEntry.value;
+    const phaseTwoExecutable = [
+      "actions",
+      "pages",
+      "scenarios",
+      "flows",
+      "aiTasks",
+      "externalLinks",
+      "deliveryBehavior",
+    ].some((property) => list(module?.[property]).length > 0);
     if (
       module?.phase === 2
-      && (list(module?.pages).length > 0 || list(module?.actions).length > 0)
+      && phaseTwoExecutable
     ) {
       errors.push(
         `PHASE_BOUNDARY_EXECUTABLE_PAGE ${formatValidationValue(module?.id)} exposes pages or actions in phase two`,
@@ -2766,6 +3020,1766 @@ function phaseAndTemplateErrors(index) {
           `FORBIDDEN_GENERIC_TEMPLATE page ${formatValidationValue(pageEntry.value?.id)} -> ${name}`,
         );
       }
+    }
+  }
+  return errors;
+}
+
+function contentGovernanceErrors(index) {
+  const moduleEntry = index.moduleById.get("CONTENT-001");
+  const questionEntry = index.objectById.get("CONTENT-OBJ-QUESTION-VERSION");
+  const licenseEntry = index.objectById.get("CONTENT-OBJ-LICENSE");
+  const permissionEntry = index.objectById.get("CONTENT-OBJ-PERMISSION");
+  const publishEntry = index.actionById.get("CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+  if (
+    !moduleEntry
+    || questionEntry?.moduleId !== "CONTENT-001"
+    || licenseEntry?.moduleId !== "CONTENT-001"
+    || permissionEntry?.moduleId !== "CONTENT-001"
+    || publishEntry?.moduleId !== "CONTENT-001"
+  ) return task8ProfileEnabled(index)
+    ? ["INVALID_CONTENT_GOVERNANCE_CONTRACT CONTENT-001 prerequisites are missing"]
+    : [];
+
+  const question = questionEntry.value;
+  const permission = permissionEntry.value;
+  const publish = publishEntry.value;
+  const action = (id) => index.actionById.get(id)?.value;
+  const hasExactUniqueStrings = (actual, expected) => {
+    const values = list(actual);
+    return values.length === expected.length
+      && values.every(isValidId)
+      && new Set(values).size === values.length
+      && setEquals(new Set(values), new Set(expected));
+  };
+  const ownedFieldMatches = (fieldId, objectId, dataType, optionSetId) => {
+    const fieldEntry = index.fieldById.get(fieldId);
+    const field = fieldEntry?.value;
+    return fieldEntry?.moduleId === "CONTENT-001"
+      && fieldEntry?.objectId === objectId
+      && field?.dataType === dataType
+      && (optionSetId === undefined || hasExactValues(field?.valueSource, {
+        kind: "OPTION_SET",
+        optionSetId,
+      }));
+  };
+  const questionContextFields = [
+    ["CONTENT-QUESTION-F-SCHOOL-ID", "OPT-COM-002"],
+    ["CONTENT-QUESTION-F-SUBJECT-ID", "OPT-COM-007"],
+    ["CONTENT-QUESTION-F-COURSE-ID", "OPT-COM-008"],
+  ];
+  const grantFacts = [
+    {
+      scopeCode: "SCHOOL",
+      payloadFieldId: "CONTENT-PERMISSION-F-SCHOOL-ID",
+      optionSetId: "OPT-COM-002",
+      actionId: "CONTENT-ACT-CREATE-SCHOOL-PERMISSION",
+    },
+    {
+      scopeCode: "SUBJECT",
+      payloadFieldId: "CONTENT-PERMISSION-F-SUBJECT-ID",
+      optionSetId: "OPT-COM-007",
+      actionId: "CONTENT-ACT-CREATE-SUBJECT-PERMISSION",
+    },
+    {
+      scopeCode: "COURSE",
+      payloadFieldId: "CONTENT-PERMISSION-F-COURSE-ID",
+      optionSetId: "OPT-COM-008",
+      actionId: "CONTENT-ACT-CREATE-COURSE-PERMISSION",
+    },
+  ];
+  const commonGrantInputFieldIds = [
+    "CONTENT-PERMISSION-F-GRANTEE-ID",
+    "CONTENT-PERMISSION-F-EFFECTIVE-AT",
+    "CONTENT-PERMISSION-F-EXPIRES-AT",
+  ];
+  const createQuestion = action("CONTENT-ACT-CREATE-QUESTION-VERSION");
+  const sourceGroups = records(permission?.exclusiveSourceGroups);
+  const scopeValues = records(index.optionSetById.get("OPT-EXT-010")?.value?.values);
+  const coverage = publish?.permissionCoverage;
+  let valid = questionContextFields.every(([fieldId, optionSetId]) => (
+    ownedFieldMatches(fieldId, question.id, "ID", optionSetId)
+    && index.fieldById.get(fieldId)?.value?.required === true
+    && list(createQuestion?.inputFieldIds).includes(fieldId)
+  ))
+    && ownedFieldMatches(
+      "CONTENT-PERMISSION-F-SCOPE",
+      permission.id,
+      "STRING",
+      "OPT-EXT-010",
+    )
+    && hasExactUniqueStrings(scopeValues.map(({ code }) => code), grantFacts.map(({ scopeCode }) => (
+      scopeCode
+    )))
+    && grantFacts.every(({ payloadFieldId, optionSetId }) => (
+      ownedFieldMatches(payloadFieldId, permission.id, "ID", optionSetId)
+      && index.fieldById.get(payloadFieldId)?.value?.required === false
+    ))
+    && ownedFieldMatches(
+      "CONTENT-PERMISSION-F-GRANTEE-ID",
+      permission.id,
+      "ID",
+    )
+    && ownedFieldMatches(
+      "CONTENT-PERMISSION-F-EFFECTIVE-AT",
+      permission.id,
+      "DATETIME",
+    )
+    && ownedFieldMatches(
+      "CONTENT-PERMISSION-F-EXPIRES-AT",
+      permission.id,
+      "DATETIME",
+    )
+    && sourceGroups.length === grantFacts.length
+    && grantFacts.every(({ scopeCode, payloadFieldId }) => sourceGroups.filter((group) => (
+      hasExactKeys(group, ["id", "fieldIds"])
+      && group.id === scopeCode
+      && hasExactUniqueStrings(group.fieldIds, [payloadFieldId])
+    )).length === 1)
+    && grantFacts.every(({ scopeCode, payloadFieldId, actionId }) => {
+      const grantActionEntry = index.actionById.get(actionId);
+      const grantAction = grantActionEntry?.value;
+      const acceptedValues = records(grantAction?.acceptedInputValues);
+      const expectedInputFieldIds = [
+        "CONTENT-PERMISSION-F-SCOPE",
+        payloadFieldId,
+        ...commonGrantInputFieldIds,
+      ];
+      return grantActionEntry?.moduleId === "CONTENT-001"
+        && grantAction?.targetObjectId === permission.id
+        && grantAction?.operationKind === "CREATE"
+        && grantAction?.writes === true
+        && hasExactUniqueStrings(grantAction?.inputFieldIds, expectedInputFieldIds)
+        && hasExactUniqueStrings(grantAction?.outputFieldIds, [
+          "CONTENT-PERMISSION-F-ID",
+          "CONTENT-PERMISSION-F-VERSION",
+        ])
+        && acceptedValues.length === 1
+        && hasExactKeys(acceptedValues[0], [
+          "fieldId",
+          "optionSetId",
+          "partitionId",
+          "codes",
+        ])
+        && acceptedValues[0].fieldId === "CONTENT-PERMISSION-F-SCOPE"
+        && acceptedValues[0].optionSetId === "OPT-EXT-010"
+        && acceptedValues[0].partitionId === "CONTENT-PERMISSION-SCOPE"
+        && hasExactUniqueStrings(acceptedValues[0].codes, [scopeCode]);
+    })
+    && hasExactKeys(coverage, [
+      "grantRefFieldId",
+      "grantScopeFieldId",
+      "contentContextFieldIds",
+      "grantContextFieldIds",
+      "granteeFieldId",
+      "effectiveAtFieldId",
+      "expiresAtFieldId",
+      "predicate",
+    ])
+    && coverage.grantRefFieldId === "CONTENT-QUESTION-F-PERMISSION-REF"
+    && coverage.grantScopeFieldId === "CONTENT-PERMISSION-F-SCOPE"
+    && hasExactValues(coverage.contentContextFieldIds, {
+      schoolId: "CONTENT-QUESTION-F-SCHOOL-ID",
+      subjectId: "CONTENT-QUESTION-F-SUBJECT-ID",
+      courseId: "CONTENT-QUESTION-F-COURSE-ID",
+    })
+    && hasExactValues(coverage.grantContextFieldIds, {
+      schoolId: "CONTENT-PERMISSION-F-SCHOOL-ID",
+      subjectId: "CONTENT-PERMISSION-F-SUBJECT-ID",
+      courseId: "CONTENT-PERMISSION-F-COURSE-ID",
+    })
+    && coverage.granteeFieldId === "CONTENT-PERMISSION-F-GRANTEE-ID"
+    && coverage.effectiveAtFieldId === "CONTENT-PERMISSION-F-EFFECTIVE-AT"
+    && coverage.expiresAtFieldId === "CONTENT-PERMISSION-F-EXPIRES-AT"
+    && coverage.predicate === "ACTIVE_GRANT_COVERS_CONTENT_CONTEXT_AND_CURRENT_TIME";
+  const expectedRefs = [
+    {
+      refFieldId: "CONTENT-QUESTION-F-LICENSE-REF",
+      versionFieldId: "CONTENT-QUESTION-F-LICENSE-VERSION",
+      targetObjectId: "CONTENT-OBJ-LICENSE",
+      targetVersionFieldId: "CONTENT-LICENSE-F-VERSION",
+    },
+    {
+      refFieldId: "CONTENT-QUESTION-F-PERMISSION-REF",
+      versionFieldId: "CONTENT-QUESTION-F-PERMISSION-VERSION",
+      targetObjectId: "CONTENT-OBJ-PERMISSION",
+      targetVersionFieldId: "CONTENT-PERMISSION-F-VERSION",
+    },
+  ];
+  valid = valid && expectedRefs.every((expected) => {
+    const refEntry = index.fieldById.get(expected.refFieldId);
+    const versionEntry = index.fieldById.get(expected.versionFieldId);
+    const targetVersionEntry = index.fieldById.get(expected.targetVersionFieldId);
+    const ref = refEntry?.value;
+    return refEntry?.moduleId === "CONTENT-001"
+      && refEntry?.objectId === question.id
+      && ref?.dataType === "ID"
+      && ref?.mutability === "IMMUTABLE"
+      && ref?.referenceIntegrity === "VERSION_PINNED"
+      && ref?.stateGuardPolicy === "UPDATE_REQUIRED"
+      && hasExactValues(ref?.valueSource, {
+        kind: "OBJECT_REF",
+        targetObjectId: expected.targetObjectId,
+      })
+      && hasExactValues(ref?.versionBinding, {
+        versionFieldId: expected.versionFieldId,
+        targetVersionFieldId: expected.targetVersionFieldId,
+      })
+      && hasExactKeys(ref?.actionApplicability, ["requiredActionIds"])
+      && sameStringSet(ref?.actionApplicability?.requiredActionIds, [
+        "CONTENT-ACT-PUBLISH-QUESTION-VERSION",
+      ])
+      && versionEntry?.moduleId === "CONTENT-001"
+      && versionEntry?.objectId === question.id
+      && versionEntry?.value?.dataType === "INTEGER"
+      && versionEntry?.value?.mutability === "IMMUTABLE"
+      && targetVersionEntry?.moduleId === "CONTENT-001"
+      && targetVersionEntry?.objectId === expected.targetObjectId
+      && targetVersionEntry?.value?.dataType === "INTEGER"
+      && targetVersionEntry?.value?.idempotencyRole === "OBJECT_VERSION";
+  });
+
+  const lineageBindings = records(question?.lineageBindings);
+  valid = valid
+    && lineageBindings.length === expectedRefs.length
+    && expectedRefs.every((expected) => lineageBindings.some((binding) => (
+      hasExactValues(binding, expected)
+    )));
+
+  const expectedRelationships = [
+    {
+      id: "CONTENT-REL-QUESTION-LICENSE",
+      fromObjectId: "CONTENT-OBJ-QUESTION-VERSION",
+      toObjectId: "CONTENT-OBJ-LICENSE",
+      type: "REQUIRES",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "block publication and require a new pinned active license version",
+    },
+    {
+      id: "CONTENT-REL-QUESTION-PERMISSION",
+      fromObjectId: "CONTENT-OBJ-QUESTION-VERSION",
+      toObjectId: "CONTENT-OBJ-PERMISSION",
+      type: "AUTHORIZED_BY",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SUBJECT",
+      onSourceInvalidation: "block publication and require a new pinned active permission version",
+    },
+  ];
+  const relationships = records(moduleEntry.value?.relationships);
+  valid = valid
+    && relationships.length === expectedRelationships.length
+    && expectedRelationships.every((expected) => relationships.some((relationship) => (
+      hasExactValues(relationship, expected)
+    )));
+
+  const expectedGuards = expectedRefs.map((expected) => ({
+    refFieldId: expected.refFieldId,
+    versionFieldId: expected.versionFieldId,
+    targetObjectId: expected.targetObjectId,
+    requiredState: "ACTIVE",
+  }));
+  const guards = records(publish?.relatedStateGuards);
+  const allowPermissions = records(publish?.permissions).filter(({ effect }) => (
+    effect === "ALLOW"
+  ));
+  valid = valid
+    && publish?.targetObjectId === question.id
+    && publish?.operationKind === "UPDATE"
+    && publish?.transition?.from === "DRAFT"
+    && publish?.transition?.to === "PUBLISHED"
+    && sameStringSet(publish?.inputFieldIds, expectedRefs.flatMap((expected) => [
+      expected.refFieldId,
+      expected.versionFieldId,
+    ]))
+    && sameStringSet(publish?.outputFieldIds, [
+      "CONTENT-QUESTION-F-VERSION",
+      "CONTENT-QUESTION-F-AVAILABILITY",
+    ])
+    && guards.length === expectedGuards.length
+    && expectedGuards.every((expected) => guards.some((guard) => (
+      hasExactValues(guard, expected)
+    )))
+    && allowPermissions.length === 1
+    && allowPermissions[0]?.dutyRef === "DUTY-SUBJECT-LEAD"
+    && !Object.hasOwn(allowPermissions[0] ?? {}, "roleRef")
+    && !Object.hasOwn(allowPermissions[0] ?? {}, "actorRef")
+    && sameStringSet(publish?.failureResults, [
+      "PERMISSION_DENIED",
+      "LICENSE_INACTIVE",
+      "CONTENT_PERMISSION_INACTIVE",
+      "SOURCE_VERSION_STALE",
+      "VERSION_CONFLICT",
+    ]);
+
+  return valid
+    ? []
+    : [
+      "INVALID_CONTENT_GOVERNANCE_CONTRACT CONTENT question publication requires active version-pinned license and permission lineage under the subject lead",
+    ];
+}
+
+function task8PhaseFieldErrors(index) {
+  if (!task8ProfileEnabled(index)) return [];
+
+  const phaseFields = [
+    {
+      moduleId: "PREP-001",
+      objectId: "PREP-OBJ-CLASSROOM-ACTIVITY",
+      fieldId: "PREP-ACTIVITY-F-EVIDENCE",
+      writerActionId: "PREP-ACT-RECORD-CLASSROOM-ACTIVITY",
+      requiredState: "RECORDED",
+    },
+    {
+      moduleId: "EXM-001",
+      objectId: "EXM-OBJ-EXAM-EVENT",
+      fieldId: "EXM-EVENT-F-PUBLICATION-AT",
+      writerActionId: "EXM-ACT-PUBLISH-EVENT",
+      requiredState: "PUBLISHED",
+    },
+    {
+      moduleId: "PLAT-001",
+      objectId: "PLAT-OBJ-SERVICE-PLAN",
+      fieldId: "PLAT-PLAN-F-SCHOOL-CONFIRMED-AT",
+      writerActionId: "PLAT-ACT-CONFIRM-SERVICE-PLAN",
+      requiredState: "CONFIRMED",
+    },
+  ];
+  const valid = phaseFields.every((expected) => {
+    const fieldEntry = index.fieldById.get(expected.fieldId);
+    const required = fieldEntry?.value?.required;
+    const writerEntry = index.actionById.get(expected.writerActionId);
+    const writer = writerEntry?.value;
+    const writerEntries = index.actions.filter(({ value }) => (
+      value?.writes === true
+      && list(value?.outputFieldIds).includes(expected.fieldId)
+    ));
+    return fieldEntry?.moduleId === expected.moduleId
+      && fieldEntry?.objectId === expected.objectId
+      && hasExactKeys(required, ["description", "whenStates", "whenActionIds"])
+      && isValidId(required.description)
+      && list(required.whenStates).length === 1
+      && required.whenStates[0] === expected.requiredState
+      && list(required.whenActionIds).length === 1
+      && required.whenActionIds[0] === expected.writerActionId
+      && writerEntry?.moduleId === expected.moduleId
+      && writer?.targetObjectId === expected.objectId
+      && writer?.writes === true
+      && concreteActionState(index, writer) === expected.requiredState
+      && list(writer?.outputFieldIds).filter((fieldId) => (
+        fieldId === expected.fieldId
+      )).length === 1
+      && writerEntries.length === 1
+      && writerEntries[0]?.value?.id === expected.writerActionId;
+  });
+  return valid
+    ? []
+    : [
+      "INVALID_TASK8_PHASE_FIELD_CONTRACT Task 8 phase fields require one exclusive semantic-stage writer and matching conditional requirement",
+    ];
+}
+
+function examGovernanceErrors(index) {
+  const moduleEntry = index.moduleById.get("EXM-001");
+  const importEntry = index.objectById.get("EXM-OBJ-SCORE-IMPORT");
+  const scoreEntry = index.objectById.get("EXM-OBJ-SUBJECT-SCORE");
+  const requiredActionIds = [
+    "EXM-ACT-IMPORT-SCORES",
+    "EXM-ACT-VALIDATE-SCORE-IMPORT",
+    "EXM-ACT-REJECT-SCORE-IMPORT",
+    "EXM-ACT-REVISE-REJECTED-IMPORT",
+    "EXM-ACT-ACCEPT-SCORE-IMPORT",
+    "EXM-ACT-CREATE-SUBJECT-SCORE",
+    "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+    "EXM-ACT-REJECT-SUBJECT-SCORE",
+    "EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE",
+    "EXM-ACT-PUBLISH-SUBJECT-SCORE",
+    "EXM-ACT-REPUBLISH-CORRECTED-SCORE",
+  ];
+  if (
+    !moduleEntry
+    || importEntry?.moduleId !== "EXM-001"
+    || scoreEntry?.moduleId !== "EXM-001"
+    || requiredActionIds.some((id) => index.actionById.get(id)?.moduleId !== "EXM-001")
+  ) return task8ProfileEnabled(index)
+    ? ["INVALID_EXAM_GOVERNANCE_CONTRACT EXM-001 prerequisites are missing"]
+    : [];
+
+  const exam = moduleEntry.value;
+  const score = scoreEntry.value;
+  const action = (id) => index.actionById.get(id)?.value;
+  const importOption = index.optionSetById.get("OPT-EXT-005")?.value;
+  const decisionOption = index.optionSetById.get("OPT-EXT-018")?.value;
+  const exactOptionCodes = (optionSet, expectedCodes) => {
+    const values = records(optionSet?.values);
+    const codes = values.map(({ code }) => code);
+    return values.length === expectedCodes.length
+      && codes.every(isValidId)
+      && sameStringSet(codes, expectedCodes);
+  };
+
+  let valid = setEquals(
+    stateIds(importEntry.value),
+    new Set(["PENDING", "PASSED", "REJECTED", "ACCEPTED"]),
+  )
+    && exactOptionCodes(importOption, ["PENDING", "PASSED", "REJECTED"])
+    && exactOptionCodes(decisionOption, ["CONFIRM", "REJECT"])
+    && concreteActionState(index, action("EXM-ACT-IMPORT-SCORES")) === "PENDING";
+
+  const importTransitions = [
+    ["EXM-ACT-VALIDATE-SCORE-IMPORT", "PENDING", "PASSED"],
+    ["EXM-ACT-REJECT-SCORE-IMPORT", "PENDING", "REJECTED"],
+    ["EXM-ACT-REVISE-REJECTED-IMPORT", "REJECTED", "PENDING"],
+    ["EXM-ACT-ACCEPT-SCORE-IMPORT", "PASSED", "ACCEPTED"],
+  ];
+  valid = valid && importTransitions.every(([actionId, from, to]) => (
+    action(actionId)?.targetObjectId === "EXM-OBJ-SCORE-IMPORT"
+    && action(actionId)?.transition?.from === from
+    && action(actionId)?.transition?.to === to
+  ));
+
+  const importRefEntry = index.fieldById.get("EXM-SCORE-F-IMPORT-REF");
+  const importVersionEntry = index.fieldById.get("EXM-SCORE-F-IMPORT-VERSION");
+  const sourceVersionEntry = index.fieldById.get("EXM-IMPORT-F-VERSION");
+  const importRef = importRefEntry?.value;
+  const expectedLineage = {
+    refFieldId: "EXM-SCORE-F-IMPORT-REF",
+    versionFieldId: "EXM-SCORE-F-IMPORT-VERSION",
+    targetObjectId: "EXM-OBJ-SCORE-IMPORT",
+    targetVersionFieldId: "EXM-IMPORT-F-VERSION",
+  };
+  valid = valid
+    && importRefEntry?.moduleId === "EXM-001"
+    && importRefEntry?.objectId === score.id
+    && importRef?.dataType === "ID"
+    && importRef?.mutability === "IMMUTABLE"
+    && importRef?.referenceIntegrity === "VERSION_PINNED"
+    && importRef?.stateGuardPolicy === "CREATE_REQUIRED"
+    && hasExactValues(importRef?.valueSource, {
+      kind: "OBJECT_REF",
+      targetObjectId: "EXM-OBJ-SCORE-IMPORT",
+    })
+    && hasExactValues(importRef?.versionBinding, {
+      versionFieldId: "EXM-SCORE-F-IMPORT-VERSION",
+      targetVersionFieldId: "EXM-IMPORT-F-VERSION",
+    })
+    && hasExactKeys(importRef?.actionApplicability, ["requiredActionIds"])
+    && sameStringSet(importRef?.actionApplicability?.requiredActionIds, [
+      "EXM-ACT-CREATE-SUBJECT-SCORE",
+    ])
+    && importVersionEntry?.moduleId === "EXM-001"
+    && importVersionEntry?.objectId === score.id
+    && importVersionEntry?.value?.dataType === "INTEGER"
+    && importVersionEntry?.value?.mutability === "IMMUTABLE"
+    && sourceVersionEntry?.moduleId === "EXM-001"
+    && sourceVersionEntry?.objectId === "EXM-OBJ-SCORE-IMPORT"
+    && sourceVersionEntry?.value?.dataType === "INTEGER"
+    && sourceVersionEntry?.value?.idempotencyRole === "OBJECT_VERSION";
+
+  const lineageBindings = records(score?.lineageBindings);
+  const relationships = records(exam?.relationships);
+  valid = valid
+    && lineageBindings.length === 1
+    && hasExactValues(lineageBindings[0], expectedLineage)
+    && relationships.length === 1
+    && hasExactValues(relationships[0], {
+      id: "EXM-REL-SCORE-IMPORT",
+      fromObjectId: "EXM-OBJ-SUBJECT-SCORE",
+      toObjectId: "EXM-OBJ-SCORE-IMPORT",
+      type: "DERIVED_FROM",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SCHOOL",
+      onSourceInvalidation: "block score creation and mark unconfirmed derived score versions stale",
+    });
+
+  const createScore = action("EXM-ACT-CREATE-SUBJECT-SCORE");
+  const createGuards = records(createScore?.relatedStateGuards);
+  valid = valid
+    && createScore?.operationKind === "CREATE"
+    && createScore?.targetObjectId === score.id
+    && concreteActionState(index, createScore) === "IMPORTED"
+    && sameStringSet(createScore?.inputFieldIds, [
+      "EXM-SCORE-F-STUDENT-ID",
+      "EXM-SCORE-F-SUBJECT",
+      "EXM-SCORE-F-SCORE",
+      "EXM-SCORE-F-IMPORT-REF",
+      "EXM-SCORE-F-IMPORT-VERSION",
+    ])
+    && sameStringSet(createScore?.outputFieldIds, [
+      "EXM-SCORE-F-ID",
+      "EXM-SCORE-F-EVIDENCE",
+      "EXM-SCORE-F-VERSION",
+    ])
+    && createGuards.length === 1
+    && hasExactValues(createGuards[0], {
+      refFieldId: "EXM-SCORE-F-IMPORT-REF",
+      versionFieldId: "EXM-SCORE-F-IMPORT-VERSION",
+      targetObjectId: "EXM-OBJ-SCORE-IMPORT",
+      requiredState: "ACCEPTED",
+    })
+    && sameStringSet(createScore?.failureResults, [
+      "PERMISSION_DENIED",
+      "IMPORT_REJECTED",
+      "SOURCE_VERSION_STALE",
+      "VERSION_CONFLICT",
+    ]);
+
+  const writerIdsFor = (fieldId) => index.actions
+    .filter(({ moduleId, value }) => (
+      moduleId === "EXM-001"
+      && value?.writes === true
+      && list(value?.outputFieldIds).includes(fieldId)
+    ))
+    .map(({ value }) => value.id);
+  valid = valid
+    && sameStringSet(writerIdsFor("EXM-SCORE-F-TEACHER-CONFIRMED-AT"), [
+      "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+    ])
+    && sameStringSet(writerIdsFor("EXM-SCORE-F-VISIBLE-AT"), [
+      "EXM-ACT-PUBLISH-SUBJECT-SCORE",
+    ]);
+
+  const teacherConfirmedAt = index.fieldById
+    .get("EXM-SCORE-F-TEACHER-CONFIRMED-AT")?.value;
+  const visibleAt = index.fieldById.get("EXM-SCORE-F-VISIBLE-AT")?.value;
+  valid = valid
+    && sameStringSet(teacherConfirmedAt?.required?.whenStates, ["TEACHER_CONFIRMED"])
+    && sameStringSet(teacherConfirmedAt?.required?.whenActionIds, [
+      "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+    ])
+    && sameStringSet(visibleAt?.required?.whenStates, ["PUBLISHED"])
+    && sameStringSet(visibleAt?.required?.whenActionIds, [
+      "EXM-ACT-PUBLISH-SUBJECT-SCORE",
+    ])
+    && sameStringSet(action("EXM-ACT-PUBLISH-SUBJECT-SCORE")?.outputFieldIds, [
+      "EXM-SCORE-F-VISIBLE-AT",
+      "EXM-SCORE-F-VERSION",
+    ])
+    && sameStringSet(action("EXM-ACT-REPUBLISH-CORRECTED-SCORE")?.outputFieldIds, [
+      "EXM-SCORE-F-VERSION",
+    ]);
+
+  const decisionActions = [
+    {
+      id: "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+      from: "IMPORTED",
+      to: "TEACHER_CONFIRMED",
+      code: "CONFIRM",
+      inputFieldIds: [
+        "EXM-SCORE-F-CONFIRMATION-DECISION",
+        "EXM-SCORE-F-CONFIRMATION-REASON",
+      ],
+      outputFieldIds: [
+        "EXM-SCORE-F-EVIDENCE",
+        "EXM-SCORE-F-TEACHER-CONFIRMED-AT",
+        "EXM-SCORE-F-VERSION",
+        "EXM-SCORE-F-CONFIRMATION-DECISION",
+        "EXM-SCORE-F-CONFIRMATION-REASON",
+      ],
+    },
+    {
+      id: "EXM-ACT-REJECT-SUBJECT-SCORE",
+      from: "IMPORTED",
+      to: "REJECTED",
+      code: "REJECT",
+      inputFieldIds: [
+        "EXM-SCORE-F-CONFIRMATION-DECISION",
+        "EXM-SCORE-F-CONFIRMATION-REASON",
+      ],
+      outputFieldIds: [
+        "EXM-SCORE-F-EVIDENCE",
+        "EXM-SCORE-F-VERSION",
+        "EXM-SCORE-F-CONFIRMATION-DECISION",
+        "EXM-SCORE-F-CONFIRMATION-REASON",
+      ],
+    },
+  ];
+  valid = valid && decisionActions.every((expected) => {
+    const decisionAction = action(expected.id);
+    const acceptedValues = records(decisionAction?.acceptedInputValues);
+    const allows = records(decisionAction?.permissions).filter(({ effect }) => (
+      effect === "ALLOW"
+    ));
+    return decisionAction?.transition?.from === expected.from
+      && decisionAction?.transition?.to === expected.to
+      && sameStringSet(decisionAction?.inputFieldIds, expected.inputFieldIds)
+      && sameStringSet(decisionAction?.outputFieldIds, expected.outputFieldIds)
+      && acceptedValues.length === 1
+      && acceptedValues[0]?.fieldId === "EXM-SCORE-F-CONFIRMATION-DECISION"
+      && acceptedValues[0]?.optionSetId === "OPT-EXT-018"
+      && acceptedValues[0]?.partitionId === "EXM-SCORE-CONFIRMATION"
+      && sameStringSet(acceptedValues[0]?.codes, [expected.code])
+      && allows.length === 1
+      && allows[0]?.dutyRef === "DUTY-SUBJECT-TEACHER"
+      && !Object.hasOwn(allows[0] ?? {}, "roleRef")
+      && !Object.hasOwn(allows[0] ?? {}, "actorRef");
+  });
+
+  const revise = action("EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE");
+  const reviseAllows = records(revise?.permissions).filter(({ effect }) => effect === "ALLOW");
+  valid = valid
+    && revise?.transition?.from === "REJECTED"
+    && revise?.transition?.to === "IMPORTED"
+    && sameStringSet(revise?.inputFieldIds, ["EXM-SCORE-F-SCORE"])
+    && sameStringSet(revise?.outputFieldIds, [
+      "EXM-SCORE-F-SCORE",
+      "EXM-SCORE-F-EVIDENCE",
+      "EXM-SCORE-F-VERSION",
+    ])
+    && reviseAllows.length === 1
+    && reviseAllows[0]?.dutyRef === "DUTY-SUBJECT-TEACHER"
+    && !Object.hasOwn(reviseAllows[0] ?? {}, "roleRef")
+    && !Object.hasOwn(reviseAllows[0] ?? {}, "actorRef");
+
+  const scorePublishedEvent = index.eventById.get("EVT-EXM-SCORE-PUBLISHED")?.value;
+  valid = valid
+    && Array.isArray(scorePublishedEvent?.producerActionIds)
+    && scorePublishedEvent.producerActionIds.length === 1
+    && scorePublishedEvent.producerActionIds[0] === "EXM-ACT-PUBLISH-SUBJECT-SCORE";
+
+  return valid
+    ? []
+    : [
+      "INVALID_EXAM_GOVERNANCE_CONTRACT EXM score import and publication require passed version lineage and exclusive subject-teacher decisions",
+    ];
+}
+
+function scheduleSourceErrors(index) {
+  const moduleEntry = index.moduleById.get("SCH-001");
+  const calendarEntry = index.objectById.get("SCH-OBJ-CALENDAR");
+  const candidateEntry = index.objectById.get("SCH-OBJ-CANDIDATE");
+  const constraintEntry = index.objectById.get("SCH-OBJ-CONSTRAINT");
+  const snapshotEntry = index.objectById.get("SCH-OBJ-CONSTRAINT-SNAPSHOT");
+  const requiredActionIds = [
+    "SCH-ACT-PUBLISH-CALENDAR",
+    "SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT",
+    "SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT",
+    "SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT",
+    "SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT",
+    "SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT",
+    "SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT",
+    "SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT",
+    "SCH-ACT-GENERATE-CANDIDATE",
+    "SCH-ACT-CONFIRM-CANDIDATE",
+    "SCH-ACT-PUBLISH-CANDIDATE",
+    "SCH-ACT-MARK-CANDIDATE-STALE",
+  ];
+  if (
+    !moduleEntry
+    || calendarEntry?.moduleId !== "SCH-001"
+    || candidateEntry?.moduleId !== "SCH-001"
+    || constraintEntry?.moduleId !== "SCH-001"
+    || snapshotEntry?.moduleId !== "SCH-001"
+    || requiredActionIds.some((id) => index.actionById.get(id)?.moduleId !== "SCH-001")
+  ) return task8ProfileEnabled(index)
+    ? ["INVALID_SCHEDULE_SOURCE_CONTRACT SCH-001 prerequisites are missing"]
+    : [];
+
+  const candidate = candidateEntry.value;
+  const action = (id) => index.actionById.get(id)?.value;
+  const exactUniqueStrings = (values, expected) => {
+    const actual = list(values);
+    return actual.length === expected.length
+      && actual.every(isValidId)
+      && new Set(actual).size === actual.length
+      && setEquals(new Set(actual), new Set(expected));
+  };
+  const expectedSources = [
+    {
+      refFieldId: "SCH-CANDIDATE-F-CALENDAR-REF",
+      versionFieldId: "SCH-CANDIDATE-F-CALENDAR-VERSION",
+      targetObjectId: "SCH-OBJ-CALENDAR",
+      targetVersionFieldId: "SCH-CALENDAR-F-VERSION",
+      requiredState: "PUBLISHED",
+    },
+    {
+      refFieldId: "SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF",
+      versionFieldId: "SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION",
+      targetObjectId: "SCH-OBJ-CONSTRAINT-SNAPSHOT",
+      targetVersionFieldId: "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+      requiredState: "ACTIVE",
+    },
+  ];
+  const sourceActionIds = [
+    "SCH-ACT-GENERATE-CANDIDATE",
+    "SCH-ACT-CONFIRM-CANDIDATE",
+    "SCH-ACT-PUBLISH-CANDIDATE",
+  ];
+  let valid = expectedSources.every((expected) => {
+    const refEntry = index.fieldById.get(expected.refFieldId);
+    const versionEntry = index.fieldById.get(expected.versionFieldId);
+    const targetVersionEntry = index.fieldById.get(expected.targetVersionFieldId);
+    const ref = refEntry?.value;
+    return refEntry?.moduleId === "SCH-001"
+      && refEntry?.objectId === candidate.id
+      && ref?.dataType === "ID"
+      && ref?.mutability === "IMMUTABLE"
+      && ref?.referenceIntegrity === "VERSION_PINNED"
+      && ref?.stateGuardPolicy === "ALWAYS_REQUIRED"
+      && hasExactValues(ref?.valueSource, {
+        kind: "OBJECT_REF",
+        targetObjectId: expected.targetObjectId,
+      })
+      && hasExactValues(ref?.versionBinding, {
+        versionFieldId: expected.versionFieldId,
+        targetVersionFieldId: expected.targetVersionFieldId,
+      })
+      && hasExactKeys(ref?.actionApplicability, ["requiredActionIds"])
+      && sameStringSet(ref?.actionApplicability?.requiredActionIds, sourceActionIds)
+      && versionEntry?.objectId === candidate.id
+      && versionEntry?.value?.dataType === "INTEGER"
+      && versionEntry?.value?.mutability === "IMMUTABLE"
+      && targetVersionEntry?.objectId === expected.targetObjectId
+      && targetVersionEntry?.value?.dataType === "INTEGER"
+      && targetVersionEntry?.value?.idempotencyRole === "OBJECT_VERSION";
+  });
+
+  const lineageBindings = records(candidate?.lineageBindings);
+  valid = valid
+    && lineageBindings.length === expectedSources.length
+    && expectedSources.every((expected) => lineageBindings.some((binding) => (
+      hasExactValues(binding, {
+        refFieldId: expected.refFieldId,
+        versionFieldId: expected.versionFieldId,
+        targetObjectId: expected.targetObjectId,
+        targetVersionFieldId: expected.targetVersionFieldId,
+      })
+    )))
+    && !index.fieldById.has("SCH-CANDIDATE-F-SOURCE-VERSION");
+
+  const expectedRelationships = [
+    {
+      id: "SCH-REL-CANDIDATE-CALENDAR",
+      fromObjectId: "SCH-OBJ-CANDIDATE",
+      toObjectId: "SCH-OBJ-CALENDAR",
+    },
+    {
+      id: "SCH-REL-CANDIDATE-CONSTRAINT-SNAPSHOT",
+      fromObjectId: "SCH-OBJ-CANDIDATE",
+      toObjectId: "SCH-OBJ-CONSTRAINT-SNAPSHOT",
+    },
+  ];
+  const relationships = records(moduleEntry.value?.relationships);
+  valid = valid && expectedRelationships.every((expected) => relationships.some((value) => (
+    value?.id === expected.id
+    && value?.fromObjectId === expected.fromObjectId
+    && value?.toObjectId === expected.toObjectId
+    && value?.type === "DERIVED_FROM"
+    && value?.cardinality === "MANY_TO_ONE"
+    && value?.ownershipScope === "SAME_SCHOOL"
+  )));
+
+  const payloadSpecs = [
+    {
+      fieldId: "SCH-CONSTRAINT-F-TEACHER-AVAILABILITY-WINDOWS",
+      kindCode: "TEACHER_AVAILABILITY",
+      requiredKeys: ["teacherId", "availablePeriods"],
+      actionId: "SCH-ACT-CREATE-TEACHER-AVAILABILITY-CONSTRAINT",
+    },
+    {
+      fieldId: "SCH-CONSTRAINT-F-CLASS-COURSE-PERIOD-RULES",
+      kindCode: "CLASS_PERIOD",
+      requiredKeys: ["classId", "courseId", "allowedPeriods"],
+      actionId: "SCH-ACT-CREATE-CLASS-PERIOD-CONSTRAINT",
+    },
+    {
+      fieldId: "SCH-CONSTRAINT-F-TEACHER-LOAD-LIMITS",
+      kindCode: "COURSE_LOAD",
+      requiredKeys: ["teacherId", "courseId", "maxPeriodsPerWeek"],
+      actionId: "SCH-ACT-CREATE-COURSE-LOAD-CONSTRAINT",
+    },
+    {
+      fieldId: "SCH-CONSTRAINT-F-ROOM-CAPACITY-RULES",
+      kindCode: "ROOM_CAPACITY",
+      requiredKeys: ["roomId", "minimumCapacity"],
+      actionId: "SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT",
+    },
+  ];
+  const sourceGroups = records(constraintEntry.value?.exclusiveSourceGroups);
+  valid = valid
+    && sourceGroups.length === payloadSpecs.length
+    && payloadSpecs.every((expected) => {
+      const payloadEntry = index.fieldById.get(expected.fieldId);
+      const create = action(expected.actionId);
+      const accepted = records(create?.acceptedInputValues);
+      return payloadEntry?.moduleId === "SCH-001"
+        && payloadEntry?.objectId === "SCH-OBJ-CONSTRAINT"
+        && payloadEntry?.value?.dataType === "JSON"
+        && payloadEntry?.value?.required === false
+        && hasExactKeys(payloadEntry?.value?.payloadContract, ["kindCode", "requiredKeys"])
+        && payloadEntry.value.payloadContract.kindCode === expected.kindCode
+        && sameStringSet(
+          payloadEntry.value.payloadContract.requiredKeys,
+          expected.requiredKeys,
+        )
+        && sourceGroups.some((group) => (
+          group?.id === expected.kindCode
+          && sameStringSet(group?.fieldIds, [expected.fieldId])
+        ))
+        && create?.operationKind === "CREATE"
+        && create?.targetObjectId === "SCH-OBJ-CONSTRAINT"
+        && sameStringSet(create?.inputFieldIds, [
+          "SCH-CONSTRAINT-F-KIND",
+          "SCH-CONSTRAINT-F-HARDNESS",
+          expected.fieldId,
+        ])
+        && sameStringSet(create?.outputFieldIds, [
+          "SCH-CONSTRAINT-F-ID",
+          "SCH-CONSTRAINT-F-VERSION",
+        ])
+        && concreteActionState(index, create) === "DRAFT"
+        && accepted.length === 1
+        && accepted[0]?.fieldId === "SCH-CONSTRAINT-F-KIND"
+        && accepted[0]?.optionSetId === "OPT-EXT-017"
+        && accepted[0]?.partitionId === "SCH-CONSTRAINT-KIND"
+        && sameStringSet(accepted[0]?.codes, [expected.kindCode]);
+    });
+
+  const snapshot = snapshotEntry.value;
+  const itemsEntry = index.fieldById.get("SCH-CONSTRAINT-SNAPSHOT-F-ITEMS");
+  const constraintIdsEntry = index.fieldById
+    .get("SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS");
+  const hashEntry = index.fieldById.get("SCH-CONSTRAINT-SNAPSHOT-F-HASH");
+  const snapshotStatusEntry = index.fieldById.get("SCH-CONSTRAINT-SNAPSHOT-F-STATUS");
+  const snapshotVersionEntry = index.fieldById.get("SCH-CONSTRAINT-SNAPSHOT-F-VERSION");
+  const itemContract = itemsEntry?.value?.snapshotItemContract;
+  const requiredKindCodes = payloadSpecs.map(({ kindCode }) => kindCode);
+  valid = valid
+    && setEquals(stateIds(snapshot), new Set(["DRAFT", "ACTIVE", "REPLACED"]))
+    && itemsEntry?.moduleId === "SCH-001"
+    && itemsEntry?.objectId === snapshot.id
+    && itemsEntry?.value?.dataType === "JSON"
+    && itemsEntry?.value?.mutability === "IMMUTABLE"
+    && hasExactKeys(itemContract, [
+      "sourceObjectId",
+      "sourceVersionFieldId",
+      "requiredKeys",
+      "groupBy",
+      "requiredKindCodes",
+      "perKindCardinality",
+    ])
+    && itemContract?.sourceObjectId === "SCH-OBJ-CONSTRAINT"
+    && itemContract?.sourceVersionFieldId === "SCH-CONSTRAINT-F-VERSION"
+    && exactUniqueStrings(itemContract?.requiredKeys, [
+      "constraintId",
+      "constraintVersion",
+      "kind",
+      "hardness",
+    ])
+    && itemContract?.groupBy === "kind"
+    && exactUniqueStrings(itemContract?.requiredKindCodes, requiredKindCodes)
+    && itemContract?.perKindCardinality === "EXACTLY_ONE"
+    && constraintIdsEntry?.moduleId === "SCH-001"
+    && constraintIdsEntry?.objectId === snapshot.id
+    && constraintIdsEntry?.value?.dataType === "STRING_ARRAY"
+    && constraintIdsEntry?.value?.mutability === "IMMUTABLE"
+    && hasStableIdempotencyRole(
+      index,
+      "SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS",
+      ["FANOUT_SET"],
+    )
+    && hashEntry?.moduleId === "SCH-001"
+    && hashEntry?.objectId === snapshot.id
+    && hashEntry?.value?.dataType === "STRING"
+    && hashEntry?.value?.mutability === "IMMUTABLE"
+    && snapshotStatusEntry?.moduleId === "SCH-001"
+    && snapshotStatusEntry?.objectId === snapshot.id
+    && snapshotStatusEntry?.value?.dataType === "STRING"
+    && snapshotVersionEntry?.moduleId === "SCH-001"
+    && snapshotVersionEntry?.objectId === snapshot.id
+    && snapshotVersionEntry?.value?.dataType === "INTEGER"
+    && snapshotVersionEntry?.value?.idempotencyRole === "OBJECT_VERSION";
+
+  const createSnapshot = action("SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT");
+  const activateSnapshot = action("SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT");
+  const replaceSnapshot = action("SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT");
+  valid = valid
+    && createSnapshot?.operationKind === "CREATE"
+    && createSnapshot?.targetObjectId === snapshot.id
+    && concreteActionState(index, createSnapshot) === "DRAFT"
+    && exactUniqueStrings(createSnapshot?.inputFieldIds, [
+      "SCH-CONSTRAINT-SNAPSHOT-F-ITEMS",
+    ])
+    && exactUniqueStrings(createSnapshot?.outputFieldIds, [
+      "SCH-CONSTRAINT-SNAPSHOT-F-ID",
+      "SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS",
+      "SCH-CONSTRAINT-SNAPSHOT-F-HASH",
+      "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+      "SCH-CONSTRAINT-SNAPSHOT-F-STATUS",
+    ])
+    && activateSnapshot?.targetObjectId === snapshot.id
+    && activateSnapshot?.transition?.from === "DRAFT"
+    && activateSnapshot?.transition?.to === "ACTIVE"
+    && exactUniqueStrings(activateSnapshot?.outputFieldIds, [
+      "SCH-CONSTRAINT-SNAPSHOT-F-STATUS",
+      "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+    ])
+    && replaceSnapshot?.targetObjectId === snapshot.id
+    && replaceSnapshot?.transition?.from === "ACTIVE"
+    && replaceSnapshot?.transition?.to === "REPLACED"
+    && exactUniqueStrings(replaceSnapshot?.outputFieldIds, [
+      "SCH-CONSTRAINT-SNAPSHOT-F-STATUS",
+      "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+    ]);
+
+  valid = valid && sourceActionIds.every((actionId) => {
+    const sourceAction = action(actionId);
+    const guards = records(sourceAction?.relatedStateGuards);
+    return list(sourceAction?.failureResults).includes("SOURCE_VERSION_STALE")
+      && guards.length === expectedSources.length
+      && expectedSources.every((expected) => guards.some((guard) => (
+        hasExactValues(guard, {
+          refFieldId: expected.refFieldId,
+          versionFieldId: expected.versionFieldId,
+          targetObjectId: expected.targetObjectId,
+          requiredState: expected.requiredState,
+        })
+      )));
+  });
+
+  const expectedRecheckActionIds = [
+    "SCH-ACT-CONFIRM-CANDIDATE",
+    "SCH-ACT-PUBLISH-CANDIDATE",
+  ];
+  valid = valid && expectedRecheckActionIds.every((actionId) => {
+    const recheckAction = action(actionId);
+    const recheck = recheckAction?.sourceRecheck;
+    return hasExactKeys(recheck, ["versionFieldIds", "hardGate", "softGate"])
+      && exactUniqueStrings(recheck?.versionFieldIds, [
+        "SCH-CANDIDATE-F-CALENDAR-VERSION",
+        "SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION",
+      ])
+      && hasExactValues(recheck?.hardGate, {
+        fieldId: "SCH-CANDIDATE-F-HARD-CHECK",
+        requiredCode: "PASS",
+      })
+      && hasExactValues(recheck?.softGate, {
+        fieldId: "SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED",
+        requiredValue: true,
+      })
+      && [
+        ...recheck.versionFieldIds,
+        recheck.hardGate.fieldId,
+        recheck.softGate.fieldId,
+      ].every((fieldId) => list(recheckAction?.inputFieldIds).includes(fieldId));
+  });
+
+  const stale = action("SCH-ACT-MARK-CANDIDATE-STALE");
+  const staleAllows = records(stale?.permissions).filter(({ effect }) => effect === "ALLOW");
+  const staleEvent = index.eventById.get("EVT-SCH-SOURCE-VERSION-CHANGED")?.value;
+  valid = valid
+    && stale?.executionMode === "SYSTEM_EVENT"
+    && !Object.hasOwn(stale ?? {}, "clients")
+    && hasExactValues(stale?.trigger, {
+      kind: "EVENT",
+      eventId: "EVT-SCH-SOURCE-VERSION-CHANGED",
+    })
+    && sameStringSet(stale?.transition?.from, [
+      "GENERATED",
+      "REVIEWED",
+      "CONFIRMED",
+      "PUBLISHED",
+    ])
+    && stale?.transition?.to === "STALE"
+    && sameStringSet(stale?.outputFieldIds, ["SCH-CANDIDATE-F-STATUS"])
+    && staleAllows.length === 1
+    && staleAllows[0]?.actorRef === "SYSTEM"
+    && sameStringSet(staleEvent?.triggeredActionIds, [
+      "SCH-ACT-MARK-CANDIDATE-STALE",
+    ])
+    && exactUniqueStrings(staleEvent?.producerActionIds, [
+      "SCH-ACT-PUBLISH-CALENDAR",
+      "SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT",
+      "SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT",
+    ])
+    && !index.pages.some(({ value }) => (
+      list(value?.actionIds).includes("SCH-ACT-MARK-CANDIDATE-STALE")
+    ));
+
+  return valid
+    ? []
+    : [
+      "INVALID_SCHEDULE_SOURCE_CONTRACT SCH candidates require closed calendar and kind-specific constraint lineage with event-driven staleness",
+    ];
+}
+
+function preparationHandoffErrors(index) {
+  const moduleEntry = index.moduleById.get("PREP-001");
+  const lessonEntry = index.objectById.get("PREP-OBJ-LESSON-PLAN");
+  const draftEntry = index.objectById.get("PREP-OBJ-ASSIGNMENT-DRAFT");
+  const generateEntry = index.actionById.get("PREP-ACT-GENERATE-ASSIGNMENT-DRAFT");
+  const completeEntry = index.actionById.get("PREP-ACT-COMPLETE-ASSIGNMENT-DRAFT");
+  const confirmEntry = index.actionById.get("PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF");
+  const formalEntry = index.actionById.get("HW-ACT-CREATE-DRAFT");
+  if (
+    !moduleEntry
+    || lessonEntry?.moduleId !== "PREP-001"
+    || draftEntry?.moduleId !== "PREP-001"
+    || generateEntry?.moduleId !== "PREP-001"
+    || completeEntry?.moduleId !== "PREP-001"
+    || confirmEntry?.moduleId !== "PREP-001"
+    || formalEntry?.moduleId !== "HW-001"
+  ) return task8ProfileEnabled(index)
+    ? ["INVALID_PREPARATION_HANDOFF_CONTRACT PREP-001 prerequisites are missing"]
+    : [];
+
+  const draft = draftEntry.value;
+  const generate = generateEntry.value;
+  const complete = completeEntry.value;
+  const confirm = confirmEntry.value;
+  const formal = formalEntry.value;
+  const lessonRefEntry = index.fieldById.get("PREP-DRAFT-F-SOURCE-LESSON-REF");
+  const lessonVersionEntry = index.fieldById
+    .get("PREP-DRAFT-F-SOURCE-LESSON-VERSION");
+  const sourceVersionEntry = index.fieldById.get("PREP-LESSON-F-VERSION");
+  const payloadEntry = index.fieldById.get("PREP-DRAFT-F-CONTENT");
+  const lessonRef = lessonRefEntry?.value;
+  const expectedFormalInputFieldIds = [
+    "HW-ASSIGNMENT-F-TITLE",
+    "HW-ASSIGNMENT-F-INSTRUCTIONS",
+    "HW-ASSIGNMENT-F-SUBJECT-ID",
+    "HW-ASSIGNMENT-F-COURSE-ID",
+    "HW-ASSIGNMENT-F-CLASS-SCOPE-IDS",
+    "HW-ASSIGNMENT-F-OPEN-AT",
+    "HW-ASSIGNMENT-F-DUE-AT",
+    "HW-ASSIGNMENT-F-LATE-POLICY",
+    "HW-ASSIGNMENT-F-RESUBMISSION-POLICY",
+    "HW-ASSIGNMENT-F-ASSIGNMENT-TYPE",
+    "HW-ASSIGNMENT-F-QUESTION-ORDER",
+    "HW-ASSIGNMENT-F-RUBRIC-VERSION",
+    "HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS",
+    "HW-ASSIGNMENT-F-FEEDBACK-POLICY",
+    "HW-ASSIGNMENT-F-NOTIFICATION-POLICY",
+  ];
+  const expectedBindings = [
+    { targetFieldId: "HW-ASSIGNMENT-F-TITLE", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-TITLE", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
+    { targetFieldId: "HW-ASSIGNMENT-F-INSTRUCTIONS", sourceKind: "GENERATED_PAYLOAD", payloadPath: "instructions" },
+    { targetFieldId: "HW-ASSIGNMENT-F-SUBJECT-ID", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-SUBJECT", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
+    { targetFieldId: "HW-ASSIGNMENT-F-COURSE-ID", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-COURSE", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
+    { targetFieldId: "HW-ASSIGNMENT-F-CLASS-SCOPE-IDS", sourceKind: "TEACHER_REQUIRED", payloadPath: "classScopeIds" },
+    { targetFieldId: "HW-ASSIGNMENT-F-OPEN-AT", sourceKind: "TEACHER_REQUIRED", payloadPath: "openAt" },
+    { targetFieldId: "HW-ASSIGNMENT-F-DUE-AT", sourceKind: "TEACHER_REQUIRED", payloadPath: "dueAt" },
+    { targetFieldId: "HW-ASSIGNMENT-F-LATE-POLICY", sourceKind: "TEACHER_REQUIRED", payloadPath: "latePolicy" },
+    { targetFieldId: "HW-ASSIGNMENT-F-RESUBMISSION-POLICY", sourceKind: "TEACHER_REQUIRED", payloadPath: "resubmissionPolicy" },
+    { targetFieldId: "HW-ASSIGNMENT-F-ASSIGNMENT-TYPE", sourceKind: "GENERATED_PAYLOAD", payloadPath: "assignmentType" },
+    { targetFieldId: "HW-ASSIGNMENT-F-QUESTION-ORDER", sourceKind: "GENERATED_PAYLOAD", payloadPath: "questionOrder" },
+    { targetFieldId: "HW-ASSIGNMENT-F-RUBRIC-VERSION", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-RUBRIC-VERSION", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
+    { targetFieldId: "HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-KNOWLEDGE-POINT-IDS", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
+    { targetFieldId: "HW-ASSIGNMENT-F-FEEDBACK-POLICY", sourceKind: "POLICY_DEFAULT", policyKey: "assignment.feedbackPolicy" },
+    { targetFieldId: "HW-ASSIGNMENT-F-NOTIFICATION-POLICY", sourceKind: "POLICY_DEFAULT", policyKey: "assignment.notificationPolicy" },
+  ];
+  const exactOrderedUniqueStrings = (actual, expected) => (
+    Array.isArray(actual)
+    && actual.length === expected.length
+    && new Set(actual).size === actual.length
+    && actual.every((value, position) => value === expected[position])
+  );
+  const expectedLineage = {
+    refFieldId: "PREP-DRAFT-F-SOURCE-LESSON-REF",
+    versionFieldId: "PREP-DRAFT-F-SOURCE-LESSON-VERSION",
+    targetObjectId: "PREP-OBJ-LESSON-PLAN",
+    targetVersionFieldId: "PREP-LESSON-F-VERSION",
+  };
+  let valid = lessonRefEntry?.moduleId === "PREP-001"
+    && lessonRefEntry?.objectId === draft.id
+    && list(draft?.states).length === 2
+    && setEquals(stateIds(draft), new Set(["DRAFT", "READY_FOR_HANDOFF"]))
+    && lessonRef?.dataType === "ID"
+    && lessonRef?.mutability === "IMMUTABLE"
+    && lessonRef?.referenceIntegrity === "VERSION_PINNED"
+    && lessonRef?.stateGuardPolicy === "ALWAYS_REQUIRED"
+    && hasExactValues(lessonRef?.valueSource, {
+      kind: "OBJECT_REF",
+      targetObjectId: "PREP-OBJ-LESSON-PLAN",
+    })
+    && hasExactValues(lessonRef?.versionBinding, {
+      versionFieldId: "PREP-DRAFT-F-SOURCE-LESSON-VERSION",
+      targetVersionFieldId: "PREP-LESSON-F-VERSION",
+    })
+    && hasExactKeys(lessonRef?.actionApplicability, ["requiredActionIds"])
+    && exactOrderedUniqueStrings(lessonRef?.actionApplicability?.requiredActionIds, [
+      "PREP-ACT-GENERATE-ASSIGNMENT-DRAFT",
+      "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF",
+    ])
+    && lessonVersionEntry?.moduleId === "PREP-001"
+    && lessonVersionEntry?.objectId === draft.id
+    && lessonVersionEntry?.value?.dataType === "INTEGER"
+    && lessonVersionEntry?.value?.mutability === "IMMUTABLE"
+    && sourceVersionEntry?.objectId === lessonEntry.value?.id
+    && sourceVersionEntry?.value?.dataType === "INTEGER"
+    && sourceVersionEntry?.value?.idempotencyRole === "OBJECT_VERSION";
+
+  const lineageBindings = records(draft?.lineageBindings);
+  const relationships = records(moduleEntry.value?.relationships);
+  valid = valid
+    && lineageBindings.length === 1
+    && hasExactValues(lineageBindings[0], expectedLineage)
+    && relationships.some((relationship) => (
+      relationship?.id === "PREP-REL-DRAFT-LESSON"
+      && relationship?.fromObjectId === draft.id
+      && relationship?.toObjectId === lessonEntry.value?.id
+      && relationship?.type === "DERIVED_FROM"
+      && relationship?.cardinality === "MANY_TO_ONE"
+      && relationship?.ownershipScope === "SAME_SUBJECT"
+    ));
+
+  const guards = records(generate?.relatedStateGuards);
+  const expectedGuard = {
+    refFieldId: "PREP-DRAFT-F-SOURCE-LESSON-REF",
+    versionFieldId: "PREP-DRAFT-F-SOURCE-LESSON-VERSION",
+    targetObjectId: "PREP-OBJ-LESSON-PLAN",
+    requiredState: "CONFIRMED",
+  };
+  const subjectTeacherIsExclusiveAllow = (actionValue) => {
+    const allows = records(actionValue?.permissions).filter(({ effect }) => effect === "ALLOW");
+    return allows.length === 1
+      && allows[0]?.dutyRef === "DUTY-SUBJECT-TEACHER"
+      && !Object.hasOwn(allows[0] ?? {}, "roleRef")
+      && !Object.hasOwn(allows[0] ?? {}, "actorRef");
+  };
+  valid = valid
+    && generate?.operationKind === "CREATE"
+    && generate?.targetObjectId === draft.id
+    && concreteActionState(index, generate) === "DRAFT"
+    && exactOrderedUniqueStrings(generate?.inputFieldIds, ["PREP-DRAFT-F-SOURCE-LESSON-REF"])
+    && exactOrderedUniqueStrings(generate?.outputFieldIds, [
+      "PREP-DRAFT-F-ID",
+      "PREP-DRAFT-F-CONTENT",
+      "PREP-DRAFT-F-SOURCE-LESSON-VERSION",
+      "PREP-DRAFT-F-STATUS",
+    ])
+    && guards.length === 1
+    && hasExactValues(guards[0], expectedGuard)
+    && list(generate?.failureResults).includes("LESSON_STALE")
+    && subjectTeacherIsExclusiveAllow(generate)
+    && !Object.hasOwn(generate ?? {}, "handoffContract")
+    && complete?.operationKind === "UPDATE"
+    && complete?.targetObjectId === draft.id
+    && complete?.transition?.from === "DRAFT"
+    && complete?.transition?.to === "DRAFT"
+    && exactOrderedUniqueStrings(complete?.inputFieldIds, ["PREP-DRAFT-F-CONTENT"])
+    && exactOrderedUniqueStrings(complete?.outputFieldIds, [
+      "PREP-DRAFT-F-CONTENT",
+      "PREP-DRAFT-F-STATUS",
+    ])
+    && subjectTeacherIsExclusiveAllow(complete)
+    && !Object.hasOwn(complete ?? {}, "handoffContract")
+    && confirm?.operationKind === "UPDATE"
+    && confirm?.targetObjectId === draft.id
+    && confirm?.transition?.from === "DRAFT"
+    && confirm?.transition?.to === "READY_FOR_HANDOFF"
+    && exactOrderedUniqueStrings(confirm?.inputFieldIds, [
+      "PREP-DRAFT-F-SOURCE-LESSON-REF",
+      "PREP-DRAFT-F-SOURCE-LESSON-VERSION",
+    ])
+    && exactOrderedUniqueStrings(confirm?.outputFieldIds, ["PREP-DRAFT-F-STATUS"])
+    && records(confirm?.relatedStateGuards).length === 1
+    && hasExactValues(records(confirm?.relatedStateGuards)[0], expectedGuard)
+    && subjectTeacherIsExclusiveAllow(confirm)
+    && list(confirm?.failureResults).includes("LESSON_STALE")
+    && list(confirm?.failureResults).includes("HANDOFF_INCOMPLETE");
+
+  const handoff = confirm?.handoffContract;
+  const formalAllows = records(formal?.permissions).filter(({ effect }) => effect === "ALLOW");
+  const bindings = records(handoff?.fieldBindings);
+  const payloadSchema = payloadEntry?.value?.handoffPayloadSchema;
+  const payloadProperties = isRecord(payloadSchema?.properties)
+    ? payloadSchema.properties
+    : {};
+  const payloadBindings = expectedBindings.filter(({ sourceKind }) => (
+    sourceKind === "GENERATED_PAYLOAD" || sourceKind === "TEACHER_REQUIRED"
+  ));
+  const lessonBindings = expectedBindings.filter(({ sourceKind }) => (
+    sourceKind === "LESSON_FIELD"
+  ));
+  valid = valid
+    && hasExactKeys(handoff, [
+      "formalActionId",
+      "payloadFieldId",
+      "formalInputFieldIds",
+      "fieldBindings",
+      "completionRule",
+      "requiredConfirmationDutyRef",
+      "effectBoundary",
+    ])
+    && handoff?.formalActionId === formal.id
+    && handoff?.payloadFieldId === "PREP-DRAFT-F-CONTENT"
+    && payloadEntry?.objectId === draft.id
+    && payloadEntry?.value?.dataType === "JSON"
+    && exactOrderedUniqueStrings(formal?.inputFieldIds, expectedFormalInputFieldIds)
+    && exactOrderedUniqueStrings(handoff?.formalInputFieldIds, expectedFormalInputFieldIds)
+    && bindings.length === expectedBindings.length
+    && bindings.every((binding, position) => hasExactValues(
+      binding,
+      expectedBindings[position],
+    ))
+    && lessonBindings.every(({ targetFieldId, sourceFieldId, sourceVersionFieldId }) => {
+      const targetField = index.fieldById.get(targetFieldId);
+      const sourceField = index.fieldById.get(sourceFieldId);
+      return targetField?.objectId === "HW-OBJ-ASSIGNMENT"
+        && sourceField?.objectId === "PREP-OBJ-LESSON-PLAN"
+        && targetField?.value?.dataType === sourceField?.value?.dataType
+        && sourceVersionFieldId === "PREP-LESSON-F-VERSION";
+    })
+    && hasExactKeys(payloadSchema, [
+      "schemaVersion",
+      "additionalProperties",
+      "properties",
+    ])
+    && payloadSchema?.schemaVersion === "PREP_HW_DRAFT_V1"
+    && payloadSchema?.additionalProperties === false
+    && setEquals(
+      new Set(Object.keys(payloadProperties)),
+      new Set(payloadBindings.map(({ payloadPath }) => payloadPath)),
+    )
+    && payloadBindings.every(({ targetFieldId, payloadPath }) => {
+      const property = payloadProperties[payloadPath];
+      return hasExactKeys(property, ["dataType", "required"])
+        && property.required === true
+        && property.dataType === index.fieldById.get(targetFieldId)?.value?.dataType;
+    })
+    && hasExactValues(handoff?.completionRule, {
+      failureResult: "HANDOFF_INCOMPLETE",
+      requiredBindingCount: 15,
+      requireAllTeacherInputs: true,
+      rejectUnknownPayloadFields: true,
+    })
+    && handoff?.requiredConfirmationDutyRef === "DUTY-SUBJECT-TEACHER"
+    && handoff?.effectBoundary === "DRAFT_ONLY_UNTIL_FORMAL_HW_ACTION"
+    && formal?.operationKind === "CREATE"
+    && formal?.targetObjectId === "HW-OBJ-ASSIGNMENT"
+    && formalAllows.some(({ dutyRef }) => dutyRef === "DUTY-SUBJECT-TEACHER");
+
+  return valid
+    ? []
+    : [
+      "INVALID_PREPARATION_HANDOFF_CONTRACT PREP assignment drafts require confirmed lesson lineage and the exact formal HW draft input surface",
+    ];
+}
+
+function platformAuditErrors(index) {
+  const auditModule = index.moduleById.get("AUD-001")?.value;
+  const platformModule = index.moduleById.get("PLAT-001")?.value;
+  const requestEntry = index.objectById.get("AUD-OBJ-ACCESS-REQUEST");
+  const sessionEntry = index.objectById.get("AUD-OBJ-ACCESS-SESSION");
+  const supportEntry = index.objectById.get("PLAT-OBJ-SUPPORT-CASE");
+  const requiredActionIds = [
+    "AUD-ACT-REQUEST-SENSITIVE",
+    "AUD-ACT-APPROVE-SENSITIVE",
+    "AUD-ACT-DENY-SENSITIVE",
+    "AUD-ACT-EXPIRE-ACCESS-REQUEST",
+    "AUD-ACT-OPEN-SESSION",
+    "AUD-ACT-EXPIRE-SESSION",
+    "AUD-ACT-REVOKE-SESSION",
+    "AUD-ACT-APPEND-EVENT",
+    "PLAT-ACT-CREATE-SUPPORT-CASE",
+    "PLAT-ACT-CLOSE-SUPPORT-CASE",
+    "PLAT-ACT-USE-SUPPORT-ACCESS",
+  ];
+  if (
+    !auditModule
+    || !platformModule
+    || requestEntry?.moduleId !== "AUD-001"
+    || sessionEntry?.moduleId !== "AUD-001"
+    || supportEntry?.moduleId !== "PLAT-001"
+    || requiredActionIds.some((id) => !index.actionById.has(id))
+  ) return task8ProfileEnabled(index)
+    ? ["INVALID_PLATFORM_AUD_CONTRACT PLAT-001 or AUD-001 prerequisites are missing"]
+    : [];
+
+  const action = (id) => index.actionById.get(id)?.value;
+  const field = (id) => index.fieldById.get(id);
+  const exactUniqueStrings = (values, expected) => (
+    Array.isArray(values)
+    && values.length === expected.length
+    && new Set(values).size === values.length
+    && setEquals(new Set(values), new Set(expected))
+  );
+  const expectedSessionLineage = {
+    refFieldId: "AUD-SESSION-F-REQUEST-ID",
+    versionFieldId: "AUD-SESSION-F-REQUEST-VERSION",
+    targetObjectId: "AUD-OBJ-ACCESS-REQUEST",
+    targetVersionFieldId: "AUD-REQUEST-F-VERSION",
+  };
+  const expectedSupportLineage = {
+    refFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+    versionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+    targetObjectId: "AUD-OBJ-ACCESS-SESSION",
+    targetVersionFieldId: "AUD-SESSION-F-VERSION",
+  };
+  const expectedGuard = {
+    sessionRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+    pinnedSessionVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+    authorizedActorFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",
+    requestedScopeFieldId: "PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE",
+    scopeFieldId: "AUD-SESSION-F-SCOPE",
+    expiresAtFieldId: "AUD-SESSION-F-EXPIRY",
+    stateFieldId: "AUD-SESSION-F-STATUS",
+    requiredState: "ACTIVE",
+    sourceVersionFieldId: "AUD-SESSION-F-VERSION",
+    timeComparison: "CURRENT_TIME_BEFORE_EXPIRY",
+    actorBinding: "CURRENT_ACTOR_EQUALS_AUTHORIZED_OPERATOR",
+    scopeBinding: "REQUESTED_SCOPE_WITHIN_AUTHORIZED_SESSION_SCOPE",
+    auditActionId: "AUD-ACT-APPEND-EVENT",
+    auditOrdering: "BEFORE_DATA_RETURN",
+  };
+  const expectedRelatedGuard = {
+    refFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+    versionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+    targetObjectId: "AUD-OBJ-ACCESS-SESSION",
+    requiredState: "ACTIVE",
+  };
+
+  const requestVersion = field("AUD-REQUEST-F-VERSION");
+  const sessionVersion = field("AUD-SESSION-F-VERSION");
+  const sessionRequest = field("AUD-SESSION-F-REQUEST-ID");
+  const sessionRequestVersion = field("AUD-SESSION-F-REQUEST-VERSION");
+  const sessionOperator = field("AUD-SESSION-F-AUTHORIZED-OPERATOR-ID");
+  let valid = requestVersion?.objectId === requestEntry.value?.id
+    && requestVersion?.value?.dataType === "INTEGER"
+    && requestVersion?.value?.mutability === "IMMUTABLE"
+    && requestVersion?.value?.idempotencyRole === "OBJECT_VERSION"
+    && sessionVersion?.objectId === sessionEntry.value?.id
+    && sessionVersion?.value?.dataType === "INTEGER"
+    && sessionVersion?.value?.mutability === "IMMUTABLE"
+    && sessionVersion?.value?.idempotencyRole === "OBJECT_VERSION"
+    && sessionRequest?.objectId === sessionEntry.value?.id
+    && sessionRequest?.value?.referenceIntegrity === "VERSION_PINNED"
+    && hasExactValues(sessionRequest?.value?.valueSource, {
+      kind: "OBJECT_REF",
+      targetObjectId: "AUD-OBJ-ACCESS-REQUEST",
+    })
+    && hasExactValues(sessionRequest?.value?.versionBinding, {
+      versionFieldId: "AUD-SESSION-F-REQUEST-VERSION",
+      targetVersionFieldId: "AUD-REQUEST-F-VERSION",
+    })
+    && sessionRequestVersion?.objectId === sessionEntry.value?.id
+    && sessionOperator?.objectId === sessionEntry.value?.id
+    && sessionOperator?.value?.dataType === "ID"
+    && sessionOperator?.value?.mutability === "IMMUTABLE"
+    && hasExactValues(sessionOperator?.value?.sourceBinding, {
+      sourceRefFieldId: "AUD-SESSION-F-REQUEST-ID",
+      sourceVersionFieldId: "AUD-SESSION-F-REQUEST-VERSION",
+      sourceFieldId: "AUD-REQUEST-F-REQUESTER",
+    })
+    && records(sessionEntry.value?.lineageBindings).length === 1
+    && hasExactValues(records(sessionEntry.value?.lineageBindings)[0], expectedSessionLineage)
+    && setEquals(stateIds(requestEntry.value), new Set([
+      "REQUESTED", "APPROVED", "DENIED", "EXPIRED",
+    ]))
+    && setEquals(stateIds(sessionEntry.value), new Set(["ACTIVE", "EXPIRED", "REVOKED"]));
+
+  const openSession = action("AUD-ACT-OPEN-SESSION");
+  valid = valid
+    && openSession?.operationKind === "CREATE"
+    && openSession?.targetObjectId === "AUD-OBJ-ACCESS-SESSION"
+    && exactUniqueStrings(openSession?.outputFieldIds, [
+      "AUD-SESSION-F-ID",
+      "AUD-SESSION-F-START",
+      "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",
+      "AUD-SESSION-F-STATUS",
+      "AUD-SESSION-F-VERSION",
+    ])
+    && records(openSession?.relatedStateGuards).length === 1
+    && hasExactValues(records(openSession?.relatedStateGuards)[0], {
+      refFieldId: "AUD-SESSION-F-REQUEST-ID",
+      versionFieldId: "AUD-SESSION-F-REQUEST-VERSION",
+      targetObjectId: "AUD-OBJ-ACCESS-REQUEST",
+      requiredState: "APPROVED",
+    });
+
+  const support = supportEntry.value;
+  const supportRef = field("PLAT-SUPPORT-CASE-F-AUD-SESSION-REF");
+  const supportVersion = field("PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION");
+  const projectedOperator = field("PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID");
+  const requestedScope = field("PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE");
+  valid = valid
+    && support?.lifecyclePolicyId === "LIFE-001"
+    && setEquals(stateIds(support), new Set(["OPEN", "CLOSED"]))
+    && supportRef?.objectId === support.id
+    && supportRef?.value?.dataType === "ID"
+    && supportRef?.value?.mutability === "IMMUTABLE"
+    && supportRef?.value?.referenceIntegrity === "VERSION_PINNED"
+    && supportRef?.value?.stateGuardPolicy === "ALWAYS_REQUIRED"
+    && hasExactValues(supportRef?.value?.valueSource, {
+      kind: "OBJECT_REF",
+      targetObjectId: "AUD-OBJ-ACCESS-SESSION",
+    })
+    && hasExactValues(supportRef?.value?.versionBinding, {
+      versionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+      targetVersionFieldId: "AUD-SESSION-F-VERSION",
+    })
+    && hasExactKeys(supportRef?.value?.actionApplicability, ["requiredActionIds"])
+    && exactUniqueStrings(supportRef?.value?.actionApplicability?.requiredActionIds, [
+      "PLAT-ACT-CREATE-SUPPORT-CASE",
+      "PLAT-ACT-USE-SUPPORT-ACCESS",
+    ])
+    && supportVersion?.objectId === support.id
+    && supportVersion?.value?.dataType === "INTEGER"
+    && supportVersion?.value?.mutability === "IMMUTABLE"
+    && projectedOperator?.objectId === support.id
+    && requestedScope?.objectId === support.id
+    && requestedScope?.value?.dataType === "JSON"
+    && hasExactValues(projectedOperator?.value?.sourceBinding, {
+      sourceRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+      sourceVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+      sourceFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",
+    })
+    && records(support?.lineageBindings).length === 1
+    && hasExactValues(records(support?.lineageBindings)[0], expectedSupportLineage);
+
+  const supportActions = index.actions
+    .filter(({ moduleId, value }) => (
+      moduleId === "PLAT-001" && value?.targetObjectId === "PLAT-OBJ-SUPPORT-CASE"
+    ))
+    .map(({ value }) => value.id);
+  valid = valid
+    && exactUniqueStrings(supportActions, [
+      "PLAT-ACT-CREATE-SUPPORT-CASE",
+      "PLAT-ACT-CLOSE-SUPPORT-CASE",
+      "PLAT-ACT-USE-SUPPORT-ACCESS",
+    ])
+    && !index.actionById.has("PLAT-ACT-REQUEST-SUPPORT-ACCESS")
+    && !index.actionById.has("PLAT-ACT-APPROVE-SUPPORT-ACCESS")
+    && !index.actionById.has("PLAT-ACT-EXPIRE-SUPPORT-ACCESS");
+
+  const createCase = action("PLAT-ACT-CREATE-SUPPORT-CASE");
+  const closeCase = action("PLAT-ACT-CLOSE-SUPPORT-CASE");
+  const useAccess = action("PLAT-ACT-USE-SUPPORT-ACCESS");
+  for (const guardedAction of [createCase, useAccess]) {
+    valid = valid
+      && records(guardedAction?.relatedStateGuards).length === 1
+      && hasExactValues(records(guardedAction?.relatedStateGuards)[0], expectedRelatedGuard)
+      && hasExactValues(guardedAction?.accessGuard, expectedGuard);
+  }
+  valid = valid
+    && createCase?.operationKind === "CREATE"
+    && createCase?.targetObjectId === support.id
+    && exactUniqueStrings(createCase?.inputFieldIds, [
+      "PLAT-SUPPORT-CASE-F-PURPOSE",
+      "PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE",
+      "PLAT-SUPPORT-CASE-F-AUDIT-REASON",
+      "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+    ])
+    && exactUniqueStrings(createCase?.outputFieldIds, [
+      "PLAT-SUPPORT-CASE-F-ID",
+      "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+      "PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID",
+      "PLAT-SUPPORT-CASE-F-STATUS",
+    ])
+    && createCase?.risk === "HIGH"
+    && createCase?.auditMode === "REQUIRED"
+    && exactUniqueStrings(createCase?.failureResults, [
+      "PERMISSION_DENIED",
+      "ACCESS_INACTIVE",
+      "ACCESS_EXPIRED",
+      "ACCESS_OTHER_RECORD",
+      "ACCESS_SCOPE_DENIED",
+      "SOURCE_VERSION_STALE",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+      "AUDIT_FAILED",
+    ])
+    && closeCase?.transition?.from === "OPEN"
+    && closeCase?.transition?.to === "CLOSED"
+    && closeCase?.risk === "HIGH"
+    && closeCase?.auditMode === "REQUIRED"
+    && useAccess?.operationKind === "READ"
+    && useAccess?.writes === false
+    && exactUniqueStrings(useAccess?.inputFieldIds, [
+      "PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE",
+    ])
+    && exactUniqueStrings(useAccess?.outputFieldIds, [
+      "PLAT-SUPPORT-CASE-F-PURPOSE",
+      "PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE",
+      "PLAT-SUPPORT-CASE-F-AUDIT-REASON",
+      "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+      "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+      "PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID",
+      "PLAT-SUPPORT-CASE-F-STATUS",
+    ])
+    && useAccess?.risk === "HIGH"
+    && useAccess?.auditMode === "REQUIRED"
+    && exactUniqueStrings(useAccess?.failureResults, [
+      "PERMISSION_DENIED",
+      "NOT_FOUND",
+      "ACCESS_INACTIVE",
+      "ACCESS_EXPIRED",
+      "ACCESS_OTHER_RECORD",
+      "ACCESS_SCOPE_DENIED",
+      "SOURCE_VERSION_STALE",
+      "AUDIT_FAILED",
+    ])
+    && records(useAccess?.permissions).filter((permission) => (
+      permission.effect === "ALLOW" && permission.roleRef === "ROLE-PLATFORM-OPS"
+    )).length === 1
+    && records(useAccess?.permissions).some((permission) => (
+      permission.effect === "ALLOW"
+      && permission.roleRef === "ROLE-PLATFORM-OPS"
+      && permission.scope?.kind === "OWN_RECORD"
+      && permission.scope?.subjectFieldId
+        === "PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID"
+    ))
+    && records(useAccess?.permissions).some((permission) => (
+      permission.effect === "DENY"
+      && permission.roleRef === "ROLE-PLATFORM-OPS"
+      && permission.scope?.kind === "OTHER_RECORD"
+      && permission.scope?.subjectFieldId
+        === "PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID"
+    ))
+    && hasExactValues(action("AUD-ACT-APPEND-EVENT")?.targetObjectId
+      ? { targetObjectId: action("AUD-ACT-APPEND-EVENT").targetObjectId }
+      : null, { targetObjectId: "AUD-OBJ-EVENT" });
+
+  return valid
+    ? []
+    : [
+      "INVALID_PLATFORM_AUD_CONTRACT PLAT support cases must reuse one active versioned AUD session authority without a second approval lifecycle",
+    ];
+}
+
+function task8BusinessFailureErrors(index) {
+  const task8Enabled = task8ProfileEnabled(index)
+    || [...TASK8_BUSINESS_FAILURES.keys()].some((id) => index.actionById.has(id));
+  if (!task8Enabled) return [];
+
+  const requiredPredicateKeys = new Set(
+    [...TASK8_BUSINESS_FAILURES].flatMap(([actionId, codes]) => (
+      codes.map((code) => `${actionId}:${code}`)
+    )),
+  );
+  let valid = setEquals(
+    requiredPredicateKeys,
+    new Set(TASK8_BUSINESS_FAILURE_PREDICATES.keys()),
+  );
+  for (const [actionId, requiredCodes] of TASK8_BUSINESS_FAILURES) {
+    const action = index.actionById.get(actionId)?.value;
+    const failureResults = list(action?.failureResults);
+    const scenarioIdValues = list(action?.scenarioIds);
+    const scenarioIds = new Set(scenarioIdValues);
+    const requiredCodeSet = new Set(requiredCodes);
+    const semantics = records(action?.failureSemantics);
+    const semanticCodes = semantics.map(({ resultCode }) => resultCode);
+    if (
+      !action
+      || !Array.isArray(action?.failureResults)
+      || failureResults.length !== new Set(failureResults).size
+      || scenarioIdValues.length !== scenarioIds.size
+      || requiredCodes.some((code) => (
+        failureResults.filter((value) => value === code).length !== 1
+      ))
+      || failureResults.some((code) => (
+        !requiredCodeSet.has(code) && !TASK8_GENERIC_FAILURE_CODES.has(code)
+      ))
+      || !Array.isArray(action?.failureSemantics)
+      || semantics.length !== action.failureSemantics.length
+      || semantics.length !== requiredCodes.length
+      || semanticCodes.length !== new Set(semanticCodes).size
+      || !setEquals(new Set(semanticCodes), requiredCodeSet)
+    ) {
+      valid = false;
+      continue;
+    }
+    for (const code of requiredCodes) {
+      const semantic = semantics.find(({ resultCode }) => resultCode === code);
+      const expectedPredicate = TASK8_BUSINESS_FAILURE_PREDICATES
+        .get(`${actionId}:${code}`);
+      const scenarios = index.scenarios.filter(({ value }) => (
+        value?.actionId === actionId
+        && value?.kind !== "SUCCESS"
+        && value?.resultCode === code
+      ));
+      if (
+        !hasExactKeys(semantic, [
+          "resultCode",
+          "predicate",
+          "given",
+          "when",
+          "expectedData",
+        ])
+        || !isValidId(expectedPredicate)
+        || semantic?.predicate !== expectedPredicate
+        || !isValidId(semantic?.given)
+        || !isValidId(semantic?.when)
+        || !isValidId(semantic?.expectedData)
+        || scenarios.length !== 1
+        || scenarios[0].value?.id !== `${actionId}-SCN-${code}`
+        || scenarios[0].value?.kind !== "FAILURE"
+        || !scenarioIds.has(scenarios[0].value?.id)
+        || scenarios[0].value?.failurePredicate !== semantic?.predicate
+        || scenarios[0].value?.given !== semantic?.given
+        || scenarios[0].value?.when !== semantic?.when
+        || scenarios[0].value?.then?.expectedData !== semantic?.expectedData
+        || scenarios[0].value?.then?.expectedState?.mode !== "UNCHANGED"
+        || scenarios[0].value?.then?.expectedPermission !== "DENY"
+      ) {
+        valid = false;
+      }
+    }
+    const authoredPredicateScenarios = index.scenarios.filter(({ value }) => (
+      value?.actionId === actionId
+      && Object.hasOwn(value ?? {}, "failurePredicate")
+    ));
+    if (
+      authoredPredicateScenarios.length !== requiredCodes.length
+      || authoredPredicateScenarios.some(({ value }) => (
+        !requiredCodeSet.has(value?.resultCode)
+      ))
+    ) valid = false;
+  }
+
+  return valid
+    ? []
+    : [
+      "INVALID_TASK8_BUSINESS_FAILURE_CONTRACT Task 8 guarded Actions require one closed causal predicate and one matching fail-closed scenario per declared business result",
+    ];
+}
+
+function task8ManifestErrors(index) {
+  const requiredObjectIds = new Set();
+  const requiredActionIds = new Set();
+  const requiredPageIds = new Set();
+  for (const manifest of TASK8_MODULE_MANIFEST.values()) {
+    manifest.objectIds.forEach((id) => requiredObjectIds.add(id));
+    manifest.actionTargets.forEach(([id]) => requiredActionIds.add(id));
+    manifest.pageIds.forEach((id) => requiredPageIds.add(id));
+  }
+  const task8EntityPresent = task8ProfileEnabled(index)
+    || (
+      index.baselineDecisionById.has("BASE-001")
+      && index.baselineDecisionById.has("BASE-010")
+    )
+    || [...TASK8_MODULE_MANIFEST.keys()].some((id) => index.moduleById.has(id))
+    || index.objects.some(({ value }) => requiredObjectIds.has(value?.id))
+    || index.actions.some(({ value }) => requiredActionIds.has(value?.id))
+    || index.pages.some(({ value }) => requiredPageIds.has(value?.id))
+    || TASK8_OPTION_SET_IDS.some((id) => index.optionSetById.has(id))
+    || TASK8_EVENT_IDS.some((id) => index.eventById.has(id));
+  if (!task8EntityPresent) return [];
+
+  let valid = true;
+  for (const [moduleId, manifest] of TASK8_MODULE_MANIFEST) {
+    const moduleEntry = index.moduleById.get(moduleId);
+    if (!moduleEntry) {
+      valid = false;
+      continue;
+    }
+    if (moduleId === "REPORT-001") {
+      valid = valid
+        && moduleEntry.value?.contractKind === "TASK8_REPORT_FUTURE_METADATA";
+    }
+    for (const objectId of manifest.objectIds) {
+      valid = valid && index.objectById.get(objectId)?.moduleId === moduleId;
+    }
+    for (const [actionId, targetObjectId] of manifest.actionTargets) {
+      const actionEntry = index.actionById.get(actionId);
+      valid = valid
+        && actionEntry?.moduleId === moduleId
+        && actionEntry?.value?.targetObjectId === targetObjectId;
+    }
+    for (const pageId of manifest.pageIds) {
+      valid = valid && index.pageById.get(pageId)?.moduleId === moduleId;
+    }
+  }
+  valid = valid
+    && TASK8_OPTION_SET_IDS.every((id) => index.optionSetById.has(id))
+    && TASK8_EVENT_IDS.every((id) => index.eventById.has(id));
+
+  return valid
+    ? []
+    : [
+      "MISSING_TASK8_CONTRACT Task 8 requires the closed PREP, CONTENT, EXM, SCH, PLAT, and REPORT entity and capability manifest",
+    ];
+}
+
+function extensionModuleErrors(index) {
+  const errors = [];
+  const examModule = index.moduleById.get("EXM-001")?.value;
+  const scoreObject = index.objectById.get("EXM-OBJ-SUBJECT-SCORE")?.value;
+  if (examModule && scoreObject) {
+    const platformOpsAllowed = list(examModule.actions).some((action) => (
+      action?.targetObjectId === scoreObject.id
+      && records(action?.permissions).some((permission) => (
+        permission.effect === "ALLOW" && permission.roleRef === "ROLE-PLATFORM-OPS"
+      ))
+    ));
+    if (platformOpsAllowed) {
+      errors.push(
+        "INVALID_EXTENSION_PERMISSION EXM-OBJ-SUBJECT-SCORE must deny platform operations default access to student score detail",
+      );
+    }
+  }
+
+  const confirmCandidate = index.actionById.get("SCH-ACT-CONFIRM-CANDIDATE")?.value;
+  if (confirmCandidate) {
+    const gate = confirmCandidate.constraintGate;
+    const valid = hasExactKeys(gate, ["fieldId", "requiredCode", "onFailure"])
+      && gate.fieldId === "SCH-CANDIDATE-F-HARD-CHECK"
+      && gate.requiredCode === "PASS"
+      && gate.onFailure === "BLOCK_CONFIRMATION"
+      && list(confirmCandidate.inputFieldIds).includes(gate.fieldId)
+      && confirmCandidate.transition?.from === "REVIEWED"
+      && confirmCandidate.transition?.to === "CONFIRMED";
+    if (!valid) {
+      errors.push(
+        "INVALID_SCHEDULE_CONSTRAINT_GATE SCH-ACT-CONFIRM-CANDIDATE requires a fail-closed hard-constraint PASS gate",
+      );
+    }
+  }
+
+  const reportModule = index.moduleById.get("REPORT-001")?.value;
+  if (reportModule) {
+    const reportObjects = records(reportModule.objects);
+    const reportObject = reportObjects.find(({ id }) => (
+      id === "REPORT-OBJ-FUTURE-CONTRACT"
+    ));
+    const uniqueStrings = (values) => (
+      Array.isArray(values)
+      && values.length > 0
+      && values.every(isValidId)
+      && new Set(values).size === values.length
+    );
+    const expectedObjectKeys = [
+      "id",
+      "label",
+      "dataSubject",
+      "controlSubject",
+      "producerRef",
+      "ownerRef",
+      "confirmerRef",
+      "stewardRef",
+      "lifecyclePolicyId",
+      "sensitivityId",
+      "states",
+      "fields",
+      "futureActors",
+      "dependencies",
+      "requiredPermissions",
+      "reuseModuleIds",
+      "unresolvedProductDecisions",
+    ];
+    const actorsValid = uniqueStrings(reportObject?.futureActors)
+      && reportObject.futureActors.every((actorRef) => (
+        index.roleIds.has(actorRef) || index.dutyIds.has(actorRef)
+      ));
+    const reuseValid = uniqueStrings(reportObject?.reuseModuleIds)
+      && reportObject.reuseModuleIds.length === 1
+      && reportObject.reuseModuleIds[0] === "DGV-001"
+      && index.moduleById.has("DGV-001");
+    const valid = reportModule.title === "Future Extended Reporting Contract"
+      && reportObjects.length === 1
+      && hasExactKeys(reportObject, expectedObjectKeys)
+      && list(reportObject.states).length === 0
+      && list(reportObject.fields).length === 0
+      && actorsValid
+      && uniqueStrings(reportObject.dependencies)
+      && uniqueStrings(reportObject.requiredPermissions)
+      && reuseValid
+      && uniqueStrings(reportObject.unresolvedProductDecisions);
+    if (!valid) {
+      errors.push(
+        "INVALID_REPORT_METADATA_CONTRACT REPORT-OBJ-FUTURE-CONTRACT requires closed non-executable actors, dependencies, permissions, DGV reuse, and unresolved decisions",
+      );
     }
   }
   return errors;
@@ -3104,6 +5118,14 @@ function gradingCapabilityErrors(index) {
 export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
+    ...task8ManifestErrors(index),
+    ...contentGovernanceErrors(index),
+    ...task8PhaseFieldErrors(index),
+    ...examGovernanceErrors(index),
+    ...scheduleSourceErrors(index),
+    ...preparationHandoffErrors(index),
+    ...platformAuditErrors(index),
+    ...task8BusinessFailureErrors(index),
     ...flowErrors(index),
     ...flowProfileErrors(index),
     ...actionErrors(index),
@@ -3122,6 +5144,7 @@ export function validateModelSemantics(model) {
     ...learningPathErrors(index),
     ...notificationErrors(index),
     ...notificationChannelErrors(index),
+    ...extensionModuleErrors(index),
     ...phaseAndTemplateErrors(index),
     ...metricErrors(index),
     ...gradingCapabilityErrors(index),

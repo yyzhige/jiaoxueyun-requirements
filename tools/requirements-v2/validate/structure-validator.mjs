@@ -1390,6 +1390,58 @@ function validateAction(errors, action, path, strict) {
     "INVALID_ACTION_CONTRACT",
     { nonEmpty: true },
   );
+  if (Object.hasOwn(action, "failureSemantics")) {
+    const failureSemantics = contractArray(
+      errors,
+      action,
+      "failureSemantics",
+      path,
+      "INVALID_ACTION_CONTRACT",
+      { nonEmpty: true },
+    );
+    const resultCodes = [];
+    const expectedKeys = new Set([
+      "resultCode",
+      "predicate",
+      "given",
+      "when",
+      "expectedData",
+    ]);
+    failureSemantics.forEach((semantic, index) => {
+      const semanticPath = `${path}.failureSemantics[${index}]`;
+      if (
+        !isRecord(semantic)
+        || Object.keys(semantic).length !== expectedKeys.size
+        || Object.keys(semantic).some((key) => !expectedKeys.has(key))
+      ) {
+        errors.push(
+          `INVALID_ACTION_CONTRACT ${semanticPath} must use the closed resultCode, predicate, given, when, and expectedData shape`,
+        );
+        return;
+      }
+      for (const property of expectedKeys) {
+        contractString(
+          errors,
+          semantic,
+          property,
+          semanticPath,
+          "INVALID_ACTION_CONTRACT",
+        );
+      }
+      resultCodes.push(semantic.resultCode);
+      if (!failureResults.includes(semantic.resultCode)) {
+        errors.push(
+          `INVALID_ACTION_CONTRACT ${semanticPath}.resultCode must be declared in failureResults`,
+        );
+      }
+    });
+    validateUniqueStrings(
+      errors,
+      resultCodes,
+      `${path}.failureSemantics`,
+      "INVALID_ACTION_CONTRACT",
+    );
+  }
   if (typeof action.writes !== "boolean") {
     errors.push(`INVALID_ACTION_CONTRACT ${path}.writes must be boolean`);
   }
@@ -1505,8 +1557,22 @@ function validateScenario(errors, scenario, path, strict) {
         `INVALID_SCENARIO_CONTRACT ${path}.resultCode is not allowed for SUCCESS`,
       );
     }
+    if (Object.hasOwn(scenario, "failurePredicate")) {
+      errors.push(
+        `INVALID_SCENARIO_CONTRACT ${path}.failurePredicate is not allowed for SUCCESS`,
+      );
+    }
   } else {
     contractString(errors, scenario, "resultCode", path, "INVALID_SCENARIO_CONTRACT");
+    if (Object.hasOwn(scenario, "failurePredicate")) {
+      contractString(
+        errors,
+        scenario,
+        "failurePredicate",
+        path,
+        "INVALID_SCENARIO_CONTRACT",
+      );
+    }
   }
   const outcome = scenario.then;
   if (!isRecord(outcome)) {
@@ -2749,6 +2815,22 @@ function validateEvent(errors, event, path) {
       "INVALID_ENTITY_SHAPE",
     );
   }
+  if (Object.hasOwn(event, "producerActionIds")) {
+    const producerActionIds = contractStringArray(
+      errors,
+      event,
+      "producerActionIds",
+      path,
+      "INVALID_ENTITY_SHAPE",
+      { nonEmpty: true },
+    );
+    validateUniqueStrings(
+      errors,
+      producerActionIds,
+      `${path}.producerActionIds`,
+      "INVALID_ENTITY_SHAPE",
+    );
+  }
 }
 
 function validateNfr(errors, nfr, path) {
@@ -2758,6 +2840,14 @@ function validateNfr(errors, nfr, path) {
 
 function validateModelShape(model) {
   const errors = [];
+  const productionMarkerIds = new Set(["ACC-001", "ORG-001", "IAM-001", "DGV-001", "AUD-001"]);
+  const hasProductionMarker = (Array.isArray(model.modules) ? model.modules : [])
+    .some((module) => isRecord(module) && productionMarkerIds.has(module.id));
+  if (!["GENERIC", "ZHIXU_V2"].includes(model.profile)) {
+    errors.push("INVALID_MODEL_PROFILE model.profile must be GENERIC or ZHIXU_V2");
+  } else if (hasProductionMarker && model.profile !== "ZHIXU_V2") {
+    errors.push("INVALID_MODEL_PROFILE production foundation modules require ZHIXU_V2");
+  }
   for (const property of REQUIRED_MODEL_COLLECTIONS) {
     if (!Array.isArray(model[property])) {
       errors.push(`MISSING_MODEL_COLLECTION ${property} must be an array`);

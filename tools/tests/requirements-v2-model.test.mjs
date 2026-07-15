@@ -9,6 +9,7 @@ import {
 import * as modelValidatorExports from "../requirements-v2/validate/model-validator.mjs";
 import * as requirementModelExports from "../requirements-v2/model.mjs";
 import * as aiReportingFactExports from "../requirements-v2/facts/ai-reporting.mjs";
+import * as extensionFactExports from "../requirements-v2/facts/extensions.mjs";
 import * as foundationFactExports from "../requirements-v2/facts/foundation.mjs";
 import * as teachingLoopFactExports from "../requirements-v2/facts/teaching-loop.mjs";
 import { prepareRequirementModel } from "../requirements-v2/validate/structure-validator.mjs";
@@ -247,6 +248,7 @@ function validFixture() {
     }),
   ];
   return {
+    profile: "GENERIC",
     baselineDecisions: [{
       id: "BASE-TEST",
       statement: "fixture baseline decision",
@@ -367,7 +369,7 @@ function validFixture() {
       pages: [],
       scenarios: [],
     }, {
-      id: "REPORT-001",
+      id: "REPORT-TEST",
       phase: PHASE.SECOND,
       objects: [validObject("DAT-REPORT-01", "ROLE-TEACHER", validField("REPORT-F001"), {
         states: ["AVAILABLE", "GENERATED"],
@@ -1233,7 +1235,7 @@ test("enforces identity-only object references without lineage containers", () =
 
 test("requires object-reference integrity during structural preparation in every phase", () => {
   const model = validFixture();
-  const reportField = moduleById(model, "REPORT-001").objects[0].fields[0];
+  const reportField = moduleById(model, "REPORT-TEST").objects[0].fields[0];
   Object.assign(reportField, {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "DAT-HW-01" },
@@ -1277,10 +1279,10 @@ test("classifies every phase-one object reference with a closed integrity mode",
       .filter(({ valueSource }) => valueSource?.kind === "OBJECT_REF")
       .map((field) => ({ module, object, field }))
   )));
-  assert.equal(objectRefs.length, 61);
+  assert.equal(objectRefs.length, 69);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "VERSION_PINNED"
-  )).length, 44);
+  )).length, 52);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "IDENTITY_ONLY"
   )).length, 17);
@@ -1664,7 +1666,19 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 79);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 103);
+  assert.deepEqual(
+    moduleById(requirementModel, "CONTENT-001").actions
+      .filter(({ targetObjectId, operationKind }) => (
+        targetObjectId === "CONTENT-OBJ-PERMISSION" && operationKind === "CREATE"
+      ))
+      .map(({ id }) => id),
+    [
+      "CONTENT-ACT-CREATE-SCHOOL-PERMISSION",
+      "CONTENT-ACT-CREATE-SUBJECT-PERMISSION",
+      "CONTENT-ACT-CREATE-COURSE-PERMISSION",
+    ],
+  );
 
   const requiredPairs = [
     ["ORG-001", "ORG-ACT-CREATE-GRADE", "ORG-ACT-UPDATE-GRADE"],
@@ -3302,9 +3316,11 @@ test("rejects null and non-object requirement models", () => {
 test("rejects missing required top-level collections", () => {
   assert.deepEqual(
     validateRequirementModel({}),
-    REQUIRED_COLLECTION_NAMES
-      .map((name) => `MISSING_MODEL_COLLECTION ${name} must be an array`)
-      .sort(),
+    [
+      "INVALID_MODEL_PROFILE model.profile must be GENERIC or ZHIXU_V2",
+      ...REQUIRED_COLLECTION_NAMES
+        .map((name) => `MISSING_MODEL_COLLECTION ${name} must be an array`),
+    ].sort(),
   );
 });
 
@@ -3329,12 +3345,13 @@ test("publishes one frozen manifest for required top-level collections", () => {
   assertDeepFrozen(requirementModelExports.MODEL_COLLECTIONS);
   assert.deepEqual(
     Object.keys(requirementModel),
-    expected.map(({ key }) => key),
+    ["profile", ...expected.map(({ key }) => key)],
   );
 });
 
 test("accepts explicitly present empty top-level collections", () => {
   assert.deepEqual(validateRequirementModel({
+    profile: "GENERIC",
     baselineDecisions: [],
     roles: [],
     duties: [],
@@ -3353,6 +3370,7 @@ test("accepts explicitly present empty top-level collections", () => {
 
 test("assembles the shared facts into the phase-one executable model", () => {
   assert.deepEqual(requirementModel, {
+    profile: "ZHIXU_V2",
     baselineDecisions,
     roles,
     duties,
@@ -3390,12 +3408,21 @@ test("authors reachability and Flow profiles in source facts without assembly de
       objectCount: 9,
       flowCount: 2,
     },
+    {
+      modules: extensionFactExports.extensionModules,
+      flows: extensionFactExports.extensionFlows,
+      objectCount: 20,
+      flowCount: 0,
+    },
   ];
   for (const group of factGroups) {
     const objects = group.modules.flatMap((module) => module.objects);
+    const phaseOneObjects = group.modules
+      .filter(({ phase }) => phase === PHASE.FIRST)
+      .flatMap((module) => module.objects);
     assert.equal(objects.length, group.objectCount);
     assert.equal(group.flows.length, group.flowCount);
-    assert.ok(objects.every((object) => Object.hasOwn(object, "stateReachability")));
+    assert.ok(phaseOneObjects.every((object) => Object.hasOwn(object, "stateReachability")));
     assert.ok(group.flows.every((flow) => Object.hasOwn(flow, "contractProfile")));
   }
   assert.equal(modules[0], foundationFactExports.foundationModules[0]);
@@ -3412,9 +3439,9 @@ test("declares the direct read mode for every phase-one object", () => {
       [mode, objects.length]
     ))),
     {
-      AUTHORIZED: 21,
+      AUTHORIZED: 39,
       NO_DIRECT_READ: 44,
-      STUDENT_TIMED_RELEASE: 3,
+      STUDENT_TIMED_RELEASE: 4,
     },
   );
   assert.equal(
@@ -3439,11 +3466,11 @@ test("declares the direct read mode for every phase-one object", () => {
   }
 });
 
-test("declares one standard system identity for all 68 phase-one objects", () => {
+test("declares one standard system identity for all 87 phase-one objects", () => {
   const phaseOneObjects = modules
     .filter(({ phase }) => phase === PHASE.FIRST)
     .flatMap(({ objects }) => objects);
-  assert.equal(phaseOneObjects.length, 68);
+  assert.equal(phaseOneObjects.length, 87);
 
   const violations = phaseOneObjects.flatMap((object) => {
     const identities = object.fields
@@ -3459,7 +3486,7 @@ test("declares one standard system identity for all 68 phase-one objects", () =>
   assert.deepEqual(violations, []);
 });
 
-test("defines the phase-one foundation teaching-loop and AI-reporting modules and Flows", () => {
+test("defines all phase-one modules the REPORT metadata module and phase-one Flows", () => {
   assert.deepEqual(
     modules.map(({ id }) => id),
     [
@@ -3484,6 +3511,12 @@ test("defines the phase-one foundation teaching-loop and AI-reporting modules an
       "RPT-001",
       "LPATH-001",
       "NOTI-001",
+      "PREP-001",
+      "CONTENT-001",
+      "EXM-001",
+      "SCH-001",
+      "PLAT-001",
+      "REPORT-001",
     ],
   );
   assert.deepEqual(
@@ -3505,7 +3538,16 @@ test("defines the phase-one foundation teaching-loop and AI-reporting modules an
       "DF-013",
     ],
   );
-  assert.equal(modules.every(({ phase, priority }) => phase === 1 && priority === "P0"), true);
+  assert.equal(
+    modules.filter(({ phase }) => phase === PHASE.FIRST)
+      .every(({ priority }) => priority === "P0"),
+    true,
+  );
+  assert.deepEqual(
+    modules.filter(({ phase }) => phase === PHASE.SECOND)
+      .map(({ id, priority }) => ({ id, priority })),
+    [{ id: "REPORT-001", priority: "P1" }],
+  );
 });
 
 test("publishes the complete AI task registry", () => {
@@ -7158,6 +7200,12 @@ test("defines score evidence plan student execution and correction modules with 
       "RPT-001",
       "LPATH-001",
       "NOTI-001",
+      "PREP-001",
+      "CONTENT-001",
+      "EXM-001",
+      "SCH-001",
+      "PLAT-001",
+      "REPORT-001",
     ],
   );
   assert.deepEqual(
@@ -7801,7 +7849,7 @@ test("declares field-derived guard policies for every version-pinned reference",
     "UPDATE_REQUIRED",
     "ALWAYS_REQUIRED",
   ]);
-  assert.equal(pinnedRefs.length, 44);
+  assert.equal(pinnedRefs.length, 52);
   assert.equal(pinnedRefs.every(({ field }) => allowedPolicies.has(field.stateGuardPolicy)), true);
 
   const correction = moduleById(requirementModel, "CORR-001");
@@ -7820,7 +7868,7 @@ test("declares exact action applicability for every version-pinned reference", (
     object.fields.filter(({ referenceIntegrity }) => referenceIntegrity === "VERSION_PINNED")
       .map((field) => ({ module, object, field }))
   )));
-  assert.equal(pinnedRefs.length, 44);
+  assert.equal(pinnedRefs.length, 52);
   assert.equal(pinnedRefs.every(({ field }) => (
     field.actionApplicability
     && Object.keys(field.actionApplicability).length === 1
@@ -8257,8 +8305,14 @@ test("publishes task-specific actions, pages, and complete scenario coverage", (
   ]);
   const genericPageLabels = new Set(["列表/工作台", "详情/处理页", "预览/确认页", "历史/审计页"]);
 
-  assert.equal(modules.length, 21);
+  assert.equal(modules.length, 27);
   for (const module of modules) {
+    if (module.phase === PHASE.SECOND) {
+      assert.deepEqual(module.actions, [], module.id);
+      assert.deepEqual(module.pages, [], module.id);
+      assert.deepEqual(module.scenarios, [], module.id);
+      continue;
+    }
     assert.equal(module.actions.length > 0, true, module.id);
     assert.equal(module.pages.length > 0, true, module.id);
     assert.equal(module.actions.every(({ label }) => !genericActionLabels.has(label)), true);
@@ -8371,12 +8425,13 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["NOTI-ACT-DELIVER", "SYSTEM_EVENT"],
     ["NOTI-ACT-FAIL-DELIVERY", "SYSTEM_EVENT"],
     ["NOTI-ACT-RETRY-DELIVERY", "SYSTEM_EVENT"],
+    ["SCH-ACT-MARK-CANDIDATE-STALE", "SYSTEM_EVENT"],
   ]);
   const actions = modules.flatMap((module) => module.actions);
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 76);
+  assert.equal(expectedModes.size, 77);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -9057,13 +9112,13 @@ test("keeps every Flow action participant and data reference valid and symmetric
   }
 });
 
-test("the validation CLI reports twenty-one modules and fourteen Flows", () => {
+test("the validation CLI reports twenty-seven modules and fourteen Flows", () => {
   const output = execFileSync(
     process.execPath,
     ["tools/validate_v2_requirements.mjs"],
     { cwd: new URL("../..", import.meta.url), encoding: "utf8" },
   );
-  assert.equal(output, "validated modules=21 flows=14\n");
+  assert.equal(output, "validated modules=27 flows=14\n");
 });
 
 test("defines the immutable baseline decisions and teacher duty model", () => {
@@ -9402,6 +9457,24 @@ test("registers every required Option Set concept with stable code-label values"
     "knowledgeMappingRelation",
     "modelTrainingUse",
     "teacherWorkspaceView",
+    "lessonPlanStatus",
+    "materialLicenseStatus",
+    "contentAvailability",
+    "examEventStatus",
+    "scoreImportValidation",
+    "scoreConfirmationDecision",
+    "scheduleConstraintHardness",
+    "scheduleHardConstraintCheck",
+    "scheduleConstraintKind",
+    "serviceState",
+    "supportCaseStatus",
+    "contentPermissionScope",
+    "contentLicenseStatus",
+    "activityStatus",
+    "assignmentDraftStatus",
+    "scheduleCandidateStatus",
+    "platformCaseStatus",
+    "policyTemplateStatus",
   ];
   const runtimeSources = {
     school: {
@@ -9639,6 +9712,29 @@ test("registers every required Option Set concept with stable code-label values"
     knowledgeMappingRelation: ["PRIMARY", "SUPPORTING", "PREREQUISITE", "EXTENSION"],
     modelTrainingUse: ["DENIED", "SEPARATELY_APPROVED"],
     teacherWorkspaceView: ["TODAY", "GRADING_QUEUE", "HOMEROOM_OVERVIEW", "REPORTS"],
+    lessonPlanStatus: ["DRAFT", "CONFIRMED"],
+    materialLicenseStatus: ["PENDING", "VERIFIED"],
+    contentAvailability: ["DRAFT", "PUBLISHED"],
+    examEventStatus: ["DRAFT", "PUBLISHED", "CORRECTION_OPEN"],
+    scoreImportValidation: ["PENDING", "PASSED", "REJECTED"],
+    scoreConfirmationDecision: ["CONFIRM", "REJECT"],
+    scheduleConstraintHardness: ["HARD", "SOFT"],
+    scheduleHardConstraintCheck: ["PASS", "FAIL"],
+    scheduleConstraintKind: [
+      "TEACHER_AVAILABILITY",
+      "CLASS_PERIOD",
+      "COURSE_LOAD",
+      "ROOM_CAPACITY",
+    ],
+    serviceState: ["DRAFT", "CONFIRMED", "ACTIVE"],
+    supportCaseStatus: ["OPEN", "CLOSED"],
+    contentPermissionScope: ["SCHOOL", "SUBJECT", "COURSE"],
+    contentLicenseStatus: ["DRAFT", "ACTIVE"],
+    activityStatus: ["PLANNED", "RECORDED"],
+    assignmentDraftStatus: ["DRAFT", "READY_FOR_HANDOFF"],
+    scheduleCandidateStatus: ["GENERATED", "REVIEWED", "CONFIRMED", "PUBLISHED", "STALE"],
+    platformCaseStatus: ["OPEN", "SCHOOL_CONFIRMED"],
+    policyTemplateStatus: ["DRAFT", "CONFIRMED", "ACTIVE"],
   };
   for (const source of Object.values(runtimeSources)) {
     source.idKind = source.valueField === "actionId" ? "ACTION_ID" : "OBJECT_ID";
@@ -10753,6 +10849,464 @@ test("rejects a flow whose declared modules and action modules differ", () => {
   assertHasCode(errors, "FLOW_PARTICIPANT_MISMATCH");
 });
 
+const TASK8_MODULE_CONTRACTS = [
+  ["PREP-001", PHASE.FIRST, "P0"],
+  ["CONTENT-001", PHASE.FIRST, "P0"],
+  ["EXM-001", PHASE.FIRST, "P0"],
+  ["SCH-001", PHASE.FIRST, "P0"],
+  ["PLAT-001", PHASE.FIRST, "P0"],
+  ["REPORT-001", PHASE.SECOND, "P1"],
+];
+
+const TASK8_OBJECT_FIELDS = new Map([
+  ["PREP-OBJ-LESSON-PLAN", [
+    "PREP-LESSON-F-SUBJECT",
+    "PREP-LESSON-F-RUBRIC-VERSION",
+    "PREP-LESSON-F-KNOWLEDGE-POINT-IDS",
+    "PREP-LESSON-F-VERSION",
+    "PREP-LESSON-F-STATUS",
+  ]],
+  ["PREP-OBJ-MATERIAL-REF", ["PREP-MATERIAL-F-REFERENCE", "PREP-MATERIAL-F-LICENSE-STATUS"]],
+  ["PREP-OBJ-CLASSROOM-ACTIVITY", ["PREP-ACTIVITY-F-INSTRUCTIONS", "PREP-ACTIVITY-F-STATUS"]],
+  ["PREP-OBJ-ASSIGNMENT-DRAFT", ["PREP-DRAFT-F-CONTENT", "PREP-DRAFT-F-STATUS"]],
+  ["CONTENT-OBJ-QUESTION-VERSION", [
+    "CONTENT-QUESTION-F-VERSION",
+    "CONTENT-QUESTION-F-ANSWER",
+    "CONTENT-QUESTION-F-ANALYSIS",
+    "CONTENT-QUESTION-F-KNOWLEDGE-MAPPINGS",
+    "CONTENT-QUESTION-F-AVAILABILITY",
+  ]],
+  ["CONTENT-OBJ-LICENSE", ["CONTENT-LICENSE-F-STATUS"]],
+  ["CONTENT-OBJ-PERMISSION", ["CONTENT-PERMISSION-F-SCOPE"]],
+  ["EXM-OBJ-EXAM-EVENT", ["EXM-EVENT-F-STATUS", "EXM-EVENT-F-PUBLICATION-AT"]],
+  ["EXM-OBJ-SCORE-IMPORT", ["EXM-IMPORT-F-VALIDATION", "EXM-IMPORT-F-EVIDENCE"]],
+  ["EXM-OBJ-AGGREGATE-RULE", ["EXM-RULE-F-DEFINITION", "EXM-RULE-F-VERSION"]],
+  ["EXM-OBJ-SUBJECT-SCORE", ["EXM-SCORE-F-SCORE", "EXM-SCORE-F-EVIDENCE", "EXM-SCORE-F-VISIBLE-AT"]],
+  ["SCH-OBJ-CALENDAR", ["SCH-CALENDAR-F-TERM", "SCH-CALENDAR-F-VERSION"]],
+  ["SCH-OBJ-CONSTRAINT", ["SCH-CONSTRAINT-F-KIND", "SCH-CONSTRAINT-F-HARDNESS"]],
+  ["SCH-OBJ-CONSTRAINT-SNAPSHOT", [
+    "SCH-CONSTRAINT-SNAPSHOT-F-ITEMS",
+    "SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS",
+    "SCH-CONSTRAINT-SNAPSHOT-F-HASH",
+    "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+  ]],
+  ["SCH-OBJ-CANDIDATE", ["SCH-CANDIDATE-F-HARD-CHECK", "SCH-CANDIDATE-F-STATUS"]],
+  ["PLAT-OBJ-ONBOARDING-CASE", ["PLAT-CASE-F-SCHOOL", "PLAT-CASE-F-STATUS"]],
+  ["PLAT-OBJ-SERVICE-PLAN", ["PLAT-PLAN-F-SERVICE-STATE", "PLAT-PLAN-F-SCHOOL-CONFIRMED-AT"]],
+  ["PLAT-OBJ-POLICY-TEMPLATE", ["PLAT-POLICY-F-VERSION", "PLAT-POLICY-F-STATUS"]],
+  ["PLAT-OBJ-SUPPORT-CASE", [
+    "PLAT-SUPPORT-CASE-F-PURPOSE",
+    "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+  ]],
+]);
+
+test("registers the six Task 8 modules with closed phase and priority", () => {
+  assert.equal(modules.length, 27);
+  for (const [moduleId, phase, priority] of TASK8_MODULE_CONTRACTS) {
+    const module = moduleById(requirementModel, moduleId);
+    assert.ok(module, moduleId);
+    assert.equal(module.phase, phase, moduleId);
+    assert.equal(module.priority, priority, moduleId);
+  }
+});
+
+test("models the Task 8 domain objects and task-specific key fields", () => {
+  const objectById = new Map(modules.flatMap((module) => (
+    module.objects.map((object) => [object.id, object])
+  )));
+  for (const [objectId, requiredFieldIds] of TASK8_OBJECT_FIELDS) {
+    const object = objectById.get(objectId);
+    assert.ok(object, objectId);
+    const fieldIds = new Set(object.fields.map(({ id }) => id));
+    for (const fieldId of requiredFieldIds) assert.ok(fieldIds.has(fieldId), fieldId);
+  }
+
+  const assignmentDraft = moduleById(requirementModel, "PREP-001")?.actions
+    .find(({ id }) => id === "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF");
+  const handoff = assignmentDraft?.handoffContract;
+  const formalAction = moduleById(requirementModel, "HW-001")?.actions
+    .find(({ id }) => id === handoff?.formalActionId);
+  assert.equal(handoff?.formalActionId, "HW-ACT-CREATE-DRAFT");
+  assert.equal(handoff?.payloadFieldId, "PREP-DRAFT-F-CONTENT");
+  assert.deepEqual(handoff?.formalInputFieldIds, formalAction?.inputFieldIds);
+  assert.equal(handoff?.requiredConfirmationDutyRef, "DUTY-SUBJECT-TEACHER");
+  assert.equal(handoff?.effectBoundary, "DRAFT_ONLY_UNTIL_FORMAL_HW_ACTION");
+});
+
+test("closes Task 8 ownership permissions and state reachability", () => {
+  const task8Modules = TASK8_MODULE_CONTRACTS
+    .filter(([, phase]) => phase === PHASE.FIRST)
+    .map(([moduleId]) => moduleById(requirementModel, moduleId));
+  assert.equal(task8Modules.every(Boolean), true);
+  for (const module of task8Modules) {
+    for (const object of module.objects) {
+      assert.equal(object.controlSubject, "SCHOOL", object.id);
+      assert.equal(object.stateReachability.mode, "ACTION_GRAPH", object.id);
+      assert.deepEqual(object.stateReachability.initialStateIds, [], object.id);
+    }
+    for (const action of module.actions) {
+      const effects = new Set(action.permissions.map(({ effect }) => effect));
+      assert.deepEqual(effects, new Set(["ALLOW", "DENY"]), action.id);
+    }
+  }
+  assert.deepEqual(validateRequirementModel(requirementModel), []);
+});
+
+test("centralizes Task 8 selection fields and preserves Web App asymmetry", () => {
+  const expectedOptionSets = new Map([
+    ["PREP-LESSON-F-STATUS", "OPT-EXT-001"],
+    ["PREP-MATERIAL-F-LICENSE-STATUS", "OPT-EXT-002"],
+    ["CONTENT-QUESTION-F-AVAILABILITY", "OPT-EXT-003"],
+    ["EXM-EVENT-F-STATUS", "OPT-EXT-004"],
+    ["EXM-IMPORT-F-VALIDATION", "OPT-EXT-005"],
+    ["SCH-CONSTRAINT-F-HARDNESS", "OPT-EXT-006"],
+    ["SCH-CONSTRAINT-F-KIND", "OPT-EXT-017"],
+    ["SCH-CANDIDATE-F-HARD-CHECK", "OPT-EXT-007"],
+    ["PLAT-PLAN-F-SERVICE-STATE", "OPT-EXT-008"],
+    ["PLAT-SUPPORT-CASE-F-STATUS", "OPT-EXT-009"],
+  ]);
+  const fieldById = new Map(modules.flatMap((module) => module.objects.flatMap((object) => (
+    object.fields.map((field) => [field.id, field])
+  ))));
+  for (const [fieldId, optionSetId] of expectedOptionSets) {
+    assert.deepEqual(fieldById.get(fieldId)?.valueSource, { kind: "OPTION_SET", optionSetId });
+    assert.ok(optionSets.some(({ id }) => id === optionSetId), optionSetId);
+  }
+
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+  assert.deepEqual(actionById.get("PREP-ACT-RECORD-CLASSROOM-ACTIVITY")?.clients, [CLIENT.APP]);
+  assert.deepEqual(actionById.get("EXM-ACT-IMPORT-SCORES")?.clients, [CLIENT.WEB]);
+  assert.deepEqual(actionById.get("EXM-ACT-VIEW-PUBLISHED-SCORE")?.clients, [CLIENT.WEB, CLIENT.APP]);
+  assert.deepEqual(actionById.get("SCH-ACT-GENERATE-CANDIDATE")?.clients, [CLIENT.WEB]);
+  assert.deepEqual(actionById.get("PLAT-ACT-CREATE-SUPPORT-CASE")?.clients, [CLIENT.WEB, CLIENT.APP]);
+});
+
+test("keeps REPORT and the three registered extensions metadata only", () => {
+  const report = moduleById(requirementModel, "REPORT-001");
+  assert.ok(report);
+  for (const key of [
+    "actions",
+    "pages",
+    "scenarios",
+    "flows",
+    "aiTasks",
+    "externalLinks",
+    "deliveryBehavior",
+  ]) assert.deepEqual(report[key], [], `REPORT-001.${key}`);
+  assert.deepEqual(report.objects[0].reuseModuleIds, ["DGV-001"]);
+  assert.ok(report.objects[0].futureActors.length > 0);
+  assert.ok(report.objects[0].dependencies.length > 0);
+  assert.ok(report.objects[0].requiredPermissions.length > 0);
+  assert.ok(report.objects[0].unresolvedProductDecisions.length > 0);
+
+  for (const extensionId of [
+    "EXT-THIRD-PARTY-NOTIFICATIONS",
+    "EXT-AI-EXPLANATION-VIDEO",
+    "EXT-AI-TEACHING-VIDEO",
+  ]) {
+    const extension = extensions.find(({ id }) => id === extensionId);
+    assert.ok(extension, extensionId);
+    assert.equal(extension.status, "REGISTERED_ONLY", extensionId);
+    assert.equal(
+      ["actions", "pages", "flows", "aiTasks", "routes", "commands"]
+        .some((key) => Object.hasOwn(extension, key)),
+      false,
+      extensionId,
+    );
+  }
+});
+
+test("fails closed for Task 8 semantic boundary mutations", () => {
+  const mutations = [
+    ["missing Option Set", "MISSING_OPTION_SET", (model) => {
+      model.optionSets = model.optionSets.filter(({ id }) => id !== "OPT-EXT-007");
+    }],
+    ["platform operations student detail", "INVALID_EXTENSION_PERMISSION", (model) => {
+      moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-VIEW-PUBLISHED-SCORE")
+        .permissions.push({
+          effect: "ALLOW",
+          roleRef: "ROLE-PLATFORM-OPS",
+          condition: "platform operations requests student score detail",
+        });
+    }],
+    ["REPORT action", "PHASE_BOUNDARY_EXECUTABLE_PAGE", (model) => {
+      moduleById(model, "REPORT-001").actions.push({ id: "REPORT-ACT-EXECUTE" });
+    }],
+    ["REPORT page", "PHASE_BOUNDARY_EXECUTABLE_PAGE", (model) => {
+      moduleById(model, "REPORT-001").pages.push({ id: "REPORT-PAGE-DELIVERY" });
+    }],
+    ["REPORT flow", "PHASE_BOUNDARY_EXECUTABLE_PAGE", (model) => {
+      moduleById(model, "REPORT-001").flows.push({ id: "REPORT-FLOW-DELIVER" });
+    }],
+    ["AI video extension action", "PHASE_BOUNDARY_EXECUTABLE_PAGE", (model) => {
+      model.extensions.find(({ id }) => id === "EXT-AI-EXPLANATION-VIDEO")
+        .actions = [{ id: "EXT-AI-VIDEO-ACT-GENERATE" }];
+    }],
+    ["unpublished student score", "INVALID_READ_POLICY", (model) => {
+      moduleById(model, "EXM-001").objects
+        .find(({ id }) => id === "EXM-OBJ-SUBJECT-SCORE")
+        .readPolicies[0].requiredState = "IMPORTED";
+    }],
+    ["hard constraint bypass", "INVALID_SCHEDULE_CONSTRAINT_GATE", (model) => {
+      delete moduleById(model, "SCH-001").actions
+        .find(({ id }) => id === "SCH-ACT-CONFIRM-CANDIDATE").constraintGate;
+    }],
+    ["support access without expiry", "INVALID_PLATFORM_AUD_CONTRACT", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      delete use.accessGuard.expiresAtFieldId;
+    }],
+    ["support access without audit", "INVALID_PLATFORM_AUD_CONTRACT", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.auditMode = "NOT_REQUIRED";
+      use.failureResults = use.failureResults
+        .filter((resultCode) => resultCode !== "AUDIT_FAILED");
+    }],
+  ];
+
+  for (const [name, errorCode, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), errorCode, name);
+  }
+});
+
+test("keeps support authorization fields and use guards authoritative in AUD", () => {
+  const audit = moduleById(requirementModel, "AUD-001");
+  const session = audit.objects.find(({ id }) => id === "AUD-OBJ-ACCESS-SESSION");
+  const authorizedOperator = session.fields
+    .find(({ id }) => id === "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID");
+  assert.deepEqual(authorizedOperator?.sourceBinding, {
+    sourceRefFieldId: "AUD-SESSION-F-REQUEST-ID",
+    sourceVersionFieldId: "AUD-SESSION-F-REQUEST-VERSION",
+    sourceFieldId: "AUD-REQUEST-F-REQUESTER",
+  });
+
+  const platform = moduleById(requirementModel, "PLAT-001");
+  const supportCase = platform.objects
+    .find(({ id }) => id === "PLAT-OBJ-SUPPORT-CASE");
+  const use = platform.actions
+    .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+  assert.deepEqual(supportCase?.states, ["OPEN", "CLOSED"]);
+  assert.equal(platform.actions.some(({ id }) => [
+    "PLAT-ACT-REQUEST-SUPPORT-ACCESS",
+    "PLAT-ACT-APPROVE-SUPPORT-ACCESS",
+    "PLAT-ACT-EXPIRE-SUPPORT-ACCESS",
+  ].includes(id)), false);
+  assert.deepEqual(use.accessGuard, {
+    sessionRefFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+    pinnedSessionVersionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+    authorizedActorFieldId: "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID",
+    requestedScopeFieldId: "PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE",
+    scopeFieldId: "AUD-SESSION-F-SCOPE",
+    expiresAtFieldId: "AUD-SESSION-F-EXPIRY",
+    stateFieldId: "AUD-SESSION-F-STATUS",
+    requiredState: "ACTIVE",
+    sourceVersionFieldId: "AUD-SESSION-F-VERSION",
+    timeComparison: "CURRENT_TIME_BEFORE_EXPIRY",
+    actorBinding: "CURRENT_ACTOR_EQUALS_AUTHORIZED_OPERATOR",
+    scopeBinding: "REQUESTED_SCOPE_WITHIN_AUTHORIZED_SESSION_SCOPE",
+    auditActionId: "AUD-ACT-APPEND-EVENT",
+    auditOrdering: "BEFORE_DATA_RETURN",
+  });
+  assert.equal(use.risk, RISK.HIGH);
+  assert.equal(use.auditMode, "REQUIRED");
+  assert.deepEqual(use.failureResults, [
+    "PERMISSION_DENIED",
+    "NOT_FOUND",
+    "ACCESS_INACTIVE",
+    "ACCESS_EXPIRED",
+    "ACCESS_OTHER_RECORD",
+    "ACCESS_SCOPE_DENIED",
+    "SOURCE_VERSION_STALE",
+    "AUDIT_FAILED",
+  ]);
+});
+
+test("rejects support access self-approval scope expiry and audit bypass mutations", () => {
+  const mutations = [
+    ["restore platform self approval", (model) => {
+      const platform = moduleById(model, "PLAT-001");
+      const create = platform.actions
+        .find(({ id }) => id === "PLAT-ACT-CREATE-SUPPORT-CASE");
+      platform.actions.push({
+        ...structuredClone(create),
+        id: "PLAT-ACT-APPROVE-SUPPORT-ACCESS",
+      });
+    }],
+    ["use requested access", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.accessGuard = { ...use.accessGuard, requiredState: "REQUESTED" };
+    }],
+    ["remove expiry comparison", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.accessGuard = { ...use.accessGuard };
+      delete use.accessGuard.timeComparison;
+    }],
+    ["remove expiry field guard", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.accessGuard = { ...use.accessGuard };
+      delete use.accessGuard.expiresAtFieldId;
+    }],
+    ["remove requested scope output", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.outputFieldIds = use.outputFieldIds
+        .filter((fieldId) => fieldId !== "PLAT-SUPPORT-CASE-F-REQUESTED-SCOPE");
+    }],
+    ["downgrade use audit", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.risk = RISK.READ;
+      use.auditMode = "NOT_REQUIRED";
+      use.failureResults = use.failureResults
+        .filter((resultCode) => resultCode !== "AUDIT_FAILED");
+    }],
+    ["allow other support record", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      const allow = use.permissions.find(({ effect, roleRef }) => (
+        effect === "ALLOW" && roleRef === "ROLE-PLATFORM-OPS"
+      ));
+      allow.scope = {
+        kind: "OTHER_RECORD",
+        subjectFieldId: "PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID",
+      };
+    }],
+    ["malformed use input array", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.inputFieldIds = {};
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_PLATFORM_AUD_CONTRACT", name);
+  }
+});
+
+test("rejects incomplete expanded or duplicate support access failure taxonomies", () => {
+  const requiredFailureResults = [
+    "PERMISSION_DENIED",
+    "NOT_FOUND",
+    "ACCESS_INACTIVE",
+    "ACCESS_EXPIRED",
+    "ACCESS_OTHER_RECORD",
+    "ACCESS_SCOPE_DENIED",
+    "SOURCE_VERSION_STALE",
+    "AUDIT_FAILED",
+  ];
+  for (const removedResult of requiredFailureResults) {
+    const model = structuredClone(requirementModel);
+    const platform = moduleById(model, "PLAT-001");
+    const use = platform.actions
+      .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+    use.failureResults = use.failureResults
+      .filter((resultCode) => resultCode !== removedResult);
+    const removedScenarioIds = new Set(platform.scenarios
+      .filter(({ actionId, resultCode }) => (
+        actionId === use.id && resultCode === removedResult
+      ))
+      .map(({ id }) => id));
+    platform.scenarios = platform.scenarios.filter(({ id }) => !removedScenarioIds.has(id));
+    use.scenarioIds = use.scenarioIds
+      .filter((scenarioId) => !removedScenarioIds.has(scenarioId));
+    assertNoCode(validateRequirementModel(model), "MISSING_ACTION_SCENARIO");
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_PLATFORM_AUD_CONTRACT",
+      removedResult,
+    );
+  }
+
+  const expanded = structuredClone(requirementModel);
+  const expandedPlatform = moduleById(expanded, "PLAT-001");
+  const expandedUse = expandedPlatform.actions
+    .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+  expandedUse.failureResults.push("UNDECLARED_SUPPORT_FAILURE");
+  const extraScenario = {
+    ...expandedPlatform.scenarios.find(({ actionId, resultCode }) => (
+      actionId === expandedUse.id && resultCode === "NOT_FOUND"
+    )),
+    id: `${expandedUse.id}-SCN-UNDECLARED_SUPPORT_FAILURE`,
+    resultCode: "UNDECLARED_SUPPORT_FAILURE",
+  };
+  expandedPlatform.scenarios.push(extraScenario);
+  expandedUse.scenarioIds.push(extraScenario.id);
+  assertNoCode(validateRequirementModel(expanded), "MISSING_ACTION_SCENARIO");
+  assertHasCode(validateRequirementModel(expanded), "INVALID_PLATFORM_AUD_CONTRACT");
+
+  const duplicated = structuredClone(requirementModel);
+  const duplicatedUse = moduleById(duplicated, "PLAT-001").actions
+    .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+  duplicatedUse.failureResults.push("ACCESS_EXPIRED");
+  assertHasCode(validateRequirementModel(duplicated), "INVALID_PLATFORM_AUD_CONTRACT");
+});
+
+test("rejects incomplete or malformed REPORT future metadata contracts", () => {
+  const requiredMetadata = [
+    "futureActors",
+    "dependencies",
+    "requiredPermissions",
+    "reuseModuleIds",
+    "unresolvedProductDecisions",
+  ];
+  const mutations = requiredMetadata.flatMap((property) => [
+    [`delete ${property}`, (model) => {
+      delete moduleById(model, "REPORT-001").objects[0][property];
+    }],
+    [`empty ${property}`, (model) => {
+      moduleById(model, "REPORT-001").objects[0][property] = [];
+    }],
+  ]);
+  mutations.push(
+    ["rename REPORT title", (model) => {
+      moduleById(model, "REPORT-001").title = "Renamed Future Report";
+    }],
+    ["delete future contract object", (model) => {
+      moduleById(model, "REPORT-001").objects = [];
+    }],
+    ["unknown future actor", (model) => {
+      moduleById(model, "REPORT-001").objects[0].futureActors.push("ROLE-UNKNOWN");
+    }],
+    ["malformed future actor", (model) => {
+      moduleById(model, "REPORT-001").objects[0].futureActors.push(" ");
+    }],
+    ["reuse without governance", (model) => {
+      moduleById(model, "REPORT-001").objects[0].reuseModuleIds = ["AUD-001"];
+    }],
+    ["reuse unknown module", (model) => {
+      moduleById(model, "REPORT-001").objects[0].reuseModuleIds = ["DGV-UNKNOWN"];
+    }],
+    ["duplicate dependency", (model) => {
+      const object = moduleById(model, "REPORT-001").objects[0];
+      object.dependencies.push(object.dependencies[0]);
+    }],
+    ["malformed permission", (model) => {
+      moduleById(model, "REPORT-001").objects[0].requiredPermissions.push(" ");
+    }],
+    ["malformed dependency array", (model) => {
+      moduleById(model, "REPORT-001").objects[0].dependencies = {};
+    }],
+    ["unexpected report metadata", (model) => {
+      moduleById(model, "REPORT-001").objects[0].deliveryTarget = "external";
+    }],
+  );
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_REPORT_METADATA_CONTRACT", name);
+  }
+});
+
 test("rejects an orphan Owner role", () => {
   const model = validFixture();
   moduleById(model, "SUB-001").objects[0].ownerRef = "ROLE-ORPHAN";
@@ -10888,7 +11442,7 @@ test("rejects scenario coverage whose IDs do not match the action", () => {
 
 test("rejects phase-two page contracts independently of actions", () => {
   const model = validFixture();
-  const reportModule = moduleById(model, "REPORT-001");
+  const reportModule = moduleById(model, "REPORT-TEST");
   assert.deepEqual(reportModule.actions, []);
   reportModule.pages = [{
     id: "REPORT-W01",
@@ -10904,7 +11458,7 @@ test("rejects phase-two page contracts independently of actions", () => {
 
 test("rejects executable phase-two actions independently of pages", () => {
   const model = validFixture();
-  const reportModule = moduleById(model, "REPORT-001");
+  const reportModule = moduleById(model, "REPORT-TEST");
   assert.deepEqual(reportModule.pages, []);
   reportModule.actions = [{
     id: "REPORT-ACT-01",
@@ -11337,4 +11891,1243 @@ test("assertValidRequirementModel throws one aggregated validation error", () =>
       return true;
     },
   );
+});
+
+test("enforces the closed Task 8 required entity and capability manifest", () => {
+  assertNoCode(validateRequirementModel(requirementModel), "MISSING_TASK8_CONTRACT");
+  const mutations = [
+    ["coordinated Task 8 deletion", (model) => {
+      const task8ModuleIds = new Set([
+        "PREP-001",
+        "CONTENT-001",
+        "EXM-001",
+        "SCH-001",
+        "PLAT-001",
+        "REPORT-001",
+      ]);
+      model.modules = model.modules.filter(({ id }) => !task8ModuleIds.has(id));
+      model.optionSets = model.optionSets.filter(({ id }) => !id.startsWith("OPT-EXT-"));
+      model.events = model.events.filter(({ id }) => id !== "EVT-EXM-SCORE-PUBLISHED");
+    }],
+    ["module", (model) => {
+      model.modules = model.modules.filter(({ id }) => id !== "PREP-001");
+    }],
+    ["object rename", (model) => {
+      moduleById(model, "CONTENT-001").objects
+        .find(({ id }) => id === "CONTENT-OBJ-LICENSE").id = "CONTENT-OBJ-LICENSE-RENAMED";
+    }],
+    ["action retarget", (model) => {
+      moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-IMPORT-SCORES")
+        .targetObjectId = "EXM-OBJ-EXAM-EVENT";
+    }],
+    ["page", (model) => {
+      const schedule = moduleById(model, "SCH-001");
+      schedule.pages = schedule.pages.filter(({ id }) => (
+        id !== "SCH-PAGE-SCHEDULE-OPERATIONS"
+      ));
+    }],
+    ["Option Set", (model) => {
+      model.optionSets = model.optionSets.filter(({ id }) => id !== "OPT-EXT-003");
+    }],
+    ["event", (model) => {
+      model.events = model.events.filter(({ id }) => id !== "EVT-EXM-SCORE-PUBLISHED");
+    }],
+    ["REPORT contract kind", (model) => {
+      moduleById(model, "REPORT-001").contractKind = "RENAMED_REPORT_CONTRACT";
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "MISSING_TASK8_CONTRACT", name);
+  }
+});
+
+test("pins question publication to active license and permission versions", () => {
+  const content = moduleById(requirementModel, "CONTENT-001");
+  const question = content.objects.find(({ id }) => id === "CONTENT-OBJ-QUESTION-VERSION");
+  const publish = content.actions
+    .find(({ id }) => id === "CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+  const fieldById = new Map(question.fields.map((field) => [field.id, field]));
+  assert.deepEqual(fieldById.get("CONTENT-QUESTION-F-LICENSE-REF")?.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "CONTENT-OBJ-LICENSE",
+  });
+  assert.deepEqual(fieldById.get("CONTENT-QUESTION-F-PERMISSION-REF")?.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "CONTENT-OBJ-PERMISSION",
+  });
+  assert.deepEqual(new Set(publish.inputFieldIds), new Set([
+    "CONTENT-QUESTION-F-LICENSE-REF",
+    "CONTENT-QUESTION-F-LICENSE-VERSION",
+    "CONTENT-QUESTION-F-PERMISSION-REF",
+    "CONTENT-QUESTION-F-PERMISSION-VERSION",
+  ]));
+  assert.deepEqual(
+    new Set(publish.relatedStateGuards.map(({ targetObjectId, requiredState }) => (
+      `${targetObjectId}:${requiredState}`
+    ))),
+    new Set([
+      "CONTENT-OBJ-LICENSE:ACTIVE",
+      "CONTENT-OBJ-PERMISSION:ACTIVE",
+    ]),
+  );
+  assert.ok(publish.failureResults.includes("LICENSE_INACTIVE"));
+  assert.ok(publish.failureResults.includes("CONTENT_PERMISSION_INACTIVE"));
+  assert.ok(publish.failureResults.includes("SOURCE_VERSION_STALE"));
+  assert.deepEqual(
+    new Set(content.relationships.map(({ fromObjectId, toObjectId }) => (
+      `${fromObjectId}->${toObjectId}`
+    ))),
+    new Set([
+      "CONTENT-OBJ-QUESTION-VERSION->CONTENT-OBJ-LICENSE",
+      "CONTENT-OBJ-QUESTION-VERSION->CONTENT-OBJ-PERMISSION",
+    ]),
+  );
+});
+
+test("rejects fail-open content governance publication mutations", () => {
+  const mutations = [
+    ["delete license object", "MISSING_TASK8_CONTRACT", (model) => {
+      const content = moduleById(model, "CONTENT-001");
+      content.objects = content.objects.filter(({ id }) => id !== "CONTENT-OBJ-LICENSE");
+    }],
+    ["retarget publish", "MISSING_TASK8_CONTRACT", (model) => {
+      moduleById(model, "CONTENT-001").actions
+        .find(({ id }) => id === "CONTENT-ACT-PUBLISH-QUESTION-VERSION")
+        .targetObjectId = "CONTENT-OBJ-LICENSE";
+    }],
+    ["remove license relationship", "INVALID_CONTENT_GOVERNANCE_CONTRACT", (model) => {
+      const content = moduleById(model, "CONTENT-001");
+      content.relationships = content.relationships.filter(({ toObjectId }) => (
+        toObjectId !== "CONTENT-OBJ-LICENSE"
+      ));
+    }],
+    ["remove permission guard", "INVALID_CONTENT_GOVERNANCE_CONTRACT", (model) => {
+      const publish = moduleById(model, "CONTENT-001").actions
+        .find(({ id }) => id === "CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+      publish.relatedStateGuards = publish.relatedStateGuards.filter(({ targetObjectId }) => (
+        targetObjectId !== "CONTENT-OBJ-PERMISSION"
+      ));
+    }],
+    ["widen publisher actor", "INVALID_CONTENT_GOVERNANCE_CONTRACT", (model) => {
+      const publish = moduleById(model, "CONTENT-001").actions
+        .find(({ id }) => id === "CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+      const allow = publish.permissions.find(({ effect }) => effect === "ALLOW");
+      delete allow.dutyRef;
+      allow.roleRef = "ROLE-ACADEMIC";
+    }],
+    ["remove inactive failure", "INVALID_CONTENT_GOVERNANCE_CONTRACT", (model) => {
+      const content = moduleById(model, "CONTENT-001");
+      const publish = content.actions
+        .find(({ id }) => id === "CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+      publish.failureResults = publish.failureResults
+        .filter((code) => code !== "LICENSE_INACTIVE");
+      const removed = new Set(content.scenarios
+        .filter(({ actionId, resultCode }) => (
+          actionId === publish.id && resultCode === "LICENSE_INACTIVE"
+        ))
+        .map(({ id }) => id));
+      content.scenarios = content.scenarios.filter(({ id }) => !removed.has(id));
+      publish.scenarioIds = publish.scenarioIds.filter((id) => !removed.has(id));
+    }],
+  ];
+  for (const [name, code, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), code, name);
+  }
+});
+
+test("aligns exam import decisions and score lineage with teacher confirmation", () => {
+  const exam = moduleById(requirementModel, "EXM-001");
+  const score = exam.objects.find(({ id }) => id === "EXM-OBJ-SUBJECT-SCORE");
+  const scoreFieldById = new Map(score.fields.map((field) => [field.id, field]));
+  assert.deepEqual(
+    exam.objects.find(({ id }) => id === "EXM-OBJ-SCORE-IMPORT").states,
+    ["PENDING", "PASSED", "REJECTED", "ACCEPTED"],
+  );
+  assert.deepEqual(
+    exam.actions.find(({ id }) => id === "EXM-ACT-ACCEPT-SCORE-IMPORT").transition,
+    { from: "PASSED", to: "ACCEPTED" },
+  );
+  assert.deepEqual(scoreFieldById.get("EXM-SCORE-F-IMPORT-REF")?.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "EXM-OBJ-SCORE-IMPORT",
+  });
+  const createScore = exam.actions.find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE");
+  assert.ok(createScore.relatedStateGuards.some(({ targetObjectId, requiredState }) => (
+    targetObjectId === "EXM-OBJ-SCORE-IMPORT" && requiredState === "ACCEPTED"
+  )));
+  const teacherConfirmationWriters = exam.actions.filter(({ writes, outputFieldIds }) => (
+    writes === true && outputFieldIds.includes("EXM-SCORE-F-TEACHER-CONFIRMED-AT")
+  ));
+  assert.deepEqual(
+    teacherConfirmationWriters.map(({ id }) => id),
+    ["EXM-ACT-CONFIRM-SUBJECT-SCORE"],
+  );
+  const visibleAtWriters = exam.actions.filter(({ writes, outputFieldIds }) => (
+    writes === true && outputFieldIds.includes("EXM-SCORE-F-VISIBLE-AT")
+  ));
+  assert.deepEqual(visibleAtWriters.map(({ id }) => id), ["EXM-ACT-PUBLISH-SUBJECT-SCORE"]);
+  for (const actionId of [
+    "EXM-ACT-CONFIRM-SUBJECT-SCORE",
+    "EXM-ACT-REJECT-SUBJECT-SCORE",
+    "EXM-ACT-REVISE-REJECTED-SUBJECT-SCORE",
+  ]) assert.ok(exam.actions.some(({ id }) => id === actionId), actionId);
+  const confirm = exam.actions.find(({ id }) => id === "EXM-ACT-CONFIRM-SUBJECT-SCORE");
+  assert.ok(confirm.permissions.some(({ effect, dutyRef }) => (
+    effect === "ALLOW" && dutyRef === "DUTY-SUBJECT-TEACHER"
+  )));
+});
+
+test("rejects fail-open exam import lineage and teacher decision mutations", () => {
+  const mutations = [
+    ["accept unpassed import", "INVALID_EXAM_GOVERNANCE_CONTRACT", (model) => {
+      moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-ACCEPT-SCORE-IMPORT")
+        .transition.from = "PENDING";
+    }],
+    ["retarget score creation", "MISSING_TASK8_CONTRACT", (model) => {
+      moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE")
+        .targetObjectId = "EXM-OBJ-SCORE-IMPORT";
+    }],
+    ["remove score import relationship", "INVALID_EXAM_GOVERNANCE_CONTRACT", (model) => {
+      const exam = moduleById(model, "EXM-001");
+      exam.relationships = exam.relationships.filter(({ toObjectId }) => (
+        toObjectId !== "EXM-OBJ-SCORE-IMPORT"
+      ));
+    }],
+    ["remove passed import guard", "INVALID_EXAM_GOVERNANCE_CONTRACT", (model) => {
+      delete moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE").relatedStateGuards;
+    }],
+    ["create teacher confirmation time", "INVALID_EXAM_GOVERNANCE_CONTRACT", (model) => {
+      moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE")
+        .outputFieldIds.push("EXM-SCORE-F-TEACHER-CONFIRMED-AT");
+    }],
+    ["create student visibility time", "INVALID_EXAM_GOVERNANCE_CONTRACT", (model) => {
+      moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE")
+        .outputFieldIds.push("EXM-SCORE-F-VISIBLE-AT");
+    }],
+    ["widen teacher confirmation", "INVALID_EXAM_GOVERNANCE_CONTRACT", (model) => {
+      const confirm = moduleById(model, "EXM-001").actions
+        .find(({ id }) => id === "EXM-ACT-CONFIRM-SUBJECT-SCORE");
+      const allow = confirm.permissions.find(({ effect }) => effect === "ALLOW");
+      delete allow.dutyRef;
+      allow.roleRef = "ROLE-ACADEMIC";
+    }],
+    ["delete reject path", "MISSING_TASK8_CONTRACT", (model) => {
+      const exam = moduleById(model, "EXM-001");
+      exam.actions = exam.actions.filter(({ id }) => id !== "EXM-ACT-REJECT-SUBJECT-SCORE");
+    }],
+  ];
+  for (const [name, code, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), code, name);
+  }
+});
+
+test("pins schedule candidates to immutable complete constraint snapshots", () => {
+  const schedule = moduleById(requirementModel, "SCH-001");
+  const snapshot = schedule.objects.find(({ id }) => id === "SCH-OBJ-CONSTRAINT-SNAPSHOT");
+  assert.ok(snapshot);
+  assert.deepEqual(snapshot.states, ["DRAFT", "ACTIVE", "REPLACED"]);
+  const items = snapshot.fields
+    .find(({ id }) => id === "SCH-CONSTRAINT-SNAPSHOT-F-ITEMS");
+  assert.equal(items?.dataType, "JSON");
+  assert.equal(items?.mutability, "IMMUTABLE");
+  assert.deepEqual(items?.snapshotItemContract, {
+    sourceObjectId: "SCH-OBJ-CONSTRAINT",
+    sourceVersionFieldId: "SCH-CONSTRAINT-F-VERSION",
+    requiredKeys: ["constraintId", "constraintVersion", "kind", "hardness"],
+    groupBy: "kind",
+    requiredKindCodes: [
+      "TEACHER_AVAILABILITY",
+      "CLASS_PERIOD",
+      "COURSE_LOAD",
+      "ROOM_CAPACITY",
+    ],
+    perKindCardinality: "EXACTLY_ONE",
+  });
+  const constraintIds = snapshot.fields
+    .find(({ id }) => id === "SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS");
+  assert.equal(constraintIds?.dataType, "STRING_ARRAY");
+  assert.equal(constraintIds?.mutability, "IMMUTABLE");
+  assert.equal(constraintIds?.idempotencyRole, "FANOUT_SET");
+  assert.equal(
+    snapshot.fields.find(({ id }) => id === "SCH-CONSTRAINT-SNAPSHOT-F-HASH")?.mutability,
+    "IMMUTABLE",
+  );
+  assert.equal(
+    snapshot.fields.find(({ id }) => id === "SCH-CONSTRAINT-SNAPSHOT-F-VERSION")
+      ?.idempotencyRole,
+    "OBJECT_VERSION",
+  );
+  const createSnapshot = schedule.actions
+    .find(({ id }) => id === "SCH-ACT-CREATE-CONSTRAINT-SNAPSHOT");
+  assert.deepEqual(createSnapshot?.inputFieldIds, ["SCH-CONSTRAINT-SNAPSHOT-F-ITEMS"]);
+  assert.deepEqual(createSnapshot?.outputFieldIds, [
+    "SCH-CONSTRAINT-SNAPSHOT-F-ID",
+    "SCH-CONSTRAINT-SNAPSHOT-F-CONSTRAINT-IDS",
+    "SCH-CONSTRAINT-SNAPSHOT-F-HASH",
+    "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+    "SCH-CONSTRAINT-SNAPSHOT-F-STATUS",
+  ]);
+  const activateSnapshot = schedule.actions
+    .find(({ id }) => id === "SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT");
+  assert.deepEqual(activateSnapshot?.transition, { from: "DRAFT", to: "ACTIVE" });
+  assert.deepEqual(activateSnapshot?.outputFieldIds, [
+    "SCH-CONSTRAINT-SNAPSHOT-F-STATUS",
+    "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+  ]);
+  const replaceSnapshot = schedule.actions
+    .find(({ id }) => id === "SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT");
+  assert.deepEqual(replaceSnapshot?.transition, { from: "ACTIVE", to: "REPLACED" });
+  assert.deepEqual(replaceSnapshot?.outputFieldIds, [
+    "SCH-CONSTRAINT-SNAPSHOT-F-STATUS",
+    "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+  ]);
+
+  const candidate = schedule.objects.find(({ id }) => id === "SCH-OBJ-CANDIDATE");
+  const fieldById = new Map(candidate.fields.map((field) => [field.id, field]));
+  const expectedBindings = [
+    {
+      refFieldId: "SCH-CANDIDATE-F-CALENDAR-REF",
+      versionFieldId: "SCH-CANDIDATE-F-CALENDAR-VERSION",
+      targetObjectId: "SCH-OBJ-CALENDAR",
+      targetVersionFieldId: "SCH-CALENDAR-F-VERSION",
+    },
+    {
+      refFieldId: "SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF",
+      versionFieldId: "SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION",
+      targetObjectId: "SCH-OBJ-CONSTRAINT-SNAPSHOT",
+      targetVersionFieldId: "SCH-CONSTRAINT-SNAPSHOT-F-VERSION",
+    },
+  ];
+  for (const binding of expectedBindings) {
+    assert.deepEqual(fieldById.get(binding.refFieldId)?.valueSource, {
+      kind: "OBJECT_REF",
+      targetObjectId: binding.targetObjectId,
+    });
+    assert.deepEqual(fieldById.get(binding.refFieldId)?.versionBinding, {
+      versionFieldId: binding.versionFieldId,
+      targetVersionFieldId: binding.targetVersionFieldId,
+    });
+    assert.ok(candidate.lineageBindings.some((candidateBinding) => (
+      JSON.stringify(candidateBinding) === JSON.stringify(binding)
+    )), binding.refFieldId);
+  }
+  assert.deepEqual(candidate.lineageBindings, expectedBindings);
+  assert.ok(schedule.actions.find(({ id }) => id === "SCH-ACT-GENERATE-CANDIDATE")
+    ?.outputFieldIds.includes("SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION"));
+});
+
+test("binds schedule source producers and candidate rechecks to stale prior candidates", () => {
+  const schedule = moduleById(requirementModel, "SCH-001");
+  const stale = schedule.actions.find(({ id }) => id === "SCH-ACT-MARK-CANDIDATE-STALE");
+  assert.equal(stale.executionMode, "SYSTEM_EVENT");
+  assert.deepEqual(stale.trigger, {
+    kind: "EVENT",
+    eventId: "EVT-SCH-SOURCE-VERSION-CHANGED",
+  });
+  assert.equal(Object.hasOwn(stale, "clients"), false);
+  assert.ok(stale.permissions.some(({ effect, actorRef }) => (
+    effect === "ALLOW" && actorRef === "SYSTEM"
+  )));
+  const sourceEvent = events.find(({ id }) => id === "EVT-SCH-SOURCE-VERSION-CHANGED");
+  assert.deepEqual(sourceEvent?.triggeredActionIds, ["SCH-ACT-MARK-CANDIDATE-STALE"]);
+  assert.deepEqual(sourceEvent?.producerActionIds, [
+    "SCH-ACT-PUBLISH-CALENDAR",
+    "SCH-ACT-ACTIVATE-CONSTRAINT-SNAPSHOT",
+    "SCH-ACT-REPLACE-CONSTRAINT-SNAPSHOT",
+  ]);
+  const expectedRecheck = {
+    versionFieldIds: [
+      "SCH-CANDIDATE-F-CALENDAR-VERSION",
+      "SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-VERSION",
+    ],
+    hardGate: {
+      fieldId: "SCH-CANDIDATE-F-HARD-CHECK",
+      requiredCode: "PASS",
+    },
+    softGate: {
+      fieldId: "SCH-CANDIDATE-F-SOFT-CONSTRAINT-ACKNOWLEDGED",
+      requiredValue: true,
+    },
+  };
+  for (const actionId of ["SCH-ACT-CONFIRM-CANDIDATE", "SCH-ACT-PUBLISH-CANDIDATE"]) {
+    const action = schedule.actions.find(({ id }) => id === actionId);
+    assert.ok(action.failureResults.includes("SOURCE_VERSION_STALE"), actionId);
+    assert.equal(action.relatedStateGuards.length, 2, actionId);
+    assert.deepEqual(action.sourceRecheck, expectedRecheck, actionId);
+  }
+});
+
+test("rejects incomplete direct or unbound schedule snapshot contracts", () => {
+  const mutations = [
+    ["missing snapshot kind", (model) => {
+      const snapshot = moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CONSTRAINT-SNAPSHOT");
+      snapshot?.fields.find(({ id }) => id === "SCH-CONSTRAINT-SNAPSHOT-F-ITEMS")
+        ?.snapshotItemContract?.requiredKindCodes.pop();
+    }],
+    ["duplicate snapshot kind", (model) => {
+      const snapshot = moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CONSTRAINT-SNAPSHOT");
+      const kinds = snapshot?.fields
+        .find(({ id }) => id === "SCH-CONSTRAINT-SNAPSHOT-F-ITEMS")
+        ?.snapshotItemContract?.requiredKindCodes;
+      if (kinds?.length) kinds.push(kinds[0]);
+    }],
+    ["missing snapshot version", (model) => {
+      const snapshot = moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CONSTRAINT-SNAPSHOT");
+      if (snapshot) snapshot.fields = snapshot.fields.filter(({ id }) => (
+        id !== "SCH-CONSTRAINT-SNAPSHOT-F-VERSION"
+      ));
+    }],
+    ["missing snapshot hash", (model) => {
+      const snapshot = moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CONSTRAINT-SNAPSHOT");
+      if (snapshot) snapshot.fields = snapshot.fields.filter(({ id }) => (
+        id !== "SCH-CONSTRAINT-SNAPSHOT-F-HASH"
+      ));
+    }],
+    ["candidate pins a direct constraint", (model) => {
+      const ref = moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CANDIDATE")?.fields
+        .find(({ id }) => id === "SCH-CANDIDATE-F-CONSTRAINT-SNAPSHOT-REF");
+      if (ref) {
+        ref.valueSource.targetObjectId = "SCH-OBJ-CONSTRAINT";
+        ref.versionBinding.targetVersionFieldId = "SCH-CONSTRAINT-F-VERSION";
+      }
+    }],
+    ["missing source producer", (model) => {
+      const event = model.events.find(({ id }) => id === "EVT-SCH-SOURCE-VERSION-CHANGED");
+      if (event?.producerActionIds) event.producerActionIds = event.producerActionIds.slice(1);
+    }],
+    ["wrong source producer", (model) => {
+      const event = model.events.find(({ id }) => id === "EVT-SCH-SOURCE-VERSION-CHANGED");
+      if (event) event.producerActionIds = ["SCH-ACT-CREATE-CALENDAR"];
+    }],
+    ["confirm omits snapshot guard", (model) => {
+      const confirm = moduleById(model, "SCH-001").actions
+        .find(({ id }) => id === "SCH-ACT-CONFIRM-CANDIDATE");
+      confirm.relatedStateGuards = confirm.relatedStateGuards.filter(({ targetObjectId }) => (
+        targetObjectId !== "SCH-OBJ-CONSTRAINT-SNAPSHOT"
+      ));
+    }],
+    ["publish omits snapshot guard", (model) => {
+      const publish = moduleById(model, "SCH-001").actions
+        .find(({ id }) => id === "SCH-ACT-PUBLISH-CANDIDATE");
+      publish.relatedStateGuards = publish.relatedStateGuards.filter(({ targetObjectId }) => (
+        targetObjectId !== "SCH-OBJ-CONSTRAINT-SNAPSHOT"
+      ));
+    }],
+  ];
+  const undetected = [];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    const errors = validateRequirementModel(model);
+    if (!errors.some((error) => error.startsWith("INVALID_SCHEDULE_SOURCE_CONTRACT"))) {
+      undetected.push(name);
+    }
+  }
+  assert.deepEqual(undetected, []);
+});
+
+test("pins generated assignment drafts to confirmed lesson versions and exact HW inputs", () => {
+  const preparation = moduleById(requirementModel, "PREP-001");
+  const draft = preparation.objects.find(({ id }) => id === "PREP-OBJ-ASSIGNMENT-DRAFT");
+  const lessonRef = draft.fields.find(({ id }) => id === "PREP-DRAFT-F-SOURCE-LESSON-REF");
+  assert.deepEqual(lessonRef?.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "PREP-OBJ-LESSON-PLAN",
+  });
+  assert.deepEqual(lessonRef?.versionBinding, {
+    versionFieldId: "PREP-DRAFT-F-SOURCE-LESSON-VERSION",
+    targetVersionFieldId: "PREP-LESSON-F-VERSION",
+  });
+  const generate = preparation.actions
+    .find(({ id }) => id === "PREP-ACT-GENERATE-ASSIGNMENT-DRAFT");
+  assert.ok(generate.relatedStateGuards.some(({ targetObjectId, requiredState }) => (
+    targetObjectId === "PREP-OBJ-LESSON-PLAN" && requiredState === "CONFIRMED"
+  )));
+  const confirm = preparation.actions
+    .find(({ id }) => id === "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF");
+  const formalAction = moduleById(requirementModel, "HW-001").actions
+    .find(({ id }) => id === confirm.handoffContract.formalActionId);
+  assert.deepEqual(
+    confirm.handoffContract.formalInputFieldIds,
+    formalAction.inputFieldIds,
+  );
+  assert.equal(confirm.handoffContract.payloadFieldId, "PREP-DRAFT-F-CONTENT");
+});
+
+test("rejects fail-open schedule and preparation lineage mutations", () => {
+  const mutations = [
+    ["remove schedule lineage", "INVALID_SCHEDULE_SOURCE_CONTRACT", (model) => {
+      moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CANDIDATE").lineageBindings = [];
+    }],
+    ["make stale user driven", "INVALID_SCHEDULE_SOURCE_CONTRACT", (model) => {
+      const stale = moduleById(model, "SCH-001").actions
+        .find(({ id }) => id === "SCH-ACT-MARK-CANDIDATE-STALE");
+      stale.executionMode = "USER_TASK";
+    }],
+    ["remove publish stale failure", "INVALID_SCHEDULE_SOURCE_CONTRACT", (model) => {
+      const publish = moduleById(model, "SCH-001").actions
+        .find(({ id }) => id === "SCH-ACT-PUBLISH-CANDIDATE");
+      publish.failureResults = publish.failureResults
+        .filter((code) => code !== "SOURCE_VERSION_STALE");
+    }],
+    ["remove kind-specific payload", "INVALID_SCHEDULE_SOURCE_CONTRACT", (model) => {
+      const constraint = moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CONSTRAINT");
+      constraint.fields = constraint.fields.filter(({ id }) => (
+        id !== "SCH-CONSTRAINT-F-ROOM-CAPACITY-RULES"
+      ));
+    }],
+    ["misbind constraint kind", "INVALID_SCHEDULE_SOURCE_CONTRACT", (model) => {
+      moduleById(model, "SCH-001").actions
+        .find(({ id }) => id === "SCH-ACT-CREATE-ROOM-CAPACITY-CONSTRAINT")
+        .acceptedInputValues[0].codes = ["COURSE_LOAD"];
+    }],
+    ["remove confirmed lesson guard", "INVALID_PREPARATION_HANDOFF_CONTRACT", (model) => {
+      delete moduleById(model, "PREP-001").actions
+        .find(({ id }) => id === "PREP-ACT-GENERATE-ASSIGNMENT-DRAFT")
+        .relatedStateGuards;
+    }],
+    ["drop formal HW input", "INVALID_PREPARATION_HANDOFF_CONTRACT", (model) => {
+      moduleById(model, "PREP-001").actions
+        .find(({ id }) => id === "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF")
+        .handoffContract.formalInputFieldIds = [];
+    }],
+  ];
+  for (const [name, code, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), code, name);
+  }
+});
+
+test("pins PLAT support cases and use to active versioned AUD sessions", () => {
+  const audit = moduleById(requirementModel, "AUD-001");
+  const request = audit.objects.find(({ id }) => id === "AUD-OBJ-ACCESS-REQUEST");
+  const session = audit.objects.find(({ id }) => id === "AUD-OBJ-ACCESS-SESSION");
+  assert.equal(
+    request.fields.find(({ id }) => id === "AUD-REQUEST-F-VERSION")?.idempotencyRole,
+    "OBJECT_VERSION",
+  );
+  assert.equal(
+    session.fields.find(({ id }) => id === "AUD-SESSION-F-VERSION")?.idempotencyRole,
+    "OBJECT_VERSION",
+  );
+  assert.deepEqual(
+    session.fields.find(({ id }) => id === "AUD-SESSION-F-REQUEST-ID")?.versionBinding,
+    {
+      versionFieldId: "AUD-SESSION-F-REQUEST-VERSION",
+      targetVersionFieldId: "AUD-REQUEST-F-VERSION",
+    },
+  );
+  const openSession = audit.actions.find(({ id }) => id === "AUD-ACT-OPEN-SESSION");
+  assert.ok(openSession.inputFieldIds.includes("AUD-SESSION-F-REQUEST-VERSION"));
+  assert.ok(openSession.outputFieldIds.includes("AUD-SESSION-F-VERSION"));
+  assert.ok(openSession.outputFieldIds.includes("AUD-SESSION-F-AUTHORIZED-OPERATOR-ID"));
+  assert.ok(openSession.relatedStateGuards.some(({ targetObjectId, requiredState }) => (
+    targetObjectId === "AUD-OBJ-ACCESS-REQUEST" && requiredState === "APPROVED"
+  )));
+
+  const platform = moduleById(requirementModel, "PLAT-001");
+  const support = platform.objects.find(({ id }) => id === "PLAT-OBJ-SUPPORT-CASE");
+  const sessionRef = support.fields
+    .find(({ id }) => id === "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF");
+  assert.deepEqual(sessionRef?.valueSource, {
+    kind: "OBJECT_REF",
+    targetObjectId: "AUD-OBJ-ACCESS-SESSION",
+  });
+  assert.deepEqual(sessionRef?.versionBinding, {
+    versionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+    targetVersionFieldId: "AUD-SESSION-F-VERSION",
+  });
+  assert.deepEqual(support.lineageBindings, [{
+    refFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF",
+    versionFieldId: "PLAT-SUPPORT-CASE-F-AUD-SESSION-VERSION",
+    targetObjectId: "AUD-OBJ-ACCESS-SESSION",
+    targetVersionFieldId: "AUD-SESSION-F-VERSION",
+  }]);
+  const caseActionIds = platform.actions
+    .filter(({ targetObjectId }) => targetObjectId === "PLAT-OBJ-SUPPORT-CASE")
+    .map(({ id }) => id);
+  assert.deepEqual(caseActionIds, [
+    "PLAT-ACT-CREATE-SUPPORT-CASE",
+    "PLAT-ACT-CLOSE-SUPPORT-CASE",
+    "PLAT-ACT-USE-SUPPORT-ACCESS",
+  ]);
+  for (const actionId of ["PLAT-ACT-CREATE-SUPPORT-CASE", "PLAT-ACT-USE-SUPPORT-ACCESS"]) {
+    const action = platform.actions.find(({ id }) => id === actionId);
+    assert.ok(action.relatedStateGuards.some(({ targetObjectId, requiredState }) => (
+      targetObjectId === "AUD-OBJ-ACCESS-SESSION" && requiredState === "ACTIVE"
+    )), actionId);
+  }
+});
+
+test("rejects duplicated PLAT authorization and fail-open AUD session use", () => {
+  const accessGuardKeys = [
+    "sessionRefFieldId",
+    "pinnedSessionVersionFieldId",
+    "authorizedActorFieldId",
+    "scopeFieldId",
+    "expiresAtFieldId",
+    "stateFieldId",
+    "requiredState",
+    "sourceVersionFieldId",
+    "timeComparison",
+    "actorBinding",
+    "scopeBinding",
+    "auditActionId",
+    "auditOrdering",
+  ];
+  const mutations = [
+    ...[
+      "PLAT-ACT-REQUEST-SUPPORT-ACCESS",
+      "PLAT-ACT-APPROVE-SUPPORT-ACCESS",
+    ].map((legacyActionId) => [`restore ${legacyActionId}`, (model) => {
+      const platform = moduleById(model, "PLAT-001");
+      if (!platform.actions.some(({ id }) => id === legacyActionId)) {
+        const template = platform.actions
+          .find(({ id }) => id === "PLAT-ACT-CREATE-SUPPORT-CASE");
+        platform.actions.push({ ...structuredClone(template), id: legacyActionId });
+      }
+    }]),
+    ["remove AUD authorized operator", (model) => {
+      const session = moduleById(model, "AUD-001").objects
+        .find(({ id }) => id === "AUD-OBJ-ACCESS-SESSION");
+      session.fields = session.fields.filter(({ id }) => (
+        id !== "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID"
+      ));
+    }],
+    ["derive AUD operator from non-requester", (model) => {
+      const operator = moduleById(model, "AUD-001").objects
+        .find(({ id }) => id === "AUD-OBJ-ACCESS-SESSION")?.fields
+        .find(({ id }) => id === "AUD-SESSION-F-AUTHORIZED-OPERATOR-ID");
+      if (operator?.sourceBinding) operator.sourceBinding.sourceFieldId = "AUD-REQUEST-F-SCOPE";
+    }],
+    ...accessGuardKeys.map((key) => [`remove use guard ${key}`, (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      delete use.accessGuard?.[key];
+    }]),
+    ["audit after data return", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      if (use.accessGuard) use.accessGuard.auditOrdering = "AFTER_DATA_RETURN";
+    }],
+    ["missing canonical failure", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.failureResults = use.failureResults.filter((code) => code !== "ACCESS_EXPIRED");
+    }],
+    ["extra synonymous failure", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.failureResults.push("ACCESS_NOT_ACTIVE");
+    }],
+    ["duplicate canonical failure", (model) => {
+      const use = moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS");
+      use.failureResults.push("ACCESS_EXPIRED");
+    }],
+  ];
+  const undetected = [];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    const errors = validateRequirementModel(model);
+    if (!errors.some((error) => error.startsWith("INVALID_PLATFORM_AUD_CONTRACT"))) {
+      undetected.push(name);
+    }
+  }
+  assert.deepEqual(undetected, []);
+});
+
+test("rejects fail-open PLAT AUD lineage and lifecycle mutations", () => {
+  const mutations = [
+    ["remove AUD request version", (model) => {
+      const request = moduleById(model, "AUD-001").objects
+        .find(({ id }) => id === "AUD-OBJ-ACCESS-REQUEST");
+      request.fields = request.fields.filter(({ id }) => id !== "AUD-REQUEST-F-VERSION");
+    }],
+    ["retarget PLAT session", (model) => {
+      const ref = moduleById(model, "PLAT-001").objects
+        .find(({ id }) => id === "PLAT-OBJ-SUPPORT-CASE").fields
+        .find(({ id }) => id === "PLAT-SUPPORT-CASE-F-AUD-SESSION-REF");
+      if (ref) ref.valueSource.targetObjectId = "AUD-OBJ-ACCESS-REQUEST";
+    }],
+    ["remove use session guard", (model) => {
+      delete moduleById(model, "PLAT-001").actions
+        .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS")
+        .relatedStateGuards;
+    }],
+    ["misderive projected operator", (model) => {
+      const operator = moduleById(model, "PLAT-001").objects
+        .find(({ id }) => id === "PLAT-OBJ-SUPPORT-CASE").fields
+        .find(({ id }) => id === "PLAT-SUPPORT-CASE-F-AUTHORIZED-OPERATOR-ID");
+      if (operator?.sourceBinding) {
+        operator.sourceBinding.sourceFieldId = "AUD-SESSION-F-SCOPE";
+      }
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_PLATFORM_AUD_CONTRACT", name);
+  }
+});
+
+const TASK8_BUSINESS_FAILURES = new Map([
+  ["CONTENT-ACT-PUBLISH-QUESTION-VERSION", [
+    "LICENSE_INACTIVE",
+    "CONTENT_PERMISSION_INACTIVE",
+  ]],
+  ["EXM-ACT-VALIDATE-SCORE-IMPORT", ["IMPORT_REJECTED"]],
+  ["EXM-ACT-ACCEPT-SCORE-IMPORT", ["IMPORT_REJECTED"]],
+  ["EXM-ACT-CREATE-SUBJECT-SCORE", ["IMPORT_REJECTED"]],
+  ["EXM-ACT-CONFIRM-SUBJECT-SCORE", ["SCORE_REJECTED"]],
+  ["EXM-ACT-PUBLISH-SUBJECT-SCORE", [
+    "SCORE_REJECTED",
+    "TEACHER_CONFIRMATION_REQUIRED",
+  ]],
+  ["EXM-ACT-VIEW-PUBLISHED-SCORE", [
+    "RESULT_NOT_PUBLISHED",
+    "RESULT_NOT_VISIBLE",
+  ]],
+  ["SCH-ACT-GENERATE-CANDIDATE", ["SOURCE_VERSION_STALE"]],
+  ["SCH-ACT-CONFIRM-CANDIDATE", [
+    "HARD_CONSTRAINT_FAILED",
+    "SOURCE_VERSION_STALE",
+  ]],
+  ["SCH-ACT-PUBLISH-CANDIDATE", ["SOURCE_VERSION_STALE"]],
+  ["PREP-ACT-GENERATE-ASSIGNMENT-DRAFT", ["LESSON_STALE"]],
+  ["PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF", [
+    "LESSON_STALE",
+    "HANDOFF_INCOMPLETE",
+  ]],
+  ["PLAT-ACT-CREATE-SUPPORT-CASE", [
+    "ACCESS_INACTIVE",
+    "ACCESS_EXPIRED",
+    "ACCESS_OTHER_RECORD",
+    "ACCESS_SCOPE_DENIED",
+  ]],
+  ["PLAT-ACT-USE-SUPPORT-ACCESS", [
+    "ACCESS_INACTIVE",
+    "ACCESS_EXPIRED",
+    "ACCESS_OTHER_RECORD",
+    "ACCESS_SCOPE_DENIED",
+    "AUDIT_FAILED",
+  ]],
+]);
+
+test("declares action-specific Task 8 business failure taxonomies", () => {
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+  for (const [actionId, requiredCodes] of TASK8_BUSINESS_FAILURES) {
+    const action = actionById.get(actionId);
+    assert.ok(action, actionId);
+    for (const code of requiredCodes) {
+      assert.ok(action.failureResults.includes(code), `${actionId}:${code}`);
+    }
+  }
+});
+
+test("rejects generic substitution for Task 8 business failures", () => {
+  for (const [actionId, requiredCodes] of TASK8_BUSINESS_FAILURES) {
+    for (const code of requiredCodes) {
+      const model = structuredClone(requirementModel);
+      const module = model.modules.find(({ actions }) => (
+        actions.some(({ id }) => id === actionId)
+      ));
+      const action = module.actions.find(({ id }) => id === actionId);
+      action.failureResults = action.failureResults.filter((value) => value !== code);
+      const removedScenarioIds = new Set(module.scenarios
+        .filter(({ actionId: scenarioActionId, resultCode }) => (
+          scenarioActionId === actionId && resultCode === code
+        ))
+        .map(({ id }) => id));
+      module.scenarios = module.scenarios.filter(({ id }) => !removedScenarioIds.has(id));
+      action.scenarioIds = action.scenarioIds.filter((id) => !removedScenarioIds.has(id));
+      if (!action.failureResults.includes("VALIDATION_FAILED")) {
+        action.failureResults.push("VALIDATION_FAILED");
+        const scenarioId = `${actionId}-SCN-VALIDATION_FAILED`;
+        action.scenarioIds.push(scenarioId);
+        module.scenarios.push({
+          id: scenarioId,
+          kind: "FAILURE",
+          resultCode: "VALIDATION_FAILED",
+          actionId,
+          given: "generic validation fails",
+          when: "the actor invokes the action",
+          then: {
+            expectedData: "generic validation failure",
+            expectedState: { mode: "UNCHANGED" },
+            expectedPermission: "DENY",
+            expectedVisibility: "no data outside the authorized scope",
+          },
+          ...(action.executionMode === "USER_TASK"
+            ? { pageId: module.pages.find(({ actionIds }) => actionIds.includes(actionId))?.id }
+            : { trigger: structuredClone(action.trigger) }),
+        });
+      }
+      assertHasCode(
+        validateRequirementModel(model),
+        "INVALID_TASK8_BUSINESS_FAILURE_CONTRACT",
+        `${actionId}:${code}`,
+      );
+    }
+  }
+});
+
+test("returns stable business errors for malformed failure result collections", () => {
+  const malformedValues = [null, 42, "ACCESS_INACTIVE", { code: "ACCESS_INACTIVE" }];
+  for (const malformed of malformedValues) {
+    const model = structuredClone(requirementModel);
+    moduleById(model, "PLAT-001").actions
+      .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS")
+      .failureResults = malformed;
+    let errors;
+    assert.doesNotThrow(() => { errors = validateRequirementModel(model); });
+    assertHasCode(errors, "INVALID_TASK8_BUSINESS_FAILURE_CONTRACT");
+    assert.deepEqual(errors, validateRequirementModel(model));
+  }
+  for (const malformed of malformedValues) {
+    const model = structuredClone(requirementModel);
+    moduleById(model, "PLAT-001").actions
+      .find(({ id }) => id === "PLAT-ACT-USE-SUPPORT-ACCESS")
+      .failureSemantics = malformed;
+    let errors;
+    assert.doesNotThrow(() => { errors = validateRequirementModel(model); });
+    assertHasCode(errors, "INVALID_TASK8_BUSINESS_FAILURE_CONTRACT");
+    assert.deepEqual(errors, validateRequirementModel(model));
+  }
+});
+
+test("does not throw on malformed nested Task 8 governance contracts", () => {
+  const mutations = [
+    ["INVALID_CONTENT_GOVERNANCE_CONTRACT", (model) => {
+      moduleById(model, "CONTENT-001").objects
+        .find(({ id }) => id === "CONTENT-OBJ-QUESTION-VERSION")
+        .lineageBindings = { invalid: true };
+    }],
+    ["INVALID_EXAM_GOVERNANCE_CONTRACT", (model) => {
+      moduleById(model, "EXM-001").objects
+        .find(({ id }) => id === "EXM-OBJ-SCORE-IMPORT").states = null;
+    }],
+    ["INVALID_SCHEDULE_SOURCE_CONTRACT", (model) => {
+      moduleById(model, "SCH-001").objects
+        .find(({ id }) => id === "SCH-OBJ-CONSTRAINT").exclusiveSourceGroups = [null, 7];
+    }],
+    ["INVALID_PREPARATION_HANDOFF_CONTRACT", (model) => {
+      moduleById(model, "PREP-001").actions
+        .find(({ id }) => id === "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF")
+        .handoffContract = "invalid";
+    }],
+    ["INVALID_PLATFORM_AUD_CONTRACT", (model) => {
+      moduleById(model, "PLAT-001").objects
+        .find(({ id }) => id === "PLAT-OBJ-SUPPORT-CASE")
+        .states = { invalid: true };
+    }],
+  ];
+  for (const [code, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    let errors;
+    assert.doesNotThrow(() => { errors = validateRequirementModel(model); }, code);
+    assertHasCode(errors, code);
+  }
+});
+
+test("keeps the Zhixu Task 8 profile mandatory after coordinated contract deletion", () => {
+  const model = structuredClone(requirementModel);
+  const task8ModuleIds = new Set([
+    "PREP-001",
+    "CONTENT-001",
+    "EXM-001",
+    "SCH-001",
+    "PLAT-001",
+    "REPORT-001",
+  ]);
+  model.modules = model.modules.filter(({ id }) => !task8ModuleIds.has(id));
+  model.optionSets = model.optionSets.filter(({ id }) => !id.startsWith("OPT-EXT-"));
+  model.events = model.events.filter(({ id }) => ![
+    "EVT-EXM-SCORE-PUBLISHED",
+    "EVT-SCH-SOURCE-VERSION-CHANGED",
+  ].includes(id));
+  model.baselineDecisions = model.baselineDecisions.filter(({ id }) => ![
+    "BASE-001",
+    "BASE-010",
+  ].includes(id));
+  for (const module of model.modules) {
+    module.baselineDecisionIds = module.baselineDecisionIds.filter((id) => ![
+      "BASE-001",
+      "BASE-010",
+    ].includes(id));
+  }
+  assertHasCode(validateRequirementModel(model), "MISSING_TASK8_CONTRACT");
+
+  model.profile = "GENERIC";
+  assertHasCode(validateRequirementModel(model), "INVALID_MODEL_PROFILE");
+  assertHasCode(validateRequirementModel(model), "MISSING_TASK8_CONTRACT");
+});
+
+test("returns a stable model profile error for malformed profile values", () => {
+  const model = structuredClone(requirementModel);
+  model.profile = { value: "ZHIXU_V2" };
+  let errors;
+  assert.doesNotThrow(() => { errors = validateRequirementModel(model); });
+  assertHasCode(errors, "INVALID_MODEL_PROFILE");
+});
+
+test("returns explicit specialized errors when Task 8 prerequisites are missing", () => {
+  const expectations = [
+    ["CONTENT-001", "INVALID_CONTENT_GOVERNANCE_CONTRACT"],
+    ["EXM-001", "INVALID_EXAM_GOVERNANCE_CONTRACT"],
+    ["SCH-001", "INVALID_SCHEDULE_SOURCE_CONTRACT"],
+    ["PREP-001", "INVALID_PREPARATION_HANDOFF_CONTRACT"],
+    ["PLAT-001", "INVALID_PLATFORM_AUD_CONTRACT"],
+  ];
+  for (const [moduleId, code] of expectations) {
+    const model = structuredClone(requirementModel);
+    model.modules = model.modules.filter(({ id }) => id !== moduleId);
+    assertHasCode(validateRequirementModel(model), code, moduleId);
+  }
+});
+
+test("requires ACCEPTED score imports before subject score creation", () => {
+  const exam = moduleById(requirementModel, "EXM-001");
+  const accept = exam.actions.find(({ id }) => id === "EXM-ACT-ACCEPT-SCORE-IMPORT");
+  const createScore = exam.actions.find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE");
+  assert.deepEqual(accept.transition, { from: "PASSED", to: "ACCEPTED" });
+  assert.ok(createScore.relatedStateGuards.some(({ targetObjectId, requiredState }) => (
+    targetObjectId === "EXM-OBJ-SCORE-IMPORT" && requiredState === "ACCEPTED"
+  )));
+
+  const model = structuredClone(requirementModel);
+  moduleById(model, "EXM-001").actions
+    .find(({ id }) => id === "EXM-ACT-CREATE-SUBJECT-SCORE")
+    .relatedStateGuards[0].requiredState = "PASSED";
+  assertHasCode(validateRequirementModel(model), "INVALID_EXAM_GOVERNANCE_CONTRACT");
+});
+
+test("models closed school subject and course content grants with context coverage", () => {
+  const content = moduleById(requirementModel, "CONTENT-001");
+  const grant = content.objects.find(({ id }) => id === "CONTENT-OBJ-PERMISSION");
+  const payloads = new Map([
+    ["SCHOOL", "CONTENT-PERMISSION-F-SCHOOL-ID"],
+    ["SUBJECT", "CONTENT-PERMISSION-F-SUBJECT-ID"],
+    ["COURSE", "CONTENT-PERMISSION-F-COURSE-ID"],
+  ]);
+  assert.deepEqual(
+    new Set((grant.exclusiveSourceGroups ?? []).map(({ id }) => id)),
+    new Set(payloads.keys()),
+  );
+  for (const [scopeCode, payloadFieldId] of payloads) {
+    const action = content.actions.find(({ acceptedInputValues }) => (
+      acceptedInputValues?.[0]?.codes?.[0] === scopeCode
+    ));
+    assert.ok(action, scopeCode);
+    assert.deepEqual(action.inputFieldIds, [
+      "CONTENT-PERMISSION-F-SCOPE",
+      payloadFieldId,
+      "CONTENT-PERMISSION-F-GRANTEE-ID",
+      "CONTENT-PERMISSION-F-EFFECTIVE-AT",
+      "CONTENT-PERMISSION-F-EXPIRES-AT",
+    ]);
+  }
+  for (const fieldId of [
+    "CONTENT-PERMISSION-F-GRANTEE-ID",
+    "CONTENT-PERMISSION-F-EFFECTIVE-AT",
+    "CONTENT-PERMISSION-F-EXPIRES-AT",
+  ]) assert.ok(grant.fields.some(({ id }) => id === fieldId), fieldId);
+
+  const publish = content.actions
+    .find(({ id }) => id === "CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+  assert.deepEqual(publish.permissionCoverage, {
+    grantRefFieldId: "CONTENT-QUESTION-F-PERMISSION-REF",
+    grantScopeFieldId: "CONTENT-PERMISSION-F-SCOPE",
+    contentContextFieldIds: {
+      schoolId: "CONTENT-QUESTION-F-SCHOOL-ID",
+      subjectId: "CONTENT-QUESTION-F-SUBJECT-ID",
+      courseId: "CONTENT-QUESTION-F-COURSE-ID",
+    },
+    grantContextFieldIds: {
+      schoolId: "CONTENT-PERMISSION-F-SCHOOL-ID",
+      subjectId: "CONTENT-PERMISSION-F-SUBJECT-ID",
+      courseId: "CONTENT-PERMISSION-F-COURSE-ID",
+    },
+    granteeFieldId: "CONTENT-PERMISSION-F-GRANTEE-ID",
+    effectiveAtFieldId: "CONTENT-PERMISSION-F-EFFECTIVE-AT",
+    expiresAtFieldId: "CONTENT-PERMISSION-F-EXPIRES-AT",
+    predicate: "ACTIVE_GRANT_COVERS_CONTENT_CONTEXT_AND_CURRENT_TIME",
+  });
+});
+
+test("rejects fail-open content grant payload and coverage mutations", () => {
+  const mutations = [
+    ["remove course payload", (model) => {
+      const grant = moduleById(model, "CONTENT-001").objects
+        .find(({ id }) => id === "CONTENT-OBJ-PERMISSION");
+      grant.fields = grant.fields.filter(({ id }) => id !== "CONTENT-PERMISSION-F-COURSE-ID");
+    }],
+    ["mispartition subject grant", (model) => {
+      const action = moduleById(model, "CONTENT-001").actions
+        .find(({ id }) => id === "CONTENT-ACT-CREATE-SUBJECT-PERMISSION");
+      if (action) action.acceptedInputValues[0].codes = ["SCHOOL"];
+    }],
+    ["remove publication coverage", (model) => {
+      delete moduleById(model, "CONTENT-001").actions
+        .find(({ id }) => id === "CONTENT-ACT-PUBLISH-QUESTION-VERSION")
+        .permissionCoverage;
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertHasCode(validateRequirementModel(model), "INVALID_CONTENT_GOVERNANCE_CONTRACT", name);
+  }
+});
+
+test("writes Task 8 phase fields only at their semantic stages", () => {
+  const expectedWriters = new Map([
+    ["PREP-ACTIVITY-F-EVIDENCE", ["PREP-ACT-RECORD-CLASSROOM-ACTIVITY"]],
+    ["EXM-EVENT-F-PUBLICATION-AT", ["EXM-ACT-PUBLISH-EVENT"]],
+    ["PLAT-PLAN-F-SCHOOL-CONFIRMED-AT", ["PLAT-ACT-CONFIRM-SERVICE-PLAN"]],
+  ]);
+  const actions = modules.flatMap((module) => module.actions);
+  for (const [fieldId, expectedActionIds] of expectedWriters) {
+    const writers = actions.filter(({ writes, outputFieldIds }) => (
+      writes === true && outputFieldIds.includes(fieldId)
+    ));
+    assert.deepEqual(writers.map(({ id }) => id), expectedActionIds, fieldId);
+  }
+});
+
+test("rejects early Task 8 phase-field writers", () => {
+  const mutations = [
+    ["PREP-ACT-PLAN-CLASSROOM-ACTIVITY", "PREP-ACTIVITY-F-EVIDENCE"],
+    ["EXM-ACT-CREATE-EVENT", "EXM-EVENT-F-PUBLICATION-AT"],
+    ["PLAT-ACT-CREATE-SERVICE-PLAN", "PLAT-PLAN-F-SCHOOL-CONFIRMED-AT"],
+  ];
+  for (const [actionId, fieldId] of mutations) {
+    const model = structuredClone(requirementModel);
+    const action = model.modules.flatMap((module) => module.actions)
+      .find(({ id }) => id === actionId);
+    if (!action.outputFieldIds.includes(fieldId)) action.outputFieldIds.push(fieldId);
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_TASK8_PHASE_FIELD_CONTRACT",
+      actionId,
+    );
+  }
+});
+
+test("maps every formal HW draft input exactly once through a closed PREP handoff", () => {
+  const prep = moduleById(requirementModel, "PREP-001");
+  const formal = moduleById(requirementModel, "HW-001").actions
+    .find(({ id }) => id === "HW-ACT-CREATE-DRAFT");
+  const confirm = prep.actions
+    .find(({ id }) => id === "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF");
+  assert.ok(confirm);
+  const contract = confirm.handoffContract;
+  assert.equal(contract.formalActionId, formal.id);
+  assert.equal(contract.payloadFieldId, "PREP-DRAFT-F-CONTENT");
+  assert.deepEqual(contract.formalInputFieldIds, formal.inputFieldIds);
+  assert.equal(new Set(contract.formalInputFieldIds).size, formal.inputFieldIds.length);
+  assert.equal(contract.fieldBindings.length, formal.inputFieldIds.length);
+  assert.deepEqual(
+    contract.fieldBindings.map(({ targetFieldId }) => targetFieldId),
+    formal.inputFieldIds,
+  );
+  assert.equal(new Set(contract.fieldBindings.map(({ targetFieldId }) => targetFieldId)).size, 15);
+  assert.deepEqual(new Set(contract.fieldBindings.map(({ sourceKind }) => sourceKind)), new Set([
+    "LESSON_FIELD",
+    "GENERATED_PAYLOAD",
+    "POLICY_DEFAULT",
+    "TEACHER_REQUIRED",
+  ]));
+  const lessonSources = new Set(contract.fieldBindings
+    .filter(({ sourceKind }) => sourceKind === "LESSON_FIELD")
+    .map(({ sourceFieldId }) => sourceFieldId));
+  assert.deepEqual(lessonSources, new Set([
+    "PREP-LESSON-F-TITLE",
+    "PREP-LESSON-F-SUBJECT",
+    "PREP-LESSON-F-COURSE",
+    "PREP-LESSON-F-RUBRIC-VERSION",
+    "PREP-LESSON-F-KNOWLEDGE-POINT-IDS",
+  ]));
+  const payload = prep.objects.find(({ id }) => id === "PREP-OBJ-ASSIGNMENT-DRAFT")
+    .fields.find(({ id }) => id === "PREP-DRAFT-F-CONTENT");
+  assert.equal(payload.handoffPayloadSchema.additionalProperties, false);
+  const payloadPaths = new Set(Object.keys(payload.handoffPayloadSchema.properties));
+  const boundPayloadPaths = new Set(contract.fieldBindings
+    .filter(({ sourceKind }) => ["GENERATED_PAYLOAD", "TEACHER_REQUIRED"].includes(sourceKind))
+    .map(({ payloadPath }) => payloadPath));
+  assert.deepEqual(payloadPaths, boundPayloadPaths);
+  assert.deepEqual(contract.completionRule, {
+    failureResult: "HANDOFF_INCOMPLETE",
+    requiredBindingCount: 15,
+    requireAllTeacherInputs: true,
+    rejectUnknownPayloadFields: true,
+  });
+  assert.equal(contract.requiredConfirmationDutyRef, "DUTY-SUBJECT-TEACHER");
+  assert.equal(contract.effectBoundary, "DRAFT_ONLY_UNTIL_FORMAL_HW_ACTION");
+});
+
+test("rejects incomplete duplicate or source-free PREP handoff mappings", () => {
+  const mutations = [
+    ["duplicate formal input", (contract) => {
+      contract.formalInputFieldIds.push(contract.formalInputFieldIds[0]);
+    }],
+    ["duplicate target binding", (contract) => {
+      contract.fieldBindings.push(structuredClone(contract.fieldBindings[0]));
+    }],
+    ["drop target binding", (contract) => {
+      contract.fieldBindings.pop();
+    }],
+    ["wrong lesson source", (contract) => {
+      const binding = contract.fieldBindings
+        .find(({ targetFieldId }) => targetFieldId === "HW-ASSIGNMENT-F-SUBJECT-ID");
+      binding.sourceFieldId = "PREP-LESSON-F-TITLE";
+    }],
+    ["downgrade teacher required", (contract) => {
+      const binding = contract.fieldBindings
+        .find(({ sourceKind }) => sourceKind === "TEACHER_REQUIRED");
+      binding.sourceKind = "GENERATED_PAYLOAD";
+    }],
+    ["drop payload schema property", (contract, model) => {
+      const payload = moduleById(model, "PREP-001").objects
+        .find(({ id }) => id === "PREP-OBJ-ASSIGNMENT-DRAFT").fields
+        .find(({ id }) => id === "PREP-DRAFT-F-CONTENT");
+      delete payload.handoffPayloadSchema.properties[contract.fieldBindings
+        .find(({ sourceKind }) => sourceKind === "TEACHER_REQUIRED").payloadPath];
+    }],
+    ["bypass teacher confirmation", (contract) => {
+      contract.requiredConfirmationDutyRef = "ROLE-TEACHER";
+    }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const model = structuredClone(requirementModel);
+    const confirm = moduleById(model, "PREP-001").actions
+      .find(({ id }) => id === "PREP-ACT-CONFIRM-ASSIGNMENT-HANDOFF");
+    assert.ok(confirm, name);
+    const contract = confirm.handoffContract;
+    mutate(contract, model);
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_PREPARATION_HANDOFF_CONTRACT",
+      name,
+    );
+  }
+});
+
+test("binds every Task 8 business failure to one authored causal predicate", () => {
+  const actionById = new Map(modules.flatMap((module) => (
+    module.actions.map((action) => [action.id, action])
+  )));
+  const scenarioById = new Map(modules.flatMap((module) => (
+    module.scenarios.map((scenario) => [scenario.id, scenario])
+  )));
+  for (const [actionId, codes] of TASK8_BUSINESS_FAILURES) {
+    const action = actionById.get(actionId);
+    assert.ok(Array.isArray(action.failureSemantics), actionId);
+    assert.equal(action.failureSemantics.length, codes.length, actionId);
+    for (const code of codes) {
+      const semantic = action.failureSemantics
+        .find(({ resultCode }) => resultCode === code);
+      assert.ok(semantic?.predicate, `${actionId}:${code}`);
+      const scenario = scenarioById.get(`${actionId}-SCN-${code}`);
+      assert.equal(scenario.failurePredicate, semantic.predicate, `${actionId}:${code}`);
+      assert.equal(scenario.given, semantic.given, `${actionId}:${code}`);
+      assert.equal(scenario.when, semantic.when, `${actionId}:${code}`);
+      assert.equal(scenario.then.expectedData, semantic.expectedData, `${actionId}:${code}`);
+    }
+  }
+});
+
+test("rejects unrelated prose predicates and undeclared Task 8 failures", () => {
+  const model = structuredClone(requirementModel);
+  for (const [actionId, codes] of TASK8_BUSINESS_FAILURES) {
+    const module = model.modules.find(({ actions }) => actions.some(({ id }) => id === actionId));
+    for (const code of codes) {
+      const scenario = module.scenarios.find(({ actionId: id, resultCode }) => (
+        id === actionId && resultCode === code
+      ));
+      scenario.failurePredicate = "UNRELATED_PREDICATE";
+      scenario.given = "unrelated given";
+      scenario.when = "unrelated when";
+      scenario.then.expectedData = "unrelated expected data";
+    }
+  }
+  assertHasCode(
+    validateRequirementModel(model),
+    "INVALID_TASK8_BUSINESS_FAILURE_CONTRACT",
+  );
+
+  const expanded = structuredClone(requirementModel);
+  const [actionId] = TASK8_BUSINESS_FAILURES.keys();
+  const module = expanded.modules.find(({ actions }) => actions.some(({ id }) => id === actionId));
+  const action = module.actions.find(({ id }) => id === actionId);
+  action.failureResults.push("UNDECLARED_TASK8_FAILURE");
+  action.failureSemantics.push({
+    resultCode: "UNDECLARED_TASK8_FAILURE",
+    predicate: "UNDECLARED_PREDICATE",
+    given: "undeclared given",
+    when: "undeclared when",
+    expectedData: "undeclared expected data",
+  });
+  const scenario = structuredClone(module.scenarios.find(({ actionId: id, kind }) => (
+    id === actionId && kind !== "SUCCESS"
+  )));
+  scenario.id = `${actionId}-SCN-UNDECLARED_TASK8_FAILURE`;
+  scenario.resultCode = "UNDECLARED_TASK8_FAILURE";
+  scenario.failurePredicate = "UNDECLARED_PREDICATE";
+  scenario.given = "undeclared given";
+  scenario.when = "undeclared when";
+  scenario.then.expectedData = "undeclared expected data";
+  module.scenarios.push(scenario);
+  action.scenarioIds.push(scenario.id);
+  assertHasCode(
+    validateRequirementModel(expanded),
+    "INVALID_TASK8_BUSINESS_FAILURE_CONTRACT",
+  );
+});
+
+test("binds the EXM publication event to the actual score publication action", () => {
+  const published = events.find(({ id }) => id === "EVT-EXM-SCORE-PUBLISHED");
+  assert.deepEqual(published.producerActionIds, ["EXM-ACT-PUBLISH-SUBJECT-SCORE"]);
+  for (const producerActionIds of [
+    [],
+    ["EXM-ACT-CREATE-EVENT"],
+    ["EXM-ACT-PUBLISH-SUBJECT-SCORE", "EXM-ACT-PUBLISH-SUBJECT-SCORE"],
+    null,
+    "EXM-ACT-PUBLISH-SUBJECT-SCORE",
+  ]) {
+    const model = structuredClone(requirementModel);
+    model.events.find(({ id }) => id === "EVT-EXM-SCORE-PUBLISHED").producerActionIds
+      = producerActionIds;
+    assertHasCode(validateRequirementModel(model), "INVALID_EXAM_GOVERNANCE_CONTRACT");
+  }
+  const missing = structuredClone(requirementModel);
+  missing.events.find(({ id }) => id === "EVT-EXM-SCORE-PUBLISHED").producerActionIds
+    = ["EXM-ACT-MISSING-PUBLISHER"];
+  const errors = validateRequirementModel(missing);
+  assertHasCode(errors, "MISSING_EVENT_PRODUCER_ACTION");
+  assertHasCode(errors, "INVALID_EXAM_GOVERNANCE_CONTRACT");
 });

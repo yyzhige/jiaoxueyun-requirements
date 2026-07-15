@@ -27,15 +27,24 @@ import {
   teachingLoopModules,
   teachingLoopOptionSets,
 } from "./teaching-loop.mjs";
+import {
+  extensionAiTasks,
+  extensionEvents,
+  extensionFlows,
+  extensionModules,
+  extensionOptionSets,
+} from "./extensions.mjs";
 
 export const optionSets = deepFreeze([
   ...catalogOptionSets,
   ...teachingLoopOptionSets,
+  ...extensionOptionSets,
 ]);
 
 export const events = deepFreeze([
   ...catalogEvents,
   ...teachingLoopEvents,
+  ...extensionEvents,
 ]);
 
 export {
@@ -53,13 +62,18 @@ export const modules = deepFreeze([
   ...foundationModules,
   ...teachingLoopModules,
   ...aiReportingModules,
+  ...extensionModules,
 ]);
 export const flows = deepFreeze([
   ...foundationFlows,
   ...teachingLoopFlows,
   ...aiReportingFlows,
+  ...extensionFlows,
 ]);
-export const aiTasks = deepFreeze(aiReportingAiTasks);
+export const aiTasks = deepFreeze([
+  ...aiReportingAiTasks,
+  ...extensionAiTasks,
+]);
 
 const collectionFacts = {
   baselineDecisions,
@@ -77,6 +91,9 @@ const collectionFacts = {
   extensions,
 };
 
-export const requirementModel = defineRequirementModel(Object.fromEntries(
-  MODEL_COLLECTIONS.map(({ key }) => [key, collectionFacts[key]]),
-));
+export const requirementModel = defineRequirementModel({
+  profile: "ZHIXU_V2",
+  ...Object.fromEntries(
+    MODEL_COLLECTIONS.map(({ key }) => [key, collectionFacts[key]]),
+  ),
+});

@@ -218,6 +218,7 @@ export function buildModelIndex(model) {
     lifecyclePolicyById: mapById(lifecyclePolicies),
     lifecyclePolicies,
     metrics,
+    modelProfile: model?.profile,
     modules,
     moduleById: mapById(modules),
     objects,
@@ -1077,6 +1078,13 @@ export function validateModelReferences(model) {
   }
 
   for (const eventEntry of index.events) {
+    for (const actionId of list(eventEntry.value?.producerActionIds)) {
+      if (!index.actionById.has(actionId)) {
+        errors.push(
+          `MISSING_EVENT_PRODUCER_ACTION ${formatValidationValue(eventEntry.value?.id)} -> ${formatValidationValue(actionId)}`,
+        );
+      }
+    }
     for (const actionId of list(eventEntry.value?.triggeredActionIds)) {
       const action = index.actionById.get(actionId)?.value;
       if (
