@@ -1,4 +1,11 @@
-import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import {
+  CLIENT,
+  PHASE,
+  RELEASE_STATUS,
+  RISK,
+  deepFreeze,
+  defineModule,
+} from "../model.mjs";
 import {
   withProfessionalWriteAuthorization,
   withProfessionalWritePolicy,
@@ -922,6 +929,7 @@ const preparationActions = [
 const preparationModule = moduleFact({
   id: "PREP-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Lesson Preparation and Classroom Activity",
   objective: "Version lesson preparation facts and generate only a teacher-confirmed handoff draft for formal assignment creation",
@@ -1259,6 +1267,7 @@ const contentActions = [
 const contentModule = moduleFact({
   id: "CONTENT-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Versioned Question and Content Governance",
   objective: "Keep question answers analyses knowledge mappings licensing permissions and availability version-complete",
@@ -1772,6 +1781,7 @@ const examAdminActionIds = examActions
 const examModule = moduleFact({
   id: "EXM-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Exam Event Score Import and Publication",
   objective: "Govern exam events validation aggregate rules subject confirmation publication correction and evidence",
@@ -2361,6 +2371,7 @@ const scheduleActions = [
 const scheduleModule = moduleFact({
   id: "SCH-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Calendar Constraint and Schedule Publication",
   objective: "Generate review confirm and publish schedules without bypassing hard constraints or stale-source detection",
@@ -2766,6 +2777,7 @@ const platformActions = [
 const platformModule = moduleFact({
   id: "PLAT-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "School Onboarding Service and Support Access",
   objective: "Operate school onboarding and service metadata while requiring school confirmation and expiring audited support access",
@@ -2799,6 +2811,7 @@ const platformModule = moduleFact({
 const reportModule = defineModule({
   id: "REPORT-001",
   phase: PHASE.SECOND,
+  releaseStatus: RELEASE_STATUS.PLANNED,
   priority: "P1",
   contractKind: "TASK8_REPORT_FUTURE_METADATA",
   title: "Future Extended Reporting Contract",

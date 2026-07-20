@@ -1,4 +1,8 @@
-import { MODEL_COLLECTIONS } from "../model.mjs";
+import {
+  MODEL_COLLECTIONS,
+  PHASE,
+  RELEASE_STATUS,
+} from "../model.mjs";
 import { studentDataClassificationMatchesRegistry } from "../facts/student-data-classification.mjs";
 import { STUDENT_DETAIL_ACCESS_EXCEPTION_KIND } from "../facts/student-detail-access-exceptions.mjs";
 import {
@@ -10,6 +14,13 @@ import {
 } from "../facts/professional-write-authorization.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
+const MODULE_PHASES = new Set(Object.values(PHASE));
+const MODULE_RELEASE_STATUSES = new Set(Object.values(RELEASE_STATUS));
+const RELEASE_STATUS_BY_PHASE = new Map([
+  [PHASE.FIRST, RELEASE_STATUS.BUILD_READY],
+  [PHASE.SECOND, RELEASE_STATUS.PLANNED],
+  [PHASE.THIRD, RELEASE_STATUS.PLANNED],
+]);
 
 const MAX_TRAVERSAL_DEPTH = 64;
 const OPTION_SET_MODES = new Set(["STATIC", "RUNTIME_QUERY"]);
@@ -1704,10 +1715,20 @@ function validateScenario(errors, scenario, path, strict) {
 }
 
 function validateModule(errors, module, path) {
-  if (![1, 2].includes(module.phase)) {
-    errors.push(`INVALID_MODULE_PHASE ${path}.phase must be 1 or 2`);
+  const phaseIsValid = MODULE_PHASES.has(module.phase);
+  if (!phaseIsValid) {
+    errors.push(`INVALID_MODULE_PHASE ${path}.phase must be 1, 2, or 3`);
   }
-  const strict = module.phase === 1;
+  const expectedReleaseStatus = RELEASE_STATUS_BY_PHASE.get(module.phase);
+  if (
+    !MODULE_RELEASE_STATUSES.has(module.releaseStatus)
+    || (phaseIsValid && module.releaseStatus !== expectedReleaseStatus)
+  ) {
+    errors.push(
+      `INVALID_PHASE_RELEASE_STATUS ${path}.releaseStatus=${formatValidationValue(module.releaseStatus)} is not valid for phase=${formatValidationValue(module.phase)}`,
+    );
+  }
+  const strict = module.phase === PHASE.FIRST;
   if (strict) {
     for (const property of ["priority", "title", "objective"]) {
       contractString(errors, module, property, path, "INVALID_MODULE_CONTRACT");
@@ -2949,7 +2970,7 @@ function validateModelShape(model) {
   }
   for (const property of REQUIRED_MODEL_COLLECTIONS) {
     if (!Array.isArray(model[property])) {
-      errors.push(`MISSING_MODEL_COLLECTION ${property} must be an array`);
+      errors.push(`MISSING_REQUIRED_COLLECTION ${property} must be an array`);
     }
   }
 

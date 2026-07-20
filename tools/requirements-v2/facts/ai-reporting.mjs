@@ -1,4 +1,11 @@
-import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import {
+  CLIENT,
+  PHASE,
+  RELEASE_STATUS,
+  RISK,
+  deepFreeze,
+  defineModule,
+} from "../model.mjs";
 import {
   STUDENT_DATA_KIND,
   withStudentDataClassification,
@@ -351,6 +358,7 @@ const createPlanDraftPreview = action({
 const aixModule = moduleFact({
   id: "AIX-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "AI Conversation and Controlled Task Preview",
   objective: "Resolve registered Web and App AI tasks into authorized structured previews without creating a second business fact",
@@ -1059,6 +1067,7 @@ const reportActions = [
 const reportModule = moduleFact({
   id: "RPT-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Ad-hoc Analysis and Scheduled Reports",
   objective: "Keep report definitions, subscriptions, runs, snapshots, and deliveries as separate authoritative objects",
@@ -1647,6 +1656,7 @@ const learningPathActions = [
 const learningPathModule = moduleFact({
   id: "LPATH-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Cross-term Learning Path",
   objective: "Retain cross-term fact references and teacher-confirmed interpretation versions without rewriting source learning facts",
@@ -1960,6 +1970,7 @@ const markNotificationHandled = action({
 const notificationModule = moduleFact({
   id: "NOTI-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "In-product Notification Delivery",
   objective: "Deliver authorized product summaries and deep links without rolling back accepted source business facts",

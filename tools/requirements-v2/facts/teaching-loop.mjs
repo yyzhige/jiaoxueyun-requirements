@@ -1,4 +1,11 @@
-import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import {
+  CLIENT,
+  PHASE,
+  RELEASE_STATUS,
+  RISK,
+  deepFreeze,
+  defineModule,
+} from "../model.mjs";
 import {
   withProfessionalWriteAuthorization,
   withProfessionalWritePolicy,
@@ -685,6 +692,7 @@ const hwActions = [
 const hwModule = moduleFact({
   id: "HW-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Assignment Authoring and Publication",
   objective: "Create, validate, publish, close, and revise versioned all-subject assignments",
@@ -1056,6 +1064,7 @@ const submissionActions = [
 const submissionModule = moduleFact({
   id: "SUB-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Student Answering and Submission",
   objective: "Preserve answer drafts and uploaded chunks while requiring a server receipt for final submission",
@@ -1883,6 +1892,7 @@ const gradingActions = [
 const gradingModule = moduleFact({
   id: "GRD-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Grading Routing and Teacher Decision",
   objective: "Route every supported combination by evidence while keeping official scoring under subject-teacher control",
@@ -2570,6 +2580,7 @@ const publicationActions = [
 const publicationModule = moduleFact({
   id: "PUB-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Result Publication and Correction",
   objective: "Publish only eligible confirmed results and preserve visible correction and downstream invalidation history",
@@ -2988,6 +2999,7 @@ const scoreActions = [
 const scoreModule = moduleFact({
   id: "SCO-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Source-pinned Gradebook Views",
   objective: "Define authorized score views and follow-up records without owning a second official score, evidence, or plan fact",
@@ -3392,6 +3404,7 @@ const evidenceActions = [
 const evidenceModule = moduleFact({
   id: "INS-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Evidence and Mastery Interpretation",
   objective: "Preserve versioned evidence lineage and require subject-teacher confirmation before a mastery interpretation becomes student-visible",
@@ -3921,6 +3934,7 @@ const planActions = [
 const planModule = moduleFact({
   id: "PLN-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Improvement Plans and Explicit Coordination Outputs",
   objective: "Keep plan content under the corresponding subject teacher while producing explicit subject and homeroom coordination outputs",
@@ -4270,6 +4284,7 @@ const studentTodoActions = [
 const studentExecutionModule = moduleFact({
   id: "APP-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Student Todo Aggregation and Local Execution",
   objective: "Aggregate deep links and local execution state without becoming a second homework or improvement-plan owner",
@@ -4862,6 +4877,7 @@ const correctionActions = [
 const correctionModule = moduleFact({
   id: "CORR-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Student Correction and Versioned Invalidation",
   objective: "Keep correction answers student-submitted, judgments teacher-confirmed, and every dependent invalidation versioned with history preserved",
@@ -5203,6 +5219,7 @@ const studentProfileActions = [
 const studentProfileModule = moduleFact({
   id: "STU-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Source-pinned Student Management Profile",
   objective: "Aggregate authorized profile view definitions and attention records without owning a second score, evidence, or plan fact",

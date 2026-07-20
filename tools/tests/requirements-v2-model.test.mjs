@@ -16,19 +16,26 @@ import { prepareRequirementModel } from "../requirements-v2/validate/structure-v
 import {
   CLIENT,
   PHASE,
+  RELEASE_STATUS,
   RISK,
   defineModule,
   defineRequirementModel,
 } from "../requirements-v2/model.mjs";
 import {
   baselineDecisions,
+  baselineChapters,
   duties,
   events,
   extensions,
+  launchGates,
   lifecyclePolicies,
+  metricGroups,
   metrics,
+  migrationChanges,
   nfrs,
   optionSets,
+  phases,
+  productDecisions,
   aiTasks,
   flows,
   modules,
@@ -313,6 +320,7 @@ function validFixture() {
     modules: [{
       id: "SUB-001",
       phase: PHASE.FIRST,
+      releaseStatus: RELEASE_STATUS.BUILD_READY,
       priority: "P0",
       title: "Fixture submission",
       objective: "Accept one authorized fixture submission",
@@ -346,6 +354,7 @@ function validFixture() {
     }, {
       id: "HW-001",
       phase: PHASE.FIRST,
+      releaseStatus: RELEASE_STATUS.BUILD_READY,
       priority: "P0",
       title: "Fixture homework",
       objective: "Expose one authorized fixture homework fact",
@@ -376,6 +385,7 @@ function validFixture() {
     }, {
       id: "REPORT-TEST",
       phase: PHASE.SECOND,
+      releaseStatus: RELEASE_STATUS.PLANNED,
       objects: [validObject("DAT-REPORT-01", "ROLE-TEACHER", validField("REPORT-F001"), {
         states: ["AVAILABLE", "GENERATED"],
       })],
@@ -432,6 +442,12 @@ function validFixture() {
     }],
     aiTasks: [],
     extensions: [],
+    phases: [],
+    productDecisions: [],
+    baselineChapters: [],
+    migrationChanges: [],
+    metricGroups: [],
+    launchGates: [],
   };
 }
 
@@ -721,6 +737,12 @@ const REQUIRED_COLLECTION_NAMES = [
   "flows",
   "aiTasks",
   "extensions",
+  "phases",
+  "productDecisions",
+  "baselineChapters",
+  "migrationChanges",
+  "metricGroups",
+  "launchGates",
 ];
 
 function moduleById(model, moduleId) {
@@ -3514,7 +3536,7 @@ test("rejects missing required top-level collections", () => {
     [
       "INVALID_MODEL_PROFILE model.profile must be GENERIC or ZHIXU_V2",
       ...REQUIRED_COLLECTION_NAMES
-        .map((name) => `MISSING_MODEL_COLLECTION ${name} must be an array`),
+        .map((name) => `MISSING_REQUIRED_COLLECTION ${name} must be an array`),
     ].sort(),
   );
 });
@@ -3534,6 +3556,12 @@ test("publishes one frozen manifest for required top-level collections", () => {
     { key: "flows", label: "Flow" },
     { key: "aiTasks", label: "AI task" },
     { key: "extensions", label: "extension" },
+    { key: "phases", label: "phase" },
+    { key: "productDecisions", label: "product decision" },
+    { key: "baselineChapters", label: "baseline chapter" },
+    { key: "migrationChanges", label: "migration change" },
+    { key: "metricGroups", label: "metric group" },
+    { key: "launchGates", label: "launch gate" },
   ];
 
   assert.deepEqual(requirementModelExports.MODEL_COLLECTIONS, expected);
@@ -3560,6 +3588,12 @@ test("accepts explicitly present empty top-level collections", () => {
     flows: [],
     aiTasks: [],
     extensions: [],
+    phases: [],
+    productDecisions: [],
+    baselineChapters: [],
+    migrationChanges: [],
+    metricGroups: [],
+    launchGates: [],
   }), []);
 });
 
@@ -3580,6 +3614,12 @@ test("assembles the shared facts into the phase-one executable model", () => {
     flows,
     aiTasks,
     extensions,
+    phases,
+    productDecisions,
+    baselineChapters,
+    migrationChanges,
+    metricGroups,
+    launchGates,
   });
   assert.deepEqual(validateRequirementModel(requirementModel), []);
 });
@@ -11060,15 +11100,15 @@ for (const entityCase of ENTITY_CASES) {
 }
 
 const INVALID_COLLECTION_SHAPE_CASES = [
-  ["baseline decisions", "MISSING_MODEL_COLLECTION", (model) => {
+  ["baseline decisions", "MISSING_REQUIRED_COLLECTION", (model) => {
     model.baselineDecisions = {};
   }],
-  ["roles", "MISSING_MODEL_COLLECTION", (model) => { model.roles = {}; }],
-  ["duties", "MISSING_MODEL_COLLECTION", (model) => { model.duties = {}; }],
-  ["lifecycle policies", "MISSING_MODEL_COLLECTION", (model) => {
+  ["roles", "MISSING_REQUIRED_COLLECTION", (model) => { model.roles = {}; }],
+  ["duties", "MISSING_REQUIRED_COLLECTION", (model) => { model.duties = {}; }],
+  ["lifecycle policies", "MISSING_REQUIRED_COLLECTION", (model) => {
     model.lifecyclePolicies = {};
   }],
-  ["sensitivities", "MISSING_MODEL_COLLECTION", (model) => {
+  ["sensitivities", "MISSING_REQUIRED_COLLECTION", (model) => {
     model.sensitivities = {};
   }],
   ["Option Set values", "INVALID_ENTITY_SHAPE", (model) => {
@@ -11077,8 +11117,8 @@ const INVALID_COLLECTION_SHAPE_CASES = [
   ["metric event IDs", "INVALID_ENTITY_SHAPE", (model) => {
     model.metrics[0].eventIds = {};
   }],
-  ["events", "MISSING_MODEL_COLLECTION", (model) => { model.events = {}; }],
-  ["NFRs", "MISSING_MODEL_COLLECTION", (model) => { model.nfrs = {}; }],
+  ["events", "MISSING_REQUIRED_COLLECTION", (model) => { model.events = {}; }],
+  ["NFRs", "MISSING_REQUIRED_COLLECTION", (model) => { model.nfrs = {}; }],
   ["module objects", "INVALID_ENTITY_SHAPE", (model) => {
     moduleById(model, "SUB-001").objects = {};
   }],
@@ -11229,10 +11269,15 @@ test("rejects sparse authored collection arrays", () => {
 });
 
 test("exports stable model constants", () => {
-  assert.deepEqual(PHASE, { FIRST: 1, SECOND: 2 });
+  assert.deepEqual(PHASE, { FIRST: 1, SECOND: 2, THIRD: 3 });
+  assert.deepEqual(RELEASE_STATUS, {
+    BUILD_READY: "BUILD_READY",
+    PLANNED: "PLANNED",
+  });
   assert.deepEqual(RISK, { READ: "READ", LOW: "LOW", HIGH: "HIGH" });
   assert.deepEqual(CLIENT, { WEB: "WEB", APP: "APP" });
   assert.equal(Object.isFrozen(PHASE), true);
+  assert.equal(Object.isFrozen(RELEASE_STATUS), true);
   assert.equal(Object.isFrozen(RISK), true);
   assert.equal(Object.isFrozen(CLIENT), true);
 });
@@ -11351,7 +11396,7 @@ test("does not include invalid IDs in duplicate lookup indexes", () => {
 });
 
 test("rejects missing and invalid module phases", () => {
-  for (const phase of [undefined, 0, 3, "1"]) {
+  for (const phase of [undefined, 0, 4, "1"]) {
     const model = validFixture();
     const module = moduleById(model, "SUB-001");
     if (phase === undefined) delete module.phase;

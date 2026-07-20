@@ -75,6 +75,13 @@ export const aiTasks = deepFreeze([
   ...extensionAiTasks,
 ]);
 
+export const phases = deepFreeze([]);
+export const productDecisions = deepFreeze([]);
+export const baselineChapters = deepFreeze([]);
+export const migrationChanges = deepFreeze([]);
+export const metricGroups = deepFreeze([]);
+export const launchGates = deepFreeze([]);
+
 export const reviewStatus = deepFreeze({
   code: "PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED",
   label: "v2.0 product fact source; semantic review passed",
@@ -95,6 +102,12 @@ const collectionFacts = {
   flows,
   aiTasks,
   extensions,
+  phases,
+  productDecisions,
+  baselineChapters,
+  migrationChanges,
+  metricGroups,
+  launchGates,
 };
 
 export const requirementModel = defineRequirementModel({

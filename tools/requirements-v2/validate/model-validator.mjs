@@ -135,6 +135,30 @@ export function buildModelIndex(model) {
     value,
     path: `extensions[${index}]`,
   }));
+  const phases = list(model?.phases).map((value, index) => ({
+    value,
+    path: `phases[${index}]`,
+  }));
+  const productDecisions = list(model?.productDecisions).map((value, index) => ({
+    value,
+    path: `productDecisions[${index}]`,
+  }));
+  const baselineChapters = list(model?.baselineChapters).map((value, index) => ({
+    value,
+    path: `baselineChapters[${index}]`,
+  }));
+  const migrationChanges = list(model?.migrationChanges).map((value, index) => ({
+    value,
+    path: `migrationChanges[${index}]`,
+  }));
+  const metricGroups = list(model?.metricGroups).map((value, index) => ({
+    value,
+    path: `metricGroups[${index}]`,
+  }));
+  const launchGates = list(model?.launchGates).map((value, index) => ({
+    value,
+    path: `launchGates[${index}]`,
+  }));
   const objects = [];
   const fields = [];
   const actions = [];
@@ -205,6 +229,7 @@ export function buildModelIndex(model) {
     actionById: mapById(actions),
     actorIds: new Set([...roleIds, ...dutyIds, ...SYSTEM_ACTOR_CATEGORIES]),
     aiTasks,
+    baselineChapters,
     baselineDecisionById: mapById(baselineDecisions),
     baselineDecisions,
     duties,
@@ -217,7 +242,10 @@ export function buildModelIndex(model) {
     flows,
     lifecyclePolicyById: mapById(lifecyclePolicies),
     lifecyclePolicies,
+    launchGates,
     metrics,
+    metricGroups,
+    migrationChanges,
     modelProfile: model?.profile,
     modules,
     moduleById: mapById(modules),
@@ -227,6 +255,8 @@ export function buildModelIndex(model) {
     optionSetById: mapById(optionSets),
     pages,
     pageById: mapById(pages),
+    phases,
+    productDecisions,
     nfrById: mapById(nfrs),
     nfrs,
     relationships,

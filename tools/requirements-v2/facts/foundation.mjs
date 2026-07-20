@@ -1,4 +1,11 @@
-import { CLIENT, PHASE, RISK, deepFreeze, defineModule } from "../model.mjs";
+import {
+  CLIENT,
+  PHASE,
+  RELEASE_STATUS,
+  RISK,
+  deepFreeze,
+  defineModule,
+} from "../model.mjs";
 import { withStudentDataClassification } from "./student-data-classification.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
@@ -539,6 +546,7 @@ const accActions = [
 const accModule = moduleFact({
   id: "ACC-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "School entry, login, and active context",
   objective: "Establish an explicit school, identity, and term context before any protected work.",
@@ -824,6 +832,7 @@ const orgActions = [
 const orgModule = moduleFact({
   id: "ORG-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Organization, members, and import",
   objective: "Maintain versioned school organization and execute observable object-level imports.",
@@ -939,6 +948,7 @@ const iamActions = [
 const iamModule = moduleFact({
   id: "IAM-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Identity, duty, and data scope",
   objective: "Evaluate every protected action from current roles, duties, object scopes, time limits, and source versions.",
@@ -1018,6 +1028,7 @@ const dgvActions = [
 const dgvModule = moduleFact({
   id: "DGV-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Governance, lifecycle, and AI data use",
   objective: "Make school-owned retention, sensitive export, and AI data-use decisions explicit and auditable.",
@@ -1134,6 +1145,7 @@ const audActions = [
 const audModule = moduleFact({
   id: "AUD-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Audit and sensitive access",
   objective: "Append immutable audit facts and gate sensitive access by school authorization, scope, and time.",
@@ -1230,6 +1242,7 @@ const currActions = [
 const currModule = moduleFact({
   id: "CURR-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Curriculum, textbook, and knowledge map",
   objective: "Publish versioned curriculum maps without rewriting historical teaching or evidence references.",
@@ -1306,6 +1319,7 @@ const teaActions = [
 const teaModule = moduleFact({
   id: "TEA-001",
   phase: PHASE.FIRST,
+  releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Teacher and homeroom workbench",
   objective: "Own teacher view definitions, preferences, and coordination items while referencing professional facts at source.",

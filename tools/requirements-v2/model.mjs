@@ -1,4 +1,8 @@
-export const PHASE = Object.freeze({ FIRST: 1, SECOND: 2 });
+export const PHASE = Object.freeze({ FIRST: 1, SECOND: 2, THIRD: 3 });
+export const RELEASE_STATUS = Object.freeze({
+  BUILD_READY: "BUILD_READY",
+  PLANNED: "PLANNED",
+});
 export const RISK = Object.freeze({ READ: "READ", LOW: "LOW", HIGH: "HIGH" });
 export const CLIENT = Object.freeze({ WEB: "WEB", APP: "APP" });
 
@@ -23,6 +27,12 @@ export const MODEL_COLLECTIONS = deepFreeze([
   { key: "flows", label: "Flow" },
   { key: "aiTasks", label: "AI task" },
   { key: "extensions", label: "extension" },
+  { key: "phases", label: "phase" },
+  { key: "productDecisions", label: "product decision" },
+  { key: "baselineChapters", label: "baseline chapter" },
+  { key: "migrationChanges", label: "migration change" },
+  { key: "metricGroups", label: "metric group" },
+  { key: "launchGates", label: "launch gate" },
 ]);
 
 export function defineModule(value) {
