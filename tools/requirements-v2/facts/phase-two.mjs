@@ -259,6 +259,36 @@ function action({
   };
 }
 
+function stateTransitionAction({
+  id,
+  label,
+  targetObjectId,
+  identityFieldId,
+  versionFieldId,
+  statusFieldId,
+  from,
+  to,
+  eventId,
+}) {
+  return action({
+    id,
+    label,
+    targetObjectId,
+    operationKind: "UPDATE",
+    inputFieldIds: [identityFieldId, versionFieldId],
+    outputFieldIds: [statusFieldId, versionFieldId],
+    executionMode: SYSTEM_EVENT,
+    trigger: { kind: "EVENT", eventId },
+    permissions: [
+      permission("ALLOW", "SYSTEM", `the system applies the versioned ${to} transition after ${eventId}`),
+      permission("DENY", "AI", "AI cannot change the lifecycle state without the registered system event"),
+    ],
+    transition: { from, to },
+    risk: RISK.HIGH,
+    failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "VERSION_CONFLICT", "SOURCE_VERSION_STALE"],
+  });
+}
+
 function page(id, label, objectIds, fieldIds, actionIds, clients = WEB_APP) {
   return {
     id,
@@ -793,6 +823,28 @@ const progressActions = [
     transition: { from: "PROPOSED", to: "DEFERRED" },
     successData: "records deferral without changing class progress, assigning work, or claiming a learning failure",
     failureResults: ["PERMISSION_DENIED", "CHOICE_REQUIRED", "SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
+  }),
+  stateTransitionAction({
+    id: "PROG-ACT-SUPERSEDE-COURSE-TARGET-SNAPSHOT",
+    label: "Supersede a Stale Course Target Snapshot",
+    targetObjectId: "PROG-OBJ-COURSE-TARGET-SNAPSHOT",
+    identityFieldId: "PROG-SNAPSHOT-F-ID",
+    versionFieldId: "PROG-SNAPSHOT-F-VERSION",
+    statusFieldId: "PROG-SNAPSHOT-F-STATUS",
+    from: "ACTIVE",
+    to: "SUPERSEDED",
+    eventId: "EVT-P2-PROGRESS-SOURCE-SNAPSHOT-REPLACED",
+  }),
+  stateTransitionAction({
+    id: "PROG-ACT-EXPIRE-NEXT-TARGET-CHOICE",
+    label: "Expire an Unselected Next Target Proposal",
+    targetObjectId: "PROG-OBJ-NEXT-TARGET-CHOICE",
+    identityFieldId: "PROG-CHOICE-F-ID",
+    versionFieldId: "PROG-CHOICE-F-VERSION",
+    statusFieldId: "PROG-CHOICE-F-STATUS",
+    from: "PROPOSED",
+    to: "EXPIRED",
+    eventId: "EVT-P2-NEXT-TARGET-PROPOSAL-EXPIRED",
   }),
 ];
 
@@ -2487,6 +2539,61 @@ const videoActions = [
     successData: "returns the versioned raw learning fact and its limitations without promoting it to durable mastery",
     failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "SOURCE_VERSION_STALE"],
   }),
+  stateTransitionAction({
+    id: "VIDEO-ACT-CANCEL-REQUEST",
+    label: "Cancel an Invalid or Withdrawn Student Video Request",
+    targetObjectId: "VIDEO-OBJ-REQUEST",
+    identityFieldId: "VIDEO-REQUEST-F-ID",
+    versionFieldId: "VIDEO-REQUEST-F-VERSION",
+    statusFieldId: "VIDEO-REQUEST-F-STATUS",
+    from: "ACCEPTED",
+    to: "CANCELLED",
+    eventId: "EVT-P2-VIDEO-REQUEST-CANCELLED",
+  }),
+  stateTransitionAction({
+    id: "VIDEO-ACT-CANCEL-SCHOOL-REQUEST",
+    label: "Cancel an Invalid or Withdrawn School Video Request",
+    targetObjectId: "VIDEO-OBJ-SCHOOL-REQUEST",
+    identityFieldId: "VIDEO-SCHOOL-REQUEST-F-ID",
+    versionFieldId: "VIDEO-SCHOOL-REQUEST-F-VERSION",
+    statusFieldId: "VIDEO-SCHOOL-REQUEST-F-STATUS",
+    from: "ACCEPTED",
+    to: "CANCELLED",
+    eventId: "EVT-P2-VIDEO-SCHOOL-REQUEST-CANCELLED",
+  }),
+  stateTransitionAction({
+    id: "VIDEO-ACT-SUSPEND-STUDENT-ENTITLEMENT",
+    label: "Suspend a Student Video Entitlement",
+    targetObjectId: "VIDEO-OBJ-STUDENT-ENTITLEMENT",
+    identityFieldId: "VIDEO-ENTITLEMENT-F-ID",
+    versionFieldId: "VIDEO-ENTITLEMENT-F-VERSION",
+    statusFieldId: "VIDEO-ENTITLEMENT-F-STATUS",
+    from: ["AVAILABLE", "EXHAUSTED"],
+    to: "SUSPENDED",
+    eventId: "EVT-P2-VIDEO-ENTITLEMENT-SUSPENDED",
+  }),
+  stateTransitionAction({
+    id: "VIDEO-ACT-SUSPEND-SCHOOL-OVERFLOW-POOL",
+    label: "Suspend a School Video Overflow Pool",
+    targetObjectId: "VIDEO-OBJ-SCHOOL-OVERFLOW-POOL",
+    identityFieldId: "VIDEO-OVERFLOW-F-ID",
+    versionFieldId: "VIDEO-OVERFLOW-F-VERSION",
+    statusFieldId: "VIDEO-OVERFLOW-F-STATUS",
+    from: ["AVAILABLE", "EXHAUSTED"],
+    to: "SUSPENDED",
+    eventId: "EVT-P2-VIDEO-OVERFLOW-SUSPENDED",
+  }),
+  stateTransitionAction({
+    id: "VIDEO-ACT-INVALIDATE-LEARNING-FACT",
+    label: "Invalidate a Post-video Learning Fact after Source Correction",
+    targetObjectId: "VIDEO-OBJ-LEARNING-FACT",
+    identityFieldId: "VIDEO-FACT-F-ID",
+    versionFieldId: "VIDEO-FACT-F-VERSION",
+    statusFieldId: "VIDEO-FACT-F-STATUS",
+    from: "RECORDED",
+    to: "INVALIDATED",
+    eventId: "EVT-P2-VIDEO-LEARNING-FACT-INVALIDATED",
+  }),
 ];
 
 const videoPages = [
@@ -3031,6 +3138,48 @@ export const phaseTwoEvents = deepFreeze([
       "VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT",
       "VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL",
     ],
+  },
+  {
+    id: "EVT-P2-PROGRESS-SOURCE-SNAPSHOT-REPLACED",
+    label: "Current course target source snapshot replaced",
+    definition: "A newer authorized course target snapshot supersedes the prior active snapshot.",
+    triggeredActionIds: ["PROG-ACT-SUPERSEDE-COURSE-TARGET-SNAPSHOT"],
+  },
+  {
+    id: "EVT-P2-NEXT-TARGET-PROPOSAL-EXPIRED",
+    label: "Unselected next target proposal expired",
+    definition: "A proposed next target passed its selection window without student choice.",
+    triggeredActionIds: ["PROG-ACT-EXPIRE-NEXT-TARGET-CHOICE"],
+  },
+  {
+    id: "EVT-P2-VIDEO-REQUEST-CANCELLED",
+    label: "Student video request cancelled",
+    definition: "A student video request is withdrawn, invalidated, or no longer serviceable.",
+    triggeredActionIds: ["VIDEO-ACT-CANCEL-REQUEST"],
+  },
+  {
+    id: "EVT-P2-VIDEO-SCHOOL-REQUEST-CANCELLED",
+    label: "School video request cancelled",
+    definition: "A school-private video request is withdrawn, invalidated, or no longer serviceable.",
+    triggeredActionIds: ["VIDEO-ACT-CANCEL-SCHOOL-REQUEST"],
+  },
+  {
+    id: "EVT-P2-VIDEO-ENTITLEMENT-SUSPENDED",
+    label: "Student video entitlement suspended",
+    definition: "The active entitlement is suspended by a service or rights boundary.",
+    triggeredActionIds: ["VIDEO-ACT-SUSPEND-STUDENT-ENTITLEMENT"],
+  },
+  {
+    id: "EVT-P2-VIDEO-OVERFLOW-SUSPENDED",
+    label: "School video overflow pool suspended",
+    definition: "The school overflow pool is suspended by a service or rights boundary.",
+    triggeredActionIds: ["VIDEO-ACT-SUSPEND-SCHOOL-OVERFLOW-POOL"],
+  },
+  {
+    id: "EVT-P2-VIDEO-LEARNING-FACT-INVALIDATED",
+    label: "Post-video learning fact invalidated",
+    definition: "A source correction invalidates future interpretation of a recorded post-video fact.",
+    triggeredActionIds: ["VIDEO-ACT-INVALIDATE-LEARNING-FACT"],
   },
 ]);
 
