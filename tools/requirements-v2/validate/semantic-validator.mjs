@@ -6504,6 +6504,10 @@ const ANSWER_OPEN_SURFACES = [
 const ASSESSMENT_STANDARD_OBJECT_ID = "GRD-OBJ-ASSESSMENT-STANDARD-VERSION";
 const ASSESSMENT_STANDARD_EVENT_ID = "EVT-ACTIVITY-ASSESSMENT-STANDARD-REQUIRED";
 const ASSESSMENT_NOTIFICATION_EVENT_ID = "EVT-AI-ASSESSMENT-CORRECTION-NOTIFICATION-REQUESTED";
+const ASSESSMENT_READINESS_ACTION_ID = "GRD-ACT-CHECK-PHASE-TWO-ASSESSMENT-READINESS";
+const CHALLENGE_OPENED_EVENT_ID = "EVT-AI-ASSESSMENT-CHALLENGE-OPENED";
+const PROFESSIONAL_EVIDENCE_EVENT_ID = "EVT-AI-ASSESSMENT-PROFESSIONAL-EVIDENCE-SUBMITTED";
+const CHALLENGE_RESOLVED_EVENT_ID = "EVT-AI-ASSESSMENT-CHALLENGE-RESOLVED";
 const ASSESSMENT_STANDARD_REQUIRED_CONTENT_FIELDS = [
   "GRD-STANDARD-F-ANSWER-OR-DIMENSIONS",
   "GRD-STANDARD-F-KEY-POINTS",
@@ -6528,11 +6532,28 @@ const ANSWER_OPEN_TIME_FIELD_IDS = [
   "PUB-RESULT-F-SOLUTION-OPEN-AT",
   "PUB-RESULT-F-RUBRIC-OPEN-AT",
 ];
+const FEEDBACK_LAYER_FIELD_IDS = [
+  "PUB-RESULT-F-FEEDBACK-LAYER-1",
+  "PUB-RESULT-F-FEEDBACK-LAYER-2",
+  "PUB-RESULT-F-FEEDBACK-LAYER-3",
+  "PUB-RESULT-F-FEEDBACK-LAYER-4",
+];
+const PUBLICATION_SNAPSHOT_INTERFACE = {
+  objectId: "HW-OBJ-PUBLICATION-SNAPSHOT",
+  identityFieldId: "HW-SNAPSHOT-F-ID",
+  versionFieldId: "HW-SNAPSHOT-F-VERSION",
+  producerActionId: "HW-ACT-CREATE-PUBLICATION-SNAPSHOT",
+  producerEventId: "EVT-HW-PUBLICATION-COMMITTED",
+  resolutionRequiredBeforeExecution: true,
+};
 const ANSWER_OPEN_ENFORCEMENT_REFS = new Map([
   ["PAGE", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
-  ["SEARCH", { kind: "POLICY_POINT", id: "ANSWER-OPEN-SEARCH-FILTER" }],
-  ["EXPORT", { kind: "POLICY_POINT", id: "ANSWER-OPEN-EXPORT-SERIALIZER" }],
-  ["NOTIFICATION", { kind: "POLICY_POINT", id: "ANSWER-OPEN-NOTIFICATION-PAYLOAD" }],
+  ["SEARCH", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
+  ["EXPORT", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
+  ["NOTIFICATION", { kind: "ACTION", ids: [
+    "PUB-ACT-PUBLISH-RESULT",
+    "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
+  ] }],
   ["AI_CONVERSATION", {
     kind: "ACTION",
     ids: [
@@ -6541,15 +6562,24 @@ const ANSWER_OPEN_ENFORCEMENT_REFS = new Map([
       "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
     ],
   }],
-  ["VIDEO", { kind: "POLICY_POINT", id: "ANSWER-OPEN-VIDEO-DELIVERY" }],
-  ["CACHE", { kind: "POLICY_POINT", id: "ANSWER-OPEN-CACHE-GATE" }],
-  ["DIRECT_LINK", { kind: "POLICY_POINT", id: "ANSWER-OPEN-DIRECT-LINK-RESOLVER" }],
+  ["VIDEO", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
+  ["CACHE", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
+  ["DIRECT_LINK", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
 ]);
 const PROHIBITED_AI_PERSISTENCE_FIELD = /(?:hidden[-_ ]*chain[-_ ]*of[-_ ]*thought|chain[-_ ]*of[-_ ]*thought|vendor[-_ ]*debug|full[-_ ]*upstream[-_ ]*request|隐藏.{0,6}思维链|供应商.{0,6}调试)/iu;
 
 function phaseTwoAiAssessmentErrors(index) {
   if (!task8ProfileEnabled(index)) return [];
+  const errors = [];
   let valid = true;
+  const closeDomain = (domain, message) => {
+    if (!valid) {
+      errors.push(
+        `INVALID_PHASE_TWO_AI_ASSESSMENT_CONTRACT domain=${domain} ${message}`,
+      );
+    }
+    valid = true;
+  };
   const module = (id) => index.moduleById.get(id)?.value;
   const grading = module("GRD-001");
   const publication = module("PUB-001");
@@ -6566,6 +6596,10 @@ function phaseTwoAiAssessmentErrors(index) {
   valid = valid && PHASE_TWO_AI_FLOW_IDS.every((id) => (
     index.flows.find(({ value }) => value?.id === id)?.value?.phase === PHASE.SECOND
   ));
+  closeDomain(
+    "MODULE_SURFACE",
+    "GRD/PUB/CORR/AIX modules and assessment flows must remain planned phase-two surfaces",
+  );
 
   const assessment = grading?.aiAssessmentContract;
   const statusAxes = records(assessment?.statusAxes);
@@ -6582,15 +6616,78 @@ function phaseTwoAiAssessmentErrors(index) {
         && fieldEntry?.value?.valueSource?.kind === "OPTION_SET"
         && fieldEntry.value.valueSource.optionSetId === axis?.optionSetId;
     });
+  const statusWriterContracts = [
+    ...records(assessment?.statusAxisWriters),
+    ...records(publication?.resultAxisWriterContract),
+  ];
+  valid = valid
+    && statusWriterContracts.length === AI_RESULT_STATUS_AXES.length
+    && sameStringSet(statusWriterContracts.map(({ axis }) => axis), AI_RESULT_STATUS_AXES)
+    && statusWriterContracts.every((contract) => {
+      const axis = statusAxes.find(({ axis: candidate }) => candidate === contract?.axis);
+      const optionCodes = records(index.optionSetById.get(axis?.optionSetId)?.value?.values)
+        .map(({ code }) => code);
+      const actualWriterActionIds = index.actions
+        .filter(({ value: action }) => records(action?.statusWrites).some(({ fieldId }) => (
+          fieldId === contract?.fieldId
+        )))
+        .map(({ value: action }) => action.id);
+      return axis?.fieldId === contract?.fieldId
+        && index.fieldById.get(contract?.fieldId)?.value?.required === true
+        && sameStringSet(contract?.writerActionIds, actualWriterActionIds)
+        && list(contract?.writerActionIds).every((actionId) => {
+          const action = index.actionById.get(actionId)?.value;
+          const writes = records(action?.statusWrites)
+            .filter(({ fieldId }) => fieldId === contract?.fieldId);
+          return list(action?.outputFieldIds).includes(contract?.fieldId)
+            && writes.length === 1
+            && list(writes[0].codes).length > 0
+            && list(writes[0].codes).every((code) => optionCodes.includes(code));
+        });
+    })
+    && sameStringSet(
+      records(index.optionSetById.get("OPT-AI2-001")?.value?.values).map(({ code }) => code),
+      ["QUEUED", "PROCESSING", "SUCCEEDED", "FAILED"],
+    );
   const nextStep = assessment?.nextStep;
   const nextStepField = index.fieldById.get(nextStep?.fieldId);
   const assessmentRouteOptions = index.optionSetById.get("OPT-TL-011")?.value;
   valid = valid
     && nextStep?.optionSetId === "OPT-AI2-005"
     && nextStep?.requiredForEverySubmission === true
+    && nextStep?.requiredForEveryDeterminedResult === true
+    && sameStringSet(nextStep?.allowedNoValueStates, ["QUEUED", "PROCESSING"])
     && sameStringSet(nextStep?.values, AI_ASSESSMENT_NEXT_STEPS)
     && nextStepField?.objectId === "GRD-OBJ-DECISION"
-    && nextStepField?.value?.valueSource?.optionSetId === nextStep?.optionSetId;
+    && nextStepField?.value?.valueSource?.optionSetId === nextStep?.optionSetId
+    && sameStringSet(nextStepField?.value?.required?.whenStates, [
+      "AI_DETERMINED",
+      "EXCEPTION_REVIEW_REQUIRED",
+      "EXCEPTION_RESOLVED",
+    ])
+    && sameStringSet(
+      nextStepField?.value?.required?.whenActionIds,
+      nextStep?.writerActionIds,
+    )
+    && sameStringSet(
+      nextStep?.writerActionIds,
+      index.actions
+        .filter(({ value: action }) => records(action?.statusWrites).some(({ fieldId }) => (
+          fieldId === nextStep?.fieldId
+        )))
+        .map(({ value: action }) => action.id),
+    )
+    && list(nextStep?.writerActionIds).every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      const writes = records(action?.statusWrites)
+        .filter(({ fieldId }) => fieldId === nextStep?.fieldId);
+      return list(action?.outputFieldIds).includes(nextStep?.fieldId)
+        && writes.length === 1
+        && list(writes[0].codes).length > 0
+        && list(writes[0].codes).every((code) => AI_ASSESSMENT_NEXT_STEPS.includes(code));
+    })
+    && !list(index.actionById.get("GRD-ACT-PROCESS")?.value?.outputFieldIds)
+      .includes(nextStep?.fieldId);
   valid = valid
     && assessmentRouteOptions?.key === "aiAssessmentRoute"
     && sameStringSet(
@@ -6624,6 +6721,10 @@ function phaseTwoAiAssessmentErrors(index) {
     ])
     && assessment?.unableToDetermine?.routineTeacherAssessment === false
     && assessment?.unableToDetermine?.unresolvedState === "UNPUBLISHED_UNDECIDED";
+  closeDomain(
+    "AXES_NEXT_STEP",
+    "result axes, exhaustive writers, structured outcomes, and required next steps must remain closed and executable",
+  );
 
   const standardContract = grading?.assessmentStandardContract;
   const standardObject = index.objectById.get(standardContract?.objectId)?.value;
@@ -6637,14 +6738,36 @@ function phaseTwoAiAssessmentErrors(index) {
     .find(({ refFieldId }) => refFieldId === "GRD-DECISION-F-RUBRIC-REF");
   const assessmentFlow = index.flows.find(({ value }) => value?.id === "DF-006")?.value;
   const processAssessment = index.actionById.get("GRD-ACT-PROCESS")?.value;
+  const phaseTwoActivationGate = standardContract?.phaseTwoActivationGate;
+  const snapshotInterfaceMatches = (value) => (
+    isRecord(value)
+    && hasExactKeys(value, Object.keys(PUBLICATION_SNAPSHOT_INTERFACE))
+    && Object.entries(PUBLICATION_SNAPSHOT_INTERFACE).every(([key, expected]) => (
+      value[key] === expected
+    ))
+  );
   valid = valid
     && standardContract?.objectId === ASSESSMENT_STANDARD_OBJECT_ID
     && standardContract?.generationEventId === ASSESSMENT_STANDARD_EVENT_ID
     && standardContract?.identityFieldId === "GRD-STANDARD-F-ID"
     && standardContract?.versionFieldId === "GRD-STANDARD-F-VERSION"
     && sameStringSet(standardContract?.requiredContentFieldIds, ASSESSMENT_STANDARD_REQUIRED_CONTENT_FIELDS)
-    && sameStringSet(standardContract?.studentAnswerGateActionIds, STUDENT_ANSWER_ACTION_IDS)
     && standardContract?.generatedBeforeStudentAnswer === true
+    && standardContract?.phaseOneSubmissionDependency === "NONE"
+    && snapshotInterfaceMatches(standardContract?.sourceSnapshotInterface)
+    && phaseTwoActivationGate?.enforcementBoundary === "PHASE_TWO_ACTIVITY_ACTIVATION"
+    && phaseTwoActivationGate?.actionId === ASSESSMENT_READINESS_ACTION_ID
+    && sameStringSet(phaseTwoActivationGate?.flowIds, ["DF-006"])
+    && phaseTwoActivationGate?.sourceSnapshotRequired === true
+    && phaseTwoActivationGate?.frozenStandardRequired === true
+    && phaseTwoActivationGate?.requiredStandardState === "FROZEN"
+    && phaseTwoActivationGate?.sourceSnapshotMatch === "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION"
+    && phaseTwoActivationGate?.standardFrozenBeforeFirstAnswerRequired === true
+    && phaseTwoActivationGate?.successResult === "PHASE_TWO_ASSESSMENT_READY"
+    && phaseTwoActivationGate?.failureBehavior === "KEEP_PHASE_TWO_ASSESSMENT_UNAVAILABLE"
+    && list(phaseTwoActivationGate?.phaseOneSubmissionActionIds).length === 0
+    && phaseTwoActivationGate?.phaseOneSubmissionBlocked === false
+    && phaseTwoActivationGate?.failClosedForPhaseTwoActivation === true
     && standardContract?.immutableAfterGeneration === true
     && standardContract?.replacementPolicy === "NEW_ACTIVITY_OR_STANDARD_VERSION_ONLY"
     && standardContract?.aiUseMode === "EXACT_SUBMISSION_BOUND_VERSION_ONLY"
@@ -6676,23 +6799,40 @@ function phaseTwoAiAssessmentErrors(index) {
     && sameStringSet(resolveStandard?.outputFieldIds, [
       "GRD-STANDARD-F-ID",
       "GRD-STANDARD-F-VERSION",
+      "GRD-STANDARD-F-FROZEN-AT",
     ])
     && resolveStandard?.snapshotMatch === "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION"
-    && sameStringSet(standardEvent?.producerActionIds, [
-      "HW-ACT-PUBLISH-NOW",
-      "HW-ACT-PUBLISH-SCHEDULED",
-    ])
-    && sameStringSet(standardEvent?.triggeredActionIds, [generateStandard?.id])
-    && list(standardEvent?.producerActionIds).every((actionId) => (
-      list(index.actionById.get(actionId)?.value?.producedEventIds).includes(ASSESSMENT_STANDARD_EVENT_ID)
-    ))
-    && STUDENT_ANSWER_ACTION_IDS.every((actionId) => {
-      const gate = index.actionById.get(actionId)?.value?.assessmentStandardGate;
-      return gate?.standardObjectId === ASSESSMENT_STANDARD_OBJECT_ID
-        && gate?.requiredState === "FROZEN"
-        && gate?.matchMode === "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION"
-        && gate?.missingBehavior === "BLOCK_STUDENT_ANSWER";
+    && snapshotInterfaceMatches({
+      objectId: generateStandard?.publicationSnapshotGuard?.objectId,
+      identityFieldId: generateStandard?.publicationSnapshotGuard?.identityFieldId,
+      versionFieldId: generateStandard?.publicationSnapshotGuard?.versionFieldId,
+      producerActionId: generateStandard?.publicationSnapshotGuard?.producerActionId,
+      producerEventId: generateStandard?.publicationSnapshotGuard?.producerEventId,
+      resolutionRequiredBeforeExecution: generateStandard?.publicationSnapshotGuard?.resolutionRequiredBeforeExecution,
     })
+    && generateStandard?.publicationSnapshotGuard?.failClosed === true
+    && generateStandard?.publicationSnapshotGuard?.executionAllowedWithoutResolvedSource === false
+    && snapshotInterfaceMatches({
+      objectId: resolveStandard?.publicationSnapshotGuard?.objectId,
+      identityFieldId: resolveStandard?.publicationSnapshotGuard?.identityFieldId,
+      versionFieldId: resolveStandard?.publicationSnapshotGuard?.versionFieldId,
+      producerActionId: resolveStandard?.publicationSnapshotGuard?.producerActionId,
+      producerEventId: resolveStandard?.publicationSnapshotGuard?.producerEventId,
+      resolutionRequiredBeforeExecution: resolveStandard?.publicationSnapshotGuard?.resolutionRequiredBeforeExecution,
+    })
+    && resolveStandard?.publicationSnapshotGuard?.failClosed === true
+    && resolveStandard?.publicationSnapshotGuard?.executionAllowedWithoutResolvedSource === false
+    && !Object.hasOwn(standardEvent ?? {}, "producerActionIds")
+    && snapshotInterfaceMatches(standardEvent?.deferredProducerInterface)
+    && sameStringSet(standardEvent?.triggeredActionIds, [generateStandard?.id])
+    && STUDENT_ANSWER_ACTION_IDS.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      return action && !Object.hasOwn(action, "assessmentStandardGate");
+    })
+    && ["HW-ACT-PUBLISH-NOW", "HW-ACT-PUBLISH-SCHEDULED"].every((actionId) => (
+      !list(index.actionById.get(actionId)?.value?.producedEventIds)
+        .includes(ASSESSMENT_STANDARD_EVENT_ID)
+    ))
     && decisionStandardRef?.valueSource?.targetObjectId === ASSESSMENT_STANDARD_OBJECT_ID
     && decisionStandardRef?.versionBinding?.versionFieldId === "GRD-DECISION-F-RUBRIC-VERSION"
     && decisionStandardRef?.versionBinding?.targetVersionFieldId === "GRD-STANDARD-F-VERSION"
@@ -6709,7 +6849,17 @@ function phaseTwoAiAssessmentErrors(index) {
     && processAssessment?.assessmentStandardBinding?.refFieldId === "GRD-DECISION-F-RUBRIC-REF"
     && processAssessment?.assessmentStandardBinding?.versionFieldId === "GRD-DECISION-F-RUBRIC-VERSION"
     && processAssessment?.assessmentStandardBinding?.requiredState === "FROZEN"
-    && processAssessment?.assessmentStandardBinding?.matchMode === "EXACT_SUBMISSION_BOUND_VERSION";
+    && processAssessment?.assessmentStandardBinding?.matchMode === "EXACT_SUBMISSION_BOUND_VERSION"
+    && resolveStandard?.phaseTwoReadinessGate?.requiredState === "FROZEN"
+    && resolveStandard?.phaseTwoReadinessGate?.sourceSnapshotMatch === "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION"
+    && resolveStandard?.phaseTwoReadinessGate?.standardFrozenBeforeFirstAnswerRequired === true
+    && resolveStandard?.phaseTwoReadinessGate?.successResult === "PHASE_TWO_ASSESSMENT_READY"
+    && resolveStandard?.phaseTwoReadinessGate?.failureBehavior === "KEEP_PHASE_TWO_ASSESSMENT_UNAVAILABLE"
+    && resolveStandard?.phaseTwoReadinessGate?.phaseOneSubmissionBlocked === false;
+  closeDomain(
+    "SNAPSHOT_READINESS",
+    "the publication snapshot, frozen standard, phase-two readiness Action, lineage, and phase-one independence must remain fail closed",
+  );
 
   const highImpact = grading?.highImpactUseContract;
   valid = valid
@@ -6755,6 +6905,10 @@ function phaseTwoAiAssessmentErrors(index) {
     && processAssessment?.externalAiProcessingGuard?.failureResult === "EXTERNAL_AI_CONTRACT_INCOMPLETE"
     && processAssessment?.externalAiProcessingGuard?.failClosed === true
     && list(processAssessment?.failureResults).includes("EXTERNAL_AI_CONTRACT_INCOMPLETE");
+  closeDomain(
+    "EXTERNAL_AI_HIGH_IMPACT",
+    "external AI processing and high-impact use must remain minimum-necessary, separately authorized, and fail closed",
+  );
 
   const exceptionActionIds = [
     "GRD-ACT-ACCEPT-SUGGESTION",
@@ -6771,6 +6925,10 @@ function phaseTwoAiAssessmentErrors(index) {
     return action?.assessmentRole === "PROFESSIONAL_EXCEPTION_ONLY"
       && action?.routineAssessmentAllowed === false;
   });
+  closeDomain(
+    "PROFESSIONAL_EXCEPTION",
+    "bounded professional exceptions must stay separate from routine AI assessment",
+  );
 
   const publicationContract = publication?.aiPublicationContract;
   const publishAction = index.actionById.get(publicationContract?.publishActionId)?.value;
@@ -6845,6 +7003,10 @@ function phaseTwoAiAssessmentErrors(index) {
       list(notificationProducer?.inputFieldIds).includes(fieldId)
       || list(notificationProducer?.outputFieldIds).includes(fieldId)
     ));
+  closeDomain(
+    "PUBLICATION_CORRECTION",
+    "publication gates, batch correction, version preservation, notification, and recalculation must remain bound to concrete Actions and events",
+  );
 
   valid = valid
     && sameStringSet(publication?.feedbackContract?.layers, AI_FEEDBACK_LAYERS)
@@ -6853,9 +7015,30 @@ function phaseTwoAiAssessmentErrors(index) {
       "ACTIVITY_PURPOSE",
       "VALID_ATTEMPT",
       "ANSWER_OPEN_POLICY",
+    ])
+    && sameStringSet(
+      Object.values(publication?.feedbackContract?.layerFieldBindings ?? {}),
+      FEEDBACK_LAYER_FIELD_IDS,
+    )
+    && sameStringSet(publication?.feedbackContract?.validAttemptFieldIds, [
+      "GRD-ATTEMPT-CLASS-F-CLASSIFICATION",
+      "CORR-ATTEMPT-F-VALID-ATTEMPT",
     ]);
   const answerOpen = publication?.answerOpenContract;
+  const materializeResult = index.actionById.get(
+    publication?.feedbackContract?.materializeActionId,
+  )?.value;
+  const materializedFeedbackAndPolicyFields = [
+    ...FEEDBACK_LAYER_FIELD_IDS,
+    "PUB-RESULT-F-ASSESSMENT-STANDARD-CONTENT",
+    ...ANSWER_OPEN_TIME_FIELD_IDS,
+    ...ANSWER_OPEN_POLICY_FIELD_IDS,
+  ];
   valid = valid
+    && materializeResult?.id === "PUB-ACT-MATERIALIZE-RESULT"
+    && materializedFeedbackAndPolicyFields.every((fieldId) => (
+      list(materializeResult?.outputFieldIds).includes(fieldId)
+    ))
     && answerOpen?.policyId === "ANSWER-OPEN-POLICY-V2"
     && sameStringSet(answerOpen?.independentTimes, [
       "ANSWER_OPEN_AT",
@@ -6881,12 +7064,16 @@ function phaseTwoAiAssessmentErrors(index) {
         && binding?.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT"
         && binding?.enforcementKind === expected?.kind;
       if (!common) return false;
-      if (expected.kind === "POLICY_POINT") {
-        return binding?.policyPointId === expected.id
-          && !Object.hasOwn(binding, "actionIds");
-      }
       return sameStringSet(binding?.actionIds, expected.ids)
-        && list(binding?.actionIds).every((actionId) => index.actionById.has(actionId))
+        && list(binding?.actionIds).every((actionId) => {
+          const enforcement = index.actionById.get(actionId)?.value?.answerOpenEnforcement;
+          return enforcement?.policyId === answerOpen?.policyId
+            && sameStringSet(enforcement?.policyFieldIds, ANSWER_OPEN_POLICY_FIELD_IDS)
+            && sameStringSet(enforcement?.openTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
+            && list(enforcement?.surfaces).includes(binding?.surface)
+            && enforcement?.reauthorizeAtAccess === true
+            && enforcement?.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT";
+        })
         && !Object.hasOwn(binding, "policyPointId");
     });
   const pageAnswerEnforcement = index.actionById.get("PUB-ACT-VIEW-RESULT")?.value?.answerOpenEnforcement;
@@ -6902,7 +7089,168 @@ function phaseTwoAiAssessmentErrors(index) {
     && aix?.answerOpenEnforcement?.reauthorizeEveryAccess === true
     && list(aix?.answerOpenEnforcement?.policyFieldIds).every((fieldId) => (
       index.fieldById.get(fieldId)?.objectId === "AIX-OBJ-TASK-PREVIEW"
-    ));
+    ))
+    && sameStringSet(aix?.answerOpenEnforcement?.sourcePolicyFieldIds, ANSWER_OPEN_POLICY_FIELD_IDS)
+    && sameStringSet(aix?.answerOpenEnforcement?.sourceOpenTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
+    && list(aix?.answerOpenEnforcement?.enforcementActionIds).every((actionId) => {
+      const enforcement = index.actionById.get(actionId)?.value?.answerOpenEnforcement;
+      return list(enforcement?.surfaces).includes("AI_CONVERSATION")
+        && enforcement?.reauthorizeAtAccess === true;
+    });
+
+  const resultObject = index.objectById.get("PUB-OBJ-RESULT")?.value;
+  const studentResultPolicy = records(resultObject?.readPolicies)
+    .find(({ id }) => id === "PUB-RP-STUDENT-RESULT");
+  const expectedTimeGates = new Map([
+    ["PUB-RESULT-F-ANSWER-OPEN-AT", ["PUB-RESULT-F-ANSWER"]],
+    ["PUB-RESULT-F-SCORE-VISIBLE-AT", ["PUB-RESULT-F-SCORE"]],
+    ["PUB-RESULT-F-FEEDBACK-VISIBLE-AT", [
+      "PUB-RESULT-F-FEEDBACK",
+      "PUB-RESULT-F-FEEDBACK-LAYER-1",
+      "PUB-RESULT-F-FEEDBACK-LAYER-2",
+      "PUB-RESULT-F-FEEDBACK-LAYER-3",
+    ]],
+    ["PUB-RESULT-F-SOLUTION-OPEN-AT", ["PUB-RESULT-F-FEEDBACK-LAYER-4"]],
+    ["PUB-RESULT-F-RUBRIC-OPEN-AT", ["PUB-RESULT-F-ASSESSMENT-STANDARD-CONTENT"]],
+  ]);
+  const resultViewAction = index.actionById.get("PUB-ACT-VIEW-RESULT")?.value;
+  const studentResultPage = index.pageById.get("PUB-PAGE-STUDENT-RESULT")?.value;
+  valid = valid
+    && records(resultObject?.readPolicies).length === 1
+    && studentResultPolicy?.actionId === resultViewAction?.id
+    && studentResultPolicy?.requiredState === "PUBLISHED"
+    && sameStringSet(studentResultPolicy?.safeMetadataFieldIds, [
+      "PUB-RESULT-F-RESULT-VERSION",
+      ...ANSWER_OPEN_POLICY_FIELD_IDS,
+    ])
+    && records(studentResultPolicy?.timeGates).length === expectedTimeGates.size
+    && records(studentResultPolicy?.timeGates).every((gate) => (
+      expectedTimeGates.has(gate?.visibleAtFieldId)
+      && sameStringSet(gate?.protectedFieldIds, expectedTimeGates.get(gate.visibleAtFieldId))
+    ))
+    && [...expectedTimeGates.entries()].every(([visibleAtFieldId, protectedFieldIds]) => (
+      protectedFieldIds.every((fieldId) => {
+        const release = index.fieldById.get(fieldId)?.value?.releaseRequirement;
+        return release?.readPolicyId === studentResultPolicy?.id
+          && release?.requiredState === "PUBLISHED"
+          && release?.visibleAtFieldId === visibleAtFieldId;
+      })
+    ))
+    && sameStringSet(studentResultPage?.actionIds, [resultViewAction?.id])
+    && sameStringSet(studentResultPage?.fieldIds, resultViewAction?.outputFieldIds);
+  closeDomain(
+    "FEEDBACK_OPEN",
+    "four feedback layers, independent open times, read policy, every delivery surface, and access-time reauthorization must remain bound",
+  );
+
+  const initialAttempt = grading?.initialValidAttemptContract;
+  const initialAttemptObject = index.objectById.get(initialAttempt?.classificationObjectId)?.value;
+  const classifyInitialAttempt = index.actionById.get(initialAttempt?.classifyActionId)?.value;
+  const initialAttemptLineage = records(initialAttemptObject?.lineageBindings)
+    .find(({ refFieldId }) => refFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-REF");
+  const classifyStep = list(assessmentFlow?.steps)
+    .find(({ actionId }) => actionId === classifyInitialAttempt?.id);
+  const processStep = list(assessmentFlow?.steps)
+    .find(({ actionId }) => actionId === processAssessment?.id);
+  valid = valid
+    && initialAttempt?.sourceObjectId === "SUB-OBJ-ATTEMPT"
+    && initialAttempt?.classificationObjectId === "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
+    && initialAttempt?.classificationFieldId === "GRD-ATTEMPT-CLASS-F-CLASSIFICATION"
+    && initialAttempt?.optionSetId === "OPT-AI2-008"
+    && sameStringSet(initialAttempt?.valid, ["SUBSTANTIVE_RESPONSE", "EXPLICIT_DONT_KNOW"])
+    && sameStringSet(initialAttempt?.invalid, ["BLANK", "UNRELATED", "PLACEHOLDER"])
+    && initialAttempt?.explicitDontKnowMeansCompleted === false
+    && initialAttempt?.explicitDontKnowCreatesMasteryEvidence === false
+    && initialAttempt?.nextStepDeterminedBy === "EVIDENCE_AND_FROZEN_ASSESSMENT_STANDARD"
+    && initialAttempt?.originalSubmissionWritePolicy === "FORBIDDEN"
+    && initialAttemptLineage?.targetObjectId === "SUB-OBJ-ATTEMPT"
+    && initialAttemptLineage?.versionFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-VERSION"
+    && initialAttemptLineage?.targetVersionFieldId === "SUB-ATTEMPT-F-SUBMISSION-VERSION"
+    && classifyInitialAttempt?.operationKind === "CREATE"
+    && list(classifyInitialAttempt?.outputFieldIds).includes(initialAttempt?.classificationFieldId)
+    && !list(classifyInitialAttempt?.outputFieldIds).includes("GRD-DECISION-F-NEXT-STEP")
+    && !list(classifyInitialAttempt?.outputFieldIds).includes("INS-EVIDENCE-F-MASTERY-STATUS")
+    && classifyStep?.order < processStep?.order;
+  closeDomain(
+    "INITIAL_VALID_ATTEMPT",
+    "initial attempt classification must preserve the submission and never infer completion or mastery from explicit don't-know",
+  );
+
+  const challengeContract = publication?.challengeCorrectionContract;
+  const challengeObject = index.objectById.get(challengeContract?.challengeObjectId)?.value;
+  const challengeLineage = records(challengeObject?.lineageBindings)
+    .find(({ refFieldId }) => refFieldId === "PUB-CHALLENGE-F-RESULT-REF");
+  const openChallenge = index.actionById.get(challengeContract?.openActionId)?.value;
+  const submitProfessionalEvidence = index.actionById.get(
+    challengeContract?.professionalEvidenceActionId,
+  )?.value;
+  const closeChallenge = index.actionById.get(challengeContract?.closeActionId)?.value;
+  const challengePage = index.pageById.get("PUB-PAGE-RESULT-CHALLENGE")?.value;
+  const correctionPage = index.pageById.get("PUB-PAGE-CORRECTION")?.value;
+  const challengeEvents = [
+    [CHALLENGE_OPENED_EVENT_ID, [openChallenge?.id], ["PUB-ACT-MARK-RESULT-CHALLENGED"]],
+    [PROFESSIONAL_EVIDENCE_EVENT_ID, [submitProfessionalEvidence?.id], ["PUB-ACT-MARK-RESULT-CORRECTION-PENDING"]],
+    [CHALLENGE_RESOLVED_EVENT_ID, challengeContract?.resolutionActionIds, [closeChallenge?.id]],
+  ];
+  const challengeHistoryFieldIds = [
+    "PUB-RESULT-F-PRIOR-RESULT-REF",
+    "PUB-RESULT-F-PRIOR-RESULT-VERSION",
+    "PUB-RESULT-F-CHALLENGE-REF",
+    "PUB-RESULT-F-CHALLENGE-VERSION",
+    "PUB-RESULT-F-RESOLUTION-EVIDENCE-REFS",
+  ];
+  valid = valid
+    && sameStringSet(challengeObject?.states, ["OPEN", "EVIDENCE_SUBMITTED", "RESOLVED"])
+    && challengeLineage?.targetObjectId === "PUB-OBJ-RESULT"
+    && challengeLineage?.versionFieldId === "PUB-CHALLENGE-F-RESULT-VERSION"
+    && challengeLineage?.targetVersionFieldId === "PUB-RESULT-F-RESULT-VERSION"
+    && openChallenge?.operationKind === "CREATE"
+    && openChallenge?.targetObjectId === challengeObject?.id
+    && submitProfessionalEvidence?.authorizationBoundary?.kind === "SUBJECT_COURSE_PROFESSIONAL_WRITE"
+    && challengeContract?.preservePriorResultVersions === true
+    && challengeContract?.originalFactOverwriteAllowed === false
+    && sameStringSet(challengeContract?.historyFieldIds, challengeHistoryFieldIds)
+    && sameStringSet(challengeContract?.resolutionActionIds, [
+      "PUB-ACT-CORRECT-CHALLENGED-RESULT",
+      "PUB-ACT-REPLACE-RESULT",
+      "PUB-ACT-INVALIDATE-RESULT",
+      "PUB-ACT-UPHOLD-RESULT",
+    ])
+    && list(challengeContract?.resolutionActionIds).every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      return action?.targetObjectId === "PUB-OBJ-RESULT"
+        && challengeHistoryFieldIds.every((fieldId) => list(action?.outputFieldIds).includes(fieldId))
+        && list(action?.outputFieldIds).includes("PUB-RESULT-F-RESULT-VERSION")
+        && records(action?.statusWrites).some(({ fieldId }) => (
+          fieldId === "PUB-RESULT-F-RESOLUTION-KIND"
+        ))
+        && list(action?.producedEventIds).includes(CHALLENGE_RESOLVED_EVENT_ID);
+    })
+    && challengeEvents.every(([eventId, producerActionIds, triggeredActionIds]) => {
+      const event = index.eventById.get(eventId)?.value;
+      return sameStringSet(event?.producerActionIds, producerActionIds)
+        && sameStringSet(event?.triggeredActionIds, triggeredActionIds)
+        && list(producerActionIds).every((actionId) => (
+          list(index.actionById.get(actionId)?.value?.producedEventIds).includes(eventId)
+        ));
+    })
+    && sameStringSet(challengePage?.actionIds, [openChallenge?.id])
+    && sameStringSet(challengePage?.fieldIds, list(challengeObject?.fields).map(({ id }) => id))
+    && [
+      submitProfessionalEvidence?.id,
+      ...list(challengeContract?.resolutionActionIds),
+    ].every((actionId) => list(correctionPage?.actionIds).includes(actionId))
+    && !list(index.actionById.get("PUB-ACT-CORRECT-RESULT")?.value?.inputFieldIds)
+      .some((fieldId) => [
+        "PUB-RESULT-F-CHALLENGE-REF",
+        "PUB-RESULT-F-CHALLENGE-VERSION",
+      ].includes(fieldId))
+    && !list(index.actionById.get("PUB-ACT-CORRECT-RESULT")?.value?.producedEventIds)
+      .includes(CHALLENGE_RESOLVED_EVENT_ID);
+  closeDomain(
+    "CHALLENGE_CORRECTION",
+    "student challenge, professional evidence, resolution Actions, pages, event chain, and prior versions must remain complete",
+  );
 
   const validAttempt = correction?.validAttemptContract;
   valid = valid
@@ -6919,6 +7267,10 @@ function phaseTwoAiAssessmentErrors(index) {
     && correction?.answerExposedEvidenceContract?.independentEvidence === false
     && correction?.answerExposedEvidenceContract?.evidenceKind === "REMEDIAL_AFTER_ANSWER_EXPOSURE"
     && correction?.answerExposedEvidenceContract?.independentEvidenceRequiresNewActivity === true;
+  closeDomain(
+    "CORRECTION_VALID_ATTEMPT",
+    "correction attempts and post-answer remedial evidence must remain distinct from independent mastery evidence",
+  );
 
   const separation = grading?.dataSeparationContract;
   valid = valid
@@ -6963,6 +7315,10 @@ function phaseTwoAiAssessmentErrors(index) {
       `${field?.id ?? ""} ${field?.label ?? ""}`,
     ));
   valid = valid && !prohibitedPersistedFieldExists;
+  closeDomain(
+    "RAW_FACT_TRACE",
+    "raw learning facts, derived judgments, minimal auditable trace, and hidden-chain non-persistence must remain separated",
+  );
 
   const teachingLabels = PHASE_TWO_AI_MODULE_IDS.flatMap((id) => {
     const value = module(id);
@@ -6975,10 +7331,12 @@ function phaseTwoAiAssessmentErrors(index) {
     ];
   }).filter(isValidId).join("\n");
   valid = valid && !/(?:日常|例行|常规).{0,12}审批|审批.{0,12}(?:日常|例行|常规)/u.test(teachingLabels);
+  closeDomain(
+    "TERMINOLOGY",
+    "teaching surfaces must use AI assessment and completion-determination terminology rather than routine approval",
+  );
 
-  return valid
-    ? []
-    : ["INVALID_PHASE_TWO_AI_ASSESSMENT_CONTRACT GRD/PUB/CORR/AIX must implement the finalized D058-D078 phase-two assessment, feedback, answer-open, correction, and AI trace contract"];
+  return errors;
 }
 
 export function validateModelSemantics(model) {

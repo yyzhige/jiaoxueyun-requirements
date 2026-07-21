@@ -15,6 +15,11 @@ const professionalWriteActionIds = new Set([
   "PUB-ACT-PUBLISH-SELECTED",
   "PUB-ACT-RETRY-FAILED",
   "PUB-ACT-CORRECT-RESULT",
+  "PUB-ACT-CORRECT-CHALLENGED-RESULT",
+  "PUB-ACT-SUBMIT-PROFESSIONAL-EVIDENCE",
+  "PUB-ACT-REPLACE-RESULT",
+  "PUB-ACT-INVALIDATE-RESULT",
+  "PUB-ACT-UPHOLD-RESULT",
   "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
   "SCO-ACT-CREATE-VIEW",
   "SCO-ACT-CREATE-FOLLOW-UP",
@@ -47,6 +52,7 @@ const professionalWriteObjectIds = new Set([
   "PUB-OBJ-PREVIEW",
   "PUB-OBJ-BATCH",
   "PUB-OBJ-RESULT",
+  "PUB-OBJ-RESULT-CHALLENGE",
   "SCO-OBJ-VIEW",
   "SCO-OBJ-FOLLOW-UP",
   "INS-OBJ-EVIDENCE",
@@ -69,6 +75,14 @@ const studentSubmissionPermissionSignature = {
   scopePolicy: "NO_SCOPE",
 };
 
+const studentAssessmentChallengePermissionSignature = {
+  allowRoleRef: "ROLE-STUDENT",
+  denyRoleRefs: ["ROLE-TEACHER", "ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS"],
+  denyDutyRefs: [],
+  denyActorRefs: [],
+  scopePolicy: "NO_SCOPE",
+};
+
 const academicScoreAdministrationPermissionSignature = {
   allowRoleRef: "ROLE-ACADEMIC",
   denyRoleRefs: ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
@@ -78,6 +92,12 @@ const academicScoreAdministrationPermissionSignature = {
 };
 
 const professionalWriteExceptionRegistry = new Map([
+  ["PUB-ACT-OPEN-RESULT-CHALLENGE", {
+    targetObjectId: "PUB-OBJ-RESULT-CHALLENGE",
+    operationKind: "CREATE",
+    purpose: "STUDENT_ASSESSMENT_CHALLENGE",
+    permissionSignature: studentAssessmentChallengePermissionSignature,
+  }],
   ["CORR-ACT-SUBMIT-INITIAL", {
     targetObjectId: "CORR-OBJ-ATTEMPT",
     operationKind: "CREATE",

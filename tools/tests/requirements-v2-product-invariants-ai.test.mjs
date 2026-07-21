@@ -35,6 +35,13 @@ const ANSWER_SURFACES = [
   "CACHE",
   "DIRECT_LINK",
 ];
+const ASSESSMENT_STANDARD_EVENT_ID = "EVT-ACTIVITY-ASSESSMENT-STANDARD-REQUIRED";
+const STUDENT_ANSWER_ACTION_IDS = [
+  "SUB-ACT-SAVE-DRAFT",
+  "SUB-ACT-UPLOAD-CHUNK",
+  "SUB-ACT-RETRY-UPLOAD",
+  "SUB-ACT-SUBMIT",
+];
 
 function moduleById(model, id) {
   return model.modules.find((module) => module.id === id);
@@ -78,6 +85,51 @@ test("models AI assessment and completion determination as complete planned phas
   assert.doesNotMatch(teachingSurface, /(?:日常|例行|常规).{0,12}审批|审批.{0,12}(?:日常|例行|常规)/u);
 });
 
+test("keeps phase-one activity publication and submission independent from phase-two assessment", () => {
+  for (const actionId of STUDENT_ANSWER_ACTION_IDS) {
+    assert.equal(
+      Object.hasOwn(actionById(requirementModel, actionId), "assessmentStandardGate"),
+      false,
+      actionId,
+    );
+  }
+  for (const actionId of ["HW-ACT-PUBLISH-NOW", "HW-ACT-PUBLISH-SCHEDULED"]) {
+    assert.equal(
+      actionById(requirementModel, actionId).producedEventIds?.includes(
+        ASSESSMENT_STANDARD_EVENT_ID,
+      ) ?? false,
+      false,
+      actionId,
+    );
+  }
+  assert.equal(
+    moduleById(requirementModel, "GRD-001")
+      .assessmentStandardContract.phaseOneSubmissionDependency,
+    "NONE",
+  );
+});
+
+test("declares a fail-closed publication-snapshot consumer interface for assessment standards", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  assert.deepEqual(grading.assessmentStandardContract.sourceSnapshotInterface, {
+    objectId: "HW-OBJ-PUBLICATION-SNAPSHOT",
+    identityFieldId: "HW-SNAPSHOT-F-ID",
+    versionFieldId: "HW-SNAPSHOT-F-VERSION",
+    producerActionId: "HW-ACT-CREATE-PUBLICATION-SNAPSHOT",
+    producerEventId: "EVT-HW-PUBLICATION-COMMITTED",
+    resolutionRequiredBeforeExecution: true,
+  });
+  for (const actionId of [
+    "GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD",
+    "GRD-ACT-CHECK-PHASE-TWO-ASSESSMENT-READINESS",
+  ]) {
+    const action = actionById(requirementModel, actionId);
+    assert.equal(action.publicationSnapshotGuard.failClosed, true, actionId);
+    assert.equal(action.publicationSnapshotGuard.executionAllowedWithoutResolvedSource, false, actionId);
+    assert.ok(action.inputFieldIds.length >= 2, actionId);
+  }
+});
+
 test("separates AI result state axes and returns one explicit next step", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   assert.deepEqual(grading.aiAssessmentContract.statusAxes.map(({ axis }) => axis), RESULT_AXES);
@@ -93,6 +145,35 @@ test("separates AI result state axes and returns one explicit next step", () => 
       .valueSource.optionSetId,
     grading.aiAssessmentContract.nextStep.optionSetId,
   );
+});
+
+test("binds every AI result axis and determined next step to concrete writers", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const publication = moduleById(requirementModel, "PUB-001");
+  const writerContracts = [
+    ...grading.aiAssessmentContract.statusAxisWriters,
+    ...publication.resultAxisWriterContract,
+  ];
+  assert.deepEqual(
+    requirementModel.optionSets
+      .find(({ id }) => id === "OPT-AI2-001").values.map(({ code }) => code),
+    ["QUEUED", "PROCESSING", "SUCCEEDED", "FAILED"],
+  );
+  for (const { fieldId, writerActionIds } of writerContracts) {
+    assert.equal(fieldById(requirementModel, fieldId).required, true, fieldId);
+    assert.ok(writerActionIds.length > 0, fieldId);
+    for (const actionId of writerActionIds) {
+      assert.ok(actionById(requirementModel, actionId).outputFieldIds.includes(fieldId), `${actionId}:${fieldId}`);
+    }
+  }
+  const nextStep = grading.aiAssessmentContract.nextStep;
+  assert.equal(nextStep.requiredForEveryDeterminedResult, true);
+  assert.deepEqual(nextStep.allowedNoValueStates, ["QUEUED", "PROCESSING"]);
+  assert.ok(nextStep.writerActionIds.length >= 3);
+  for (const actionId of nextStep.writerActionIds) {
+    assert.ok(actionById(requirementModel, actionId).outputFieldIds.includes(nextStep.fieldId), actionId);
+  }
+  assert.equal(actionById(requirementModel, "GRD-ACT-PROCESS").outputFieldIds.includes(nextStep.fieldId), false);
 });
 
 test("fails AI publication closed and keeps unable-to-determine out of routine teacher assessment", () => {
@@ -154,7 +235,7 @@ test("preserves superseded versions through batch impact location, notification,
   );
 });
 
-test("freezes a complete assessment standard before student answers and pins AI use to it", () => {
+test("opens phase-two assessment only for an exact pre-answer frozen standard", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   const contract = grading.assessmentStandardContract;
   const standard = objectById(requirementModel, contract.objectId);
@@ -168,14 +249,36 @@ test("freezes a complete assessment standard before student answers and pins AI 
   for (const fieldId of contract.requiredContentFieldIds) {
     assert.equal(standard.fields.find(({ id }) => id === fieldId).mutability, "IMMUTABLE", fieldId);
   }
-  for (const actionId of contract.studentAnswerGateActionIds) {
-    assert.deepEqual(actionById(requirementModel, actionId).assessmentStandardGate, {
-      standardObjectId: contract.objectId,
+  assert.deepEqual(contract.phaseTwoActivationGate, {
+    enforcementBoundary: "PHASE_TWO_ACTIVITY_ACTIVATION",
+    actionId: "GRD-ACT-CHECK-PHASE-TWO-ASSESSMENT-READINESS",
+    flowIds: ["DF-006"],
+    sourceSnapshotRequired: true,
+    frozenStandardRequired: true,
+    requiredStandardState: "FROZEN",
+    sourceSnapshotMatch: "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION",
+    standardFrozenBeforeFirstAnswerRequired: true,
+    successResult: "PHASE_TWO_ASSESSMENT_READY",
+    failureBehavior: "KEEP_PHASE_TWO_ASSESSMENT_UNAVAILABLE",
+    phaseOneSubmissionActionIds: [],
+    phaseOneSubmissionBlocked: false,
+    failClosedForPhaseTwoActivation: true,
+  });
+  assert.deepEqual(
+    actionById(requirementModel, contract.phaseTwoActivationGate.actionId)
+      .phaseTwoReadinessGate,
+    {
       requiredState: "FROZEN",
-      matchMode: "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION",
-      missingBehavior: "BLOCK_STUDENT_ANSWER",
-    });
-  }
+      sourceSnapshotMatch: "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION",
+      standardFrozenBeforeFirstAnswerRequired: true,
+      successResult: "PHASE_TWO_ASSESSMENT_READY",
+      failureBehavior: "KEEP_PHASE_TWO_ASSESSMENT_UNAVAILABLE",
+      phaseOneSubmissionBlocked: false,
+    },
+  );
+  assert.ok(requirementModel.flows.find(({ id }) => id === "DF-006").steps.some(({ actionId }) => (
+    actionId === contract.phaseTwoActivationGate.actionId
+  )));
   assert.equal(
     actionById(requirementModel, "GRD-ACT-PROCESS")
       .assessmentStandardBinding.matchMode,
@@ -204,6 +307,23 @@ test("defines four feedback layers, valid attempts, and post-answer remedial evi
   assert.equal(correction.answerExposedEvidenceContract.evidenceKind, "REMEDIAL_AFTER_ANSWER_EXPOSURE");
 });
 
+test("materializes every feedback layer and independent open time through declared writers", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const materialize = actionById(requirementModel, publication.feedbackContract.materializeActionId);
+  const expectedFields = [
+    ...Object.values(publication.feedbackContract.layerFieldBindings),
+    ...Object.values(publication.answerOpenContract.fieldBindings),
+    ...publication.answerOpenContract.policyFieldIds,
+  ];
+  assert.deepEqual(publication.feedbackContract.validAttemptFieldIds, [
+    "GRD-ATTEMPT-CLASS-F-CLASSIFICATION",
+    "CORR-ATTEMPT-F-VALID-ATTEMPT",
+  ]);
+  for (const fieldId of expectedFields) {
+    assert.ok(materialize.outputFieldIds.includes(fieldId), fieldId);
+  }
+});
+
 test("uses one answer-open policy across every delivery surface with access-time reauthorization", () => {
   const publication = moduleById(requirementModel, "PUB-001");
   assert.deepEqual(publication.answerOpenContract.independentTimes, [
@@ -228,6 +348,64 @@ test("uses one answer-open policy across every delivery surface with access-time
   assert.equal(aix.answerOpenEnforcement.policyId, publication.answerOpenContract.policyId);
   assert.equal(aix.answerOpenEnforcement.surface, "AI_CONVERSATION");
   assert.equal(aix.answerOpenEnforcement.reauthorizeEveryAccess, true);
+});
+
+test("binds every answer-open surface to real reauthorizing actions", () => {
+  const contract = moduleById(requirementModel, "PUB-001").answerOpenContract;
+  for (const binding of contract.enforcementBindings) {
+    assert.equal(binding.enforcementKind, "ACTION", binding.surface);
+    assert.equal(Object.hasOwn(binding, "policyPointId"), false, binding.surface);
+    assert.ok(binding.actionIds.length > 0, binding.surface);
+    for (const actionId of binding.actionIds) {
+      const enforcement = actionById(requirementModel, actionId).answerOpenEnforcement;
+      assert.equal(enforcement.reauthorizeAtAccess, true, `${binding.surface}:${actionId}`);
+      assert.ok(enforcement.surfaces.includes(binding.surface), `${binding.surface}:${actionId}`);
+      assert.deepEqual(enforcement.policyFieldIds, contract.policyFieldIds);
+      assert.deepEqual(enforcement.openTimeFieldIds, Object.values(contract.fieldBindings));
+    }
+  }
+});
+
+test("models student challenge professional evidence and version-preserving result resolution", () => {
+  const publication = moduleById(requirementModel, "PUB-001");
+  const challenge = objectById(requirementModel, "PUB-OBJ-RESULT-CHALLENGE");
+  assert.deepEqual(challenge.states, ["OPEN", "EVIDENCE_SUBMITTED", "RESOLVED"]);
+  assert.deepEqual(publication.challengeCorrectionContract.resolutionActionIds, [
+    "PUB-ACT-CORRECT-CHALLENGED-RESULT",
+    "PUB-ACT-REPLACE-RESULT",
+    "PUB-ACT-INVALIDATE-RESULT",
+    "PUB-ACT-UPHOLD-RESULT",
+  ]);
+  assert.equal(publication.challengeCorrectionContract.preservePriorResultVersions, true);
+  assert.equal(publication.challengeCorrectionContract.originalFactOverwriteAllowed, false);
+  assert.equal(actionById(requirementModel, "PUB-ACT-OPEN-RESULT-CHALLENGE").operationKind, "CREATE");
+  assert.equal(
+    actionById(requirementModel, "PUB-ACT-SUBMIT-PROFESSIONAL-EVIDENCE")
+      .authorizationBoundary.kind,
+    "SUBJECT_COURSE_PROFESSIONAL_WRITE",
+  );
+  for (const actionId of publication.challengeCorrectionContract.resolutionActionIds) {
+    const outputs = actionById(requirementModel, actionId).outputFieldIds;
+    assert.ok(outputs.includes("PUB-RESULT-F-PRIOR-RESULT-VERSION"), actionId);
+    assert.ok(outputs.includes("PUB-RESULT-F-RESULT-VERSION"), actionId);
+    assert.ok(outputs.includes("PUB-RESULT-F-DISPUTE-CORRECTION-STATUS"), actionId);
+  }
+});
+
+test("classifies initial submissions without treating explicit dont-know as completion or mastery", () => {
+  const grading = moduleById(requirementModel, "GRD-001");
+  const contract = grading.initialValidAttemptContract;
+  assert.equal(contract.sourceObjectId, "SUB-OBJ-ATTEMPT");
+  assert.equal(contract.classificationObjectId, "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION");
+  assert.equal(contract.classifyActionId, "GRD-ACT-CLASSIFY-INITIAL-ATTEMPT");
+  assert.deepEqual(contract.valid, ["SUBSTANTIVE_RESPONSE", "EXPLICIT_DONT_KNOW"]);
+  assert.deepEqual(contract.invalid, ["BLANK", "UNRELATED", "PLACEHOLDER"]);
+  assert.equal(contract.explicitDontKnowMeansCompleted, false);
+  assert.equal(contract.explicitDontKnowCreatesMasteryEvidence, false);
+  assert.equal(contract.nextStepDeterminedBy, "EVIDENCE_AND_FROZEN_ASSESSMENT_STANDARD");
+  const classify = actionById(requirementModel, contract.classifyActionId);
+  assert.equal(classify.outputFieldIds.includes("GRD-DECISION-F-NEXT-STEP"), false);
+  assert.equal(classify.outputFieldIds.includes("INS-EVIDENCE-F-MASTERY-STATUS"), false);
 });
 
 test("separates original learning facts from derived judgments and persists no hidden chain of thought", () => {
@@ -345,7 +523,7 @@ test("rejects destructive mutations of every phase-two AI invariant", () => {
     ["chain of thought", (model) => { moduleById(model, "GRD-001").aiTraceContract.prohibitedPersistence.shift(); }],
     ["hidden chain field", (model) => { objectById(model, "GRD-OBJ-DECISION").fields.push({ ...structuredClone(objectById(model, "GRD-OBJ-DECISION").fields[0]), id: "GRD-TRACE-F-HIDDEN-CHAIN-OF-THOUGHT", label: "Hidden Chain of Thought" }); }],
     ["assessment standard content", (model) => { moduleById(model, "GRD-001").assessmentStandardContract.requiredContentFieldIds.pop(); }],
-    ["student answer standard gate", (model) => { delete actionById(model, "SUB-ACT-SUBMIT").assessmentStandardGate; }],
+    ["phase-two readiness gate", (model) => { actionById(model, "GRD-ACT-CHECK-PHASE-TWO-ASSESSMENT-READINESS").phaseTwoReadinessGate.failureBehavior = "ALLOW"; }],
     ["high impact sole basis", (model) => { moduleById(model, "GRD-001").highImpactUseContract.routineAssessmentSoleBasisForbiddenFor.pop(); }],
     ["external AI training", (model) => { moduleById(model, "GRD-001").externalAiProcessingContract.defaultStudentDataUses.trainingAllowed = true; }],
     ["AIX reauthorization", (model) => { moduleById(model, "AIX-001").answerOpenEnforcement.reauthorizeEveryAccess = false; }],
@@ -353,5 +531,151 @@ test("rejects destructive mutations of every phase-two AI invariant", () => {
 
   for (const [label, mutate] of mutations) {
     assert.match(errorsAfter(mutate), /INVALID_PHASE_TWO_AI_ASSESSMENT_CONTRACT/, label);
+  }
+});
+
+test("rejects structural destruction of phase-two writers, lineage, pages, and event chains", () => {
+  const mutations = [
+    ["phase-one submission coupling", (model) => {
+      actionById(model, "SUB-ACT-SUBMIT").assessmentStandardGate = { requiredState: "FROZEN" };
+    }],
+    ["phase-one publication coupling", (model) => {
+      actionById(model, "HW-ACT-PUBLISH-NOW").producedEventIds = [ASSESSMENT_STANDARD_EVENT_ID];
+    }],
+    ["snapshot interface", (model) => {
+      moduleById(model, "GRD-001").assessmentStandardContract
+        .sourceSnapshotInterface.versionFieldId = "HW-SNAPSHOT-F-UNKNOWN";
+    }],
+    ["snapshot fail closed", (model) => {
+      actionById(model, "GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD")
+        .publicationSnapshotGuard.failClosed = false;
+    }],
+    ["processing axis writer", (model) => {
+      moduleById(model, "GRD-001").aiAssessmentContract.statusAxisWriters[0]
+        .writerActionIds.pop();
+    }],
+    ["publication axis writer", (model) => {
+      moduleById(model, "PUB-001").resultAxisWriterContract
+        .find(({ axis }) => axis === "PUBLICATION_STATUS").writerActionIds.pop();
+    }],
+    ["dispute axis writer", (model) => {
+      moduleById(model, "PUB-001").resultAxisWriterContract
+        .find(({ axis }) => axis === "DISPUTE_CORRECTION_STATUS").writerActionIds.pop();
+    }],
+    ["validity axis writer", (model) => {
+      moduleById(model, "PUB-001").resultAxisWriterContract
+        .find(({ axis }) => axis === "VALIDITY_STATUS").writerActionIds.pop();
+    }],
+    ["next-step required writer", (model) => {
+      fieldById(model, "GRD-DECISION-F-NEXT-STEP").required.whenActionIds.pop();
+    }],
+    ["next-step action output", (model) => {
+      const action = actionById(model, "GRD-ACT-ROUTE");
+      action.outputFieldIds = action.outputFieldIds.filter((id) => id !== "GRD-DECISION-F-NEXT-STEP");
+    }],
+    ["feedback materialization", (model) => {
+      const action = actionById(model, "PUB-ACT-MATERIALIZE-RESULT");
+      action.outputFieldIds = action.outputFieldIds
+        .filter((id) => id !== "PUB-RESULT-F-FEEDBACK-LAYER-4");
+    }],
+    ["open-time materialization", (model) => {
+      const action = actionById(model, "PUB-ACT-MATERIALIZE-RESULT");
+      action.outputFieldIds = action.outputFieldIds
+        .filter((id) => id !== "PUB-RESULT-F-RUBRIC-OPEN-AT");
+    }],
+    ["surface action binding", (model) => {
+      delete actionById(model, "PUB-ACT-VIEW-RESULT").answerOpenEnforcement;
+    }],
+    ["surface reauthorization", (model) => {
+      actionById(model, "AIX-ACT-PREPARE-TASK-PREVIEW")
+        .answerOpenEnforcement.reauthorizeAtAccess = false;
+    }],
+    ["challenge opened event", (model) => {
+      model.events.find(({ id }) => id === "EVT-AI-ASSESSMENT-CHALLENGE-OPENED")
+        .producerActionIds = ["PUB-ACT-UPHOLD-RESULT"];
+    }],
+    ["professional evidence event", (model) => {
+      model.events.find(({ id }) => id === "EVT-AI-ASSESSMENT-PROFESSIONAL-EVIDENCE-SUBMITTED")
+        .triggeredActionIds = ["PUB-ACT-CLOSE-RESULT-CHALLENGE"];
+    }],
+    ["challenge result history", (model) => {
+      const action = actionById(model, "PUB-ACT-CORRECT-CHALLENGED-RESULT");
+      action.outputFieldIds = action.outputFieldIds
+        .filter((id) => id !== "PUB-RESULT-F-PRIOR-RESULT-VERSION");
+    }],
+    ["challenge page", (model) => {
+      moduleById(model, "PUB-001").pages
+        .find(({ id }) => id === "PUB-PAGE-RESULT-CHALLENGE").actionIds = [];
+    }],
+    ["initial-attempt lineage", (model) => {
+      objectById(model, "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION")
+        .lineageBindings[0].targetVersionFieldId = "SUB-ATTEMPT-F-ID";
+    }],
+    ["classification infers next step", (model) => {
+      actionById(model, "GRD-ACT-CLASSIFY-INITIAL-ATTEMPT")
+        .outputFieldIds.push("GRD-DECISION-F-NEXT-STEP");
+    }],
+    ["dont-know means completed", (model) => {
+      moduleById(model, "GRD-001").initialValidAttemptContract
+        .explicitDontKnowMeansCompleted = true;
+    }],
+    ["dont-know means mastery", (model) => {
+      moduleById(model, "GRD-001").initialValidAttemptContract
+        .explicitDontKnowCreatesMasteryEvidence = true;
+    }],
+    ["batch correction requires challenge", (model) => {
+      actionById(model, "PUB-ACT-CORRECT-RESULT").inputFieldIds
+        .push("PUB-RESULT-F-CHALLENGE-REF");
+    }],
+    ["solution release gate", (model) => {
+      fieldById(model, "PUB-RESULT-F-FEEDBACK-LAYER-4")
+        .releaseRequirement.visibleAtFieldId = "PUB-RESULT-F-FEEDBACK-VISIBLE-AT";
+    }],
+    ["rubric read gate", (model) => {
+      const policy = objectById(model, "PUB-OBJ-RESULT").readPolicies[0];
+      policy.timeGates = policy.timeGates
+        .filter(({ visibleAtFieldId }) => visibleAtFieldId !== "PUB-RESULT-F-RUBRIC-OPEN-AT");
+    }],
+  ];
+
+  for (const [label, mutate] of mutations) {
+    assert.match(errorsAfter(mutate), /INVALID_PHASE_TWO_AI_ASSESSMENT_CONTRACT/, label);
+  }
+});
+
+test("reports the broken AI contract domain instead of one umbrella-only error", () => {
+  const mutations = [
+    ["SNAPSHOT_READINESS", (model) => {
+      moduleById(model, "GRD-001").assessmentStandardContract
+        .sourceSnapshotInterface.versionFieldId = "HW-SNAPSHOT-F-UNKNOWN";
+    }],
+    ["AXES_NEXT_STEP", (model) => {
+      moduleById(model, "PUB-001").resultAxisWriterContract[0].writerActionIds.pop();
+    }],
+    ["FEEDBACK_OPEN", (model) => {
+      actionById(model, "PUB-ACT-VIEW-RESULT")
+        .answerOpenEnforcement.reauthorizeAtAccess = false;
+    }],
+    ["CHALLENGE_CORRECTION", (model) => {
+      moduleById(model, "PUB-001").challengeCorrectionContract.historyFieldIds.pop();
+    }],
+    ["INITIAL_VALID_ATTEMPT", (model) => {
+      moduleById(model, "GRD-001").initialValidAttemptContract
+        .explicitDontKnowCreatesMasteryEvidence = true;
+    }],
+    ["CORRECTION_VALID_ATTEMPT", (model) => {
+      moduleById(model, "CORR-001").answerExposedEvidenceContract.independentEvidence = true;
+    }],
+    ["RAW_FACT_TRACE", (model) => {
+      moduleById(model, "GRD-001").aiTraceContract.prohibitedPersistence.pop();
+    }],
+    ["EXTERNAL_AI_HIGH_IMPACT", (model) => {
+      moduleById(model, "GRD-001").externalAiProcessingContract
+        .defaultStudentDataUses.trainingAllowed = true;
+    }],
+  ];
+
+  for (const [domain, mutate] of mutations) {
+    assert.match(errorsAfter(mutate), new RegExp(`domain=${domain}\\b`), domain);
   }
 });
