@@ -745,6 +745,15 @@ const REQUIRED_COLLECTION_NAMES = [
   "launchGates",
 ];
 
+const BASELINE_V2_COLLECTION_NAMES = new Set([
+  "phases",
+  "productDecisions",
+  "baselineChapters",
+  "migrationChanges",
+  "metricGroups",
+  "launchGates",
+]);
+
 function moduleById(model, moduleId) {
   const module = model.modules.find(({ id }) => id === moduleId);
   assert.ok(module, `fixture module ${moduleId} must exist`);
@@ -3536,7 +3545,12 @@ test("rejects missing required top-level collections", () => {
     [
       "INVALID_MODEL_PROFILE model.profile must be GENERIC or ZHIXU_V2",
       ...REQUIRED_COLLECTION_NAMES
-        .map((name) => `MISSING_REQUIRED_COLLECTION ${name} must be an array`),
+        .map((name) => {
+          const code = BASELINE_V2_COLLECTION_NAMES.has(name)
+            ? "MISSING_REQUIRED_COLLECTION"
+            : "MISSING_MODEL_COLLECTION";
+          return `${code} ${name} must be an array`;
+        }),
     ].sort(),
   );
 });
@@ -11100,15 +11114,15 @@ for (const entityCase of ENTITY_CASES) {
 }
 
 const INVALID_COLLECTION_SHAPE_CASES = [
-  ["baseline decisions", "MISSING_REQUIRED_COLLECTION", (model) => {
+  ["baseline decisions", "MISSING_MODEL_COLLECTION", (model) => {
     model.baselineDecisions = {};
   }],
-  ["roles", "MISSING_REQUIRED_COLLECTION", (model) => { model.roles = {}; }],
-  ["duties", "MISSING_REQUIRED_COLLECTION", (model) => { model.duties = {}; }],
-  ["lifecycle policies", "MISSING_REQUIRED_COLLECTION", (model) => {
+  ["roles", "MISSING_MODEL_COLLECTION", (model) => { model.roles = {}; }],
+  ["duties", "MISSING_MODEL_COLLECTION", (model) => { model.duties = {}; }],
+  ["lifecycle policies", "MISSING_MODEL_COLLECTION", (model) => {
     model.lifecyclePolicies = {};
   }],
-  ["sensitivities", "MISSING_REQUIRED_COLLECTION", (model) => {
+  ["sensitivities", "MISSING_MODEL_COLLECTION", (model) => {
     model.sensitivities = {};
   }],
   ["Option Set values", "INVALID_ENTITY_SHAPE", (model) => {
@@ -11117,8 +11131,8 @@ const INVALID_COLLECTION_SHAPE_CASES = [
   ["metric event IDs", "INVALID_ENTITY_SHAPE", (model) => {
     model.metrics[0].eventIds = {};
   }],
-  ["events", "MISSING_REQUIRED_COLLECTION", (model) => { model.events = {}; }],
-  ["NFRs", "MISSING_REQUIRED_COLLECTION", (model) => { model.nfrs = {}; }],
+  ["events", "MISSING_MODEL_COLLECTION", (model) => { model.events = {}; }],
+  ["NFRs", "MISSING_MODEL_COLLECTION", (model) => { model.nfrs = {}; }],
   ["module objects", "INVALID_ENTITY_SHAPE", (model) => {
     moduleById(model, "SUB-001").objects = {};
   }],

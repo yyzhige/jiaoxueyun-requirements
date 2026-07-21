@@ -14,6 +14,14 @@ import {
 } from "../facts/professional-write-authorization.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
+const BASELINE_V2_MODEL_COLLECTIONS = new Set([
+  "phases",
+  "productDecisions",
+  "baselineChapters",
+  "migrationChanges",
+  "metricGroups",
+  "launchGates",
+]);
 const MODULE_PHASES = new Set(Object.values(PHASE));
 const MODULE_RELEASE_STATUSES = new Set(Object.values(RELEASE_STATUS));
 const RELEASE_STATUS_BY_PHASE = new Map([
@@ -2970,7 +2978,10 @@ function validateModelShape(model) {
   }
   for (const property of REQUIRED_MODEL_COLLECTIONS) {
     if (!Array.isArray(model[property])) {
-      errors.push(`MISSING_REQUIRED_COLLECTION ${property} must be an array`);
+      const code = BASELINE_V2_MODEL_COLLECTIONS.has(property)
+        ? "MISSING_REQUIRED_COLLECTION"
+        : "MISSING_MODEL_COLLECTION";
+      errors.push(`${code} ${property} must be an array`);
     }
   }
 

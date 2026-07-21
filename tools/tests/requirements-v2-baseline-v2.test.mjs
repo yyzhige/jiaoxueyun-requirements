@@ -18,6 +18,22 @@ const NEW_BASELINE_COLLECTIONS = [
   "launchGates",
 ];
 
+const LEGACY_MODEL_COLLECTIONS = [
+  "baselineDecisions",
+  "roles",
+  "duties",
+  "lifecyclePolicies",
+  "sensitivities",
+  "optionSets",
+  "events",
+  "metrics",
+  "nfrs",
+  "modules",
+  "flows",
+  "aiTasks",
+  "extensions",
+];
+
 function validFixture(overrides = {}) {
   const module = {
     id: "BASELINE-MODULE-001",
@@ -102,8 +118,20 @@ test("publishes and requires all baseline-v2 top-level collections", () => {
     const fixture = validFixture();
     delete fixture[collection];
     assertOnlyCode(
-      prepareRequirementModel(fixture).errors,
+      validateRequirementModel(fixture),
       "MISSING_REQUIRED_COLLECTION",
+    );
+  }
+});
+
+test("preserves the legacy missing-model collection error contract", () => {
+  for (const collection of LEGACY_MODEL_COLLECTIONS) {
+    const fixture = validFixture();
+    fixture.modules = [];
+    delete fixture[collection];
+    assertOnlyCode(
+      validateRequirementModel(fixture),
+      "MISSING_MODEL_COLLECTION",
     );
   }
 });
@@ -120,7 +148,7 @@ test("rejects missing and unknown module phases", () => {
     else fixture.modules[0].phase = phase;
 
     assertOnlyCode(
-      prepareRequirementModel(fixture).errors,
+      validateRequirementModel(fixture),
       "INVALID_MODULE_PHASE",
     );
   }
@@ -133,7 +161,7 @@ test("rejects missing and unknown module release statuses", () => {
     else fixture.modules[0].releaseStatus = releaseStatus;
 
     assertOnlyCode(
-      prepareRequirementModel(fixture).errors,
+      validateRequirementModel(fixture),
       "INVALID_PHASE_RELEASE_STATUS",
     );
   }
@@ -146,7 +174,7 @@ test("enforces the closed phase and release-status combinations", () => {
     [PHASE.THIRD, RELEASE_STATUS.BUILD_READY],
   ]) {
     assertOnlyCode(
-      prepareRequirementModel(validFixture({ phase, releaseStatus })).errors,
+      validateRequirementModel(validFixture({ phase, releaseStatus })),
       "INVALID_PHASE_RELEASE_STATUS",
     );
   }
@@ -157,7 +185,7 @@ test("enforces the closed phase and release-status combinations", () => {
     [PHASE.THIRD, RELEASE_STATUS.PLANNED],
   ]) {
     assert.deepEqual(
-      prepareRequirementModel(validFixture({ phase, releaseStatus })).errors,
+      validateRequirementModel(validFixture({ phase, releaseStatus })),
       [],
     );
   }
