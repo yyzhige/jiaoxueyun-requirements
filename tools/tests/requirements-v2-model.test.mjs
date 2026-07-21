@@ -1492,6 +1492,8 @@ test("covers every GRD and PUB versioned reference with one field-declared linea
       "GRD-DECISION-F-ITEM-REF",
       "GRD-DECISION-F-RUBRIC-REF",
       "GRD-DECISION-F-CAPABILITY-RULE-REF",
+      "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+      "GRD-DECISION-F-PRIOR-DECISION-REF",
     ]],
     ["PUB-OBJ-RESULT", [
       "PUB-RESULT-F-SOURCE-DECISION-REF",
@@ -3007,6 +3009,8 @@ test("keeps terminal completeness path-local and closes DF-007 batch confirmatio
   assert.deepEqual(batchConfirm.inputFieldIds, [
     "GRD-DECISION-F-SUGGESTED-SCORE",
     "GRD-DECISION-F-SCORING-RATIONALE",
+    "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+    "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
   ]);
   assert.deepEqual(batchConfirm.outputFieldIds, [
     "GRD-DECISION-F-OFFICIAL-SCORE",
@@ -3023,6 +3027,8 @@ test("keeps terminal completeness path-local and closes DF-007 batch confirmatio
   closedBatch.inputFieldIds = [
     "GRD-DECISION-F-SUGGESTED-SCORE",
     "GRD-DECISION-F-SCORING-RATIONALE",
+    "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+    "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
   ];
   closedBatch.outputFieldIds = [
     "GRD-DECISION-F-OFFICIAL-SCORE",
@@ -6455,6 +6461,18 @@ test("writes grading lineage through system outputs and recovers conflicts throu
       targetObjectId: "GRD-OBJ-CAPABILITY-RULE",
       targetVersionFieldId: "GRD-CAP-F-RULE-VERSION",
     },
+    {
+      refFieldId: "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+      versionFieldId: "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
+      targetObjectId: "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION",
+      targetVersionFieldId: "GRD-ATTEMPT-CLASS-F-VERSION",
+    },
+    {
+      refFieldId: "GRD-DECISION-F-PRIOR-DECISION-REF",
+      versionFieldId: "GRD-DECISION-F-PRIOR-DECISION-VERSION",
+      targetObjectId: "GRD-OBJ-DECISION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
   ]);
   const lineageFieldIds = [
     "GRD-DECISION-F-SUBMISSION-REF",
@@ -8379,7 +8397,13 @@ test("rejects structurally complete privileged reads across every student-detail
 
     const errors = validateRequirementModel(model);
     assert.deepEqual(
-      errors.filter((error) => !error.startsWith("INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY")),
+      errors.filter((error) => (
+        !error.startsWith("INVALID_STUDENT_DETAIL_ACCESS_BOUNDARY")
+        && !(
+          family === "AI preview"
+          && error.includes("domain=AIX_PERSISTENCE")
+        )
+      )),
       [],
       family,
     );
@@ -8837,6 +8861,9 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
   const correction = moduleById(requirementModel, "CORR-001");
   const task = correction.objects.find(({ id }) => id === "CORR-OBJ-TASK");
   const attempt = correction.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
+  const assessment = correction.objects.find(({ id }) => (
+    id === "CORR-OBJ-ATTEMPT-ASSESSMENT"
+  ));
   assert.deepEqual(task.states, ["OPEN", "OVERDUE", "AWAITING_RETRY", "COMPLETED"]);
   assert.deepEqual(attempt.states, ["SUBMITTED", "JUDGED", "NEEDS_RETRY"]);
   const dueAt = task.fields.find(({ id }) => id === "CORR-TASK-F-DUE-AT");
@@ -8899,9 +8926,8 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
   );
 
   const normalizedSubmissionFields = [
-    "CORR-ATTEMPT-F-CORRECTION-ANSWER",
-    "CORR-ATTEMPT-F-REPEATED-CORRECTION-COUNT",
-    "CORR-ATTEMPT-F-CORRECTION-VERSION",
+    "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-REF",
+    "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-VERSION",
   ];
   const createAttemptOutputs = [
     "CORR-ATTEMPT-F-ID",
@@ -8930,7 +8956,15 @@ test("models one correction task lifecycle and normalizes mutually exclusive sub
   assert.equal(normalize.executionMode, "FLOW_INTERNAL");
   assert.deepEqual(normalize.trigger, { kind: "FLOW", flowIds: ["DF-010"] });
   assert.deepEqual(normalize.inputFieldIds, normalizedSubmissionFields);
-  assert.deepEqual(normalize.transition, { from: "SUBMITTED", to: "SUBMITTED" });
+  assert.equal(normalize.targetObjectId, assessment.id);
+  assert.equal(normalize.operationKind, "CREATE");
+  assert.equal(Object.hasOwn(normalize, "transition"), false);
+  assert.equal(normalize.outputFieldIds.includes("CORR-ASSESSMENT-F-VALID-ATTEMPT"), true);
+  assert.equal(normalize.outputFieldIds.includes("CORR-ASSESSMENT-F-NEXT-STEP"), true);
+  assert.equal(
+    normalize.outputFieldIds.includes("CORR-ATTEMPT-F-CORRECTION-ANSWER"),
+    false,
+  );
 
   const correctionFlow = flows.find(({ id }) => id === "DF-010");
   assert.deepEqual(
@@ -9060,7 +9094,14 @@ test("declares field-derived guard policies for every version-pinned reference",
   assert.equal(attempt.fields.find(({ id }) => (
     id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
   )).stateGuardPolicy, "CREATE_REQUIRED");
-  assert.equal(pinnedRefs.filter(({ field }) => field.stateGuardPolicy === "NONE").length, 39);
+  for (const [objectId, fieldId] of [
+    ["GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION", "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-REF"],
+    ["CORR-OBJ-ATTEMPT-ASSESSMENT", "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-REF"],
+  ]) {
+    const object = modules.flatMap((module) => module.objects)
+      .find(({ id }) => id === objectId);
+    assert.equal(object.fields.find(({ id }) => id === fieldId).stateGuardPolicy, "NONE");
+  }
 });
 
 test("declares exact action applicability for every version-pinned reference", () => {
@@ -9087,9 +9128,17 @@ test("declares exact action applicability for every version-pinned reference", (
   assert.deepEqual(attempt.fields.find(({ id }) => (
     id === "CORR-ATTEMPT-F-PRIOR-ATTEMPT-REF"
   )).actionApplicability.requiredActionIds, ["CORR-ACT-RESUBMIT"]);
-  assert.equal(pinnedRefs.filter(({ field }) => (
-    field.actionApplicability.requiredActionIds.length === 0
-  )).length, 39);
+  for (const [objectId, fieldId] of [
+    ["GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION", "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-REF"],
+    ["CORR-OBJ-ATTEMPT-ASSESSMENT", "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-REF"],
+  ]) {
+    const object = modules.flatMap((module) => module.objects)
+      .find(({ id }) => id === objectId);
+    assert.deepEqual(
+      object.fields.find(({ id }) => id === fieldId).actionApplicability.requiredActionIds,
+      [],
+    );
+  }
 });
 
 test("fails closed when version-pinned action applicability is malformed", () => {

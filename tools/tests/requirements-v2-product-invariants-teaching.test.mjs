@@ -81,7 +81,15 @@ test("activity publication seals one immutable snapshot before publication and s
     assert.ok(orderByActionId.get("HW-ACT-CREATE-PUBLICATION-SNAPSHOT") < orderByActionId.get(actionId));
   }
   const publicationEvent = requirementModel.events.find(({ id }) => id === "EVT-HW-PUBLICATION-COMMITTED");
-  assert.deepEqual(publicationEvent.triggeredActionIds, ["HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW"]);
+  assert.deepEqual(publicationEvent.producerActionIds, [
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ]);
+  assert.deepEqual(publicationEvent.triggeredActionIds, [
+    "HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW",
+    "GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD",
+  ]);
   assert.equal(actionById(module, "HW-ACT-CANCEL-ADMINISTRATIVE").transition.to, "CANCELLED");
   assert.equal(actionById(module, "HW-ACT-CANCEL-CONTENT-RIGHT-ERROR").transition.to, "CANCELLED");
   assert.equal(actionById(module, "HW-ACT-CANCEL-FOR-REPLACEMENT").transition.to, "CANCELLED");

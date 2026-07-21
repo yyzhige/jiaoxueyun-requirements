@@ -40,6 +40,40 @@ const METRIC_EVENT_COUNTS = new Map([
   ["boolean", 1],
 ]);
 
+const RESTRICTED_RESULT_CONTENT_FIELDS = Object.freeze([
+  ["PUB-RESULT-F-ANSWER", "ANSWER", "PUB-RESULT-F-ANSWER-OPEN-AT"],
+  ["PUB-RESULT-F-SCORE", "SCORE", "PUB-RESULT-F-SCORE-VISIBLE-AT"],
+  ["PUB-RESULT-F-FEEDBACK", "FEEDBACK", "PUB-RESULT-F-FEEDBACK-VISIBLE-AT"],
+  ["PUB-RESULT-F-FEEDBACK-LAYER-1", "FEEDBACK", "PUB-RESULT-F-FEEDBACK-VISIBLE-AT"],
+  ["PUB-RESULT-F-FEEDBACK-LAYER-2", "FEEDBACK", "PUB-RESULT-F-FEEDBACK-VISIBLE-AT"],
+  ["PUB-RESULT-F-FEEDBACK-LAYER-3", "FEEDBACK", "PUB-RESULT-F-FEEDBACK-VISIBLE-AT"],
+  ["PUB-RESULT-F-FEEDBACK-LAYER-4", "COMPLETE_ANSWER_AND_SOLUTION", "PUB-RESULT-F-SOLUTION-OPEN-AT"],
+  ["PUB-RESULT-F-ASSESSMENT-STANDARD-CONTENT", "ASSESSMENT_STANDARD", "PUB-RESULT-F-RUBRIC-OPEN-AT"],
+]);
+
+const PROVIDER_EXCLUSIVE_OUTPUT_FIELD_IDS = new Set([
+  "GRD-DECISION-F-RECOGNIZED-ANSWER",
+  "GRD-DECISION-F-RECOGNIZED-REGION",
+  "GRD-DECISION-F-SUGGESTED-SCORE",
+  "GRD-DECISION-F-SCORING-RATIONALE",
+  "GRD-DECISION-F-CONFIDENCE",
+  "GRD-DECISION-F-LIMITATION",
+  "GRD-DECISION-F-INPUT-QUALITY",
+  "GRD-DECISION-F-EVIDENCE-REFS",
+  "GRD-DECISION-F-CONCLUSION",
+  "GRD-DECISION-F-FEEDBACK-REF",
+  "GRD-TRACE-F-EVIDENCE-REFERENCES",
+  "GRD-TRACE-F-EXTERNAL-REFERENCE",
+  "GRD-TRACE-F-MODEL-VERSION",
+  "GRD-TRACE-F-CAPABILITY-VERSION",
+  "GRD-TRACE-F-RULE-VERSION",
+  "GRD-TRACE-F-SAFETY-VERSION",
+  "GRD-TRACE-F-RESULT-REFERENCE",
+  "GRD-TRACE-F-GATE-OUTCOMES",
+  "GRD-ATTEMPT-CLASS-F-CLASSIFICATION",
+  "GRD-ATTEMPT-CLASS-F-EVIDENCE",
+]);
+
 const EXTENSION_EXECUTABLE_KEYS = [
   "pageIds",
   "actionIds",
@@ -5724,6 +5758,17 @@ function firstStageActivityErrors(index) {
   const snapshotFields = records(snapshotObject?.fields);
   const assignmentSnapshotRef = index.fieldById
     .get("HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-REF")?.value;
+  const expectedPublicationProducerActionIds = [
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
+  const expectedPublicationConsumerActionIds = [
+    "HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW",
+    ...(index.actionById.has("GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD")
+      ? ["GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD"]
+      : []),
+  ];
   const snapshotValid = snapshot?.snapshotObjectId === "HW-OBJ-PUBLICATION-SNAPSHOT"
     && snapshot?.createActionId === "HW-ACT-CREATE-PUBLICATION-SNAPSHOT"
     && snapshot?.requiredState === "SEALED"
@@ -5752,9 +5797,19 @@ function firstStageActivityErrors(index) {
         < stepOrderByActionId.get(actionId)
     ))
     && setEquals(
-      new Set(list(publicationEvent?.triggeredActionIds)),
-      new Set(["HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW"]),
+      new Set(list(publicationEvent?.producerActionIds)),
+      new Set(expectedPublicationProducerActionIds),
     )
+    && setEquals(
+      new Set(list(publicationEvent?.triggeredActionIds)),
+      new Set(expectedPublicationConsumerActionIds),
+    )
+    && expectedPublicationProducerActionIds.every((actionId) => (
+      list(index.actionById.get(actionId)?.value?.producedEventIds)
+        .includes("EVT-HW-PUBLICATION-COMMITTED")
+    ))
+    && !list(index.actionById.get("HW-ACT-SCHEDULE-PUBLISH")?.value?.producedEventIds)
+      .includes("EVT-HW-PUBLICATION-COMMITTED")
     && !list(publicationEvent?.triggeredActionIds)
       .includes("HW-ACT-CREATE-PUBLICATION-SNAPSHOT")
     && !records(activity.fields).some(({ id }) => id?.startsWith("HW-ASSIGNMENT-F-PUBLISHED-"));
@@ -6485,6 +6540,40 @@ const AI_ASSESSMENT_NEXT_STEPS = [
   "UNABLE_TO_DETERMINE",
   "EXCEPTION_REVIEW_REQUIRED",
 ];
+const AI_NEXT_STEP_WRITER_MATRIX = {
+  "GRD-ACT-ROUTE": AI_ASSESSMENT_NEXT_STEPS,
+  "GRD-ACT-ROUTE-UNSUPPORTED": ["MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+  "GRD-ACT-ROUTE-AI-UNAVAILABLE": ["UNABLE_TO_DETERMINE", "EXCEPTION_REVIEW_REQUIRED"],
+  "GRD-ACT-ACCEPT-SUGGESTION": ["COMPLETED", "CORRECTION_REQUIRED", "MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+  "GRD-ACT-OVERRIDE-SCORE": ["COMPLETED", "CORRECTION_REQUIRED", "MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+  "GRD-ACT-MANUAL-GRADE": ["COMPLETED", "CORRECTION_REQUIRED", "MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+  "GRD-ACT-BATCH-CONFIRM": ["COMPLETED", "CORRECTION_REQUIRED", "MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+  "GRD-ACT-CONFIRM-REVISION": ["COMPLETED", "CORRECTION_REQUIRED", "MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+};
+const INITIAL_ATTEMPT_NEXT_STEP_MATRIX = {
+  SUBSTANTIVE_RESPONSE: AI_ASSESSMENT_NEXT_STEPS,
+  EXPLICIT_DONT_KNOW: [
+    "CORRECTION_REQUIRED",
+    "MORE_INPUT_REQUIRED",
+    "UNABLE_TO_DETERMINE",
+    "EXCEPTION_REVIEW_REQUIRED",
+  ],
+  BLANK: ["MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+  UNRELATED: ["MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+  PLACEHOLDER: ["MORE_INPUT_REQUIRED", "UNABLE_TO_DETERMINE"],
+};
+const CLASSIFICATION_BOUND_ASSESSMENT_ACTION_IDS = [
+  "GRD-ACT-ENQUEUE",
+  "GRD-ACT-PROCESS",
+  "GRD-ACT-ROUTE",
+  "GRD-ACT-ROUTE-UNSUPPORTED",
+  "GRD-ACT-ROUTE-AI-UNAVAILABLE",
+  "GRD-ACT-ACCEPT-SUGGESTION",
+  "GRD-ACT-OVERRIDE-SCORE",
+  "GRD-ACT-MANUAL-GRADE",
+  "GRD-ACT-BATCH-CONFIRM",
+  "GRD-ACT-CONFIRM-REVISION",
+];
 const AI_FEEDBACK_LAYERS = [
   "RESULT_AND_ERROR_LOCATION",
   "NON_ANSWER_SCAFFOLD",
@@ -6501,8 +6590,294 @@ const ANSWER_OPEN_SURFACES = [
   "CACHE",
   "DIRECT_LINK",
 ];
+const AIX_PERSISTED_FIELD_IDS = [
+  "AIX-PREVIEW-F-ID",
+  "AIX-PREVIEW-F-TASK-ID",
+  "AIX-PREVIEW-F-TARGET-ACTION-ID",
+  "AIX-PREVIEW-F-PERMISSION-RESULT",
+  "AIX-PREVIEW-F-EXPIRES-AT",
+  "AIX-PREVIEW-F-VERSION",
+  "AIX-PREVIEW-F-USER-REQUEST",
+  "AIX-PREVIEW-F-SOURCE-VERSION-REFS",
+  "AIX-PREVIEW-F-SOURCE-RESULT-REF",
+  "AIX-PREVIEW-F-SOURCE-RESULT-VERSION",
+  "AIX-PREVIEW-F-USER-VISIBLE-CONTENT",
+  "AIX-PREVIEW-F-EVIDENCE-REFERENCES",
+  "AIX-PREVIEW-F-RESULT-REFERENCE",
+  "AIX-PREVIEW-F-MODEL-VERSION",
+  "AIX-PREVIEW-F-CAPABILITY-VERSION",
+  "AIX-PREVIEW-F-RULE-VERSION",
+  "AIX-PREVIEW-F-SAFETY-VERSION",
+  "AIX-PREVIEW-F-PERMISSION-GATE",
+  "AIX-PREVIEW-F-SAFETY-GATE",
+  "AIX-PREVIEW-F-TEACHING-CORRECTNESS-GATE",
+  "AIX-PREVIEW-F-ANSWER-OPEN-GATE",
+  "AIX-PREVIEW-F-ANSWER-OPEN-POLICY-ID",
+  "AIX-PREVIEW-F-ANSWER-OPEN-POLICY-VERSION",
+  "AIX-PREVIEW-F-AUTHORIZATION-CHECKED-AT",
+  "AIX-PREVIEW-F-RESTRICTED-CONTENT-CATEGORIES",
+];
+const AIX_PROHIBITED_PERSISTENCE = [
+  "HIDDEN_CHAIN_OF_THOUGHT",
+  "VENDOR_DEBUG_FIELDS",
+  "FULL_UPSTREAM_REQUEST_BODY",
+  "UNKNOWN_PERSISTED_KEYS",
+];
+const AIX_EXTERNAL_AI_ACTION_IDS = [
+  "AIX-ACT-PREPARE-TASK-PREVIEW",
+  "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+  "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+];
+const AIX_RESULT_BOUND_ACTION_IDS = [
+  "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+  "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+];
+const AIX_NON_RESULT_ACTION_IDS = ["AIX-ACT-PREPARE-TASK-PREVIEW"];
+const AIX_RESULT_SOURCE_FIELD_IDS = [
+  "AIX-PREVIEW-F-SOURCE-RESULT-REF",
+  "AIX-PREVIEW-F-SOURCE-RESULT-VERSION",
+];
+const AIX_ANSWER_OPEN_POLICY_FIELD_MAPPINGS = [
+  {
+    sourceFieldId: "PUB-RESULT-F-ANSWER-OPEN-POLICY-ID",
+    localFieldId: "AIX-PREVIEW-F-ANSWER-OPEN-POLICY-ID",
+  },
+  {
+    sourceFieldId: "PUB-RESULT-F-ANSWER-OPEN-POLICY-VERSION",
+    localFieldId: "AIX-PREVIEW-F-ANSWER-OPEN-POLICY-VERSION",
+  },
+];
+const AIX_PREVIEW_GATE_FIELD_IDS = [
+  "AIX-PREVIEW-F-PERMISSION-GATE",
+  "AIX-PREVIEW-F-SAFETY-GATE",
+  "AIX-PREVIEW-F-TEACHING-CORRECTNESS-GATE",
+  "AIX-PREVIEW-F-ANSWER-OPEN-GATE",
+];
+const AIX_GATE_FAILURE_RESULTS = [
+  "PERMISSION_GATE_FAILED",
+  "SAFETY_GATE_FAILED",
+  "TEACHING_CORRECTNESS_GATE_FAILED",
+  "ANSWER_OPEN_GATE_FAILED",
+  "GATE_UNAVAILABLE",
+];
+const AIX_RESULT_PERSISTENCE_MAPPING = {
+  userVisibleContent: "AIX-PREVIEW-F-USER-VISIBLE-CONTENT",
+  sourceVersionRefs: "AIX-PREVIEW-F-SOURCE-VERSION-REFS",
+  evidenceReferences: "AIX-PREVIEW-F-EVIDENCE-REFERENCES",
+  resultReference: "AIX-PREVIEW-F-RESULT-REFERENCE",
+  modelVersion: "AIX-PREVIEW-F-MODEL-VERSION",
+  capabilityVersion: "AIX-PREVIEW-F-CAPABILITY-VERSION",
+  ruleVersion: "AIX-PREVIEW-F-RULE-VERSION",
+  safetyVersion: "AIX-PREVIEW-F-SAFETY-VERSION",
+  permissionGate: "AIX-PREVIEW-F-PERMISSION-GATE",
+  safetyGate: "AIX-PREVIEW-F-SAFETY-GATE",
+  teachingCorrectnessGate: "AIX-PREVIEW-F-TEACHING-CORRECTNESS-GATE",
+  answerOpenGate: "AIX-PREVIEW-F-ANSWER-OPEN-GATE",
+};
+const CLOSED_PROVIDER_RESPONSE_BOUNDARY = {
+  persisted: false,
+  fullUpstreamRequestPersisted: false,
+  vendorDebugFieldsPersisted: false,
+  hiddenChainOfThoughtPersisted: false,
+  unknownKeysBeforePersistence: "REJECT",
+};
+const EXTERNAL_AI_DERIVED_ACTION_CONTRACTS = [
+  {
+    actionId: "GRD-ACT-CLASSIFY-INITIAL-ATTEMPT",
+    requiredProperties: [
+      "classification",
+      "evidenceReferences",
+      "validityStatus",
+      "disputeStatus",
+    ],
+    propertyTypes: {
+      classification: "string",
+      evidenceReferences: "string_array",
+      validityStatus: "string",
+      disputeStatus: "string",
+    },
+    propertyEnums: {
+      classification: [
+        "SUBSTANTIVE_RESPONSE",
+        "EXPLICIT_DONT_KNOW",
+        "BLANK",
+        "UNRELATED",
+        "PLACEHOLDER",
+      ],
+      validityStatus: ["VALID"],
+      disputeStatus: ["UNCHALLENGED"],
+    },
+    resultPersistenceMapping: {
+      classification: "GRD-ATTEMPT-CLASS-F-CLASSIFICATION",
+      evidenceReferences: "GRD-ATTEMPT-CLASS-F-EVIDENCE",
+      validityStatus: "GRD-ATTEMPT-CLASS-F-VALIDITY-STATUS",
+      disputeStatus: "GRD-ATTEMPT-CLASS-F-DISPUTE-CORRECTION-STATUS",
+    },
+    systemOutputFieldIds: [
+      "GRD-ATTEMPT-CLASS-F-ID",
+      "GRD-ATTEMPT-CLASS-F-SUBMISSION-REF",
+      "GRD-ATTEMPT-CLASS-F-SUBMISSION-VERSION",
+      "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-REF",
+      "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-VERSION",
+      "GRD-ATTEMPT-CLASS-F-SUPERSESSION-REASON",
+      "GRD-ATTEMPT-CLASS-F-VERSION",
+    ],
+  },
+  {
+    actionId: "GRD-ACT-PROCESS",
+    requiredProperties: [
+      "recognizedAnswer",
+      "recognizedRegion",
+      "scoringRationale",
+      "confidence",
+      "limitation",
+      "inputQualityCodes",
+      "evidenceReferences",
+      "traceEvidenceReferences",
+      "conclusion",
+      "nextAction",
+      "externalReference",
+      "modelVersion",
+      "capabilityVersion",
+      "ruleVersion",
+      "safetyVersion",
+      "resultReference",
+      "gateOutcomes",
+    ],
+    propertyTypes: {
+      recognizedAnswer: "string",
+      recognizedRegion: "string",
+      suggestedScore: "number",
+      scoringRationale: "string",
+      confidence: "string",
+      limitation: "string",
+      inputQualityCodes: "string_array",
+      evidenceReferences: "string_array",
+      traceEvidenceReferences: "string_array",
+      conclusion: "string",
+      feedbackReference: "string",
+      nextAction: "string",
+      externalReference: "string",
+      modelVersion: "string",
+      capabilityVersion: "string",
+      ruleVersion: "string",
+      safetyVersion: "string",
+      resultReference: "string",
+      gateOutcomes: "string_array",
+    },
+    propertyEnums: {},
+    resultPersistenceMapping: {
+      recognizedAnswer: "GRD-DECISION-F-RECOGNIZED-ANSWER",
+      recognizedRegion: "GRD-DECISION-F-RECOGNIZED-REGION",
+      suggestedScore: "GRD-DECISION-F-SUGGESTED-SCORE",
+      scoringRationale: "GRD-DECISION-F-SCORING-RATIONALE",
+      confidence: "GRD-DECISION-F-CONFIDENCE",
+      limitation: "GRD-DECISION-F-LIMITATION",
+      inputQualityCodes: "GRD-DECISION-F-INPUT-QUALITY",
+      evidenceReferences: "GRD-DECISION-F-EVIDENCE-REFS",
+      traceEvidenceReferences: "GRD-TRACE-F-EVIDENCE-REFERENCES",
+      conclusion: "GRD-DECISION-F-CONCLUSION",
+      feedbackReference: "GRD-DECISION-F-FEEDBACK-REF",
+      nextAction: "GRD-DECISION-F-NEXT-ACTION",
+      externalReference: "GRD-TRACE-F-EXTERNAL-REFERENCE",
+      modelVersion: "GRD-TRACE-F-MODEL-VERSION",
+      capabilityVersion: "GRD-TRACE-F-CAPABILITY-VERSION",
+      ruleVersion: "GRD-TRACE-F-RULE-VERSION",
+      safetyVersion: "GRD-TRACE-F-SAFETY-VERSION",
+      resultReference: "GRD-TRACE-F-RESULT-REFERENCE",
+      gateOutcomes: "GRD-TRACE-F-GATE-OUTCOMES",
+    },
+    systemOutputFieldIds: [
+      "GRD-DECISION-F-DECISION-VERSION",
+      "GRD-DECISION-F-PROCESSING-STATUS",
+      "GRD-DECISION-F-ACTIVITY-SNAPSHOT-REF",
+      "GRD-DECISION-F-ACTIVITY-SNAPSHOT-VERSION",
+      "GRD-DECISION-F-HELP-ENVIRONMENT",
+      "GRD-TRACE-F-BUSINESS-TASK-ID",
+    ],
+    scoringRationaleContract: {
+      fieldId: "GRD-DECISION-F-SCORING-RATIONALE",
+      evidenceReferenceFieldId: "GRD-DECISION-F-EVIDENCE-REFS",
+      hiddenReasoningAllowed: false,
+    },
+  },
+  {
+    actionId: "CORR-ACT-NORMALIZE-SUBMISSION",
+    requiredProperties: [
+      "classification",
+      "nextStep",
+      "answerExposure",
+      "evidenceKind",
+      "validityStatus",
+      "disputeStatus",
+    ],
+    propertyTypes: {
+      classification: "string",
+      nextStep: "string",
+      answerExposure: "string",
+      evidenceKind: "string",
+      validityStatus: "string",
+      disputeStatus: "string",
+    },
+    propertyEnums: {
+      classification: [
+        "SUBSTANTIVE_RESPONSE",
+        "EXPLICIT_DONT_KNOW",
+        "BLANK",
+        "UNRELATED",
+        "PLACEHOLDER",
+      ],
+      nextStep: AI_ASSESSMENT_NEXT_STEPS,
+      answerExposure: ["NOT_EXPOSED", "ANSWER_EXPOSED", "UNKNOWN"],
+      validityStatus: ["VALID"],
+      disputeStatus: ["UNCHALLENGED"],
+    },
+    resultPersistenceMapping: {
+      classification: "CORR-ASSESSMENT-F-VALID-ATTEMPT",
+      nextStep: "CORR-ASSESSMENT-F-NEXT-STEP",
+      answerExposure: "CORR-ASSESSMENT-F-ANSWER-EXPOSURE",
+      evidenceKind: "CORR-ASSESSMENT-F-EVIDENCE-KIND",
+      validityStatus: "CORR-ASSESSMENT-F-VALIDITY-STATUS",
+      disputeStatus: "CORR-ASSESSMENT-F-DISPUTE-CORRECTION-STATUS",
+    },
+    systemOutputFieldIds: [
+      "CORR-ASSESSMENT-F-ID",
+      "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-REF",
+      "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-VERSION",
+      "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-REF",
+      "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-VERSION",
+      "CORR-ASSESSMENT-F-SUPERSESSION-REASON",
+      "CORR-ASSESSMENT-F-VERSION",
+    ],
+  },
+];
+const AIX_ASSIGNMENT_CONFIRMATION_INPUT_MAPPING = {
+  title: "HW-ASSIGNMENT-F-TITLE",
+  instructions: "HW-ASSIGNMENT-F-INSTRUCTIONS",
+  subjectId: "HW-ASSIGNMENT-F-SUBJECT-ID",
+  courseId: "HW-ASSIGNMENT-F-COURSE-ID",
+  classScopeIds: "HW-ASSIGNMENT-F-CLASS-SCOPE-IDS",
+  openAt: "HW-ASSIGNMENT-F-OPEN-AT",
+  dueAt: "HW-ASSIGNMENT-F-DUE-AT",
+  latePolicy: "HW-ASSIGNMENT-F-LATE-POLICY",
+  resubmissionPolicy: "HW-ASSIGNMENT-F-RESUBMISSION-POLICY",
+  assignmentType: "HW-ASSIGNMENT-F-ASSIGNMENT-TYPE",
+  purpose: "HW-ASSIGNMENT-F-PURPOSE",
+  helpRuleRef: "HW-ASSIGNMENT-F-HELP-RULE-REF",
+  answerOpenPolicy: "HW-ASSIGNMENT-F-ANSWER-OPEN-POLICY",
+  diagnosticUse: "HW-ASSIGNMENT-F-DIAGNOSTIC-USE",
+  lateEnrolleeWindowPolicy: "HW-ASSIGNMENT-F-LATE-ENROLLEE-WINDOW-POLICY",
+  questionOrder: "HW-ASSIGNMENT-F-QUESTION-ORDER",
+  rubricVersion: "HW-ASSIGNMENT-F-RUBRIC-VERSION",
+  knowledgePointIds: "HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS",
+  feedbackPolicy: "HW-ASSIGNMENT-F-FEEDBACK-POLICY",
+  notificationPolicy: "HW-ASSIGNMENT-F-NOTIFICATION-POLICY",
+  helpRuleVersion: "HW-ASSIGNMENT-F-HELP-RULE-VERSION",
+  schoolTimePolicyRef: "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-REF",
+  schoolTimePolicyVersion: "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-VERSION",
+};
 const ASSESSMENT_STANDARD_OBJECT_ID = "GRD-OBJ-ASSESSMENT-STANDARD-VERSION";
-const ASSESSMENT_STANDARD_EVENT_ID = "EVT-ACTIVITY-ASSESSMENT-STANDARD-REQUIRED";
+const ASSESSMENT_STANDARD_EVENT_ID = "EVT-HW-PUBLICATION-COMMITTED";
 const ASSESSMENT_NOTIFICATION_EVENT_ID = "EVT-AI-ASSESSMENT-CORRECTION-NOTIFICATION-REQUESTED";
 const ASSESSMENT_READINESS_ACTION_ID = "GRD-ACT-CHECK-PHASE-TWO-ASSESSMENT-READINESS";
 const CHALLENGE_OPENED_EVENT_ID = "EVT-AI-ASSESSMENT-CHALLENGE-OPENED";
@@ -6544,6 +6919,7 @@ const PUBLICATION_SNAPSHOT_INTERFACE = {
   versionFieldId: "HW-SNAPSHOT-F-VERSION",
   producerActionId: "HW-ACT-CREATE-PUBLICATION-SNAPSHOT",
   producerEventId: "EVT-HW-PUBLICATION-COMMITTED",
+  requiredState: "SEALED",
   resolutionRequiredBeforeExecution: true,
 };
 const ANSWER_OPEN_ENFORCEMENT_REFS = new Map([
@@ -6677,14 +7053,62 @@ function phaseTwoAiAssessmentErrors(index) {
         )))
         .map(({ value: action }) => action.id),
     )
+    && hasExactKeys(nextStep?.writerOutcomeMatrix, Object.keys(AI_NEXT_STEP_WRITER_MATRIX))
+    && Object.entries(AI_NEXT_STEP_WRITER_MATRIX).every(([actionId, codes]) => (
+      sameStringSet(nextStep?.writerOutcomeMatrix?.[actionId], codes)
+    ))
+    && hasExactKeys(
+      nextStep?.initialAttemptOutcomeMatrix,
+      Object.keys(INITIAL_ATTEMPT_NEXT_STEP_MATRIX),
+    )
+    && Object.entries(INITIAL_ATTEMPT_NEXT_STEP_MATRIX).every(([classification, codes]) => (
+      sameStringSet(nextStep?.initialAttemptOutcomeMatrix?.[classification], codes)
+    ))
+    && nextStep?.explicitDontKnowMayWriteCompleted === false
+    && !list(nextStep?.initialAttemptOutcomeMatrix?.EXPLICIT_DONT_KNOW).includes("COMPLETED")
     && list(nextStep?.writerActionIds).every((actionId) => {
       const action = index.actionById.get(actionId)?.value;
       const writes = records(action?.statusWrites)
         .filter(({ fieldId }) => fieldId === nextStep?.fieldId);
+      const allowedCodes = AI_NEXT_STEP_WRITER_MATRIX[actionId];
+      const outcomeContract = action?.nextStepOutcomeContract;
       return list(action?.outputFieldIds).includes(nextStep?.fieldId)
         && writes.length === 1
-        && list(writes[0].codes).length > 0
-        && list(writes[0].codes).every((code) => AI_ASSESSMENT_NEXT_STEPS.includes(code));
+        && sameStringSet(writes[0].codes, allowedCodes)
+        && outcomeContract?.fieldId === nextStep?.fieldId
+        && sameStringSet(outcomeContract?.allowedCodes, allowedCodes)
+        && outcomeContract?.sourceClassificationFieldId === "GRD-ATTEMPT-CLASS-F-CLASSIFICATION"
+        && outcomeContract?.sourceClassificationRefFieldId
+          === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF"
+        && outcomeContract?.sourceClassificationVersionFieldId
+          === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION"
+        && outcomeContract?.sourceClassificationTargetVersionFieldId
+          === "GRD-ATTEMPT-CLASS-F-VERSION"
+        && outcomeContract?.exactClassificationVersionRequired === true
+        && [
+          "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+          "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
+        ].every((fieldId) => list(action?.inputFieldIds).includes(fieldId))
+        && records(action?.relatedStateGuards).some((guard) => (
+          guard?.refFieldId === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF"
+          && guard?.versionFieldId
+            === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION"
+          && guard?.targetObjectId === "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
+          && guard?.requiredState === "CLASSIFIED"
+        ))
+        && hasExactKeys(
+          outcomeContract?.allowedByInitialAttemptClassification,
+          Object.keys(INITIAL_ATTEMPT_NEXT_STEP_MATRIX),
+        )
+        && Object.entries(INITIAL_ATTEMPT_NEXT_STEP_MATRIX)
+          .every(([classification, codes]) => sameStringSet(
+            outcomeContract?.allowedByInitialAttemptClassification?.[classification],
+            codes,
+          ))
+        && outcomeContract?.unknownClassificationBehavior
+          === "KEEP_UNPUBLISHED_AND_REQUEST_REVIEWABLE_INPUT"
+        && outcomeContract?.explicitDontKnowMayWriteCompleted === false
+        && outcomeContract?.completionCreatesMasteryEvidence === false;
     })
     && !list(index.actionById.get("GRD-ACT-PROCESS")?.value?.outputFieldIds)
       .includes(nextStep?.fieldId);
@@ -6739,6 +7163,27 @@ function phaseTwoAiAssessmentErrors(index) {
   const assessmentFlow = index.flows.find(({ value }) => value?.id === "DF-006")?.value;
   const processAssessment = index.actionById.get("GRD-ACT-PROCESS")?.value;
   const phaseTwoActivationGate = standardContract?.phaseTwoActivationGate;
+  const publicationProducerActionIds = [
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
+  const publicationConsumerActionIds = [
+    "HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW",
+    "GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD",
+  ];
+  const expectedSnapshotOutputBindings = [
+    {
+      producerFieldId: "HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-REF",
+      consumerFieldId: "GRD-STANDARD-F-ACTIVITY-SNAPSHOT-REF",
+      targetIdentityFieldId: "HW-SNAPSHOT-F-ID",
+    },
+    {
+      producerFieldId: "HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-VERSION",
+      consumerFieldId: "GRD-STANDARD-F-ACTIVITY-SNAPSHOT-VERSION",
+      targetVersionFieldId: "HW-SNAPSHOT-F-VERSION",
+    },
+  ];
   const snapshotInterfaceMatches = (value) => (
     isRecord(value)
     && hasExactKeys(value, Object.keys(PUBLICATION_SNAPSHOT_INTERFACE))
@@ -6799,6 +7244,8 @@ function phaseTwoAiAssessmentErrors(index) {
     && sameStringSet(resolveStandard?.outputFieldIds, [
       "GRD-STANDARD-F-ID",
       "GRD-STANDARD-F-VERSION",
+      "GRD-STANDARD-F-ACTIVITY-SNAPSHOT-REF",
+      "GRD-STANDARD-F-ACTIVITY-SNAPSHOT-VERSION",
       "GRD-STANDARD-F-FROZEN-AT",
     ])
     && resolveStandard?.snapshotMatch === "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION"
@@ -6808,6 +7255,7 @@ function phaseTwoAiAssessmentErrors(index) {
       versionFieldId: generateStandard?.publicationSnapshotGuard?.versionFieldId,
       producerActionId: generateStandard?.publicationSnapshotGuard?.producerActionId,
       producerEventId: generateStandard?.publicationSnapshotGuard?.producerEventId,
+      requiredState: generateStandard?.publicationSnapshotGuard?.requiredState,
       resolutionRequiredBeforeExecution: generateStandard?.publicationSnapshotGuard?.resolutionRequiredBeforeExecution,
     })
     && generateStandard?.publicationSnapshotGuard?.failClosed === true
@@ -6818,21 +7266,40 @@ function phaseTwoAiAssessmentErrors(index) {
       versionFieldId: resolveStandard?.publicationSnapshotGuard?.versionFieldId,
       producerActionId: resolveStandard?.publicationSnapshotGuard?.producerActionId,
       producerEventId: resolveStandard?.publicationSnapshotGuard?.producerEventId,
+      requiredState: resolveStandard?.publicationSnapshotGuard?.requiredState,
       resolutionRequiredBeforeExecution: resolveStandard?.publicationSnapshotGuard?.resolutionRequiredBeforeExecution,
     })
     && resolveStandard?.publicationSnapshotGuard?.failClosed === true
     && resolveStandard?.publicationSnapshotGuard?.executionAllowedWithoutResolvedSource === false
-    && !Object.hasOwn(standardEvent ?? {}, "producerActionIds")
-    && snapshotInterfaceMatches(standardEvent?.deferredProducerInterface)
-    && sameStringSet(standardEvent?.triggeredActionIds, [generateStandard?.id])
+    && sameStringSet(standardEvent?.producerActionIds, publicationProducerActionIds)
+    && sameStringSet(standardEvent?.triggeredActionIds, publicationConsumerActionIds)
+    && publicationProducerActionIds.every((actionId) => (
+      list(index.actionById.get(actionId)?.value?.producedEventIds)
+        .includes(ASSESSMENT_STANDARD_EVENT_ID)
+    ))
+    && publicationConsumerActionIds.every((actionId) => (
+      list(standardEvent?.triggeredActionIds).includes(actionId)
+    ))
+    && !list(index.actionById.get("HW-ACT-SCHEDULE-PUBLISH")?.value?.producedEventIds)
+      .includes(ASSESSMENT_STANDARD_EVENT_ID)
+    && snapshotInterfaceMatches({
+      objectId: standardEvent?.assessmentStandardConsumerBinding?.objectId,
+      identityFieldId: standardEvent?.assessmentStandardConsumerBinding?.identityFieldId,
+      versionFieldId: standardEvent?.assessmentStandardConsumerBinding?.versionFieldId,
+      producerActionId: standardEvent?.assessmentStandardConsumerBinding?.producerActionId,
+      producerEventId: standardEvent?.assessmentStandardConsumerBinding?.producerEventId,
+      requiredState: standardEvent?.assessmentStandardConsumerBinding?.requiredState,
+      resolutionRequiredBeforeExecution: standardEvent?.assessmentStandardConsumerBinding?.resolutionRequiredBeforeExecution,
+    })
+    && standardEvent?.assessmentStandardConsumerBinding?.failClosed === true
+    && JSON.stringify(standardEvent?.assessmentStandardConsumerBinding?.producerOutputBindings)
+      === JSON.stringify(expectedSnapshotOutputBindings)
+    && !list(standardEvent?.triggeredActionIds)
+      .includes("HW-ACT-CREATE-PUBLICATION-SNAPSHOT")
     && STUDENT_ANSWER_ACTION_IDS.every((actionId) => {
       const action = index.actionById.get(actionId)?.value;
       return action && !Object.hasOwn(action, "assessmentStandardGate");
     })
-    && ["HW-ACT-PUBLISH-NOW", "HW-ACT-PUBLISH-SCHEDULED"].every((actionId) => (
-      !list(index.actionById.get(actionId)?.value?.producedEventIds)
-        .includes(ASSESSMENT_STANDARD_EVENT_ID)
-    ))
     && decisionStandardRef?.valueSource?.targetObjectId === ASSESSMENT_STANDARD_OBJECT_ID
     && decisionStandardRef?.versionBinding?.versionFieldId === "GRD-DECISION-F-RUBRIC-VERSION"
     && decisionStandardRef?.versionBinding?.targetVersionFieldId === "GRD-STANDARD-F-VERSION"
@@ -6879,6 +7346,98 @@ function phaseTwoAiAssessmentErrors(index) {
     && highImpact?.defaultIdentifiedCompositeRankingAllowed === false
     && highImpact?.publicWeaknessRankingAllowed === false;
   const externalAi = grading?.externalAiProcessingContract;
+  const providerSchemaPropertyMatches = (property, expectedType, expectedEnum) => {
+    if (expectedType === "string_array") {
+      return property?.type === "array"
+        && property?.items?.type === "string"
+        && Object.keys(property.items).length === 1
+        && !Object.hasOwn(property, "enum");
+    }
+    return property?.type === expectedType
+      && (expectedEnum
+        ? sameStringSet(property?.enum, expectedEnum)
+        : !Object.hasOwn(property ?? {}, "enum"));
+  };
+  const externalAiDerivedActionsValid = EXTERNAL_AI_DERIVED_ACTION_CONTRACTS.every((expected) => {
+    const action = index.actionById.get(expected.actionId)?.value;
+    const provider = action?.providerResultContract;
+    const schema = provider?.resultSchema;
+    const properties = schema?.properties;
+    const expectedOutputFieldIds = [
+      ...Object.values(expected.resultPersistenceMapping),
+      ...expected.systemOutputFieldIds,
+    ];
+    const expectedProviderKeys = expected.scoringRationaleContract
+      ? [
+          "resultSchema",
+          "resultPersistenceMapping",
+          "verifiableTeachingEvidenceOnly",
+          "scoringRationaleContract",
+        ]
+      : [
+          "resultSchema",
+          "resultPersistenceMapping",
+          "verifiableTeachingEvidenceOnly",
+        ];
+    return action?.externalAiProcessingGuard?.contractId === externalAi?.id
+      && action?.externalAiProcessingGuard?.failureResult
+        === "EXTERNAL_AI_CONTRACT_INCOMPLETE"
+      && action?.externalAiProcessingGuard?.failClosed === true
+      && list(action?.failureResults).includes("EXTERNAL_AI_CONTRACT_INCOMPLETE")
+      && hasExactKeys(provider, expectedProviderKeys)
+      && provider?.verifiableTeachingEvidenceOnly === true
+      && schema?.type === "object"
+      && schema?.additionalProperties === false
+      && hasExactKeys(schema, ["type", "required", "properties", "additionalProperties"])
+      && sameStringSet(schema?.required, expected.requiredProperties)
+      && hasExactKeys(properties, Object.keys(expected.propertyTypes))
+      && Object.entries(expected.propertyTypes).every(([propertyId, expectedType]) => (
+        providerSchemaPropertyMatches(
+          properties?.[propertyId],
+          expectedType,
+          expected.propertyEnums?.[propertyId],
+        )
+      ))
+      && hasExactKeys(
+        provider?.resultPersistenceMapping,
+        Object.keys(expected.resultPersistenceMapping),
+      )
+      && Object.entries(expected.resultPersistenceMapping).every(([propertyId, fieldId]) => (
+        provider?.resultPersistenceMapping?.[propertyId] === fieldId
+        && index.fieldById.get(fieldId)?.value?.dataType !== "JSON"
+      ))
+      && JSON.stringify(action?.providerResponseBoundary)
+        === JSON.stringify(CLOSED_PROVIDER_RESPONSE_BOUNDARY)
+      && hasExactKeys(action?.persistenceContract, [
+        "allowedOutputFieldIds",
+        "unknownPersistedFields",
+        "arbitraryJsonPayloadAllowed",
+      ])
+      && sameStringSet(action?.persistenceContract?.allowedOutputFieldIds, expectedOutputFieldIds)
+      && action?.persistenceContract?.unknownPersistedFields === "REJECT"
+      && action?.persistenceContract?.arbitraryJsonPayloadAllowed === false
+      && sameStringSet(action?.outputFieldIds, expectedOutputFieldIds)
+      && (expected.scoringRationaleContract
+        ? JSON.stringify(provider?.scoringRationaleContract)
+          === JSON.stringify(expected.scoringRationaleContract)
+        : !Object.hasOwn(provider ?? {}, "scoringRationaleContract"));
+  });
+  const declaredProviderActionIds = EXTERNAL_AI_DERIVED_ACTION_CONTRACTS.map(
+    ({ actionId }) => actionId,
+  );
+  const providerOutputFieldIds = PROVIDER_EXCLUSIVE_OUTPUT_FIELD_IDS;
+  const actualProviderActions = index.modules
+    .flatMap(({ value }) => list(value?.actions).map((action) => action))
+    .filter((action) => isRecord(action?.providerResultContract));
+  const undeclaredProviderContract = actualProviderActions.some((action) => (
+    !declaredProviderActionIds.includes(action.id)
+  ));
+  const providerExclusiveOutputWriter = index.modules
+    .flatMap(({ value }) => list(value?.actions).map((action) => action))
+    .some((action) => (
+      !declaredProviderActionIds.includes(action.id)
+      && list(action?.outputFieldIds).some((fieldId) => providerOutputFieldIds.has(fieldId))
+    ));
   valid = valid
     && externalAi?.id === "EXTERNAL-AI-STUDENT-DATA-V2"
     && externalAi?.defaultStudentDataUses?.trainingAllowed === false
@@ -6901,13 +7460,331 @@ function phaseTwoAiAssessmentErrors(index) {
     && externalAi?.exceptionAuthorization?.revocableWhenLegallyPermitted === true
     && externalAi?.exceptionAuthorization?.legalValidityRequired === true
     && externalAi?.exceptionAuthorization?.defaultAllowed === false
-    && processAssessment?.externalAiProcessingGuard?.contractId === externalAi?.id
-    && processAssessment?.externalAiProcessingGuard?.failureResult === "EXTERNAL_AI_CONTRACT_INCOMPLETE"
-    && processAssessment?.externalAiProcessingGuard?.failClosed === true
-    && list(processAssessment?.failureResults).includes("EXTERNAL_AI_CONTRACT_INCOMPLETE");
+    && externalAiDerivedActionsValid
+    && sameStringSet(actualProviderActions.map(({ id }) => id), declaredProviderActionIds)
+    && !undeclaredProviderContract
+    && !providerExclusiveOutputWriter;
   closeDomain(
     "EXTERNAL_AI_HIGH_IMPACT",
     "external AI processing and high-impact use must remain minimum-necessary, separately authorized, and fail closed",
+  );
+
+  const aixPreview = index.objectById.get("AIX-OBJ-TASK-PREVIEW")?.value;
+  const aixPersistence = aix?.aiPersistenceContract;
+  const aixObjectPersistence = aixPreview?.persistenceContract;
+  const aixActions = list(aix?.actions);
+  const aixTasks = index.aiTasks
+    .map(({ value }) => value)
+    .filter((task) => AIX_EXTERNAL_AI_ACTION_IDS.includes(
+      task?.draftPolicy?.previewActionId ?? task?.actionId,
+    ));
+  const previewGateContract = aix?.previewGateContract;
+  valid = valid
+    && sameStringSet(list(aix?.objects).map(({ id }) => id), ["AIX-OBJ-TASK-PREVIEW"])
+    && aix?.externalAiProcessingContractRef?.contractId === externalAi?.id
+    && aix?.externalAiProcessingContractRef?.realStudentDataBlockedUntilComplete === true
+    && aix?.externalAiProcessingContractRef?.taskMinimumNecessaryDataOnly === true
+    && aixPersistence?.objectId === aixPreview?.id
+    && sameStringSet(aixPersistence?.persistedFieldIds, AIX_PERSISTED_FIELD_IDS)
+    && aixPersistence?.arbitraryJsonPayloadAllowed === false
+    && aixPersistence?.unknownPersistedFields === "REJECT"
+    && sameStringSet(aixPersistence?.prohibitedPersistence, AIX_PROHIBITED_PERSISTENCE)
+    && sameStringSet(aixPersistence?.externalAiGuardedActionIds, AIX_EXTERNAL_AI_ACTION_IDS)
+    && sameStringSet(aixActions.map(({ id }) => id), AIX_EXTERNAL_AI_ACTION_IDS)
+    && sameStringSet(records(aixPreview?.fields).map(({ id }) => id), AIX_PERSISTED_FIELD_IDS)
+    && records(aixPreview?.fields).every(({ dataType }) => dataType !== "JSON")
+    && ![
+      "AIX-PREVIEW-F-PARAMETERS",
+      "AIX-PREVIEW-F-SOURCE-VERSIONS",
+      "AIX-PREVIEW-F-PAYLOAD",
+    ].some((fieldId) => index.fieldById.has(fieldId))
+    && sameStringSet(aixObjectPersistence?.allowedFieldIds, AIX_PERSISTED_FIELD_IDS)
+    && aixObjectPersistence?.unknownPersistedFields === "REJECT"
+    && aixObjectPersistence?.unknownNestedKeys === "REJECT"
+    && aixObjectPersistence?.arbitraryJsonPayloadAllowed === false
+    && sameStringSet(
+      aixObjectPersistence?.prohibitedPersistence,
+      AIX_PROHIBITED_PERSISTENCE,
+    )
+    && sameStringSet(previewGateContract?.gateFieldIds, AIX_PREVIEW_GATE_FIELD_IDS)
+    && previewGateContract?.requiredPassCode === "PASS"
+    && previewGateContract?.failureBehavior === "KEEP_PREVIEW_UNAVAILABLE"
+    && previewGateContract?.bypassAllowed === false
+    && sameStringSet(previewGateContract?.gateFailureResults, AIX_GATE_FAILURE_RESULTS)
+    && aixActions.every((action) => (
+      action?.externalAiProcessingGuard?.contractId === externalAi?.id
+      && action?.externalAiProcessingGuard?.failureResult
+        === "EXTERNAL_AI_CONTRACT_INCOMPLETE"
+      && action?.externalAiProcessingGuard?.failClosed === true
+      && list(action?.failureResults).includes("EXTERNAL_AI_CONTRACT_INCOMPLETE")
+      && sameStringSet(action?.persistenceContract?.allowedInputFieldIds, action?.inputFieldIds)
+      && sameStringSet(action?.persistenceContract?.allowedOutputFieldIds, action?.outputFieldIds)
+      && action?.persistenceContract?.unknownPersistedFields === "REJECT"
+      && action?.persistenceContract?.arbitraryJsonPayloadAllowed === false
+      && sameStringSet(action?.gateEvaluation?.gateFieldIds, AIX_PREVIEW_GATE_FIELD_IDS)
+      && action?.gateEvaluation?.requiredPassCode === "PASS"
+      && action?.gateEvaluation?.anyOtherOutcome === "KEEP_PREVIEW_UNAVAILABLE"
+      && action?.gateEvaluation?.evaluatedAtomicallyWithPreviewCreation === true
+      && action?.gateEvaluation?.visibleContentFieldId
+        === "AIX-PREVIEW-F-USER-VISIBLE-CONTENT"
+      && AIX_GATE_FAILURE_RESULTS.every((resultCode) => (
+        list(action?.failureResults).includes(resultCode)
+      ))
+      && AIX_PREVIEW_GATE_FIELD_IDS.every((fieldId) => (
+        records(action?.statusWrites).some(({ fieldId: writtenFieldId, codes }) => (
+          writtenFieldId === fieldId && sameStringSet(codes, ["PASS"])
+        ))
+      ))
+    ))
+    && aixTasks.length === 3
+    && aixTasks.every((task) => {
+      const schema = task?.resultSchema;
+      const properties = schema?.properties;
+      const isAssignmentDraft = task?.id === "AI-TASK-ASSIGNMENT-DRAFT";
+      const commonRequiredKeys = Object.keys(AIX_RESULT_PERSISTENCE_MAPPING)
+        .filter((key) => key !== "resultReference");
+      const requiredKeys = isAssignmentDraft
+        ? [
+            ...commonRequiredKeys,
+            "resultReference",
+            ...Object.keys(AIX_ASSIGNMENT_CONFIRMATION_INPUT_MAPPING),
+          ]
+        : commonRequiredKeys;
+      const expectedPropertyKeys = isAssignmentDraft
+        ? [
+            ...Object.keys(AIX_RESULT_PERSISTENCE_MAPPING),
+            ...Object.keys(AIX_ASSIGNMENT_CONFIRMATION_INPUT_MAPPING),
+          ]
+        : Object.keys(AIX_RESULT_PERSISTENCE_MAPPING);
+      const arrayKeys = [
+        "sourceVersionRefs",
+        "evidenceReferences",
+        "classScopeIds",
+        "knowledgePointIds",
+      ];
+      const integerKeys = ["helpRuleVersion", "schoolTimePolicyVersion"];
+      const gateKeys = [
+        "permissionGate",
+        "safetyGate",
+        "teachingCorrectnessGate",
+        "answerOpenGate",
+      ];
+      return schema?.type === "object"
+        && schema?.additionalProperties === false
+        && sameStringSet(schema?.required, requiredKeys)
+        && hasExactKeys(properties, expectedPropertyKeys)
+        && Object.entries(properties).every(([key, property]) => (
+          arrayKeys.includes(key)
+            ? property?.type === "array"
+              && property?.items?.type === "string"
+              && Object.keys(property.items).length === 1
+            : integerKeys.includes(key)
+              ? property?.type === "integer"
+                && Object.keys(property).length === 1
+              : property?.type === "string"
+              && (!gateKeys.includes(key) || sameStringSet(property?.enum, ["PASS"]))
+        ))
+        && hasExactKeys(
+          task?.resultPersistenceMapping,
+          Object.keys(AIX_RESULT_PERSISTENCE_MAPPING),
+        )
+        && Object.entries(AIX_RESULT_PERSISTENCE_MAPPING).every(([key, fieldId]) => (
+          task?.resultPersistenceMapping?.[key] === fieldId
+        ))
+        && hasExactKeys(task?.providerResponseBoundary, [
+          "persisted",
+          "fullUpstreamRequestPersisted",
+          "vendorDebugFieldsPersisted",
+          "hiddenChainOfThoughtPersisted",
+          "unknownKeysBeforePersistence",
+        ])
+        && task.providerResponseBoundary.persisted === false
+        && task.providerResponseBoundary.fullUpstreamRequestPersisted === false
+        && task.providerResponseBoundary.vendorDebugFieldsPersisted === false
+        && task.providerResponseBoundary.hiddenChainOfThoughtPersisted === false
+        && task.providerResponseBoundary.unknownKeysBeforePersistence === "REJECT"
+        && (isAssignmentDraft
+          ? hasExactKeys(
+              task?.confirmationInputMapping,
+              Object.keys(AIX_ASSIGNMENT_CONFIRMATION_INPUT_MAPPING),
+            )
+            && Object.entries(AIX_ASSIGNMENT_CONFIRMATION_INPUT_MAPPING)
+              .every(([propertyId, fieldId]) => (
+                task?.confirmationInputMapping?.[propertyId] === fieldId
+              ))
+            && sameStringSet(
+              task?.previewFieldIds,
+              Object.values(AIX_ASSIGNMENT_CONFIRMATION_INPUT_MAPPING),
+            )
+            && hasExactKeys(task?.transientConfirmationContract, [
+              "previewActionId",
+              "previewRequestFieldId",
+              "resultReferenceFieldId",
+              "targetActionId",
+              "targetInputFieldIds",
+              "providerFieldsPersistedBeforeConfirmation",
+              "confirmationRequired",
+              "discardOnExpiryOrCancellation",
+            ])
+            && task?.transientConfirmationContract?.previewActionId
+              === "AIX-ACT-PREPARE-TASK-PREVIEW"
+            && task?.transientConfirmationContract?.previewRequestFieldId
+              === "AIX-PREVIEW-F-USER-REQUEST"
+            && task?.transientConfirmationContract?.resultReferenceFieldId
+              === "AIX-PREVIEW-F-RESULT-REFERENCE"
+            && task?.transientConfirmationContract?.targetActionId === "HW-ACT-CREATE-DRAFT"
+            && sameStringSet(
+              task?.transientConfirmationContract?.targetInputFieldIds,
+              Object.values(AIX_ASSIGNMENT_CONFIRMATION_INPUT_MAPPING),
+            )
+            && task?.transientConfirmationContract?.providerFieldsPersistedBeforeConfirmation
+              === false
+            && task?.transientConfirmationContract?.confirmationRequired === true
+            && task?.transientConfirmationContract?.discardOnExpiryOrCancellation === true
+          : !Object.hasOwn(task ?? {}, "confirmationInputMapping")
+            && !Object.hasOwn(task ?? {}, "transientConfirmationContract"));
+    });
+  closeDomain(
+    "AIX_PERSISTENCE",
+    "AI conversation must persist only closed user-visible fields and fail external processing closed without hidden reasoning, vendor debug data, or unknown keys",
+  );
+
+  const aixSourceRef = index.fieldById.get("AIX-PREVIEW-F-SOURCE-RESULT-REF");
+  const aixSourceVersion = index.fieldById.get("AIX-PREVIEW-F-SOURCE-RESULT-VERSION");
+  const aixSourceLineage = records(aixPreview?.lineageBindings).find(({ refFieldId }) => (
+    refFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-REF"
+  ));
+  const aixModuleSourceBinding = aix?.answerOpenEnforcement?.resultSourceBinding;
+  valid = valid
+    && aixSourceRef?.objectId === "AIX-OBJ-TASK-PREVIEW"
+    && aixSourceRef?.value?.valueSource?.kind === "OBJECT_REF"
+    && aixSourceRef?.value?.valueSource?.targetObjectId === "PUB-OBJ-RESULT"
+    && aixSourceRef?.value?.referenceIntegrity === "VERSION_PINNED"
+    && aixSourceRef?.value?.stateGuardPolicy === "ALWAYS_REQUIRED"
+    && sameStringSet(
+      aixSourceRef?.value?.actionApplicability?.requiredActionIds,
+      AIX_RESULT_BOUND_ACTION_IDS,
+    )
+    && aixSourceRef?.value?.versionBinding?.versionFieldId
+      === "AIX-PREVIEW-F-SOURCE-RESULT-VERSION"
+    && aixSourceRef?.value?.versionBinding?.targetVersionFieldId
+      === "PUB-RESULT-F-RESULT-VERSION"
+    && sameStringSet(aixSourceRef?.value?.required?.whenStates, ["PREVIEW_READY"])
+    && sameStringSet(
+      aixSourceRef?.value?.required?.whenActionIds,
+      AIX_RESULT_BOUND_ACTION_IDS,
+    )
+    && aixSourceVersion?.objectId === "AIX-OBJ-TASK-PREVIEW"
+    && sameStringSet(aixSourceVersion?.value?.required?.whenStates, ["PREVIEW_READY"])
+    && sameStringSet(
+      aixSourceVersion?.value?.required?.whenActionIds,
+      AIX_RESULT_BOUND_ACTION_IDS,
+    )
+    && aixSourceLineage?.versionFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-VERSION"
+    && aixSourceLineage?.targetObjectId === "PUB-OBJ-RESULT"
+    && aixSourceLineage?.targetVersionFieldId === "PUB-RESULT-F-RESULT-VERSION"
+    && hasExactKeys(aix?.sourceVersionContract, [
+      "genericSourceVersionFieldId",
+      "genericReferenceFormat",
+      "unknownSourceKinds",
+      "publishedResultUsesTypedVersionPinnedBinding",
+      "resultRefFieldId",
+      "resultVersionFieldId",
+    ])
+    && aix?.sourceVersionContract?.genericSourceVersionFieldId
+      === "AIX-PREVIEW-F-SOURCE-VERSION-REFS"
+    && aix?.sourceVersionContract?.genericReferenceFormat
+      === "REGISTERED_OBJECT_IDENTITY_AND_VERSION_TUPLES"
+    && aix?.sourceVersionContract?.unknownSourceKinds === "REJECT"
+    && aix?.sourceVersionContract?.publishedResultUsesTypedVersionPinnedBinding === true
+    && aix?.sourceVersionContract?.resultRefFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-REF"
+    && aix?.sourceVersionContract?.resultVersionFieldId
+      === "AIX-PREVIEW-F-SOURCE-RESULT-VERSION"
+    && hasExactKeys(aixModuleSourceBinding, [
+      "resultBoundActionIds",
+      "nonResultActionIds",
+      "refFieldId",
+      "versionFieldId",
+      "targetObjectId",
+      "targetVersionFieldId",
+      "requiredState",
+      "staleMissingOrMismatchBehavior",
+    ])
+    && sameStringSet(aixModuleSourceBinding?.resultBoundActionIds, AIX_RESULT_BOUND_ACTION_IDS)
+    && sameStringSet(aixModuleSourceBinding?.nonResultActionIds, AIX_NON_RESULT_ACTION_IDS)
+    && aixModuleSourceBinding?.refFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-REF"
+    && aixModuleSourceBinding?.versionFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-VERSION"
+    && aixModuleSourceBinding?.targetObjectId === "PUB-OBJ-RESULT"
+    && aixModuleSourceBinding?.targetVersionFieldId === "PUB-RESULT-F-RESULT-VERSION"
+    && aixModuleSourceBinding?.requiredState === "PUBLISHED"
+    && aixModuleSourceBinding?.staleMissingOrMismatchBehavior === "KEEP_PREVIEW_UNAVAILABLE"
+    && AIX_RESULT_BOUND_ACTION_IDS.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      const binding = action?.answerOpenSourceBinding;
+      return AIX_RESULT_SOURCE_FIELD_IDS.every((fieldId) => (
+        list(action?.inputFieldIds).includes(fieldId)
+        && list(action?.outputFieldIds).includes(fieldId)
+      ))
+        && records(action?.relatedStateGuards).some((guard) => (
+          guard?.refFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-REF"
+          && guard?.versionFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-VERSION"
+          && guard?.targetObjectId === "PUB-OBJ-RESULT"
+          && guard?.requiredState === "PUBLISHED"
+        ))
+        && hasExactKeys(binding, [
+          "sourceObjectId",
+          "refFieldId",
+          "versionFieldId",
+          "targetVersionFieldId",
+          "requiredState",
+          "policyFieldMappings",
+          "sourceOpenTimeFieldIds",
+          "localGateFieldId",
+          "staleMissingOrMismatchBehavior",
+          "permissionReauthorizedAtAccess",
+          "currentTimeReevaluatedAtAccess",
+        ])
+        && binding?.sourceObjectId === "PUB-OBJ-RESULT"
+        && binding?.refFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-REF"
+        && binding?.versionFieldId === "AIX-PREVIEW-F-SOURCE-RESULT-VERSION"
+        && binding?.targetVersionFieldId === "PUB-RESULT-F-RESULT-VERSION"
+        && binding?.requiredState === "PUBLISHED"
+        && JSON.stringify(binding?.policyFieldMappings)
+          === JSON.stringify(AIX_ANSWER_OPEN_POLICY_FIELD_MAPPINGS)
+        && binding?.policyFieldMappings?.every(({ sourceFieldId, localFieldId }) => (
+          index.fieldById.get(sourceFieldId)?.objectId === "PUB-OBJ-RESULT"
+          && index.fieldById.get(localFieldId)?.objectId === "AIX-OBJ-TASK-PREVIEW"
+        ))
+        && sameStringSet(binding?.sourceOpenTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
+        && list(binding?.sourceOpenTimeFieldIds).every((fieldId) => (
+          index.fieldById.get(fieldId)?.objectId === "PUB-OBJ-RESULT"
+        ))
+        && binding?.localGateFieldId === "AIX-PREVIEW-F-ANSWER-OPEN-GATE"
+        && binding?.staleMissingOrMismatchBehavior === "KEEP_PREVIEW_UNAVAILABLE"
+        && binding?.permissionReauthorizedAtAccess === true
+        && binding?.currentTimeReevaluatedAtAccess === true;
+    })
+    && AIX_NON_RESULT_ACTION_IDS.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      return AIX_RESULT_SOURCE_FIELD_IDS.every((fieldId) => (
+        !list(action?.inputFieldIds).includes(fieldId)
+        && !list(action?.outputFieldIds).includes(fieldId)
+      ))
+        && !Object.hasOwn(action ?? {}, "answerOpenSourceBinding")
+        && sameStringSet(action?.nonResultAnswerOpenContract?.allowedTaskIds, [
+          "AI-TASK-ASSIGNMENT-DRAFT",
+        ])
+        && action?.nonResultAnswerOpenContract?.resultSourceAllowed === false
+        && action?.nonResultAnswerOpenContract?.restrictedResultContentAllowed === false
+        && action?.nonResultAnswerOpenContract?.answerOpenPassCondition
+          === "NO_RESTRICTED_RESULT_CONTENT_REQUESTED_OR_USED";
+    })
+    && aixTasks.filter(({ id }) => id !== "AI-TASK-ASSIGNMENT-DRAFT").every((task) => (
+      AIX_RESULT_SOURCE_FIELD_IDS.every((fieldId) => list(task?.previewFieldIds).includes(fieldId))
+    ));
+  closeDomain(
+    "AIX_SOURCE_LINEAGE",
+    "AI conversation result sources must use an exact published-result identity and version, while non-result assignment drafts must be unable to request restricted result content",
   );
 
   const exceptionActionIds = [
@@ -6932,6 +7809,48 @@ function phaseTwoAiAssessmentErrors(index) {
 
   const publicationContract = publication?.aiPublicationContract;
   const publishAction = index.actionById.get(publicationContract?.publishActionId)?.value;
+  const expectedPublicationWriterActionIds = [
+    "PUB-ACT-PUBLISH-RESULT",
+    "PUB-ACT-RETRY-FAILED",
+    "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
+    "PUB-ACT-CORRECT-CHALLENGED-RESULT",
+    "PUB-ACT-REPLACE-RESULT",
+    "PUB-ACT-UPHOLD-RESULT",
+  ];
+  const actualPublicationWriterActionIds = list(publication?.actions)
+    .filter((action) => (
+      action?.targetObjectId === "PUB-OBJ-RESULT"
+      && (
+        records(action?.statusWrites).some(({ fieldId, codes }) => (
+          fieldId === "PUB-RESULT-F-PUBLICATION-STATUS"
+          && list(codes).includes("PUBLISHED")
+        ))
+        || (
+          action?.transition?.to === "PUBLISHED"
+          && action?.transition?.from !== "PUBLISHED"
+        )
+      )
+    ))
+    .map(({ id }) => id);
+  const publishedReplacementSignature = [
+    "PUB-RESULT-F-PRIOR-RESULT-REF",
+    "PUB-RESULT-F-PRIOR-RESULT-VERSION",
+    "PUB-RESULT-F-PUBLIC-CORRECTION-NOTE",
+    "PUB-RESULT-F-RESULT-VERSION",
+  ];
+  const publishedReplacementCandidates = list(publication?.actions)
+    .filter((action) => (
+      action?.targetObjectId === "PUB-OBJ-RESULT"
+      && action?.transition?.from === "PUBLISHED"
+      && action?.transition?.to === "PUBLISHED"
+      && publishedReplacementSignature.every((fieldId) => list(action?.outputFieldIds).includes(fieldId))
+    ));
+  const publicationGateFailureCodes = [
+    "PERMISSION_GATE_FAILED",
+    "SAFETY_GATE_FAILED",
+    "TEACHING_CORRECTNESS_GATE_FAILED",
+    "GATE_UNAVAILABLE",
+  ];
   valid = valid
     && sameStringSet(publicationContract?.requiredGates, [
       "PERMISSION",
@@ -6945,20 +7864,58 @@ function phaseTwoAiAssessmentErrors(index) {
     && publicationContract?.failureBehavior === "KEEP_UNPUBLISHED"
     && publicationContract?.bypassAllowed === false
     && publicationContract?.originalFactAcceptanceIndependent === true
-    && publishAction?.targetObjectId === "PUB-OBJ-RESULT"
-    && sameStringSet(publishAction?.gateEvaluation?.gateFieldIds, publicationContract?.gateFieldIds)
-    && publishAction?.gateEvaluation?.requiredPassCode === "PASS"
-    && publishAction?.gateEvaluation?.anyOtherOutcome === "KEEP_UNPUBLISHED"
-    && publishAction?.gateEvaluation?.evaluatedAtomicallyWithPublication === true
-    && list(publicationContract?.gateFieldIds).every((fieldId) => (
-      list(publishAction?.outputFieldIds).includes(fieldId)
+    && sameStringSet(
+      publicationContract?.publicationWriterActionIds,
+      expectedPublicationWriterActionIds,
+    )
+    && sameStringSet(actualPublicationWriterActionIds, expectedPublicationWriterActionIds)
+    && sameStringSet(
+      publishedReplacementCandidates.map(({ id }) => id),
+      publicationContract?.publishedVersionReplacement?.writerActionIds,
+    )
+    && publishedReplacementCandidates.every((action) => (
+      publicationContract?.publishedVersionReplacement?.writerActionIds.includes(action.id)
+      && action?.transition?.from === "PUBLISHED"
+      && action?.transition?.to === "PUBLISHED"
+      && sameStringSet(
+        action?.derivedJudgmentRecomputationContract?.requiredOutputFieldIds,
+        publicationContract?.publishedVersionReplacement?.requiredOutputFieldIds
+          ? [
+              ...publicationContract.publishedVersionReplacement.requiredOutputFieldIds,
+              "PUB-RESULT-F-VALIDITY-STATUS",
+              "PUB-RESULT-F-DISPUTE-CORRECTION-STATUS",
+            ]
+          : [],
+      )
+      && action?.gateEvaluation?.evaluatedAtomicallyWithPublication === true
+      && sameStringSet(action?.gateEvaluation?.gateFieldIds, publicationContract?.gateFieldIds)
     ))
-    && [
-      "PERMISSION_GATE_FAILED",
-      "SAFETY_GATE_FAILED",
-      "TEACHING_CORRECTNESS_GATE_FAILED",
-      "GATE_UNAVAILABLE",
-    ].every((code) => list(publishAction?.failureResults).includes(code));
+    && publishAction?.targetObjectId === "PUB-OBJ-RESULT"
+    && expectedPublicationWriterActionIds.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      return action?.targetObjectId === "PUB-OBJ-RESULT"
+        && sameStringSet(
+          action?.gateEvaluation?.gateFieldIds,
+          publicationContract?.gateFieldIds,
+        )
+        && action?.gateEvaluation?.requiredPassCode === "PASS"
+        && action?.gateEvaluation?.anyOtherOutcome === "KEEP_UNPUBLISHED"
+        && action?.gateEvaluation?.evaluatedAtomicallyWithPublication === true
+        && list(publicationContract?.gateFieldIds).every((fieldId) => (
+          list(action?.outputFieldIds).includes(fieldId)
+        ))
+        && publicationGateFailureCodes.every((code) => (
+          list(action?.failureResults).includes(code)
+        ))
+      && records(action?.statusWrites).some(({ fieldId, codes }) => (
+          fieldId === "PUB-RESULT-F-PUBLICATION-STATUS"
+          && list(codes).includes("PUBLISHED")
+        ))
+        && records(action?.statusWrites).some(({ fieldId, codes }) => (
+          fieldId === "PUB-RESULT-F-VALIDITY-STATUS"
+          && list(codes).includes("VALID")
+        ));
+    });
 
   const batch = publication?.batchCorrectionContract;
   valid = valid
@@ -7022,8 +7979,11 @@ function phaseTwoAiAssessmentErrors(index) {
     )
     && sameStringSet(publication?.feedbackContract?.validAttemptFieldIds, [
       "GRD-ATTEMPT-CLASS-F-CLASSIFICATION",
-      "CORR-ATTEMPT-F-VALID-ATTEMPT",
-    ]);
+      "CORR-ASSESSMENT-F-VALID-ATTEMPT",
+    ])
+    && list(publication?.feedbackContract?.validAttemptFieldIds).every((fieldId) => (
+      index.fieldById.has(fieldId)
+    ));
   const answerOpen = publication?.answerOpenContract;
   const materializeResult = index.actionById.get(
     publication?.feedbackContract?.materializeActionId,
@@ -7113,10 +8073,72 @@ function phaseTwoAiAssessmentErrors(index) {
     ["PUB-RESULT-F-SOLUTION-OPEN-AT", ["PUB-RESULT-F-FEEDBACK-LAYER-4"]],
     ["PUB-RESULT-F-RUBRIC-OPEN-AT", ["PUB-RESULT-F-ASSESSMENT-STANDARD-CONTENT"]],
   ]);
+  const restrictedContentFields = records(resultObject?.fields)
+    .filter((field) => isRecord(field?.restrictedContent));
+  const restrictedContentFieldIds = restrictedContentFields.map(({ id }) => id);
+  const restrictedContentSemanticsValid = sameStringSet(
+    restrictedContentFieldIds,
+    RESTRICTED_RESULT_CONTENT_FIELDS.map(([fieldId]) => fieldId),
+  ) && RESTRICTED_RESULT_CONTENT_FIELDS.every(([fieldId, category, visibleAtFieldId]) => {
+    const field = index.fieldById.get(fieldId)?.value;
+    return field?.restrictedContent?.category === category
+      && field?.restrictedContent?.policyId === answerOpen?.policyId
+      && field?.restrictedContent?.visibleAtFieldId === visibleAtFieldId
+      && field?.restrictedContent?.requiredOnEveryDeliverySurface === true
+      && field?.releaseRequirement?.readPolicyId === "PUB-RP-STUDENT-RESULT"
+      && field?.releaseRequirement?.requiredState === "PUBLISHED"
+      && field?.releaseRequirement?.visibleAtFieldId === visibleAtFieldId;
+  });
+  const releaseProtectedFieldIds = restrictedContentFieldIds;
+  const protectedAccessActions = [...index.actionById.values()]
+    .map(({ value }) => value)
+    .filter((action) => (
+      action?.id !== materializeResult?.id
+      && list(action?.outputFieldIds).some((fieldId) => (
+        releaseProtectedFieldIds.includes(fieldId)
+      ))
+    ));
+  const protectedAccessActionValid = (action) => {
+    const outputProtectedFieldIds = list(action?.outputFieldIds).filter((fieldId) => (
+      releaseProtectedFieldIds.includes(fieldId)
+    ));
+    const policies = records(resultObject?.readPolicies).filter(({ actionId }) => (
+      actionId === action?.id
+    ));
+    const policy = policies[0];
+    const enforcement = action?.answerOpenEnforcement;
+    return policies.length === 1
+      && policy?.requiredState === "PUBLISHED"
+      && enforcement?.policyId === answerOpen?.policyId
+      && sameStringSet(enforcement?.policyFieldIds, ANSWER_OPEN_POLICY_FIELD_IDS)
+      && sameStringSet(enforcement?.openTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
+      && enforcement?.reauthorizeAtAccess === true
+      && enforcement?.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT"
+      && list(enforcement?.surfaces).length > 0
+      && list(enforcement?.surfaces).every((surface) => (
+        ANSWER_OPEN_SURFACES.includes(surface)
+        && enforcementBindings.some((binding) => (
+          binding?.surface === surface
+          && list(binding?.actionIds).includes(action.id)
+        ))
+      ))
+      && outputProtectedFieldIds.every((fieldId) => {
+        const release = index.fieldById.get(fieldId)?.value?.releaseRequirement;
+        return release?.readPolicyId === policy?.id
+          && release?.requiredState === policy?.requiredState
+          && records(policy?.timeGates).some((gate) => (
+            gate?.visibleAtFieldId === release?.visibleAtFieldId
+            && list(gate?.protectedFieldIds).includes(fieldId)
+          ));
+      });
+  };
   const resultViewAction = index.actionById.get("PUB-ACT-VIEW-RESULT")?.value;
   const studentResultPage = index.pageById.get("PUB-PAGE-STUDENT-RESULT")?.value;
   valid = valid
+    && restrictedContentSemanticsValid
     && records(resultObject?.readPolicies).length === 1
+    && protectedAccessActions.length > 0
+    && protectedAccessActions.every(protectedAccessActionValid)
     && studentResultPolicy?.actionId === resultViewAction?.id
     && studentResultPolicy?.requiredState === "PUBLISHED"
     && sameStringSet(studentResultPolicy?.safeMetadataFieldIds, [
@@ -7148,10 +8170,23 @@ function phaseTwoAiAssessmentErrors(index) {
   const classifyInitialAttempt = index.actionById.get(initialAttempt?.classifyActionId)?.value;
   const initialAttemptLineage = records(initialAttemptObject?.lineageBindings)
     .find(({ refFieldId }) => refFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-REF");
+  const initialAttemptPriorLineage = records(initialAttemptObject?.lineageBindings)
+    .find(({ refFieldId }) => refFieldId === "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-REF");
+  const initialDerivedContract = initialAttemptObject?.derivedJudgmentContract;
   const classifyStep = list(assessmentFlow?.steps)
     .find(({ actionId }) => actionId === classifyInitialAttempt?.id);
   const processStep = list(assessmentFlow?.steps)
     .find(({ actionId }) => actionId === processAssessment?.id);
+  const enqueueStep = list(assessmentFlow?.steps)
+    .find(({ actionId }) => actionId === "GRD-ACT-ENQUEUE");
+  const decisionObject = index.objectById.get("GRD-OBJ-DECISION")?.value;
+  const decisionClassificationRef = index.fieldById
+    .get("GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF")?.value;
+  const decisionClassificationLineage = records(decisionObject?.lineageBindings)
+    .find(({ refFieldId }) => (
+      refFieldId === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF"
+    ));
+  const decisionBinding = initialAttempt?.decisionBinding;
   valid = valid
     && initialAttempt?.sourceObjectId === "SUB-OBJ-ATTEMPT"
     && initialAttempt?.classificationObjectId === "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
@@ -7163,13 +8198,115 @@ function phaseTwoAiAssessmentErrors(index) {
     && initialAttempt?.explicitDontKnowCreatesMasteryEvidence === false
     && initialAttempt?.nextStepDeterminedBy === "EVIDENCE_AND_FROZEN_ASSESSMENT_STANDARD"
     && initialAttempt?.originalSubmissionWritePolicy === "FORBIDDEN"
+    && decisionBinding?.decisionObjectId === "GRD-OBJ-DECISION"
+    && decisionBinding?.refFieldId
+      === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF"
+    && decisionBinding?.versionFieldId
+      === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION"
+    && decisionBinding?.targetVersionFieldId === "GRD-ATTEMPT-CLASS-F-VERSION"
+    && sameStringSet(
+      decisionBinding?.boundBeforeActionIds,
+      CLASSIFICATION_BOUND_ASSESSMENT_ACTION_IDS,
+    )
+    && decisionBinding?.exactVersionRequired === true
+    && decisionClassificationRef?.required === true
+    && decisionClassificationRef?.valueSource?.kind === "OBJECT_REF"
+    && decisionClassificationRef?.valueSource?.targetObjectId
+      === "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
+    && decisionClassificationRef?.referenceIntegrity === "VERSION_PINNED"
+    && decisionClassificationRef?.versionBinding?.versionFieldId
+      === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION"
+    && decisionClassificationRef?.versionBinding?.targetVersionFieldId
+      === "GRD-ATTEMPT-CLASS-F-VERSION"
+    && decisionClassificationLineage?.versionFieldId
+      === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION"
+    && decisionClassificationLineage?.targetObjectId
+      === "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
+    && decisionClassificationLineage?.targetVersionFieldId
+      === "GRD-ATTEMPT-CLASS-F-VERSION"
+    && CLASSIFICATION_BOUND_ASSESSMENT_ACTION_IDS.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      const binding = action?.initialAttemptClassificationBinding;
+      return [
+        "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+        "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
+      ].every((fieldId) => list(action?.inputFieldIds).includes(fieldId))
+        && binding?.refFieldId
+          === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF"
+        && binding?.versionFieldId
+          === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION"
+        && binding?.targetObjectId === "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
+        && binding?.targetVersionFieldId === "GRD-ATTEMPT-CLASS-F-VERSION"
+        && binding?.requiredState === "CLASSIFIED"
+        && binding?.exactVersionRequired === true
+        && records(action?.relatedStateGuards).some((guard) => (
+          guard?.refFieldId
+            === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF"
+          && guard?.versionFieldId
+            === "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION"
+          && guard?.targetObjectId === "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
+          && guard?.requiredState === "CLASSIFIED"
+        ));
+    })
+    && sameStringSet(records(enqueueStep?.providedInputs).map(({ fieldId }) => fieldId), [
+      "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+      "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
+    ])
+    && records(enqueueStep?.providedInputs).every(({ provider }) => (
+      provider?.actorRef === "SYSTEM" && Object.keys(provider).length === 1
+    ))
+    && JSON.stringify(enqueueStep?.sourceBindings) === JSON.stringify([
+      {
+        sourceObjectId: "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION",
+        sourceFieldId: "GRD-ATTEMPT-CLASS-F-ID",
+        targetFieldId: "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+      },
+      {
+        sourceObjectId: "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION",
+        sourceFieldId: "GRD-ATTEMPT-CLASS-F-VERSION",
+        targetFieldId: "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
+      },
+    ])
     && initialAttemptLineage?.targetObjectId === "SUB-OBJ-ATTEMPT"
     && initialAttemptLineage?.versionFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-VERSION"
     && initialAttemptLineage?.targetVersionFieldId === "SUB-ATTEMPT-F-SUBMISSION-VERSION"
+    && initialAttemptPriorLineage?.targetObjectId === initialAttemptObject?.id
+    && initialAttemptPriorLineage?.versionFieldId
+      === "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-VERSION"
+    && initialAttemptPriorLineage?.targetVersionFieldId === "GRD-ATTEMPT-CLASS-F-VERSION"
+    && initialAttemptObject?.dataNature === "AI_DERIVED_JUDGMENT"
+    && initialAttemptObject?.originalFactOverwritePolicy === "FORBIDDEN"
+    && initialDerivedContract?.sourceRefFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-REF"
+    && initialDerivedContract?.sourceVersionFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-VERSION"
+    && initialDerivedContract?.validityFieldId === "GRD-ATTEMPT-CLASS-F-VALIDITY-STATUS"
+    && initialDerivedContract?.disputeFieldId
+      === "GRD-ATTEMPT-CLASS-F-DISPUTE-CORRECTION-STATUS"
+    && initialDerivedContract?.priorRefFieldId
+      === "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-REF"
+    && initialDerivedContract?.priorVersionFieldId
+      === "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-VERSION"
+    && initialDerivedContract?.supersessionReasonFieldId
+      === "GRD-ATTEMPT-CLASS-F-SUPERSESSION-REASON"
+    && initialDerivedContract?.versionFieldId === "GRD-ATTEMPT-CLASS-F-VERSION"
+    && initialDerivedContract?.sourceOverwriteAllowed === false
+    && initialDerivedContract?.recomputationCreatesNewVersion === true
+    && initialDerivedContract?.priorVersionRequiredWhenRecomputed === true
+    && [
+      "GRD-ATTEMPT-CLASS-F-VALIDITY-STATUS",
+      "GRD-ATTEMPT-CLASS-F-DISPUTE-CORRECTION-STATUS",
+    ].every((fieldId) => index.fieldById.get(fieldId)?.value?.required === true)
     && classifyInitialAttempt?.operationKind === "CREATE"
     && list(classifyInitialAttempt?.outputFieldIds).includes(initialAttempt?.classificationFieldId)
     && !list(classifyInitialAttempt?.outputFieldIds).includes("GRD-DECISION-F-NEXT-STEP")
     && !list(classifyInitialAttempt?.outputFieldIds).includes("INS-EVIDENCE-F-MASTERY-STATUS")
+    && records(classifyInitialAttempt?.statusWrites).some(({ fieldId, codes }) => (
+      fieldId === "GRD-ATTEMPT-CLASS-F-VALIDITY-STATUS"
+      && sameStringSet(codes, ["VALID"])
+    ))
+    && records(classifyInitialAttempt?.statusWrites).some(({ fieldId, codes }) => (
+      fieldId === "GRD-ATTEMPT-CLASS-F-DISPUTE-CORRECTION-STATUS"
+      && sameStringSet(codes, ["UNCHALLENGED"])
+    ))
     && classifyStep?.order < processStep?.order;
   closeDomain(
     "INITIAL_VALID_ATTEMPT",
@@ -7253,8 +8390,18 @@ function phaseTwoAiAssessmentErrors(index) {
   );
 
   const validAttempt = correction?.validAttemptContract;
+  const correctionAttempt = index.objectById.get("CORR-OBJ-ATTEMPT")?.value;
+  const correctionAssessment = index.objectById.get(validAttempt?.assessmentObjectId)?.value;
+  const correctionDerivedContract = correctionAssessment?.derivedJudgmentContract;
+  const correctionSourceLineage = records(correctionAssessment?.lineageBindings)
+    .find(({ refFieldId }) => refFieldId === "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-REF");
+  const correctionPriorLineage = records(correctionAssessment?.lineageBindings)
+    .find(({ refFieldId }) => refFieldId === "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-REF");
+  const normalizeCorrection = index.actionById.get("CORR-ACT-NORMALIZE-SUBMISSION")?.value;
   valid = valid
-    && index.fieldById.get(validAttempt?.fieldId)?.objectId === "CORR-OBJ-ATTEMPT"
+    && validAttempt?.sourceObjectId === "CORR-OBJ-ATTEMPT"
+    && validAttempt?.assessmentObjectId === "CORR-OBJ-ATTEMPT-ASSESSMENT"
+    && index.fieldById.get(validAttempt?.fieldId)?.objectId === validAttempt?.assessmentObjectId
     && index.optionSetById.has(validAttempt?.optionSetId)
     && sameStringSet(validAttempt?.valid, ["SUBSTANTIVE_RESPONSE", "EXPLICIT_DONT_KNOW"])
     && sameStringSet(validAttempt?.invalid, ["BLANK", "UNRELATED", "PLACEHOLDER"])
@@ -7266,24 +8413,359 @@ function phaseTwoAiAssessmentErrors(index) {
     && correction?.correctionReassessmentContract?.routineTeacherAssessment === false
     && correction?.answerExposedEvidenceContract?.independentEvidence === false
     && correction?.answerExposedEvidenceContract?.evidenceKind === "REMEDIAL_AFTER_ANSWER_EXPOSURE"
-    && correction?.answerExposedEvidenceContract?.independentEvidenceRequiresNewActivity === true;
+    && correction?.answerExposedEvidenceContract?.independentEvidenceRequiresNewActivity === true
+    && index.fieldById.get(correction?.answerExposedEvidenceContract?.fieldId)?.objectId
+      === validAttempt?.assessmentObjectId
+    && index.fieldById.get(correction?.answerExposedEvidenceContract?.evidenceKindFieldId)?.objectId
+      === validAttempt?.assessmentObjectId
+    && correctionAttempt?.dataNature === "ORIGINAL_LEARNING_FACT"
+    && correctionAttempt?.originalFactOverwritePolicy === "FORBIDDEN"
+    && correctionAttempt?.factVersionPolicy === "APPEND_NEW_ATTEMPT_VERSION_ONLY"
+    && index.fieldById.get("CORR-ATTEMPT-F-CORRECTION-ANSWER")?.value?.mutability === "IMMUTABLE"
+    && !records(correctionAttempt?.fields).some(({ id }) => id?.startsWith("CORR-ASSESSMENT-F-"))
+    && correctionAssessment?.dataNature === "AI_DERIVED_JUDGMENT"
+    && correctionAssessment?.originalFactOverwritePolicy === "FORBIDDEN"
+    && correctionSourceLineage?.targetObjectId === correctionAttempt?.id
+    && correctionSourceLineage?.versionFieldId === "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-VERSION"
+    && correctionSourceLineage?.targetVersionFieldId === "CORR-ATTEMPT-F-CORRECTION-VERSION"
+    && correctionPriorLineage?.targetObjectId === correctionAssessment?.id
+    && correctionPriorLineage?.versionFieldId === "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-VERSION"
+    && correctionPriorLineage?.targetVersionFieldId === "CORR-ASSESSMENT-F-VERSION"
+    && correctionDerivedContract?.sourceRefFieldId === "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-REF"
+    && correctionDerivedContract?.sourceVersionFieldId === "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-VERSION"
+    && correctionDerivedContract?.validityFieldId === "CORR-ASSESSMENT-F-VALIDITY-STATUS"
+    && correctionDerivedContract?.disputeFieldId === "CORR-ASSESSMENT-F-DISPUTE-CORRECTION-STATUS"
+    && correctionDerivedContract?.priorRefFieldId === "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-REF"
+    && correctionDerivedContract?.priorVersionFieldId
+      === "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-VERSION"
+    && correctionDerivedContract?.supersessionReasonFieldId
+      === "CORR-ASSESSMENT-F-SUPERSESSION-REASON"
+    && correctionDerivedContract?.versionFieldId === "CORR-ASSESSMENT-F-VERSION"
+    && correctionDerivedContract?.sourceOverwriteAllowed === false
+    && correctionDerivedContract?.recomputationCreatesNewVersion === true
+    && correctionDerivedContract?.priorVersionRequiredWhenRecomputed === true
+    && normalizeCorrection?.targetObjectId === correctionAssessment?.id
+    && normalizeCorrection?.operationKind === "CREATE"
+    && !Object.hasOwn(normalizeCorrection ?? {}, "transition")
+    && records(normalizeCorrection?.relatedStateGuards).some((guard) => (
+      guard?.refFieldId === "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-REF"
+      && guard?.versionFieldId === "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-VERSION"
+      && guard?.targetObjectId === correctionAttempt?.id
+      && guard?.requiredState === "SUBMITTED"
+    ))
+    && records(normalizeCorrection?.statusWrites).some(({ fieldId, codes }) => (
+      fieldId === "CORR-ASSESSMENT-F-VALIDITY-STATUS" && sameStringSet(codes, ["VALID"])
+    ))
+    && records(normalizeCorrection?.statusWrites).some(({ fieldId, codes }) => (
+      fieldId === "CORR-ASSESSMENT-F-DISPUTE-CORRECTION-STATUS"
+      && sameStringSet(codes, ["UNCHALLENGED"])
+    ))
+    && normalizeCorrection?.explicitDontKnowMayWriteCompleted === false
+    && !list(normalizeCorrection?.initialAttemptOutcomeMatrix?.EXPLICIT_DONT_KNOW)
+      .includes("COMPLETED")
+    && normalizeCorrection?.externalAiProcessingGuard?.contractId === "EXTERNAL-AI-STUDENT-DATA-V2"
+    && normalizeCorrection?.externalAiProcessingGuard?.failClosed === true
+    && list(normalizeCorrection?.failureResults).includes("EXTERNAL_AI_CONTRACT_INCOMPLETE");
   closeDomain(
     "CORRECTION_VALID_ATTEMPT",
     "correction attempts and post-answer remedial evidence must remain distinct from independent mastery evidence",
   );
 
   const separation = grading?.dataSeparationContract;
+  const derivedJudgmentRequirements = [
+    {
+      objectId: "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION",
+      creatorActionId: "GRD-ACT-CLASSIFY-INITIAL-ATTEMPT",
+      sourceRefFieldId: "GRD-ATTEMPT-CLASS-F-SUBMISSION-REF",
+      sourceVersionFieldId: "GRD-ATTEMPT-CLASS-F-SUBMISSION-VERSION",
+      sourceObjectId: "SUB-OBJ-ATTEMPT",
+      sourceTargetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+      validityFieldId: "GRD-ATTEMPT-CLASS-F-VALIDITY-STATUS",
+      disputeFieldId: "GRD-ATTEMPT-CLASS-F-DISPUTE-CORRECTION-STATUS",
+      priorRefFieldId: "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-REF",
+      priorVersionFieldId: "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-VERSION",
+      supersessionReasonFieldId: "GRD-ATTEMPT-CLASS-F-SUPERSESSION-REASON",
+      versionFieldId: "GRD-ATTEMPT-CLASS-F-VERSION",
+      initialValidityCode: "VALID",
+      initialDisputeCode: "UNCHALLENGED",
+      recomputationWriterActionIds: ["GRD-ACT-CLASSIFY-INITIAL-ATTEMPT"],
+      recomputationStatusWritesByActionId: {
+        "GRD-ACT-CLASSIFY-INITIAL-ATTEMPT": {
+          validityCode: "VALID",
+          disputeCode: "UNCHALLENGED",
+        },
+      },
+    },
+    {
+      objectId: "GRD-OBJ-DECISION",
+      creatorActionId: "GRD-ACT-ENQUEUE",
+      sourceRefFieldId: "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-REF",
+      sourceVersionFieldId: "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
+      sourceObjectId: "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION",
+      sourceTargetVersionFieldId: "GRD-ATTEMPT-CLASS-F-VERSION",
+      validityFieldId: "GRD-DECISION-F-DERIVATION-VALIDITY-STATUS",
+      disputeFieldId: "GRD-DECISION-F-DERIVATION-DISPUTE-STATUS",
+      priorRefFieldId: "GRD-DECISION-F-PRIOR-DECISION-REF",
+      priorVersionFieldId: "GRD-DECISION-F-PRIOR-DECISION-VERSION",
+      supersessionReasonFieldId: "GRD-DECISION-F-CORRECTION-REASON",
+      versionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+      initialValidityCode: "PENDING_VALIDATION",
+      initialDisputeCode: "UNCHALLENGED",
+      recomputationWriterActionIds: ["GRD-ACT-OPEN-CONFIRMED-REVISION"],
+      recomputationStatusWritesByActionId: {
+        "GRD-ACT-OPEN-CONFIRMED-REVISION": {
+          validityCode: "PENDING_VALIDATION",
+          disputeCode: "CORRECTION_PENDING",
+        },
+      },
+    },
+    {
+      objectId: "PUB-OBJ-RESULT",
+      creatorActionId: "PUB-ACT-MATERIALIZE-RESULT",
+      sourceRefFieldId: "PUB-RESULT-F-SOURCE-DECISION-REF",
+      sourceVersionFieldId: "PUB-RESULT-F-DECISION-VERSION",
+      sourceObjectId: "GRD-OBJ-DECISION",
+      sourceTargetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+      validityFieldId: "PUB-RESULT-F-VALIDITY-STATUS",
+      disputeFieldId: "PUB-RESULT-F-DISPUTE-CORRECTION-STATUS",
+      priorRefFieldId: "PUB-RESULT-F-PRIOR-RESULT-REF",
+      priorVersionFieldId: "PUB-RESULT-F-PRIOR-RESULT-VERSION",
+      supersessionReasonFieldId: "PUB-RESULT-F-PUBLIC-CORRECTION-NOTE",
+      versionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+      initialValidityCode: "PENDING_VALIDATION",
+      initialDisputeCode: "UNCHALLENGED",
+      recomputationWriterActionIds: [
+        "PUB-ACT-CORRECT-RESULT",
+        "PUB-ACT-CORRECT-CHALLENGED-RESULT",
+        "PUB-ACT-REPLACE-RESULT",
+        "PUB-ACT-INVALIDATE-RESULT",
+        "PUB-ACT-UPHOLD-RESULT",
+      ],
+      recomputationStatusWritesByActionId: {
+        "PUB-ACT-CORRECT-RESULT": {
+          validityCode: "INVALIDATED",
+          disputeCode: "CORRECTION_PENDING",
+        },
+        "PUB-ACT-CORRECT-CHALLENGED-RESULT": {
+          validityCode: "VALID",
+          disputeCode: "RESOLVED",
+        },
+        "PUB-ACT-REPLACE-RESULT": {
+          validityCode: "VALID",
+          disputeCode: "RESOLVED",
+        },
+        "PUB-ACT-INVALIDATE-RESULT": {
+          validityCode: "INVALIDATED",
+          disputeCode: "RESOLVED",
+        },
+        "PUB-ACT-UPHOLD-RESULT": {
+          validityCode: "VALID",
+          disputeCode: "RESOLVED",
+        },
+      },
+    },
+    {
+      objectId: "CORR-OBJ-ATTEMPT-ASSESSMENT",
+      creatorActionId: "CORR-ACT-NORMALIZE-SUBMISSION",
+      sourceRefFieldId: "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-REF",
+      sourceVersionFieldId: "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-VERSION",
+      sourceObjectId: "CORR-OBJ-ATTEMPT",
+      sourceTargetVersionFieldId: "CORR-ATTEMPT-F-CORRECTION-VERSION",
+      validityFieldId: "CORR-ASSESSMENT-F-VALIDITY-STATUS",
+      disputeFieldId: "CORR-ASSESSMENT-F-DISPUTE-CORRECTION-STATUS",
+      priorRefFieldId: "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-REF",
+      priorVersionFieldId: "CORR-ASSESSMENT-F-PRIOR-ASSESSMENT-VERSION",
+      supersessionReasonFieldId: "CORR-ASSESSMENT-F-SUPERSESSION-REASON",
+      versionFieldId: "CORR-ASSESSMENT-F-VERSION",
+      initialValidityCode: "VALID",
+      initialDisputeCode: "UNCHALLENGED",
+      recomputationWriterActionIds: ["CORR-ACT-NORMALIZE-SUBMISSION"],
+      recomputationStatusWritesByActionId: {
+        "CORR-ACT-NORMALIZE-SUBMISSION": {
+          validityCode: "VALID",
+          disputeCode: "UNCHALLENGED",
+        },
+      },
+    },
+  ];
+  const derivedJudgmentContractValid = (requirement) => {
+    const object = index.objectById.get(requirement.objectId)?.value;
+    const contract = object?.derivedJudgmentContract;
+    const sourceRef = index.fieldById.get(requirement.sourceRefFieldId);
+    const sourceVersion = index.fieldById.get(requirement.sourceVersionFieldId);
+    const validity = index.fieldById.get(requirement.validityFieldId);
+    const dispute = index.fieldById.get(requirement.disputeFieldId);
+    const priorRef = index.fieldById.get(requirement.priorRefFieldId);
+    const priorVersion = index.fieldById.get(requirement.priorVersionFieldId);
+    const supersessionReason = index.fieldById.get(requirement.supersessionReasonFieldId);
+    const version = index.fieldById.get(requirement.versionFieldId);
+    const sourceLineage = records(object?.lineageBindings).find(({ refFieldId }) => (
+      refFieldId === requirement.sourceRefFieldId
+    ));
+    const priorLineage = records(object?.lineageBindings).find(({ refFieldId }) => (
+      refFieldId === requirement.priorRefFieldId
+    ));
+    const creator = index.actionById.get(requirement.creatorActionId)?.value;
+    const contractKeys = [
+      "sourceRefFieldId",
+      "sourceVersionFieldId",
+      "validityFieldId",
+      "disputeFieldId",
+      "priorRefFieldId",
+      "priorVersionFieldId",
+      "supersessionReasonFieldId",
+      "versionFieldId",
+      "sourceOverwriteAllowed",
+      "recomputationCreatesNewVersion",
+      "priorVersionRequiredWhenRecomputed",
+      "initialization",
+      "recomputation",
+    ];
+    const expectedRecomputationOutputFieldIds = [
+      requirement.priorRefFieldId,
+      requirement.priorVersionFieldId,
+      requirement.supersessionReasonFieldId,
+      requirement.versionFieldId,
+      requirement.validityFieldId,
+      requirement.disputeFieldId,
+    ];
+    const statusWriteMatches = (action, fieldId, codes) => {
+      const writes = records(action?.statusWrites).filter((write) => write?.fieldId === fieldId);
+      return writes.length === 1 && sameStringSet(writes[0]?.codes, codes);
+    };
+    const recomputationWritersValid = (
+      sameStringSet(
+        contract?.recomputation?.actionIds,
+        requirement.recomputationWriterActionIds,
+      )
+      && sameStringSet(
+        contract?.recomputation?.requiredOutputFieldIds,
+        expectedRecomputationOutputFieldIds,
+      )
+      && hasExactKeys(
+        contract?.recomputation?.statusWritesByActionId,
+        requirement.recomputationWriterActionIds,
+      )
+      && JSON.stringify(contract?.recomputation?.statusWritesByActionId)
+        === JSON.stringify(requirement.recomputationStatusWritesByActionId)
+      && requirement.recomputationWriterActionIds.every((actionId) => {
+        const action = index.actionById.get(actionId)?.value;
+        const statusWrites = requirement.recomputationStatusWritesByActionId[actionId];
+        return action?.targetObjectId === requirement.objectId
+          && JSON.stringify(action?.derivedJudgmentRecomputationContract)
+            === JSON.stringify(contract?.recomputation)
+          && expectedRecomputationOutputFieldIds.every((fieldId) => (
+            list(action?.outputFieldIds).includes(fieldId)
+          ))
+          && statusWriteMatches(
+            action,
+            requirement.validityFieldId,
+            [statusWrites.validityCode],
+          )
+          && statusWriteMatches(
+            action,
+            requirement.disputeFieldId,
+            [statusWrites.disputeCode],
+          );
+      })
+    );
+    return object?.dataNature === "AI_DERIVED_JUDGMENT"
+      && object?.originalFactOverwritePolicy === "FORBIDDEN"
+      && hasExactKeys(contract, contractKeys)
+      && contractKeys.slice(0, 8).every((key) => contract?.[key] === requirement[key])
+      && contract?.sourceOverwriteAllowed === false
+      && contract?.recomputationCreatesNewVersion === true
+      && contract?.priorVersionRequiredWhenRecomputed === true
+      && hasExactKeys(contract?.initialization, [
+        "actionId",
+        "validityCode",
+        "disputeCode",
+      ])
+      && contract?.initialization?.actionId === requirement.creatorActionId
+      && contract?.initialization?.validityCode === requirement.initialValidityCode
+      && contract?.initialization?.disputeCode === requirement.initialDisputeCode
+      && hasExactKeys(contract?.recomputation, [
+        "actionIds",
+        "requiredOutputFieldIds",
+        "statusWritesByActionId",
+      ])
+      && recomputationWritersValid
+      && sourceRef?.objectId === requirement.objectId
+      && sourceRef?.value?.valueSource?.kind === "OBJECT_REF"
+      && sourceRef?.value?.valueSource?.targetObjectId === requirement.sourceObjectId
+      && sourceRef?.value?.referenceIntegrity === "VERSION_PINNED"
+      && sourceRef?.value?.versionBinding?.versionFieldId === requirement.sourceVersionFieldId
+      && sourceRef?.value?.versionBinding?.targetVersionFieldId
+        === requirement.sourceTargetVersionFieldId
+      && sourceVersion?.objectId === requirement.objectId
+      && sourceLineage?.versionFieldId === requirement.sourceVersionFieldId
+      && sourceLineage?.targetObjectId === requirement.sourceObjectId
+      && sourceLineage?.targetVersionFieldId === requirement.sourceTargetVersionFieldId
+      && validity?.objectId === requirement.objectId
+      && validity?.value?.valueSource?.optionSetId === "OPT-AI2-004"
+      && validity?.value?.required === true
+      && dispute?.objectId === requirement.objectId
+      && dispute?.value?.valueSource?.optionSetId === "OPT-AI2-003"
+      && dispute?.value?.required === true
+      && priorRef?.objectId === requirement.objectId
+      && priorRef?.value?.valueSource?.kind === "OBJECT_REF"
+      && priorRef?.value?.valueSource?.targetObjectId === requirement.objectId
+      && priorRef?.value?.referenceIntegrity === "VERSION_PINNED"
+      && priorRef?.value?.versionBinding?.versionFieldId === requirement.priorVersionFieldId
+      && priorRef?.value?.versionBinding?.targetVersionFieldId === requirement.versionFieldId
+      && priorLineage?.versionFieldId === requirement.priorVersionFieldId
+      && priorLineage?.targetObjectId === requirement.objectId
+      && priorLineage?.targetVersionFieldId === requirement.versionFieldId
+      && priorVersion?.objectId === requirement.objectId
+      && supersessionReason?.objectId === requirement.objectId
+      && version?.objectId === requirement.objectId
+      && version?.value?.idempotencyRole === "OBJECT_VERSION"
+      && creator?.targetObjectId === requirement.objectId
+      && creator?.operationKind === "CREATE"
+      && JSON.stringify(creator?.derivedJudgmentWriteContract) === JSON.stringify(contract)
+      && statusWriteMatches(
+        creator,
+        requirement.validityFieldId,
+        [requirement.initialValidityCode],
+      )
+      && statusWriteMatches(
+        creator,
+        requirement.disputeFieldId,
+        [requirement.initialDisputeCode],
+      )
+      && [
+        requirement.sourceRefFieldId,
+        requirement.sourceVersionFieldId,
+        requirement.validityFieldId,
+        requirement.disputeFieldId,
+        requirement.versionFieldId,
+      ].every((fieldId) => list(creator?.outputFieldIds).includes(fieldId));
+  };
   valid = valid
-    && sameStringSet(separation?.originalFactObjectIds, ["SUB-OBJ-ATTEMPT"])
+    && sameStringSet(separation?.originalFactObjectIds, [
+      "SUB-OBJ-ATTEMPT",
+      "CORR-OBJ-ATTEMPT",
+    ])
     && sameStringSet(separation?.derivedJudgmentObjectIds, [
+      "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION",
       "GRD-OBJ-DECISION",
       "PUB-OBJ-RESULT",
+      "CORR-OBJ-ATTEMPT-ASSESSMENT",
     ])
     && separation?.overwriteOriginalFactAllowed === false
     && separation?.sourceIdentityAndVersionRequired === true
     && separation?.derivedValidityDisputeAndSupersessionRequired === true
+    && externalAiDerivedActionsValid
+    && derivedJudgmentRequirements.every(derivedJudgmentContractValid)
+    && index.objectById.get("GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION")?.value?.dataNature
+      === "AI_DERIVED_JUDGMENT"
     && index.objectById.get("GRD-OBJ-DECISION")?.value?.dataNature === "AI_DERIVED_JUDGMENT"
-    && index.objectById.get("PUB-OBJ-RESULT")?.value?.dataNature === "AI_DERIVED_JUDGMENT";
+    && index.objectById.get("PUB-OBJ-RESULT")?.value?.dataNature === "AI_DERIVED_JUDGMENT"
+    && index.objectById.get("CORR-OBJ-ATTEMPT-ASSESSMENT")?.value?.dataNature
+      === "AI_DERIVED_JUDGMENT"
+    && index.objectById.get("CORR-OBJ-ATTEMPT")?.value?.dataNature === "ORIGINAL_LEARNING_FACT"
+    && index.actionById.get("CORR-ACT-NORMALIZE-SUBMISSION")?.value?.targetObjectId
+      === "CORR-OBJ-ATTEMPT-ASSESSMENT";
   const trace = grading?.aiTraceContract;
   const traceFields = [
     "BUSINESS_TASK_ID",

@@ -49,8 +49,9 @@ import {
 } from "./extensions.mjs";
 import {
   deferPhaseThreeFlowActions,
-  phaseTwoAssessmentEvents,
   phaseTwoAssessmentOptionSets,
+  replacePhaseTwoAssessmentAiTasks,
+  replacePhaseTwoAssessmentEvents,
   replacePhaseTwoAssessmentFlows,
   replacePhaseTwoAssessmentModules,
   replacePhaseTwoAssessmentOptionSets,
@@ -63,12 +64,11 @@ export const optionSets = deepFreeze(replacePhaseTwoAssessmentOptionSets([
   ...phaseTwoAssessmentOptionSets,
 ]));
 
-export const events = deepFreeze([
+export const events = deepFreeze(replacePhaseTwoAssessmentEvents([
   ...catalogEvents,
   ...teachingLoopEvents,
   ...extensionEvents,
-  ...phaseTwoAssessmentEvents,
-]);
+]));
 
 export {
   baselineDecisions,
@@ -98,10 +98,10 @@ export const flows = deepFreeze(replacePhaseTwoAssessmentFlows([
   ...aiReportingFlows,
   ...extensionFlows,
 ]));
-export const aiTasks = deepFreeze([
+export const aiTasks = deepFreeze(replacePhaseTwoAssessmentAiTasks([
   ...aiReportingAiTasks,
   ...extensionAiTasks,
-]);
+]));
 
 export {
   baselineChapters,
