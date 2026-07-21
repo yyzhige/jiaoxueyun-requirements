@@ -1167,6 +1167,7 @@ export const optionSets = [
     ["MIGRATE", "迁移"],
     ["DELETE", "删除或注销"],
     ["RESTRICT", "限制处理"],
+    ["PUBLISH_STUDENT_WORK", "授权公开学生作品"],
     ["WITHDRAW_PUBLICATION", "撤回作品公开授权"],
   ]),
   optionSet("OPT-GOV-006", "exportAudience", "导出权主体", [

@@ -10928,6 +10928,7 @@ test("registers every required Option Set concept with stable code-label values"
       "MIGRATE",
       "DELETE",
       "RESTRICT",
+      "PUBLISH_STUDENT_WORK",
       "WITHDRAW_PUBLICATION",
     ],
     exportAudience: ["STUDENT", "GUARDIAN", "TEACHER", "SCHOOL"],

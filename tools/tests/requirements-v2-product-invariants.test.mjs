@@ -195,11 +195,14 @@ function foundationGovernanceInvariantErrors(model) {
   );
 
   const exportRequest = actionById(model, "DGV-ACT-REQUEST-EXPORT");
+  const exportGenerate = actionById(model, "DGV-ACT-GENERATE-EXPORT");
   const exportDownload = actionById(model, "DGV-ACT-DOWNLOAD-ROLE-BOUND-FILE");
   requireInvariant(
     sameMembers(optionCodes(model, "OPT-GOV-006"), ["STUDENT", "GUARDIAN", "TEACHER", "SCHOOL"])
+    && optionCodes(model, "OPT-GOV-005")?.includes("PUBLISH_STUDENT_WORK")
     && ["DGV-EXPORT-F-AUDIENCE", "DGV-EXPORT-F-SUBJECT-ID", "DGV-EXPORT-F-SOURCE-RIGHTS"]
       .every((id) => exportRequest?.inputFieldIds.includes(id))
+    && hasPermission(exportGenerate, "ALLOW", "actorRef", "SYSTEM", /reauthorizes.*requester.*audience.*object ownership.*source rights.*scope.*expiry.*generation time/i)
     && hasPermission(exportDownload, "ALLOW", "actorRef", "CURRENT_ACTOR", /reauthorized at download time.*immutable audience.*unexpired link/i),
     "ROLE_SEPARATED_EXPORT",
   );
@@ -299,6 +302,24 @@ test("authorization destructive variant rejects custom duty widening a platform 
 
 test("export and transfer rights remain role-separated and source-right bounded", () => {
   assert.deepEqual(foundationGovernanceInvariantErrors(requirementModel), []);
+});
+
+test("export destructive variant rejects a missing student-work publication authorization action", () => {
+  const model = structuredClone(requirementModel);
+  const dataRightActions = model.optionSets.find(({ id }) => id === "OPT-GOV-005");
+  dataRightActions.values = dataRightActions.values.filter(({ code }) => (
+    code !== "PUBLISH_STUDENT_WORK"
+  ));
+  assertInvariant(model, "ROLE_SEPARATED_EXPORT");
+});
+
+test("export destructive variant rejects generation without independent reauthorization", () => {
+  const model = structuredClone(requirementModel);
+  const action = actionById(model, "DGV-ACT-GENERATE-EXPORT");
+  action.permissions.find(({ effect, actorRef }) => (
+    effect === "ALLOW" && actorRef === "SYSTEM"
+  )).condition = "the system trusts the earlier approval without reauthorization";
+  assertInvariant(model, "ROLE_SEPARATED_EXPORT");
 });
 
 test("shared device cleanup is limited to product-controlled state", () => {
