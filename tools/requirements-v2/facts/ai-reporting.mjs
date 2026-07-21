@@ -1653,7 +1653,7 @@ const learningPathActions = [
   }),
 ];
 
-const learningPathModule = moduleFact({
+export const longTermLearningPathModule = moduleFact({
   id: "LPATH-001",
   phase: PHASE.FIRST,
   releaseStatus: RELEASE_STATUS.BUILD_READY,
@@ -2418,7 +2418,6 @@ export const aiReportingAiTasks = deepFreeze([
 export const aiReportingModules = deepFreeze([
   aixModule,
   reportModule,
-  learningPathModule,
   notificationModule,
 ]);
 
@@ -2499,7 +2498,7 @@ export const aiReportingFlows = deepFreeze([
   {
     id: "DF-011",
     label: "Versioned Learning Facts to Cross-term Learning Path",
-    phase: PHASE.FIRST,
+    phase: PHASE.THIRD,
     contractProfile: "LEARNING_PATH_AGGREGATION",
     routingPolicy: "ACTION_CHOICE_REQUIRED",
     moduleIds: ["PUB-001", "INS-001", "CORR-001", "APP-001", "GRD-001", "LPATH-001"],
@@ -2592,7 +2591,7 @@ export const aiReportingFlows = deepFreeze([
   {
     id: "DF-013",
     label: "Student Plan Execution to Report Snapshot and In-product Delivery",
-    phase: PHASE.FIRST,
+    phase: PHASE.THIRD,
     contractProfile: "REPORT_MATERIALIZATION",
     routingPolicy: "ACTION_CHOICE_REQUIRED",
     moduleIds: ["APP-001", "PLN-001", "RPT-001", "NOTI-001"],

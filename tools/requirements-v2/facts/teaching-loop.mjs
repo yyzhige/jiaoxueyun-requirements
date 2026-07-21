@@ -6093,7 +6093,7 @@ const evidenceActions = [
   }),
 ];
 
-const evidenceModule = moduleFact({
+export const longTermEvidenceModule = moduleFact({
   id: "INS-001",
   phase: PHASE.FIRST,
   releaseStatus: RELEASE_STATUS.BUILD_READY,
@@ -6623,7 +6623,7 @@ const planActions = [
   }),
 ];
 
-const planModule = moduleFact({
+export const longTermPlanModule = moduleFact({
   id: "PLN-001",
   phase: PHASE.FIRST,
   releaseStatus: RELEASE_STATUS.BUILD_READY,
@@ -8180,8 +8180,6 @@ export const teachingLoopModules = deepFreeze([
   gradingModule,
   publicationModule,
   scoreModule,
-  evidenceModule,
-  planModule,
   studentExecutionModule,
   correctionModule,
   studentProfileModule,
@@ -9071,7 +9069,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
   {
     id: "DF-009",
     label: "Published Result Correction",
-    phase: PHASE.FIRST,
+    phase: PHASE.THIRD,
     contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["GRD-001", "PUB-001", "INS-001", "PLN-001", "CORR-001"],
@@ -9370,7 +9368,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
   {
     id: "DF-010",
     label: "Correction Submission Judgment and New Evidence",
-    phase: PHASE.FIRST,
+    phase: PHASE.THIRD,
     contractProfile: "GENERIC",
     routingPolicy: "OPTION_VALUE_REQUIRED",
     moduleIds: ["PUB-001", "INS-001", "PLN-001", "CORR-001"],
@@ -9714,7 +9712,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
   {
     id: "DF-012",
     label: "Improvement Candidate to Subject Plan and Cross-subject Coordination",
-    phase: PHASE.FIRST,
+    phase: PHASE.THIRD,
     contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["INS-001", "PLN-001"],
@@ -9827,7 +9825,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
   {
     id: "DF-014",
     label: "Student Management Profile Aggregation",
-    phase: PHASE.FIRST,
+    phase: PHASE.THIRD,
     contractProfile: "GENERIC",
     routingPolicy: "NONE",
     moduleIds: ["SCO-001", "INS-001", "PLN-001", "STU-001"],
