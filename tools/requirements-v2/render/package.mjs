@@ -54,6 +54,8 @@ const MODULE_ARTIFACT_META = new Map([
   ["SCH-001", [25, "academic-scheduling"]],
   ["REPORT-001", [26, "guardian-report-sharing"]],
   ["PLAT-001", [27, "platform-onboarding-governance"]],
+  ["PROG-001", [28, "phase-two-minimum-learning-progress"]],
+  ["VIDEO-001", [29, "phase-two-source-bound-teaching-video"]],
 ]);
 
 function artifactMeta(moduleId) {

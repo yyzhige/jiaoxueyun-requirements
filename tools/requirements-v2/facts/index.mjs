@@ -56,18 +56,26 @@ import {
   replacePhaseTwoAssessmentModules,
   replacePhaseTwoAssessmentOptionSets,
 } from "./phase-two-assessment.mjs";
+import {
+  phaseTwoEvents,
+  phaseTwoFlows,
+  phaseTwoModules,
+  phaseTwoOptionSets,
+} from "./phase-two.mjs";
 
 export const optionSets = deepFreeze(replacePhaseTwoAssessmentOptionSets([
   ...catalogOptionSets,
   ...teachingLoopOptionSets,
   ...extensionOptionSets,
   ...phaseTwoAssessmentOptionSets,
+  ...phaseTwoOptionSets,
 ]));
 
 export const events = deepFreeze(replacePhaseTwoAssessmentEvents([
   ...catalogEvents,
   ...teachingLoopEvents,
   ...extensionEvents,
+  ...phaseTwoEvents,
 ]));
 
 export {
@@ -86,6 +94,7 @@ export const modules = deepFreeze(deferPhaseThreeFlowActions(replacePhaseTwoAsse
   ...teachingLoopModules,
   ...aiReportingModules,
   ...extensionModules,
+  ...phaseTwoModules,
 ])));
 export const currentReleaseModuleIds = deepFreeze(
   modules
@@ -97,6 +106,7 @@ export const flows = deepFreeze(replacePhaseTwoAssessmentFlows([
   ...teachingLoopFlows,
   ...aiReportingFlows,
   ...extensionFlows,
+  ...phaseTwoFlows,
 ]));
 export const aiTasks = deepFreeze(replacePhaseTwoAssessmentAiTasks([
   ...aiReportingAiTasks,

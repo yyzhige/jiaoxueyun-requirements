@@ -3222,6 +3222,857 @@ function notificationChannelErrors(index) {
   return errors;
 }
 
+function phaseTwoProgressVideoErrors(index) {
+  const enabled = index.productDecisionById.has("D079")
+    || index.moduleById.has("PROG-001")
+    || index.moduleById.has("VIDEO-001");
+  if (!enabled) return [];
+
+  const errors = [];
+  const progress = index.moduleById.get("PROG-001")?.value;
+  const video = index.moduleById.get("VIDEO-001")?.value;
+  const object = (id) => index.objectById.get(id)?.value;
+  const action = (id) => index.actionById.get(id)?.value;
+  const field = (id) => index.fieldById.get(id)?.value;
+  const flow = (id) => index.flows.find(({ value }) => value?.id === id)?.value;
+  const option = (id) => index.optionSetById.get(id)?.value;
+  const optionCodes = (id) => records(option(id)?.values).map(({ code }) => code);
+  const hasFields = (objectId, fieldIds) => {
+    const actual = new Set(records(object(objectId)?.fields).map(({ id }) => id));
+    return fieldIds.every((id) => actual.has(id));
+  };
+  const hasPermission = (actionValue, effect, property, subject, pattern) => (
+    records(actionValue?.permissions).some((permission) => (
+      permission.effect === effect
+      && permission[property] === subject
+      && (!pattern || pattern.test(permission.condition ?? ""))
+    ))
+  );
+  const acceptedCodes = (actionValue, fieldId) => records(actionValue?.acceptedInputValues)
+    .filter((binding) => binding.fieldId === fieldId)
+    .flatMap((binding) => list(binding.codes));
+  const plannedModule = (module) => module?.phase === PHASE.SECOND
+    && module?.releaseStatus === RELEASE_STATUS.PLANNED
+    && records(module.pages).length > 0
+    && records(module.pages).every(({ availability }) => availability === RELEASE_STATUS.PLANNED);
+
+  let progressValid = plannedModule(progress)
+    && [
+      "PROG-OBJ-COURSE-TARGET-SNAPSHOT",
+      "PROG-OBJ-STUDENT-TARGET",
+      "PROG-OBJ-NEXT-TARGET-CHOICE",
+    ].every((id) => index.objectById.get(id)?.moduleId === "PROG-001")
+    && [
+      "PROG-ACT-VIEW-CURRENT-TARGET",
+      "PROG-ACT-PROPOSE-NEXT-TARGET",
+      "PROG-ACT-SELECT-NEXT-TARGET",
+      "PROG-ACT-DEFER-NEXT-TARGET",
+    ].every((id) => index.actionById.get(id)?.moduleId === "PROG-001")
+    && index.pageById.get("PROG-PAGE-STUDENT-CURRENT-TARGET")?.moduleId === "PROG-001"
+    && Boolean(flow("DF-P2-001"));
+  const forbiddenProfileDependencies = new Set(["INS-001", "PLN-001", "LPATH-001"]);
+  progressValid = progressValid
+    && list(progress?.dependencyModuleIds).every((id) => !forbiddenProfileDependencies.has(id))
+    && hasFields("PROG-OBJ-COURSE-TARGET-SNAPSHOT", [
+      "PROG-SNAPSHOT-F-WORK-CONTEXT-REF",
+      "PROG-SNAPSHOT-F-WORK-CONTEXT-VERSION",
+      "PROG-SNAPSHOT-F-SCHOOL-PROFILE-REF",
+      "PROG-SNAPSHOT-F-SCHOOL-PROFILE-VERSION",
+      "PROG-SNAPSHOT-F-GRADE-REF",
+      "PROG-SNAPSHOT-F-COURSE-REF",
+      "PROG-SNAPSHOT-F-COURSE-SOURCE-VERSION",
+      "PROG-SNAPSHOT-F-CURRICULUM-REF",
+      "PROG-SNAPSHOT-F-CURRICULUM-VERSION",
+      "PROG-SNAPSHOT-F-UNIT-REF",
+      "PROG-SNAPSHOT-F-UNIT-SOURCE-VERSION",
+      "PROG-SNAPSHOT-F-TARGET-REF",
+      "PROG-SNAPSHOT-F-TARGET-SOURCE-VERSION",
+      "PROG-SNAPSHOT-F-PREREQUISITE-TARGET-REFS",
+      "PROG-SNAPSHOT-F-PREREQUISITE-TARGET-VERSIONS",
+      "PROG-SNAPSHOT-F-NEXT-ALLOWED-TARGET-REF",
+      "PROG-SNAPSHOT-F-NEXT-ALLOWED-TARGET-VERSION",
+      "PROG-SNAPSHOT-F-VERSION",
+    ])
+    && hasFields("PROG-OBJ-STUDENT-TARGET", [
+      "PROG-TARGET-F-STUDENT-REF",
+      "PROG-TARGET-F-SNAPSHOT-REF",
+      "PROG-TARGET-F-SNAPSHOT-VERSION",
+      "PROG-TARGET-F-STATUS",
+      "PROG-TARGET-F-COMPLETION-EVIDENCE-REF",
+      "PROG-TARGET-F-COMPLETION-EVIDENCE-VERSION",
+      "PROG-TARGET-F-VERSION",
+    ])
+    && field("PROG-TARGET-F-STATUS")?.valueSource?.optionSetId
+      === "OPT-P2-PROG-TARGET-STATUS"
+    && setEquals(new Set(optionCodes("OPT-P2-PROG-TARGET-STATUS")), new Set([
+      "NOT_STARTED",
+      "IN_PROGRESS",
+      "PENDING_COMPLETION_EVIDENCE",
+      "COMPLETED",
+      "PAUSED",
+    ]));
+  const progressLineageTargets = new Map(records(
+    object("PROG-OBJ-COURSE-TARGET-SNAPSHOT")?.lineageBindings,
+  ).map((binding) => [binding.refFieldId, binding]));
+  progressValid = progressValid
+    && hasExactValues(progressLineageTargets.get("PROG-SNAPSHOT-F-WORK-CONTEXT-REF"), {
+      refFieldId: "PROG-SNAPSHOT-F-WORK-CONTEXT-REF",
+      versionFieldId: "PROG-SNAPSHOT-F-WORK-CONTEXT-VERSION",
+      targetObjectId: "ACC-OBJ-CONTEXT",
+      targetVersionFieldId: "ACC-CONTEXT-F-CONTEXT-VERSION",
+    })
+    && hasExactValues(progressLineageTargets.get("PROG-SNAPSHOT-F-SCHOOL-PROFILE-REF"), {
+      refFieldId: "PROG-SNAPSHOT-F-SCHOOL-PROFILE-REF",
+      versionFieldId: "PROG-SNAPSHOT-F-SCHOOL-PROFILE-VERSION",
+      targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+      targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+    })
+    && hasExactValues(progressLineageTargets.get("PROG-SNAPSHOT-F-CURRICULUM-REF"), {
+      refFieldId: "PROG-SNAPSHOT-F-CURRICULUM-REF",
+      versionFieldId: "PROG-SNAPSHOT-F-CURRICULUM-VERSION",
+      targetObjectId: "CURR-OBJ-CURRICULUM",
+      targetVersionFieldId: "CURR-CURRICULUM-F-VERSION",
+    })
+    && hasExactValues(progressLineageTargets.get("PROG-SNAPSHOT-F-TARGET-MAPPING-REF"), {
+      refFieldId: "PROG-SNAPSHOT-F-TARGET-MAPPING-REF",
+      versionFieldId: "PROG-SNAPSHOT-F-TARGET-MAPPING-VERSION",
+      targetObjectId: "CURR-OBJ-MAPPING",
+      targetVersionFieldId: "CURR-MAPPING-F-VERSION",
+    });
+  const proposeNext = action("PROG-ACT-PROPOSE-NEXT-TARGET");
+  const selectNext = action("PROG-ACT-SELECT-NEXT-TARGET");
+  const deferNext = action("PROG-ACT-DEFER-NEXT-TARGET");
+  const progressFlow = flow("DF-P2-001");
+  progressValid = progressValid
+    && [
+      "PROG-CHOICE-F-CURRENT-TARGET-REF",
+      "PROG-CHOICE-F-CURRENT-TARGET-VERSION",
+      "PROG-CHOICE-F-COMPLETION-EVIDENCE-REF",
+      "PROG-CHOICE-F-COMPLETION-EVIDENCE-VERSION",
+      "PROG-CHOICE-F-NEXT-SNAPSHOT-REF",
+      "PROG-CHOICE-F-NEXT-SNAPSHOT-VERSION",
+    ].every((id) => list(proposeNext?.inputFieldIds).includes(id))
+    && hasPermission(
+      proposeNext,
+      "ALLOW",
+      "actorRef",
+      "SYSTEM",
+      /current target is COMPLETED.*completion evidence.*next snapshot.*prerequisite/i,
+    )
+    && hasPermission(
+      proposeNext,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot.*choose.*student.*automatically publish a class activity/i,
+    )
+    && hasPermission(
+      selectNext,
+      "ALLOW",
+      "roleRef",
+      "ROLE-STUDENT",
+      /student explicitly selects.*own.*proposal/i,
+    )
+    && hasPermission(
+      selectNext,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot select.*publish a class activity/i,
+    )
+    && setEquals(
+      new Set(acceptedCodes(selectNext, "PROG-CHOICE-F-STUDENT-CHOICE")),
+      new Set(["CONTINUE"]),
+    )
+    && setEquals(
+      new Set(acceptedCodes(deferNext, "PROG-CHOICE-F-STUDENT-CHOICE")),
+      new Set(["NOT_NOW"]),
+    )
+    && progressFlow?.phase === PHASE.SECOND
+    && list(progressFlow?.moduleIds).length === 1
+    && progressFlow.moduleIds[0] === "PROG-001"
+    && (() => {
+      const actionIds = records(progressFlow?.steps).map(({ actionId }) => actionId);
+      return actionIds.indexOf("PROG-ACT-PROPOSE-NEXT-TARGET") >= 0
+        && actionIds.indexOf("PROG-ACT-SELECT-NEXT-TARGET")
+          > actionIds.indexOf("PROG-ACT-PROPOSE-NEXT-TARGET");
+    })()
+    && !records(progress?.actions).some((candidate) => (
+      /PUBLISH.*CLASS|CLASS.*PUBLISH/i.test(`${candidate.id} ${candidate.label}`)
+      || records(candidate.permissions).some((permission) => (
+        permission.effect === "ALLOW" && permission.actorRef === "AI"
+      ))
+    ));
+  if (!progressValid) {
+    errors.push(
+      "INVALID_MINIMUM_PROGRESS_CONTRACT PROG-001 requires version-pinned grade/course/unit/target prerequisites and evidence plus explicit student choice without complete-profile or AI class-publication dependency",
+    );
+  }
+
+  const requestObject = object("VIDEO-OBJ-REQUEST");
+  const problemRequest = action("VIDEO-ACT-REQUEST-PROBLEM-DRIVEN");
+  const progressRequest = action("VIDEO-ACT-REQUEST-PROGRESS-DRIVEN");
+  const requestInputPairs = [
+    ["VIDEO-REQUEST-F-ASSESSMENT-RESULT-REF", "VIDEO-REQUEST-F-ASSESSMENT-RESULT-VERSION"],
+    ["VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF", "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-VERSION"],
+    ["VIDEO-REQUEST-F-PUBLISHED-RESULT-REF", "VIDEO-REQUEST-F-PUBLISHED-RESULT-VERSION"],
+    ["VIDEO-REQUEST-F-MINIMUM-PROGRESS-REF", "VIDEO-REQUEST-F-MINIMUM-PROGRESS-VERSION"],
+    ["VIDEO-REQUEST-F-MATERIAL-RIGHTS-REF", "VIDEO-REQUEST-F-MATERIAL-RIGHTS-VERSION"],
+    ["VIDEO-REQUEST-F-MATERIAL-PERMISSION-REF", "VIDEO-REQUEST-F-MATERIAL-PERMISSION-VERSION"],
+  ];
+  const commonRequestFields = requestInputPairs.flat();
+  const requestGroups = new Map(records(requestObject?.exclusiveSourceGroups)
+    .map((group) => [group.id, group]));
+  const requestLineage = new Map(records(requestObject?.lineageBindings)
+    .map((binding) => [binding.refFieldId, binding]));
+  let sourceBindingValid = plannedModule(video)
+    && list(video?.dependencyModuleIds).every((id) => !forbiddenProfileDependencies.has(id))
+    && [
+      "ORG-001",
+      "CURR-001",
+      "PROG-001",
+      "HW-001",
+      "SUB-001",
+      "GRD-001",
+      "PUB-001",
+      "CONTENT-001",
+    ].every((id) => list(video?.dependencyModuleIds).includes(id))
+    && setEquals(
+      new Set(optionCodes("OPT-P2-VIDEO-REQUEST-KIND")),
+      new Set(["PROBLEM_DRIVEN", "PROGRESS_DRIVEN"]),
+    )
+    && requestGroups.size === 2
+    && setEquals(new Set(requestGroups.get("PROBLEM_DRIVEN")?.fieldIds), new Set([
+      "VIDEO-REQUEST-F-ACTIVITY-REF",
+      "VIDEO-REQUEST-F-ACTIVITY-VERSION",
+      "VIDEO-REQUEST-F-SUBMISSION-REF",
+      "VIDEO-REQUEST-F-SUBMISSION-VERSION",
+    ]))
+    && setEquals(new Set(requestGroups.get("PROGRESS_DRIVEN")?.fieldIds), new Set([
+      "VIDEO-REQUEST-F-NEXT-TARGET-CHOICE-REF",
+      "VIDEO-REQUEST-F-NEXT-TARGET-CHOICE-VERSION",
+    ]))
+    && [
+      ...commonRequestFields,
+      "VIDEO-REQUEST-F-ANSWER-OPEN-POLICY-ID",
+      "VIDEO-REQUEST-F-ANSWER-OPEN-POLICY-VERSION",
+      "VIDEO-REQUEST-F-ANSWER-SOLUTION-RUBRIC-OPEN-AT",
+      "VIDEO-REQUEST-F-SOURCE-BINDING-DIGEST",
+    ].every((id) => list(problemRequest?.inputFieldIds).includes(id)
+      && list(progressRequest?.inputFieldIds).includes(id))
+    && [
+      "VIDEO-REQUEST-F-ACTIVITY-REF",
+      "VIDEO-REQUEST-F-SUBMISSION-REF",
+      "VIDEO-REQUEST-F-ASSESSMENT-RESULT-REF",
+      "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF",
+      "VIDEO-REQUEST-F-PUBLISHED-RESULT-REF",
+      "VIDEO-REQUEST-F-MINIMUM-PROGRESS-REF",
+      "VIDEO-REQUEST-F-NEXT-TARGET-CHOICE-REF",
+      "VIDEO-REQUEST-F-MATERIAL-RIGHTS-REF",
+      "VIDEO-REQUEST-F-MATERIAL-PERMISSION-REF",
+    ].every((id) => requestLineage.has(id))
+    && field("VIDEO-REQUEST-F-ANSWER-OPEN-POLICY-ID")?.validation
+      === "must equal ANSWER-OPEN-POLICY-V2"
+    && /separately pin answerOpenAt, solutionOpenAt, and rubricOpenAt/i.test(
+      field("VIDEO-REQUEST-F-ANSWER-SOLUTION-RUBRIC-OPEN-AT")?.validation ?? "",
+    )
+    && setEquals(
+      new Set(acceptedCodes(problemRequest, "VIDEO-REQUEST-F-KIND")),
+      new Set(["PROBLEM_DRIVEN"]),
+    )
+    && setEquals(
+      new Set(acceptedCodes(progressRequest, "VIDEO-REQUEST-F-KIND")),
+      new Set(["PROGRESS_DRIVEN"]),
+    )
+    && hasPermission(
+      problemRequest,
+      "ALLOW",
+      "roleRef",
+      "ROLE-STUDENT",
+      /pinned activity and submission.*published assessment.*answer-open.*source version.*material right/i,
+    )
+    && hasPermission(
+      progressRequest,
+      "ALLOW",
+      "roleRef",
+      "ROLE-STUDENT",
+      /completion evidence.*student explicitly selected.*next target.*assessment.*rights.*answer-open/i,
+    )
+    && hasPermission(problemRequest, "DENY", "actorRef", "AI", /cannot create.*publish a class activity/i)
+    && hasPermission(progressRequest, "DENY", "actorRef", "AI", /cannot choose.*publish a class activity/i);
+  for (const [refFieldId, versionFieldId] of requestInputPairs) {
+    sourceBindingValid = sourceBindingValid
+      && requestLineage.get(refFieldId)?.versionFieldId === versionFieldId;
+  }
+  if (!sourceBindingValid) {
+    errors.push(
+      "INVALID_VIDEO_SOURCE_BINDING_CONTRACT VIDEO-001 requires separate problem/progress requests pinned to activity or student choice, submission, assessment standard/result, minimum progress, answer-open policy, permission, and material-right versions without complete-profile dependency",
+    );
+  }
+
+  const gateFieldIds = [
+    "VIDEO-ASSET-F-SCRIPT-GATE",
+    "VIDEO-ASSET-F-RENDER-GATE",
+    "VIDEO-ASSET-F-SAFETY-GATE",
+    "VIDEO-ASSET-F-PRIVACY-GATE",
+    "VIDEO-ASSET-F-RIGHTS-GATE",
+    "VIDEO-ASSET-F-PEDAGOGY-GATE",
+    "VIDEO-ASSET-F-PLAYABILITY-GATE",
+  ];
+  const gateActionIds = [
+    "VIDEO-ACT-CHECK-SCRIPT",
+    "VIDEO-ACT-CHECK-RENDER",
+    "VIDEO-ACT-CHECK-SAFETY",
+    "VIDEO-ACT-CHECK-PRIVACY",
+    "VIDEO-ACT-CHECK-RIGHTS",
+    "VIDEO-ACT-CHECK-PEDAGOGY",
+    "VIDEO-ACT-CHECK-PLAYABILITY",
+  ];
+  const deliver = action("VIDEO-ACT-DELIVER-USABLE");
+  const gateAllow = records(deliver?.permissions)
+    .find(({ effect, actorRef }) => effect === "ALLOW" && actorRef === "SYSTEM")
+    ?.condition ?? "";
+  const gateValid = setEquals(
+    new Set(optionCodes("OPT-P2-VIDEO-GATE-STATUS")),
+    new Set(["PENDING", "PASSED", "FAILED", "UNAVAILABLE"]),
+  )
+    && gateFieldIds.every((id) => (
+      field(id)?.valueSource?.optionSetId === "OPT-P2-VIDEO-GATE-STATUS"
+    ))
+    && gateActionIds.every((id) => (
+      action(id)?.targetObjectId === "VIDEO-OBJ-ASSET"
+      && action(id)?.executionMode === "FLOW_INTERNAL"
+      && action(id)?.transition?.from === "GENERATING"
+      && action(id)?.transition?.to === "GENERATING"
+      && hasPermission(action(id), "DENY", "actorRef", "AI", /cannot.*gate passed|cannot mark.*gate passed|cannot.*bypass/i)
+    ))
+    && setEquals(new Set(deliver?.inputFieldIds), new Set(gateFieldIds))
+    && deliver?.transition?.from === "GENERATING"
+    && deliver?.transition?.to === "DELIVERED"
+    && [
+      "GATE_NOT_PASSED",
+      "SOURCE_VERSION_STALE",
+      "AUTHORIZATION_STALE",
+      "ANSWER_NOT_OPEN",
+      "RIGHTS_NOT_VALID",
+      "PLATFORM_FAILURE",
+    ].every((code) => list(deliver?.failureResults).includes(code))
+    && [
+      "SCRIPT",
+      "RENDER",
+      "SAFETY",
+      "PRIVACY",
+      "RIGHTS",
+      "PEDAGOGY",
+      "PLAYABILITY",
+    ].every((token) => gateAllow.includes(token))
+    && /assessment.*activity.*permission.*material rights.*answer-open.*source version.*before delivery/i.test(gateAllow)
+    && /all seven gates pass/i.test(
+      index.scenarios.find(({ value }) => (
+        value?.actionId === "VIDEO-ACT-DELIVER-USABLE" && value?.kind === "SUCCESS"
+      ))?.value?.then?.expectedData ?? "",
+    );
+  if (!gateValid) {
+    errors.push(
+      "INVALID_VIDEO_GATE_CONTRACT VIDEO-001 requires independent script, render, safety, privacy, rights, pedagogy, and playability gates and fail-closed source revalidation before delivery",
+    );
+  }
+
+  const controlledView = action("VIDEO-ACT-VIEW-CONTROLLED");
+  const controlledSuccess = index.scenarios.find(({ value }) => (
+    value?.actionId === "VIDEO-ACT-VIEW-CONTROLLED" && value?.kind === "SUCCESS"
+  ))?.value?.then?.expectedData ?? "";
+  const controlledPlaybackValid = [
+    "VIDEO-ASSET-F-MEDIA-REF",
+    "VIDEO-ASSET-F-SUBTITLE-REF",
+    "VIDEO-ASSET-F-SUMMARY",
+    "VIDEO-ASSET-F-LOW-BANDWIDTH-ALTERNATIVE",
+    "VIDEO-ASSET-F-DOWNLOAD-POLICY",
+    "VIDEO-ASSET-F-EXTERNAL-RECORDING-BOUNDARY",
+  ].every((id) => list(controlledView?.outputFieldIds).includes(id))
+    && setEquals(
+      new Set(optionCodes("OPT-P2-VIDEO-DOWNLOAD-POLICY")),
+      new Set(["BLOCK_PRODUCT_ORDINARY_DOWNLOAD"]),
+    )
+    && setEquals(
+      new Set(optionCodes("OPT-P2-VIDEO-EXTERNAL-RECORDING-BOUNDARY")),
+      new Set(["NO_PREVENTION_CLAIM"]),
+    )
+    && hasPermission(
+      controlledView,
+      "ALLOW",
+      "roleRef",
+      "ROLE-STUDENT",
+      /every access reauthorizes.*student relation.*source permission.*material rights.*answer-open.*not-recalled/i,
+    )
+    && /subtitles.*summary.*low-bandwidth.*no ordinary file download.*no claim.*external recording/i.test(controlledSuccess)
+    && !records(video?.actions).some((candidate) => (
+      /ORDINARY.*DOWNLOAD|DOWNLOAD.*ORDINARY/i.test(`${candidate.id} ${candidate.label}`)
+    ));
+  if (!controlledPlaybackValid) {
+    errors.push(
+      "INVALID_VIDEO_CONTROLLED_PLAYBACK_CONTRACT VIDEO-001 requires reauthorized controlled playback, subtitles, summary, low-bandwidth alternative, no ordinary product download, and no external-recording prevention claim",
+    );
+  }
+
+  const ensureMinimum = action("VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT");
+  const reserveMinimum = action("VIDEO-ACT-RESERVE-STUDENT-MINIMUM");
+  const reserveOverflow = action("VIDEO-ACT-RESERVE-SCHOOL-OVERFLOW");
+  const settle = action("VIDEO-ACT-SETTLE-USABLE-DELIVERY");
+  const release = action("VIDEO-ACT-RELEASE-QUOTA");
+  const deliveryFlow = flow("DF-P2-002");
+  const releaseFlow = flow("DF-P2-003");
+  const releaseCodes = ["PLATFORM_FAILURE", "GATE_BLOCK", "CONTENT_RECALL", "AUTOMATIC_RETRY"];
+  const quotaValid = [
+    "VIDEO-OBJ-STUDENT-ENTITLEMENT",
+    "VIDEO-OBJ-SCHOOL-OVERFLOW-POOL",
+    "VIDEO-OBJ-QUOTA-LEDGER",
+  ].every((id) => index.objectById.get(id)?.moduleId === "VIDEO-001")
+    && /greater than zero for every active phase-two student.*cannot depend on ranking.*labels.*family payment/i.test(
+      field("VIDEO-ENTITLEMENT-F-MINIMUM-UNITS")?.validation ?? "",
+    )
+    && hasPermission(
+      ensureMinimum,
+      "ALLOW",
+      "actorRef",
+      "SYSTEM",
+      /each active phase-two student.*positive minimum usable-video guarantee/i,
+    )
+    && setEquals(
+      new Set(optionCodes("OPT-P2-VIDEO-QUOTA-SOURCE")),
+      new Set(["STUDENT_MINIMUM", "SCHOOL_OVERFLOW"]),
+    )
+    && setEquals(
+      new Set(optionCodes("OPT-P2-VIDEO-QUOTA-PRIORITY")),
+      new Set(["PROBLEM_REMEDIATION", "PROGRESS_CORE", "NONESSENTIAL"]),
+    )
+    && [reserveMinimum, reserveOverflow].every((candidate) => (
+      candidate?.operationKind === "CREATE"
+      && hasPermission(
+        candidate,
+        "ALLOW",
+        "actorRef",
+        "SYSTEM",
+        /request is ACCEPTED.*problem remediation/i,
+      )
+    ))
+    && settle?.transition?.from === "RESERVED"
+    && settle?.transition?.to === "SETTLED"
+    && hasPermission(
+      settle,
+      "ALLOW",
+      "actorRef",
+      "SYSTEM",
+      /received a usable DELIVERED asset.*all mandatory gates passed/i,
+    )
+    && release?.transition?.from === "RESERVED"
+    && release?.transition?.to === "RELEASED"
+    && setEquals(new Set(optionCodes("OPT-P2-VIDEO-RELEASE-REASON")), new Set(releaseCodes))
+    && setEquals(
+      new Set(acceptedCodes(release, "VIDEO-LEDGER-F-RELEASE-REASON")),
+      new Set(releaseCodes),
+    )
+    && hasPermission(
+      release,
+      "ALLOW",
+      "actorRef",
+      "SYSTEM",
+      /platform failure.*gate block.*content recall.*automatic retry/i,
+    )
+    && (() => {
+      const deliveryActions = records(deliveryFlow?.steps).map(({ actionId }) => actionId);
+      const releaseActions = records(releaseFlow?.steps).map(({ actionId }) => actionId);
+      const firstReserve = Math.min(
+        ...["VIDEO-ACT-RESERVE-STUDENT-MINIMUM", "VIDEO-ACT-RESERVE-SCHOOL-OVERFLOW"]
+          .map((id) => deliveryActions.indexOf(id))
+          .filter((position) => position >= 0),
+      );
+      return firstReserve >= 0
+        && deliveryActions.indexOf("VIDEO-ACT-START-GENERATION") > firstReserve
+        && deliveryActions.indexOf("VIDEO-ACT-DELIVER-USABLE")
+          > deliveryActions.indexOf("VIDEO-ACT-START-GENERATION")
+        && deliveryActions.indexOf("VIDEO-ACT-SETTLE-USABLE-DELIVERY")
+          > deliveryActions.indexOf("VIDEO-ACT-DELIVER-USABLE")
+        && releaseActions.includes("VIDEO-ACT-BLOCK-DELIVERY")
+        && releaseActions.includes("VIDEO-ACT-RECALL")
+        && releaseActions.indexOf("VIDEO-ACT-RELEASE-QUOTA")
+          > releaseActions.indexOf("VIDEO-ACT-RECALL");
+    })();
+  if (!quotaValid) {
+    errors.push(
+      "INVALID_VIDEO_QUOTA_CONTRACT VIDEO-001 requires per-active-student minimum entitlement, school overflow, problem-remediation priority, acceptance reservation, usable-delivery settlement, and release for platform failure, gate block, recall, or automatic retry",
+    );
+  }
+
+  const recall = action("VIDEO-ACT-RECALL");
+  const recallValid = recall?.transition?.to === "RECALLED"
+    && setEquals(new Set(list(recall?.transition?.from)), new Set(["DELIVERED", "GATE_BLOCKED"]))
+    && hasPermission(
+      recall,
+      "ALLOW",
+      "actorRef",
+      "SYSTEM",
+      /deletion.*transfer.*source withdrawal.*rights change.*content recall.*stop/i,
+    )
+    && list(controlledView?.failureResults).includes("VIDEO_RECALLED")
+    && records(releaseFlow?.steps).some(({ actionId }) => actionId === "VIDEO-ACT-RELEASE-QUOTA");
+  if (!recallValid) {
+    errors.push(
+      "INVALID_VIDEO_RECALL_CONTRACT VIDEO-001 requires governed playback stop and quota release after deletion, transfer restriction, source withdrawal, rights change, or content recall",
+    );
+  }
+
+  const schoolRequestObject = object("VIDEO-OBJ-SCHOOL-REQUEST");
+  const assetObject = object("VIDEO-OBJ-ASSET");
+  const schoolRequest = action("VIDEO-ACT-REQUEST-SCHOOL-GROUP");
+  const personalStart = action("VIDEO-ACT-START-GENERATION");
+  const schoolStart = action("VIDEO-ACT-START-SCHOOL-GROUP-GENERATION");
+  const schoolView = action("VIDEO-ACT-VIEW-SCHOOL-PRIVATE");
+  const schoolFlow = flow("DF-P2-005");
+  const personalGovernanceFields = [
+    "VIDEO-REQUEST-F-REQUESTER-REF",
+    "VIDEO-REQUEST-F-REQUESTER-KIND",
+    "VIDEO-REQUEST-F-SERVICE-AUDIENCE",
+    "VIDEO-REQUEST-F-SERVICE-OBJECT-REFS",
+    "VIDEO-REQUEST-F-MANAGEMENT-SCOPE",
+    "VIDEO-REQUEST-F-SOURCE-MATERIALS",
+    "VIDEO-REQUEST-F-ACCESS-SCOPE",
+    "VIDEO-REQUEST-F-ACCESS-DOMAIN",
+  ];
+  const schoolGovernanceFields = [
+    "VIDEO-SCHOOL-REQUEST-F-REQUESTER-TEACHER-REF",
+    "VIDEO-SCHOOL-REQUEST-F-REQUESTER-KIND",
+    "VIDEO-SCHOOL-REQUEST-F-SERVICE-AUDIENCE",
+    "VIDEO-SCHOOL-REQUEST-F-CLASS-REF",
+    "VIDEO-SCHOOL-REQUEST-F-SERVICE-OBJECT-REFS",
+    "VIDEO-SCHOOL-REQUEST-F-MANAGEMENT-SCOPE",
+    "VIDEO-SCHOOL-REQUEST-F-SOURCE-MATERIALS",
+    "VIDEO-SCHOOL-REQUEST-F-ACCESS-SCOPE",
+    "VIDEO-SCHOOL-REQUEST-F-ACCESS-DOMAIN",
+    "VIDEO-SCHOOL-REQUEST-F-TEACHING-SCOPE-REF",
+    "VIDEO-SCHOOL-REQUEST-F-TEACHING-SCOPE-VERSION",
+    "VIDEO-SCHOOL-REQUEST-F-TEACHING-BASIS",
+  ];
+  const assetGovernanceFields = [
+    "VIDEO-ASSET-F-REQUESTER-REF",
+    "VIDEO-ASSET-F-REQUESTER-KIND",
+    "VIDEO-ASSET-F-SERVICE-AUDIENCE",
+    "VIDEO-ASSET-F-SERVICE-OBJECT-REFS",
+    "VIDEO-ASSET-F-MANAGEMENT-SCOPE",
+    "VIDEO-ASSET-F-SOURCE-MATERIALS",
+    "VIDEO-ASSET-F-ACCESS-SCOPE",
+    "VIDEO-ASSET-F-ACCESS-DOMAIN",
+    "VIDEO-ASSET-F-MANAGER-REF",
+    "VIDEO-ASSET-F-PROMOTION-POLICY",
+  ];
+  const assetSourceGroups = new Map(records(assetObject?.exclusiveSourceGroups)
+    .map((group) => [group.id, group]));
+  const schoolSuccess = index.scenarios.find(({ value }) => (
+    value?.actionId === "VIDEO-ACT-REQUEST-SCHOOL-GROUP" && value?.kind === "SUCCESS"
+  ))?.value?.then?.expectedData ?? "";
+  const accessGovernanceValid = [
+    ["OPT-P2-VIDEO-REQUESTER-KIND", ["STUDENT", "SUBJECT_TEACHER"]],
+    ["OPT-P2-VIDEO-SERVICE-AUDIENCE", ["INDIVIDUAL_STUDENT", "CLASS", "STUDENT_GROUP"]],
+    ["OPT-P2-VIDEO-MANAGEMENT-SCOPE", ["STUDENT_PERSONAL_LEARNING", "SCHOOL_PRIVATE_TEACHING"]],
+    ["OPT-P2-VIDEO-ACCESS-DOMAIN", ["STUDENT_PERSONAL", "SCHOOL_PRIVATE"]],
+    ["OPT-P2-VIDEO-ACCESS-SCOPE", ["SERVICED_STUDENT_ONLY", "AUTHORIZED_CLASS_OR_GROUP"]],
+  ].every(([optionSetId, codes]) => setEquals(
+    new Set(optionCodes(optionSetId)),
+    new Set(codes),
+  ))
+    && hasFields("VIDEO-OBJ-REQUEST", personalGovernanceFields)
+    && hasFields("VIDEO-OBJ-SCHOOL-REQUEST", schoolGovernanceFields)
+    && hasFields("VIDEO-OBJ-ASSET", assetGovernanceFields)
+    && field("VIDEO-REQUEST-F-SERVICE-OBJECT-REFS")?.idempotencyRole === "FANOUT_SET"
+    && field("VIDEO-SCHOOL-REQUEST-F-SERVICE-OBJECT-REFS")?.idempotencyRole === "FANOUT_SET"
+    && /must equal STUDENT/i.test(field("VIDEO-REQUEST-F-REQUESTER-KIND")?.validation ?? "")
+    && /INDIVIDUAL_STUDENT/i.test(field("VIDEO-REQUEST-F-SERVICE-AUDIENCE")?.validation ?? "")
+    && /STUDENT_PERSONAL_LEARNING/i.test(field("VIDEO-REQUEST-F-MANAGEMENT-SCOPE")?.validation ?? "")
+    && /SERVICED_STUDENT_ONLY/i.test(field("VIDEO-REQUEST-F-ACCESS-SCOPE")?.validation ?? "")
+    && /STUDENT_PERSONAL/i.test(field("VIDEO-REQUEST-F-ACCESS-DOMAIN")?.validation ?? "")
+    && /SUBJECT_TEACHER/i.test(field("VIDEO-SCHOOL-REQUEST-F-REQUESTER-KIND")?.validation ?? "")
+    && /CLASS.*STUDENT_GROUP/i.test(field("VIDEO-SCHOOL-REQUEST-F-SERVICE-AUDIENCE")?.validation ?? "")
+    && /SCHOOL_PRIVATE_TEACHING.*teacher leaves/i.test(field("VIDEO-SCHOOL-REQUEST-F-MANAGEMENT-SCOPE")?.validation ?? "")
+    && /AUTHORIZED_CLASS_OR_GROUP/i.test(field("VIDEO-SCHOOL-REQUEST-F-ACCESS-SCOPE")?.validation ?? "")
+    && /SCHOOL_PRIVATE.*cannot migrate.*across schools/i.test(field("VIDEO-SCHOOL-REQUEST-F-ACCESS-DOMAIN")?.validation ?? "")
+    && /PROBLEM_DRIVEN.*student-selected progress.*individual student/i.test(field("VIDEO-SCHOOL-REQUEST-F-KIND")?.validation ?? "")
+    && schoolRequestObject?.producerRef === "DUTY-SUBJECT-TEACHER"
+    && schoolRequestObject?.ownerRef === "ROLE-SCHOOL-ADMIN"
+    && schoolRequestObject?.stewardRef === "ROLE-SCHOOL-ADMIN"
+    && assetObject?.producerRef === "SYSTEM"
+    && assetObject?.ownerRef === "SYSTEM"
+    && assetSourceGroups.size === 2
+    && setEquals(new Set(assetSourceGroups.get("STUDENT_PERSONAL")?.fieldIds), new Set([
+      "VIDEO-ASSET-F-REQUEST-REF",
+      "VIDEO-ASSET-F-REQUEST-VERSION",
+    ]))
+    && setEquals(new Set(assetSourceGroups.get("SCHOOL_PRIVATE")?.fieldIds), new Set([
+      "VIDEO-ASSET-F-SCHOOL-REQUEST-REF",
+      "VIDEO-ASSET-F-SCHOOL-REQUEST-VERSION",
+    ]))
+    && [problemRequest, progressRequest].every((candidate) => (
+      personalGovernanceFields.every((fieldId) => list(candidate?.inputFieldIds).includes(fieldId))
+      && hasPermission(candidate, "ALLOW", "roleRef", "ROLE-STUDENT", /requester.*service object.*student.*student-personal/i)
+    ))
+    && schoolGovernanceFields.every((fieldId) => list(schoolRequest?.inputFieldIds).includes(fieldId))
+    && hasPermission(
+      schoolRequest,
+      "ALLOW",
+      "dutyRef",
+      "DUTY-SUBJECT-TEACHER",
+      /effective assigned subject.*course.*class.*bounded student group.*source material.*answer-open.*right/i,
+    )
+    && hasPermission(
+      schoolRequest,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot become the requester.*widen.*publish.*knowledge.*public/i,
+    )
+    && /school continues management.*teacher leaves.*no cross-school migration.*knowledge-layer promotion/i.test(schoolSuccess)
+    && setEquals(
+      new Set(acceptedCodes(personalStart, "VIDEO-ASSET-F-ACCESS-DOMAIN")),
+      new Set(["STUDENT_PERSONAL"]),
+    )
+    && setEquals(
+      new Set(acceptedCodes(schoolStart, "VIDEO-ASSET-F-ACCESS-DOMAIN")),
+      new Set(["SCHOOL_PRIVATE"]),
+    )
+    && assetGovernanceFields.every((fieldId) => (
+      list(personalStart?.inputFieldIds).includes(fieldId)
+      && list(schoolStart?.inputFieldIds).includes(fieldId)
+    ))
+    && /AI can never be the manager/i.test(field("VIDEO-ASSET-F-MANAGER-REF")?.validation ?? "")
+    && hasPermission(
+      personalStart,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot own.*manager.*publish.*deliver.*widen/i,
+    )
+    && /prohibit automatic school-knowledge or platform-public promotion.*quality.*privacy.*rights/i.test(
+      field("VIDEO-ASSET-F-PROMOTION-POLICY")?.validation ?? "",
+    )
+    && hasPermission(
+      schoolStart,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot own.*widen.*publish.*knowledge layer.*migrate.*another school/i,
+    )
+    && hasPermission(
+      schoolView,
+      "ALLOW",
+      "dutyRef",
+      "DUTY-SUBJECT-TEACHER",
+      /current assigned subject.*class.*school-private service scope/i,
+    )
+    && hasPermission(schoolView, "DENY", "roleRef", "ROLE-PLATFORM-OPS", /no default playback access/i)
+    && schoolFlow?.phase === PHASE.SECOND
+    && (() => {
+      const actionIds = records(schoolFlow?.steps).map(({ actionId }) => actionId);
+      return actionIds.indexOf("VIDEO-ACT-REQUEST-SCHOOL-GROUP") < 0
+        && actionIds.indexOf("VIDEO-ACT-START-SCHOOL-GROUP-GENERATION")
+          > actionIds.indexOf("VIDEO-ACT-RESERVE-SCHOOL-GROUP-OVERFLOW")
+        && actionIds.indexOf("VIDEO-ACT-DELIVER-USABLE")
+          > actionIds.indexOf("VIDEO-ACT-START-SCHOOL-GROUP-GENERATION")
+        && actionIds.indexOf("VIDEO-ACT-SETTLE-SCHOOL-GROUP-DELIVERY")
+          > actionIds.indexOf("VIDEO-ACT-DELIVER-USABLE")
+        && actionIds.indexOf("VIDEO-ACT-VIEW-SCHOOL-PRIVATE")
+          > actionIds.indexOf("VIDEO-ACT-DELIVER-USABLE");
+    })();
+  if (!accessGovernanceValid) {
+    errors.push(
+      "INVALID_VIDEO_ACCESS_GOVERNANCE_CONTRACT VIDEO-001 must separately record requester, service object, management scope, source materials, and access scope; keep student videos personal and teacher group videos school-private, school-managed after teacher departure, nonportable across schools by default, and never auto-promoted",
+    );
+  }
+
+  const verificationObject = object("VIDEO-OBJ-VERIFICATION");
+  const learningFactObject = object("VIDEO-OBJ-LEARNING-FACT");
+  const startVerification = action("VIDEO-ACT-START-NEW-CONTEXT-VERIFICATION");
+  const submitFirst = action("VIDEO-ACT-SUBMIT-FIRST-INDEPENDENT-EXPRESSION");
+  const pursueGap = action("VIDEO-ACT-PURSUE-ONE-SPECIFIC-GAP");
+  const returnUnknown = action("VIDEO-ACT-RETURN-UNKNOWN-TO-TEACHING");
+  const retryDifferent = action("VIDEO-ACT-RETRY-DIFFERENT-CONTEXT");
+  const submitDifferent = action("VIDEO-ACT-SUBMIT-DIFFERENT-CONTEXT-EXPRESSION");
+  const completeVerification = action("VIDEO-ACT-COMPLETE-NEW-CONTEXT-VERIFICATION");
+  const recordLearningFact = action("VIDEO-ACT-RECORD-POST-VIDEO-LEARNING-FACT");
+  const verificationFlow = flow("DF-P2-004");
+  const verificationLineage = new Map(records(verificationObject?.lineageBindings)
+    .map((binding) => [binding.refFieldId, binding]));
+  const factLineage = new Map(records(learningFactObject?.lineageBindings)
+    .map((binding) => [binding.refFieldId, binding]));
+  const startVerificationSuccess = index.scenarios.find(({ value }) => (
+    value?.actionId === "VIDEO-ACT-START-NEW-CONTEXT-VERIFICATION"
+    && value?.kind === "SUCCESS"
+  ))?.value?.then?.expectedData ?? "";
+  const completeVerificationSuccess = index.scenarios.find(({ value }) => (
+    value?.actionId === "VIDEO-ACT-COMPLETE-NEW-CONTEXT-VERIFICATION"
+    && value?.kind === "SUCCESS"
+  ))?.value?.then?.expectedData ?? "";
+  const learningFactSuccess = index.scenarios.find(({ value }) => (
+    value?.actionId === "VIDEO-ACT-RECORD-POST-VIDEO-LEARNING-FACT"
+    && value?.kind === "SUCCESS"
+  ))?.value?.then?.expectedData ?? "";
+  const verificationActionIds = [
+    "VIDEO-ACT-START-NEW-CONTEXT-VERIFICATION",
+    "VIDEO-ACT-SUBMIT-FIRST-INDEPENDENT-EXPRESSION",
+    "VIDEO-ACT-PURSUE-ONE-SPECIFIC-GAP",
+    "VIDEO-ACT-RETURN-UNKNOWN-TO-TEACHING",
+    "VIDEO-ACT-RETRY-DIFFERENT-CONTEXT",
+    "VIDEO-ACT-SUBMIT-DIFFERENT-CONTEXT-EXPRESSION",
+    "VIDEO-ACT-COMPLETE-NEW-CONTEXT-VERIFICATION",
+    "VIDEO-ACT-RECORD-POST-VIDEO-LEARNING-FACT",
+  ];
+  const verificationValid = [
+    ["OPT-P2-VIDEO-VERIFICATION-TARGET-KIND", ["CONCEPT", "CAUSAL", "LOGIC", "METHOD", "CHARACTER", "WORD", "FIXED_COLLOCATION", "MECHANICAL_FLUENCY"]],
+    ["OPT-P2-VIDEO-VERIFICATION-STRATEGY", ["ADAPTIVE_NEW_CONTEXT", "FEYNMAN_ON_DEMAND", "RETRIEVAL_PRACTICE", "SPACED_REVIEW"]],
+    ["OPT-P2-VIDEO-VERIFICATION-MODALITY", ["TEXT", "MATH_HANDWRITING", "STRUCTURED_QA", "VARIANT_PRACTICE", "VOICE_OPTIONAL"]],
+    ["OPT-P2-VIDEO-FIRST-PROMPT-POLICY", ["NO_ANSWER_HINT_BEFORE_FIRST_EXPRESSION"]],
+    ["OPT-P2-VIDEO-VERIFICATION-RESULT", ["DEMONSTRATED_IN_NEW_CONTEXT", "NEEDS_RETEACHING", "UNDETERMINED"]],
+    ["OPT-P2-VIDEO-NONKNOWLEDGE-SIGNAL", ["ACCENT", "FLUENCY", "SPEECH_RECOGNITION_ERROR"]],
+  ].every(([optionSetId, codes]) => setEquals(new Set(optionCodes(optionSetId)), new Set(codes)))
+    && verificationObject?.ownerRef === "ROLE-STUDENT"
+    && learningFactObject?.ownerRef === "ROLE-STUDENT"
+    && verificationActionIds.every((id) => index.actionById.get(id)?.moduleId === "VIDEO-001")
+    && index.pageById.get("VIDEO-PAGE-POST-VIDEO-VERIFICATION")?.moduleId === "VIDEO-001"
+    && hasFields("VIDEO-OBJ-VERIFICATION", [
+      "VIDEO-VERIFY-F-ASSET-REF",
+      "VIDEO-VERIFY-F-ASSET-VERSION",
+      "VIDEO-VERIFY-F-TARGET-REF",
+      "VIDEO-VERIFY-F-TARGET-SOURCE-VERSION",
+      "VIDEO-VERIFY-F-TARGET-KIND",
+      "VIDEO-VERIFY-F-STRATEGY",
+      "VIDEO-VERIFY-F-MODALITY",
+      "VIDEO-VERIFY-F-ABILITY-NODE-REFS",
+      "VIDEO-VERIFY-F-NEW-CONTEXT-DIGEST",
+      "VIDEO-VERIFY-F-FIRST-PROMPT-POLICY",
+      "VIDEO-VERIFY-F-MAX-SPECIFIC-GAPS-PER-TURN",
+      "VIDEO-VERIFY-F-EXCLUDED-NONKNOWLEDGE-SIGNALS",
+      "VIDEO-VERIFY-F-FIRST-EXPRESSION",
+      "VIDEO-VERIFY-F-SPECIFIC-GAP",
+      "VIDEO-VERIFY-F-UNKNOWN-DECLARATION",
+      "VIDEO-VERIFY-F-RETRY-REQUEST",
+      "VIDEO-VERIFY-F-DIFFERENT-CONTEXT-DIGEST",
+      "VIDEO-VERIFY-F-DIFFERENT-CONTEXT-EXPRESSION",
+      "VIDEO-VERIFY-F-RESULT",
+      "VIDEO-VERIFY-F-EVIDENCE",
+    ])
+    && hasFields("VIDEO-OBJ-LEARNING-FACT", [
+      "VIDEO-FACT-F-ASSET-REF",
+      "VIDEO-FACT-F-ASSET-VERSION",
+      "VIDEO-FACT-F-VERIFICATION-REF",
+      "VIDEO-FACT-F-VERIFICATION-VERSION",
+      "VIDEO-FACT-F-RESULT",
+      "VIDEO-FACT-F-EVIDENCE",
+    ])
+    && verificationLineage.get("VIDEO-VERIFY-F-ASSET-REF")?.versionFieldId
+      === "VIDEO-VERIFY-F-ASSET-VERSION"
+    && factLineage.get("VIDEO-FACT-F-ASSET-REF")?.versionFieldId === "VIDEO-FACT-F-ASSET-VERSION"
+    && factLineage.get("VIDEO-FACT-F-VERIFICATION-REF")?.versionFieldId
+      === "VIDEO-FACT-F-VERIFICATION-VERSION"
+    && /Feynman is on-demand only.*concept.*causal.*logic.*method.*retrieval practice.*spaced review/i.test(
+      field("VIDEO-VERIFY-F-STRATEGY")?.validation ?? "",
+    )
+    && /voice is optional.*text.*mathematical handwriting.*structured Q&A.*variant practice/i.test(
+      field("VIDEO-VERIFY-F-MODALITY")?.validation ?? "",
+    )
+    && /exactly one ability-node/i.test(field("VIDEO-VERIFY-F-ABILITY-NODE-REFS")?.validation ?? "")
+    && /must equal one.*only one concrete gap/i.test(
+      field("VIDEO-VERIFY-F-MAX-SPECIFIC-GAPS-PER-TURN")?.validation ?? "",
+    )
+    && /accent.*fluency.*speech-recognition error.*none may directly create a knowledge gap/i.test(
+      field("VIDEO-VERIFY-F-EXCLUDED-NONKNOWLEDGE-SIGNALS")?.validation ?? "",
+    )
+    && /viewing duration.*completion.*accent.*fluency.*recognition errors.*mastery evidence/i.test(
+      field("VIDEO-VERIFY-F-EVIDENCE")?.validation ?? "",
+    )
+    && /viewing alone is never sufficient/i.test(field("VIDEO-FACT-F-EVIDENCE")?.validation ?? "")
+    && hasPermission(
+      startVerification,
+      "ALLOW",
+      "roleRef",
+      "ROLE-STUDENT",
+      /system creates.*new context.*Feynman is on-demand.*concept.*causal.*logic.*method.*character.*word.*fixed-collocation.*mechanical-fluency.*retrieval practice.*spaced review.*one ability node.*voice remains optional/i,
+    )
+    && hasPermission(
+      startVerification,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot treat playback.*accent.*fluency.*recognition.*mastery.*multiple ability nodes/i,
+    )
+    && /no answer-style hint.*first independent expression.*one specific follow-up gap.*nonvoice modalities.*nonknowledge-signal exclusions/i.test(
+      startVerificationSuccess,
+    )
+    && hasPermission(submitFirst, "DENY", "actorRef", "AI", /cannot supply.*first expression/i)
+    && hasPermission(
+      pursueGap,
+      "ALLOW",
+      "actorRef",
+      "SYSTEM",
+      /after.*first expression.*only one concrete.*excludes accent.*fluency.*recognition errors/i,
+    )
+    && hasPermission(
+      pursueGap,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot write.*knowledge gap.*multiple gaps.*speech presentation/i,
+    )
+    && returnUnknown?.transition?.to === "RETURN_TO_TEACHING"
+    && retryDifferent?.transition?.from === "RETURN_TO_TEACHING"
+    && retryDifferent?.transition?.to === "AWAITING_DIFFERENT_CONTEXT_EXPRESSION"
+    && submitDifferent?.transition?.to === "DIFFERENT_CONTEXT_EXPRESSION_RECORDED"
+    && setEquals(
+      new Set(list(completeVerification?.transition?.from)),
+      new Set(["FIRST_EXPRESSION_RECORDED", "DIFFERENT_CONTEXT_EXPRESSION_RECORDED"]),
+    )
+    && completeVerification?.transition?.to === "COMPLETED"
+    && hasPermission(
+      completeVerification,
+      "ALLOW",
+      "actorRef",
+      "SYSTEM",
+      /student response.*excludes viewing.*completion.*accent.*fluency.*recognition errors.*mastery.*knowledge-gap/i,
+    )
+    && /only demonstrated-in-this-context.*needs-reteaching.*undetermined/i.test(completeVerificationSuccess)
+    && /video.*verification.*response.*contextual result.*separate from durable mastery/i.test(learningFactSuccess)
+    && hasPermission(
+      recordLearningFact,
+      "DENY",
+      "actorRef",
+      "AI",
+      /cannot create a learning fact from viewing.*watch completion.*accent.*fluency.*recognition error.*uncompleted verification/i,
+    )
+    && /viewing or completion alone is not mastery evidence/i.test(controlledSuccess)
+    && !list(controlledView?.outputFieldIds).some((id) => id.startsWith("VIDEO-FACT-"))
+    && records(video?.actions).filter(({ targetObjectId, operationKind }) => (
+      targetObjectId === "VIDEO-OBJ-LEARNING-FACT" && operationKind === "CREATE"
+    )).length === 1
+    && verificationFlow?.phase === PHASE.SECOND
+    && (() => {
+      const actionIds = records(verificationFlow?.steps).map(({ actionId }) => actionId);
+      return actionIds.indexOf("VIDEO-ACT-SUBMIT-FIRST-INDEPENDENT-EXPRESSION")
+          > actionIds.indexOf("VIDEO-ACT-START-NEW-CONTEXT-VERIFICATION")
+        && actionIds.indexOf("VIDEO-ACT-PURSUE-ONE-SPECIFIC-GAP")
+          > actionIds.indexOf("VIDEO-ACT-SUBMIT-FIRST-INDEPENDENT-EXPRESSION")
+        && actionIds.indexOf("VIDEO-ACT-RETRY-DIFFERENT-CONTEXT")
+          > actionIds.indexOf("VIDEO-ACT-RETURN-UNKNOWN-TO-TEACHING")
+        && actionIds.indexOf("VIDEO-ACT-SUBMIT-DIFFERENT-CONTEXT-EXPRESSION")
+          > actionIds.indexOf("VIDEO-ACT-RETRY-DIFFERENT-CONTEXT")
+        && actionIds.indexOf("VIDEO-ACT-RECORD-POST-VIDEO-LEARNING-FACT")
+          > actionIds.indexOf("VIDEO-ACT-COMPLETE-NEW-CONTEXT-VERIFICATION");
+    })();
+  if (!verificationValid) {
+    errors.push(
+      "INVALID_VIDEO_VERIFICATION_CONTRACT VIDEO-001 requires one-node target-adapted new-context verification after viewing; Feynman only on demand; no answer hint before first expression; one gap per follow-up; unknown returns to teaching then a different context; voice remains optional; accent, fluency, and recognition errors cannot form knowledge gaps; and only completed verification creates a raw learning fact",
+    );
+  }
+
+  return errors;
+}
+
 function phaseAndTemplateErrors(index) {
   const errors = [];
   const expectedCurrentReleaseModuleIds = new Set(
@@ -8853,6 +9704,7 @@ export function validateModelSemantics(model) {
     ...learningPathErrors(index),
     ...notificationErrors(index),
     ...notificationChannelErrors(index),
+    ...phaseTwoProgressVideoErrors(index),
     ...extensionModuleErrors(index),
     ...phaseAndTemplateErrors(index),
     ...metricErrors(index),

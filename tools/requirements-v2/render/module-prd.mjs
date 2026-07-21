@@ -24,7 +24,7 @@ function transitionText(action) {
     return `${stateText(action.transition.from)} → ${stateText(action.transition.to)}`;
   }
   const successStates = list(action.scenarioIds)
-    .filter((id) => id.endsWith("-SCN-SUCCESS"));
+    .filter((id) => id.includes("-SCN-SUCCESS"));
   return action.operationKind === "CREATE"
     ? `CREATE（成功状态由 ${successStates.join(" / ")} 定义）`
     : "UNCHANGED";

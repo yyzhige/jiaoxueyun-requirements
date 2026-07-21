@@ -290,8 +290,8 @@ test("builds one deterministic artifact set with planned contracts and release m
 
   assert.deepEqual(first, second);
   assert.equal(new Set(paths).size, paths.length);
-  assert.equal(paths.filter((path) => path.includes("/03-full-prd-md/")).length, 27);
-  assert.equal(paths.filter((path) => path.includes("/05-wireframe-contracts/")).length, 27);
+  assert.equal(paths.filter((path) => path.includes("/03-full-prd-md/")).length, 29);
+  assert.equal(paths.filter((path) => path.includes("/05-wireframe-contracts/")).length, 29);
   assert.equal(paths.some((path) => path.includes("guardian-report-sharing-wireframe")), true);
   assert.deepEqual(manifest.currentReleaseModuleIds, model.currentReleaseModuleIds);
   const reportManifest = manifest.modules.find(({ id }) => id === "REPORT-001");
