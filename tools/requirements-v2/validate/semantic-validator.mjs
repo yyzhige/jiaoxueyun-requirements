@@ -251,6 +251,7 @@ const TASK8_BUSINESS_FAILURES = new Map([
   ["CONTENT-ACT-PUBLISH-QUESTION-VERSION", [
     "LICENSE_INACTIVE",
     "CONTENT_PERMISSION_INACTIVE",
+    "MATERIAL_GOVERNANCE_CHAIN_MISMATCH",
   ]],
   ["EXM-ACT-VALIDATE-SCORE-IMPORT", ["IMPORT_REJECTED"]],
   ["EXM-ACT-ACCEPT-SCORE-IMPORT", ["IMPORT_REJECTED"]],
@@ -302,6 +303,7 @@ const TASK8_GENERIC_FAILURE_CODES = new Set([
 const TASK8_BUSINESS_FAILURE_PREDICATES = new Map([
   ["CONTENT-ACT-PUBLISH-QUESTION-VERSION:LICENSE_INACTIVE", "license.state !== ACTIVE || license.version !== pinnedLicenseVersion"],
   ["CONTENT-ACT-PUBLISH-QUESTION-VERSION:CONTENT_PERMISSION_INACTIVE", "contentPermission.state !== ACTIVE || currentTime >= contentPermission.expiresAt || !contentPermission.covers(questionContext, currentActor)"],
+  ["CONTENT-ACT-PUBLISH-QUESTION-VERSION:MATERIAL_GOVERNANCE_CHAIN_MISMATCH", "the question source graph rights bundle and management scope refs material IDs or pinned versions do not form one exact chain"],
   ["EXM-ACT-VALIDATE-SCORE-IMPORT:IMPORT_REJECTED", "blockingImportValidationErrors.length > 0"],
   ["EXM-ACT-ACCEPT-SCORE-IMPORT:IMPORT_REJECTED", "scoreImport.state !== PASSED || blockingImportValidationErrors.length > 0"],
   ["EXM-ACT-CREATE-SUBJECT-SCORE:IMPORT_REJECTED", "scoreImport.state !== ACCEPTED"],
@@ -4454,6 +4456,7 @@ function contentGovernanceErrors(index) {
       "CONTENT_PERMISSION_INACTIVE",
       "SOURCE_VERSION_STALE",
       "VERSION_CONFLICT",
+      "MATERIAL_GOVERNANCE_CHAIN_MISMATCH",
     ]);
 
   return valid
@@ -9725,14 +9728,40 @@ function finalizedGovernanceBaselineErrors(index) {
     ["DGV-001", ["D047", "D048", "D049"]],
     ["CONTENT-001", ["D067", "D068", "D069"]],
   ]);
-  const ownerModulesValid = [...ownerDecisionIds].every(([moduleId, decisionIds]) => {
+  const expectedOwnerByDecision = new Map([...ownerDecisionIds].flatMap(
+    ([moduleId, decisionIds]) => decisionIds.map((decisionId) => [decisionId, moduleId]),
+  ));
+  const ownerContracts = index.modules
+    .map(({ value }) => ({ module: value, owner: value?.governanceBaselineOwner }))
+    .filter(({ owner }) => owner !== undefined);
+  const actualOwnerModulesValid = ownerContracts.every(({ module: value, owner }) => (
+    hasExactKeys(owner, ["moduleId", "decisionIds"])
+    && owner.moduleId === value?.id
+    && list(owner.decisionIds).length > 0
+    && list(owner.decisionIds).every((decisionId) => (
+      expectedOwnerByDecision.get(decisionId) === value?.id
+    ))
+  ));
+  const actualOwnersByDecision = new Map();
+  for (const { module: value, owner } of ownerContracts) {
+    for (const decisionId of list(owner.decisionIds)) {
+      if (!actualOwnersByDecision.has(decisionId)) actualOwnersByDecision.set(decisionId, []);
+      actualOwnersByDecision.get(decisionId).push(value?.id);
+    }
+  }
+  const ownerModulesValid = actualOwnerModulesValid
+    && [...ownerDecisionIds].every(([moduleId, decisionIds]) => {
     const occurrences = index.modules.filter(({ value }) => value?.id === moduleId);
     const owner = occurrences[0]?.value?.governanceBaselineOwner;
     return occurrences.length === 1
       && hasExactKeys(owner, ["moduleId", "decisionIds"])
       && owner.moduleId === moduleId
       && exactOrder(owner.decisionIds, decisionIds);
-  });
+    })
+    && ownerContracts.length === ownerDecisionIds.size
+    && [...expectedOwnerByDecision].every(([decisionId, moduleId]) => (
+      exactOrder(actualOwnersByDecision.get(decisionId), [moduleId])
+    ));
   if (!ownerModulesValid) {
     errors.push("INVALID_GOVERNANCE_BASELINE_OWNER finalized governance decisions require one declared owner module each");
   }
@@ -10002,39 +10031,232 @@ function finalizedGovernanceBaselineErrors(index) {
   ];
   const deletionBindingFields = [
     "DGV-DELROW-F-DELETION-CASE-REF",
+    "DGV-DELROW-F-DELETION-CASE-VERSION",
+    "DGV-DELROW-F-INVENTORY-REF",
+    "DGV-DELROW-F-INVENTORY-VERSION",
+    "DGV-DELROW-F-INVENTORY-ITEM-ID",
+    "DGV-DELROW-F-INVENTORY-ITEM-DIGEST",
     "DGV-DELROW-F-SOURCE-OBJECT-ID",
+    "DGV-DELROW-F-SOURCE-OBJECT-VERSION",
     "DGV-DELROW-F-SOURCE-OBJECT-CATEGORY",
     "DGV-DELROW-F-LEGAL-BASIS",
     "DGV-DELROW-F-DISPUTE-BASIS",
+    "DGV-DELROW-F-HIGH-IMPACT-AUTHORIZATION-ID",
     "DGV-DELROW-F-GOVERNANCE-ACTION",
     "DGV-DELROW-F-EXECUTION-STATUS",
   ];
+  const matrixReadyZeroFields = [
+    "DGV-MATRIX-F-MISSING-DECISION-COUNT",
+    "DGV-MATRIX-F-DUPLICATE-DECISION-COUNT",
+    "DGV-MATRIX-F-UNAUTHORIZED-DECISION-COUNT",
+  ];
+  const matrixCompleteZeroFields = [
+    "DGV-MATRIX-F-UNRESOLVED-EXECUTION-COUNT",
+    "DGV-MATRIX-F-FAILED-EXECUTION-COUNT",
+    "DGV-MATRIX-F-FROZEN-EXECUTION-COUNT",
+  ];
   const deletionDecision = object("DGV-OBJ-STUDENT-DELETION-DECISION");
   const deletionCase = object("DGV-OBJ-STUDENT-DELETION-CASE");
+  const deletionInventory = object("DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT");
+  const deletionMatrix = object("DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT");
+  const captureInventory = action("DGV-ACT-CAPTURE-STUDENT-DELETION-INVENTORY");
   const registerDecision = action("DGV-ACT-REGISTER-STUDENT-DELETION-DECISION");
+  const evaluateMatrix = action("DGV-ACT-EVALUATE-STUDENT-DELETION-MATRIX");
+  const startMatrixSnapshot = action("DGV-ACT-START-STUDENT-DELETION-MATRIX-SNAPSHOT");
+  const completeMatrixSnapshot = action("DGV-ACT-COMPLETE-STUDENT-DELETION-MATRIX-SNAPSHOT");
   const finalizeMatrix = action("DGV-ACT-FINALIZE-STUDENT-DELETION-MATRIX");
+  const executeMatrix = action("DGV-ACT-EXECUTE-STUDENT-DELETION-MATRIX");
+  const completeMatrix = action("DGV-ACT-COMPLETE-STUDENT-DELETION-MATRIX");
   const identityDeletion = action("ACC-ACT-COMPLETE-IDENTITY-DELETION");
+  const dgvRelationships = records(module("DGV-001")?.relationships);
+  const requiredDeletionRelationships = [
+    { id: "DGV-REL-DELETION-CASE-DECISION", fromObjectId: "DGV-OBJ-STUDENT-DELETION-DECISION", toObjectId: "DGV-OBJ-STUDENT-DELETION-CASE", type: "PART_OF", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_STUDENT", onSourceInvalidation: "freeze the object decision and prevent identity deletion release" },
+    { id: "DGV-REL-DELETION-INVENTORY-CASE", fromObjectId: "DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT", toObjectId: "DGV-OBJ-STUDENT-DELETION-CASE", type: "DERIVED_FROM", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_STUDENT", onSourceInvalidation: "retain the immutable inventory and block matrix release" },
+    { id: "DGV-REL-DELETION-DECISION-INVENTORY", fromObjectId: "DGV-OBJ-STUDENT-DELETION-DECISION", toObjectId: "DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT", type: "REFERENCES", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_STUDENT", onSourceInvalidation: "freeze the decision and require a replacement inventory-bound decision" },
+    { id: "DGV-REL-DELETION-MATRIX-CASE", fromObjectId: "DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT", toObjectId: "DGV-OBJ-STUDENT-DELETION-CASE", type: "PART_OF", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_STUDENT", onSourceInvalidation: "block matrix execution and identity deletion release" },
+    { id: "DGV-REL-DELETION-MATRIX-INVENTORY", fromObjectId: "DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT", toObjectId: "DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT", type: "DERIVED_FROM", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_STUDENT", onSourceInvalidation: "block matrix execution when the pinned inventory cannot be verified" },
+  ];
+  const hasGuard = (value, expected) => records(value?.relatedStateGuards)
+    .some((guard) => guardMatches(guard, expected));
+  const hasBoundaryPredicate = (actionId, resultCode) => {
+    const scenario = index.scenarios
+      .map(({ value }) => value)
+      .find((candidate) => (
+        candidate?.actionId === actionId
+        && candidate?.resultCode === resultCode
+        && candidate?.kind !== "SUCCESS"
+      ));
+    return typeof scenario?.failurePredicate === "string"
+      && scenario.failurePredicate.trim().length > 0
+      && scenario?.then?.expectedState?.mode === "UNCHANGED";
+  };
   const identityGate = records(identityDeletion?.relatedStateGuards).find(({ targetObjectId }) => (
     targetObjectId === "DGV-OBJ-STUDENT-DELETION-CASE"
   ));
   const d049Valid = exactOrder(deletionDecision?.studentDeletionDecisionContract?.objectCategories, deletionCategories)
     && exactOrder(deletionDecision?.studentDeletionDecisionContract?.requiredBindingFieldIds, deletionBindingFields)
-    && objectHasFields(deletionDecision?.id, [
-      ...deletionBindingFields,
-      "DGV-DELROW-F-HIGH-IMPACT-AUTHORIZATION-ID",
-      "DGV-DELROW-F-DELETION-CASE-VERSION",
-    ])
+    && objectHasFields(deletionDecision?.id, deletionBindingFields)
     && deletionBindingFields.every((fieldId) => index.fieldById.get(fieldId)?.value?.required === true)
+    && deletionInventory?.states?.length === 1
+    && deletionInventory.states[0] === "FROZEN"
+    && deletionInventory?.inventorySnapshotContract?.hiddenObjectAllowed === false
+    && deletionInventory?.inventorySnapshotContract?.mutableAfterCapture === false
+    && exactOrder(deletionInventory?.inventorySnapshotContract?.itemIdentityParts, [
+      "SOURCE_OBJECT_ID",
+      "SOURCE_OBJECT_CATEGORY",
+      "SOURCE_OBJECT_VERSION",
+    ])
+    && captureInventory?.targetObjectId === deletionInventory?.id
+    && includesAll(captureInventory?.outputFieldIds, [
+      "DGV-INVENTORY-F-SOURCE-OBJECT-SET",
+      "DGV-INVENTORY-F-SOURCE-OBJECT-COUNT",
+      "DGV-INVENTORY-F-SOURCE-OBJECT-DIGEST",
+    ])
+    && captureInventory?.inventoryResolution?.completenessRequired === true
+    && hasGuard(captureInventory, {
+      refFieldId: "DGV-INVENTORY-F-DELETION-CASE-REF",
+      versionFieldId: "DGV-INVENTORY-F-DELETION-CASE-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-CASE",
+      requiredState: "REQUESTED",
+    })
+    && hasBoundaryPredicate(
+      "DGV-ACT-CAPTURE-STUDENT-DELETION-INVENTORY",
+      "SOURCE_INVENTORY_INCOMPLETE",
+    )
     && registerDecision?.targetObjectId === deletionDecision?.id
-    && records(registerDecision?.relatedStateGuards).some((guard) => guardMatches(guard, {
+    && includesAll(registerDecision?.inputFieldIds, deletionBindingFields.filter((fieldId) => (
+      fieldId !== "DGV-DELROW-F-EXECUTION-STATUS"
+    )))
+    && hasGuard(registerDecision, {
       refFieldId: "DGV-DELROW-F-DELETION-CASE-REF",
       versionFieldId: "DGV-DELROW-F-DELETION-CASE-VERSION",
       targetObjectId: "DGV-OBJ-STUDENT-DELETION-CASE",
       requiredState: "REQUESTED",
-    }))
+    })
+    && hasGuard(registerDecision, {
+      refFieldId: "DGV-DELROW-F-INVENTORY-REF",
+      versionFieldId: "DGV-DELROW-F-INVENTORY-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT",
+      requiredState: "FROZEN",
+    })
+    && hasBoundaryPredicate(
+      "DGV-ACT-REGISTER-STUDENT-DELETION-DECISION",
+      "INVENTORY_ITEM_MISMATCH",
+    )
+    && deletionMatrix?.matrixAggregationContract?.inventoryObjectId === deletionInventory?.id
+    && deletionMatrix?.matrixAggregationContract?.decisionObjectId === deletionDecision?.id
+    && deletionMatrix?.matrixAggregationContract?.exactOneDecisionPerInventoryItem === true
+    && exactOrder(
+      deletionMatrix?.matrixAggregationContract?.readyRequiresZeroFields,
+      matrixReadyZeroFields,
+    )
+    && exactOrder(
+      deletionMatrix?.matrixAggregationContract?.completeRequiresZeroFields,
+      matrixCompleteZeroFields,
+    )
+    && exactOrder(deletionMatrix?.matrixAggregationContract?.releasableDecisionStates, [
+      "COMPLETED",
+    ])
+    && deletionMatrix?.matrixAggregationContract?.lawfulRetentionOutcome
+      === "RETAIN_LEGAL_HOLD"
+    && evaluateMatrix?.targetObjectId === deletionMatrix?.id
+    && evaluateMatrix?.decisionAggregation?.exactOneDecisionPerInventoryItem === true
+    && evaluateMatrix?.decisionAggregation?.requiredDecisionState === "AUTHORIZED"
+    && exactOrder(evaluateMatrix?.decisionAggregation?.zeroCountFieldIds, matrixReadyZeroFields)
+    && includesAll(evaluateMatrix?.outputFieldIds, [
+      "DGV-MATRIX-F-INVENTORY-DIGEST",
+      "DGV-MATRIX-F-INVENTORY-ITEM-COUNT",
+      "DGV-MATRIX-F-DECISION-VERSION-SET",
+      "DGV-MATRIX-F-DECISION-SET-DIGEST",
+      "DGV-MATRIX-F-DECISION-COUNT",
+      ...matrixReadyZeroFields,
+    ])
+    && hasGuard(evaluateMatrix, {
+      refFieldId: "DGV-MATRIX-F-DELETION-CASE-REF",
+      versionFieldId: "DGV-MATRIX-F-DELETION-CASE-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-CASE",
+      requiredState: "REQUESTED",
+    })
+    && hasGuard(evaluateMatrix, {
+      refFieldId: "DGV-MATRIX-F-INVENTORY-REF",
+      versionFieldId: "DGV-MATRIX-F-INVENTORY-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT",
+      requiredState: "FROZEN",
+    })
+    && [
+      "INVENTORY_MISMATCH",
+      "MISSING_DECISION",
+      "DUPLICATE_DECISION",
+      "UNAUTHORIZED_DECISION",
+    ].every((resultCode) => hasBoundaryPredicate(
+      "DGV-ACT-EVALUATE-STUDENT-DELETION-MATRIX",
+      resultCode,
+    ))
+    && startMatrixSnapshot?.transition?.from === "READY"
+    && startMatrixSnapshot?.transition?.to === "EXECUTING"
+    && completeMatrixSnapshot?.transition?.from === "EXECUTING"
+    && completeMatrixSnapshot?.transition?.to === "COMPLETED"
+    && completeMatrixSnapshot?.executionAggregation?.requiredDecisionState === "COMPLETED"
+    && completeMatrixSnapshot?.executionAggregation?.allowedLawfulRetentionOutcome
+      === "RETAIN_LEGAL_HOLD"
+    && exactOrder(
+      completeMatrixSnapshot?.executionAggregation?.zeroCountFieldIds,
+      matrixCompleteZeroFields,
+    )
+    && includesAll(completeMatrixSnapshot?.outputFieldIds, [
+      ...matrixCompleteZeroFields,
+      "DGV-MATRIX-F-LAWFUL-RETENTION-COUNT",
+      "DGV-MATRIX-F-EXECUTION-DIGEST",
+    ])
+    && [
+      "DECISION_SET_CHANGED",
+      "UNRESOLVED_DECISION",
+      "FAILED_DECISION",
+      "FROZEN_DECISION",
+    ].every((resultCode) => hasBoundaryPredicate(
+      "DGV-ACT-COMPLETE-STUDENT-DELETION-MATRIX-SNAPSHOT",
+      resultCode,
+    ))
     && exactOrder(finalizeMatrix?.requiredObjectCategories, deletionCategories)
+    && finalizeMatrix?.requiredMatrixSnapshotObjectId === deletionMatrix?.id
+    && finalizeMatrix?.categoryCoverageIsAuthoritative === false
+    && hasGuard(finalizeMatrix, {
+      refFieldId: "DGV-DELCASE-F-MATRIX-SNAPSHOT-REF",
+      versionFieldId: "DGV-DELCASE-F-MATRIX-SNAPSHOT-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT",
+      requiredState: "READY",
+    })
+    && hasGuard(executeMatrix, {
+      refFieldId: "DGV-DELCASE-F-MATRIX-SNAPSHOT-REF",
+      versionFieldId: "DGV-DELCASE-F-MATRIX-SNAPSHOT-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT",
+      requiredState: "EXECUTING",
+    })
+    && hasGuard(completeMatrix, {
+      refFieldId: "DGV-DELCASE-F-MATRIX-SNAPSHOT-REF",
+      versionFieldId: "DGV-DELCASE-F-MATRIX-SNAPSHOT-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT",
+      requiredState: "COMPLETED",
+    })
     && exactOrder(deletionCase?.identityDeletionGate?.requiredObjectCategories, deletionCategories)
+    && exactOrder(deletionCase?.identityDeletionGate?.terminalDecisionStates, ["COMPLETED"])
+    && exactOrder(deletionCase?.identityDeletionGate?.nonReleasableDecisionStates, [
+      "FAILED",
+      "FROZEN",
+      "PENDING",
+      "AUTHORIZED",
+      "EXECUTING",
+    ])
+    && deletionCase?.identityDeletionGate?.matrixSnapshotObjectId === deletionMatrix?.id
+    && deletionCase?.identityDeletionGate?.matrixSnapshotRefFieldId
+      === "DGV-DELCASE-F-MATRIX-SNAPSHOT-REF"
+    && deletionCase?.identityDeletionGate?.matrixSnapshotVersionFieldId
+      === "DGV-DELCASE-F-MATRIX-SNAPSHOT-VERSION"
+    && deletionCase?.identityDeletionGate?.requiredMatrixState === "COMPLETED"
     && deletionCase?.identityDeletionGate?.releaseState === "COMPLETED"
+    && requiredDeletionRelationships.every((expected) => (
+      dgvRelationships.some((relationship) => hasExactValues(relationship, expected))
+    ))
     && identityGate?.requiredState === "COMPLETED"
     && includesAll(identityDeletion?.inputFieldIds, [
       "ACC-PIDENT-F-DELETION-CASE-REF",
@@ -10052,29 +10274,196 @@ function finalizedGovernanceBaselineErrors(index) {
     "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE",
   ];
   const rightsResolve = action("CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS");
+  const createRightsBundle = action("CONTENT-ACT-CREATE-MATERIAL-RIGHTS-BUNDLE");
+  const createManagementScope = action("CONTENT-ACT-CREATE-MATERIAL-MANAGEMENT-SCOPE");
+  const questionCreate = action("CONTENT-ACT-CREATE-QUESTION-VERSION");
   const questionPublication = action("CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+  const contentRelationships = records(content?.relationships);
+  const materialRelationships = [
+    { id: "CONTENT-REL-RIGHTS-SOURCE-GRAPH", fromObjectId: "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE", toObjectId: "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH", type: "REQUIRES", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_SUBJECT", onSourceInvalidation: "revoke future use and preserve the historical rights decision" },
+    { id: "CONTENT-REL-SCOPE-SOURCE-GRAPH", fromObjectId: "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE", toObjectId: "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH", type: "REQUIRES", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_SUBJECT", onSourceInvalidation: "revoke the management scope and block publication or promotion" },
+    { id: "CONTENT-REL-SCOPE-RIGHTS", fromObjectId: "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE", toObjectId: "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE", type: "AUTHORIZED_BY", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_SUBJECT", onSourceInvalidation: "revoke product availability and prevent promotion or publication" },
+  ];
+  const materialRelationshipIds = materialRelationships.map(({ id }) => id);
+  const materialRefContracts = [
+    ["CONTENT-RIGHTS-F-SOURCE-GRAPH-REF", "CONTENT-RIGHTS-F-SOURCE-GRAPH-VERSION", materialObjectIds[0], "CONTENT-SOURCE-F-VERSION"],
+    ["CONTENT-SCOPE-F-SOURCE-GRAPH-REF", "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION", materialObjectIds[0], "CONTENT-SOURCE-F-VERSION"],
+    ["CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF", "CONTENT-SCOPE-F-RIGHTS-BUNDLE-VERSION", materialObjectIds[1], "CONTENT-RIGHTS-F-VERSION"],
+  ];
+  const hasLineage = (objectId, refFieldId, versionFieldId, targetObjectId, targetVersionFieldId) => (
+    records(object(objectId)?.lineageBindings).some((binding) => hasExactValues(binding, {
+      refFieldId,
+      versionFieldId,
+      targetObjectId,
+      targetVersionFieldId,
+    }))
+  );
+  const refContractValid = ([refFieldId, versionFieldId, targetObjectId, targetVersionFieldId]) => {
+    const ref = index.fieldById.get(refFieldId)?.value;
+    const ownerObjectId = index.fieldById.get(refFieldId)?.objectId;
+    return ref?.valueSource?.kind === "OBJECT_REF"
+      && ref.valueSource.targetObjectId === targetObjectId
+      && ref?.referenceIntegrity === "VERSION_PINNED"
+      && ref?.versionBinding?.versionFieldId === versionFieldId
+      && ref?.versionBinding?.targetVersionFieldId === targetVersionFieldId
+      && hasLineage(
+        ownerObjectId,
+        refFieldId,
+        versionFieldId,
+        targetObjectId,
+        targetVersionFieldId,
+      );
+  };
   const materialQuestionGuards = records(questionPublication?.relatedStateGuards)
     .filter(({ targetObjectId }) => materialObjectIds.includes(targetObjectId));
-  const d067Valid = hasExactValues(materialContract, {
-    sourceGraphObjectId: materialObjectIds[0],
-    rightsBundleObjectId: materialObjectIds[1],
-    managementScopeObjectId: materialObjectIds[2],
-    rightsResolveActionId: "CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS",
-    ownerRefDerivesRights: false,
-  })
+  const expectedQuestionChain = {
+    materialIdentityFieldIds: [
+      "CONTENT-SOURCE-F-ROOT-MATERIAL-ID",
+      "CONTENT-RIGHTS-F-MATERIAL-ID",
+      "CONTENT-SCOPE-F-MATERIAL-ID",
+    ],
+    sourceGraphRefFieldIds: [
+      "CONTENT-QUESTION-F-SOURCE-GRAPH-REF",
+      "CONTENT-RIGHTS-F-SOURCE-GRAPH-REF",
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+    ],
+    rightsBundleRefFieldIds: [
+      "CONTENT-QUESTION-F-RIGHTS-BUNDLE-REF",
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+    ],
+    managementScopeRefFieldId: "CONTENT-QUESTION-F-MANAGEMENT-SCOPE-REF",
+    exactVersionMatchRequired: true,
+    ownerRefMayDeriveRights: false,
+  };
+  const questionChainValid = [questionCreate, questionPublication].every((value) => (
+    hasExactKeys(value?.materialChainBinding, Object.keys(expectedQuestionChain))
+    && exactOrder(
+      value.materialChainBinding.materialIdentityFieldIds,
+      expectedQuestionChain.materialIdentityFieldIds,
+    )
+    && exactOrder(
+      value.materialChainBinding.sourceGraphRefFieldIds,
+      expectedQuestionChain.sourceGraphRefFieldIds,
+    )
+    && exactOrder(
+      value.materialChainBinding.rightsBundleRefFieldIds,
+      expectedQuestionChain.rightsBundleRefFieldIds,
+    )
+    && value.materialChainBinding.managementScopeRefFieldId
+      === expectedQuestionChain.managementScopeRefFieldId
+    && value.materialChainBinding.exactVersionMatchRequired === true
+    && value.materialChainBinding.ownerRefMayDeriveRights === false
+    && includesAll(value?.inputFieldIds, [
+      "CONTENT-QUESTION-F-SOURCE-GRAPH-REF",
+      "CONTENT-QUESTION-F-SOURCE-GRAPH-VERSION",
+      "CONTENT-QUESTION-F-RIGHTS-BUNDLE-REF",
+      "CONTENT-QUESTION-F-RIGHTS-BUNDLE-VERSION",
+      "CONTENT-QUESTION-F-MANAGEMENT-SCOPE-REF",
+      "CONTENT-QUESTION-F-MANAGEMENT-SCOPE-VERSION",
+    ])
+    && hasBoundaryPredicate(value?.id, "MATERIAL_GOVERNANCE_CHAIN_MISMATCH")
+  ));
+  const d067Valid = hasExactKeys(materialContract, [
+    "sourceGraphObjectId",
+    "rightsBundleObjectId",
+    "managementScopeObjectId",
+    "publicReviewObjectId",
+    "rightsResolveActionId",
+    "requiredRelationshipIds",
+    "ownerRefDerivesRights",
+  ])
+    && materialContract.sourceGraphObjectId === materialObjectIds[0]
+    && materialContract.rightsBundleObjectId === materialObjectIds[1]
+    && materialContract.managementScopeObjectId === materialObjectIds[2]
+    && materialContract.publicReviewObjectId === "CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW"
+    && materialContract.rightsResolveActionId === "CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS"
+    && exactOrder(materialContract.requiredRelationshipIds, materialRelationshipIds)
+    && materialContract.ownerRefDerivesRights === false
     && materialObjectIds.every((objectId) => index.objectById.get(objectId)?.moduleId === "CONTENT-001")
+    && materialRefContracts.every(refContractValid)
+    && materialRelationships.every((expected) => contentRelationships.some((relationship) => (
+      hasExactValues(relationship, expected)
+    )))
     && objectHasFields("CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE", [
+      "CONTENT-RIGHTS-F-SOURCE-GRAPH-REF",
+      "CONTENT-RIGHTS-F-SOURCE-GRAPH-VERSION",
       "CONTENT-RIGHTS-F-RIGHTS-BASIS",
       "CONTENT-RIGHTS-F-USE-SCOPE",
       "CONTENT-RIGHTS-F-ADAPTATION-SCOPE",
       "CONTENT-RIGHTS-F-SHARING-SCOPE",
       "CONTENT-RIGHTS-F-STUDENT-PRIVACY",
     ])
+    && objectHasFields("CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE", [
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-VERSION",
+    ])
+    && hasGuard(createRightsBundle, {
+      refFieldId: "CONTENT-RIGHTS-F-SOURCE-GRAPH-REF",
+      versionFieldId: "CONTENT-RIGHTS-F-SOURCE-GRAPH-VERSION",
+      targetObjectId: materialObjectIds[0],
+      requiredState: "ACTIVE",
+    })
+    && hasBoundaryPredicate(createRightsBundle?.id, "MATERIAL_ID_MISMATCH")
+    && hasGuard(createManagementScope, {
+      refFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+      versionFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+      targetObjectId: materialObjectIds[0],
+      requiredState: "ACTIVE",
+    })
+    && hasGuard(createManagementScope, {
+      refFieldId: "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+      versionFieldId: "CONTENT-SCOPE-F-RIGHTS-BUNDLE-VERSION",
+      targetObjectId: materialObjectIds[1],
+      requiredState: "ACTIVE",
+    })
+    && hasBoundaryPredicate(createManagementScope?.id, "MATERIAL_CHAIN_MISMATCH")
+    && hasExactKeys(rightsResolve?.rightsResolution, [
+      "sourceObjectIds",
+      "targetObjectId",
+      "bindingFieldIds",
+      "resolvedMaterialIdentityFieldIds",
+      "sourceGraphConsistencyFieldIds",
+      "exactVersionMatchRequired",
+      "ownerRefUsage",
+    ])
     && exactOrder(rightsResolve?.rightsResolution?.sourceObjectIds, materialObjectIds)
+    && rightsResolve?.targetObjectId === materialObjectIds[2]
+    && rightsResolve?.rightsResolution?.targetObjectId === materialObjectIds[2]
+    && rightsResolve?.operationKind === "READ"
+    && exactOrder(rightsResolve?.rightsResolution?.bindingFieldIds, [
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-VERSION",
+    ])
+    && exactOrder(rightsResolve?.rightsResolution?.resolvedMaterialIdentityFieldIds, [
+      "CONTENT-SOURCE-F-ROOT-MATERIAL-ID",
+      "CONTENT-RIGHTS-F-MATERIAL-ID",
+      "CONTENT-SCOPE-F-MATERIAL-ID",
+    ])
+    && exactOrder(rightsResolve?.rightsResolution?.sourceGraphConsistencyFieldIds, [
+      "CONTENT-RIGHTS-F-SOURCE-GRAPH-REF",
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+    ])
+    && rightsResolve?.rightsResolution?.exactVersionMatchRequired === true
     && rightsResolve?.rightsResolution?.ownerRefUsage === "PROHIBITED"
+    && includesAll(rightsResolve?.inputFieldIds, rightsResolve?.rightsResolution?.bindingFieldIds)
+    && hasBoundaryPredicate(rightsResolve?.id, "MATERIAL_CHAIN_MISMATCH")
     && materialQuestionGuards.length === materialObjectIds.length
     && materialObjectIds.every((objectId) => materialQuestionGuards.some(({ targetObjectId, requiredState }) => (
       targetObjectId === objectId && requiredState === "ACTIVE"
+    )))
+    && questionChainValid
+    && [
+      ["CONTENT-REL-QUESTION-SOURCE-GRAPH", materialObjectIds[0]],
+      ["CONTENT-REL-QUESTION-RIGHTS", materialObjectIds[1]],
+      ["CONTENT-REL-QUESTION-SCOPE", materialObjectIds[2]],
+    ].every(([id, toObjectId]) => contentRelationships.some((relationship) => (
+      relationship?.id === id
+      && relationship?.fromObjectId === "CONTENT-OBJ-QUESTION-VERSION"
+      && relationship?.toObjectId === toObjectId
     )));
   if (!d067Valid) {
     errors.push("INVALID_D067_MATERIAL_RIGHTS provenance, rights bundle, and product management scope must remain independent and ownerRef must not derive rights");
@@ -10110,6 +10499,9 @@ function finalizedGovernanceBaselineErrors(index) {
   }
 
   const publicPromotion = action("CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC");
+  const publicReview = object("CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW");
+  const requestPublicReview = action("CONTENT-ACT-REQUEST-PLATFORM-PUBLIC-REVIEW");
+  const approvePublicReview = action("CONTENT-ACT-APPROVE-PLATFORM-PUBLIC-REVIEW");
   const publicGuard = publicPromotion?.publicPromotionGuard;
   const publicBoundary = boundaryScenario(
     "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC",
@@ -10117,19 +10509,137 @@ function finalizedGovernanceBaselineErrors(index) {
   );
   const d069Valid = hasExactKeys(publicGuard, [
     "sourceKindFieldId",
+    "sourceGraphRefFieldId",
+    "rightsBundleRefFieldId",
+    "reviewRefFieldId",
     "prohibitedSourceKinds",
     "prohibitedPhaseIds",
     "requiredReviewKinds",
   ])
-    && publicGuard.sourceKindFieldId === "CONTENT-SCOPE-F-SOURCE-KIND"
+    && publicGuard.sourceKindFieldId === "CONTENT-SOURCE-F-SOURCE-KIND"
+    && publicGuard.sourceGraphRefFieldId === "CONTENT-SCOPE-F-SOURCE-GRAPH-REF"
+    && publicGuard.rightsBundleRefFieldId === "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF"
+    && publicGuard.reviewRefFieldId === "CONTENT-SCOPE-F-PLATFORM-REVIEW-REF"
     && exactOrder(publicGuard.prohibitedSourceKinds, ["STUDENT_WORK"])
     && exactOrder(publicGuard.prohibitedPhaseIds, ["PHASE-1", "PHASE-2"])
     && exactOrder(publicGuard.requiredReviewKinds, ["SOURCE_RIGHTS", "PRIVACY", "CONTENT_QUALITY", "PLATFORM_AUTHORIZATION"])
     && publicPromotion?.targetObjectId === "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE"
+    && publicPromotion?.operationKind === "UPDATE"
+    && publicPromotion?.writes === true
+    && publicPromotion?.executionMode === "USER_TASK"
+    && publicPromotion?.metadataOnly !== true
+    && publicPromotion?.transition?.from === "DRAFT"
+    && publicPromotion?.transition?.to === "ACTIVE"
     && publicPromotion?.risk === "HIGH"
+    && includesAll(publicPromotion?.inputFieldIds, [
+      "CONTENT-SCOPE-F-MATERIAL-ID",
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+      "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-VERSION",
+      "CONTENT-SCOPE-F-SOURCE-KIND",
+      "CONTENT-SCOPE-F-MANAGEMENT-SCOPE",
+      "CONTENT-SCOPE-F-PLATFORM-REVIEW-REF",
+      "CONTENT-SCOPE-F-PLATFORM-REVIEW-VERSION",
+    ])
+    && publicPromotion?.requiredManagementScopeCode === "PLATFORM_PUBLIC"
+    && !Object.hasOwn(publicPromotion ?? {}, "acceptedInputValues")
+    && index.fieldById.get("CONTENT-SCOPE-F-MANAGEMENT-SCOPE")?.value
+      ?.valueSource?.optionSetId === "OPT-BL2-005"
+    && JSON.stringify(publicPromotion?.materialIdentityBindings) === JSON.stringify([
+      ["CONTENT-SCOPE-F-MATERIAL-ID", "CONTENT-SOURCE-F-ROOT-MATERIAL-ID"],
+      ["CONTENT-SCOPE-F-MATERIAL-ID", "CONTENT-RIGHTS-F-MATERIAL-ID"],
+      ["CONTENT-SCOPE-F-MATERIAL-ID", "CONTENT-PUBLICREVIEW-F-MATERIAL-ID"],
+    ])
+    && JSON.stringify(publicPromotion?.sourceGraphBindings) === JSON.stringify([
+      ["CONTENT-SCOPE-F-SOURCE-GRAPH-REF", "CONTENT-RIGHTS-F-SOURCE-GRAPH-REF"],
+      ["CONTENT-SCOPE-F-SOURCE-GRAPH-REF", "CONTENT-PUBLICREVIEW-F-SOURCE-GRAPH-REF"],
+    ])
+    && exactOrder(publicPromotion?.rightsBundleBinding, [
+      "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+      "CONTENT-PUBLICREVIEW-F-RIGHTS-BUNDLE-REF",
+    ])
+    && hasGuard(publicPromotion, {
+      refFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+      versionFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+      targetObjectId: "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
+      requiredState: "ACTIVE",
+    })
+    && hasGuard(publicPromotion, {
+      refFieldId: "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+      versionFieldId: "CONTENT-SCOPE-F-RIGHTS-BUNDLE-VERSION",
+      targetObjectId: "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE",
+      requiredState: "ACTIVE",
+    })
+    && hasGuard(publicPromotion, {
+      refFieldId: "CONTENT-SCOPE-F-PLATFORM-REVIEW-REF",
+      versionFieldId: "CONTENT-SCOPE-F-PLATFORM-REVIEW-VERSION",
+      targetObjectId: "CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW",
+      requiredState: "APPROVED",
+    })
     && list(publicPromotion?.failureResults).includes("STUDENT_WORK_PUBLIC_PROHIBITED")
+    && list(publicPromotion?.failureResults).includes("PLATFORM_REVIEW_NOT_APPROVED")
+    && hasBoundaryPredicate(
+      "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC",
+      "STUDENT_WORK_PUBLIC_PROHIBITED",
+    )
+    && hasBoundaryPredicate(
+      "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC",
+      "PLATFORM_REVIEW_NOT_APPROVED",
+    )
+    && publicBoundary?.failurePredicate
+      === "the pinned source graph source kind is STUDENT_WORK and the current product phase is PHASE-1 or PHASE-2"
     && publicBoundary?.then?.expectedPermission === "DENY"
     && publicBoundary?.then?.expectedState?.mode === "UNCHANGED"
+    && publicReview?.dataSubject === "MATERIAL_PLATFORM_PUBLIC_REVIEW"
+    && exactOrder(publicReview?.states, ["REQUESTED", "APPROVED", "REJECTED", "EXPIRED"])
+    && exactOrder(publicReview?.requiredReviewEvidenceFieldIds, [
+      "CONTENT-PUBLICREVIEW-F-SOURCE-RIGHTS-EVIDENCE",
+      "CONTENT-PUBLICREVIEW-F-PRIVACY-EVIDENCE",
+      "CONTENT-PUBLICREVIEW-F-CONTENT-QUALITY-EVIDENCE",
+      "CONTENT-PUBLICREVIEW-F-PLATFORM-AUTHORIZATION-EVIDENCE",
+    ])
+    && [
+      ["CONTENT-PUBLICREVIEW-F-SOURCE-GRAPH-REF", "CONTENT-PUBLICREVIEW-F-SOURCE-GRAPH-VERSION", "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH", "CONTENT-SOURCE-F-VERSION"],
+      ["CONTENT-PUBLICREVIEW-F-RIGHTS-BUNDLE-REF", "CONTENT-PUBLICREVIEW-F-RIGHTS-BUNDLE-VERSION", "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE", "CONTENT-RIGHTS-F-VERSION"],
+      ["CONTENT-SCOPE-F-PLATFORM-REVIEW-REF", "CONTENT-SCOPE-F-PLATFORM-REVIEW-VERSION", "CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW", "CONTENT-PUBLICREVIEW-F-VERSION"],
+    ].every(refContractValid)
+    && requestPublicReview?.targetObjectId === publicReview?.id
+    && approvePublicReview?.targetObjectId === publicReview?.id
+    && approvePublicReview?.transition?.from === "REQUESTED"
+    && approvePublicReview?.transition?.to === "APPROVED"
+    && exactOrder(
+      approvePublicReview?.requiredReviewEvidenceFieldIds,
+      publicReview?.requiredReviewEvidenceFieldIds,
+    )
+    && publicReview.requiredReviewEvidenceFieldIds.every((fieldId) => (
+      list(approvePublicReview?.inputFieldIds).includes(fieldId)
+    ))
+    && hasGuard(approvePublicReview, {
+      refFieldId: "CONTENT-PUBLICREVIEW-F-SOURCE-GRAPH-REF",
+      versionFieldId: "CONTENT-PUBLICREVIEW-F-SOURCE-GRAPH-VERSION",
+      targetObjectId: "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
+      requiredState: "ACTIVE",
+    })
+    && hasGuard(approvePublicReview, {
+      refFieldId: "CONTENT-PUBLICREVIEW-F-RIGHTS-BUNDLE-REF",
+      versionFieldId: "CONTENT-PUBLICREVIEW-F-RIGHTS-BUNDLE-VERSION",
+      targetObjectId: "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE",
+      requiredState: "ACTIVE",
+    })
+    && [
+      ["CONTENT-REL-PUBLIC-REVIEW-SOURCE-GRAPH", "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH"],
+      ["CONTENT-REL-PUBLIC-REVIEW-RIGHTS", "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE"],
+    ].every(([id, toObjectId]) => contentRelationships.some((relationship) => (
+      relationship?.id === id
+      && relationship?.fromObjectId === publicReview?.id
+      && relationship?.toObjectId === toObjectId
+    )))
+    && contentRelationships.some((relationship) => (
+      relationship?.id === "CONTENT-REL-SCOPE-PUBLIC-REVIEW"
+      && relationship?.fromObjectId === "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE"
+      && relationship?.toObjectId === publicReview?.id
+    ))
     && exactOrder(sampleCreate?.sampleCreationGuard?.allowedManagementScopes, ["SCHOOL_PRIVATE"]);
   if (!d069Valid) {
     errors.push("INVALID_D069_NO_STUDENT_PUBLIC_PROMOTION phases one and two must fail closed for student-work platform-public promotion");

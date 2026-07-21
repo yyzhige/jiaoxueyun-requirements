@@ -60,6 +60,23 @@ const DELETION_OBJECT_CATEGORIES = [
   "LEGAL_HOLD_RECORD",
 ];
 
+const DELETION_BINDING_FIELD_IDS = [
+  "DGV-DELROW-F-DELETION-CASE-REF",
+  "DGV-DELROW-F-DELETION-CASE-VERSION",
+  "DGV-DELROW-F-INVENTORY-REF",
+  "DGV-DELROW-F-INVENTORY-VERSION",
+  "DGV-DELROW-F-INVENTORY-ITEM-ID",
+  "DGV-DELROW-F-INVENTORY-ITEM-DIGEST",
+  "DGV-DELROW-F-SOURCE-OBJECT-ID",
+  "DGV-DELROW-F-SOURCE-OBJECT-VERSION",
+  "DGV-DELROW-F-SOURCE-OBJECT-CATEGORY",
+  "DGV-DELROW-F-LEGAL-BASIS",
+  "DGV-DELROW-F-DISPUTE-BASIS",
+  "DGV-DELROW-F-HIGH-IMPACT-AUTHORIZATION-ID",
+  "DGV-DELROW-F-GOVERNANCE-ACTION",
+  "DGV-DELROW-F-EXECUTION-STATUS",
+];
+
 function moduleById(model, id) {
   return model.modules.find((module) => module.id === id);
 }
@@ -252,15 +269,10 @@ test("implements correction, restriction, physical deletion, and irreversible de
 test("binds every student-deletion decision to one source category and a completed identity gate", () => {
   const decision = objectById(requirementModel, "DGV-OBJ-STUDENT-DELETION-DECISION");
   assert.deepEqual(decision.studentDeletionDecisionContract.objectCategories, DELETION_OBJECT_CATEGORIES);
-  assert.deepEqual(decision.studentDeletionDecisionContract.requiredBindingFieldIds, [
-    "DGV-DELROW-F-DELETION-CASE-REF",
-    "DGV-DELROW-F-SOURCE-OBJECT-ID",
-    "DGV-DELROW-F-SOURCE-OBJECT-CATEGORY",
-    "DGV-DELROW-F-LEGAL-BASIS",
-    "DGV-DELROW-F-DISPUTE-BASIS",
-    "DGV-DELROW-F-GOVERNANCE-ACTION",
-    "DGV-DELROW-F-EXECUTION-STATUS",
-  ]);
+  assert.deepEqual(
+    decision.studentDeletionDecisionContract.requiredBindingFieldIds,
+    DELETION_BINDING_FIELD_IDS,
+  );
   const finalize = actionById(requirementModel, "DGV-ACT-FINALIZE-STUDENT-DELETION-MATRIX");
   assert.deepEqual(finalize.requiredObjectCategories, DELETION_OBJECT_CATEGORIES);
   const identityDelete = actionById(requirementModel, "ACC-ACT-COMPLETE-IDENTITY-DELETION");
@@ -276,15 +288,32 @@ test("separates material provenance, rights bundle, and product management scope
     sourceGraphObjectId: "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
     rightsBundleObjectId: "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE",
     managementScopeObjectId: "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE",
+    publicReviewObjectId: "CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW",
     rightsResolveActionId: "CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS",
+    requiredRelationshipIds: [
+      "CONTENT-REL-RIGHTS-SOURCE-GRAPH",
+      "CONTENT-REL-SCOPE-SOURCE-GRAPH",
+      "CONTENT-REL-SCOPE-RIGHTS",
+    ],
     ownerRefDerivesRights: false,
   });
   const resolve = actionById(requirementModel, module.materialRightsContract.rightsResolveActionId);
+  assert.equal(resolve.targetObjectId, "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE");
   assert.deepEqual(resolve.rightsResolution.sourceObjectIds, [
     "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
     "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE",
     "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE",
   ]);
+  assert.deepEqual(resolve.rightsResolution.resolvedMaterialIdentityFieldIds, [
+    "CONTENT-SOURCE-F-ROOT-MATERIAL-ID",
+    "CONTENT-RIGHTS-F-MATERIAL-ID",
+    "CONTENT-SCOPE-F-MATERIAL-ID",
+  ]);
+  assert.deepEqual(resolve.rightsResolution.sourceGraphConsistencyFieldIds, [
+    "CONTENT-RIGHTS-F-SOURCE-GRAPH-REF",
+    "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+  ]);
+  assert.equal(resolve.rightsResolution.exactVersionMatchRequired, true);
   assert.equal(resolve.rightsResolution.ownerRefUsage, "PROHIBITED");
 });
 
@@ -308,16 +337,95 @@ test("creates an independently authorized, deidentified, purpose-limited, revoca
 test("fails closed when student work is promoted to the platform public layer in phases one or two", () => {
   const promote = actionById(requirementModel, "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC");
   assert.deepEqual(promote.publicPromotionGuard, {
-    sourceKindFieldId: "CONTENT-SCOPE-F-SOURCE-KIND",
+    sourceKindFieldId: "CONTENT-SOURCE-F-SOURCE-KIND",
+    sourceGraphRefFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+    rightsBundleRefFieldId: "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
+    reviewRefFieldId: "CONTENT-SCOPE-F-PLATFORM-REVIEW-REF",
     prohibitedSourceKinds: ["STUDENT_WORK"],
     prohibitedPhaseIds: ["PHASE-1", "PHASE-2"],
     requiredReviewKinds: ["SOURCE_RIGHTS", "PRIVACY", "CONTENT_QUALITY", "PLATFORM_AUTHORIZATION"],
   });
+  assert.equal(promote.requiredManagementScopeCode, "PLATFORM_PUBLIC");
+  assert.ok(promote.outputFieldIds.includes("CONTENT-SCOPE-F-PLATFORM-REVIEW-REF"));
+  assert.ok(promote.outputFieldIds.includes("CONTENT-SCOPE-F-PLATFORM-REVIEW-VERSION"));
   assert.equal(
     scenarioFor(requirementModel, promote.id, "STUDENT_WORK_PUBLIC_PROHIBITED")
       ?.then.expectedState.mode,
     "UNCHANGED",
   );
+});
+
+test("rejects missing or duplicate governance decision owners globally", () => {
+  assertSemanticMutation("INVALID_GOVERNANCE_BASELINE_OWNER", (model) => {
+    moduleById(model, "DGV-001").governanceBaselineOwner.decisionIds = ["D047", "D048"];
+  });
+  assertSemanticMutation("INVALID_GOVERNANCE_BASELINE_OWNER", (model) => {
+    moduleById(model, "ORG-001").governanceBaselineOwner = {
+      moduleId: "ORG-001",
+      decisionIds: ["D049"],
+    };
+  });
+});
+
+test("rejects every fail-open student deletion matrix mutation", () => {
+  assertSemanticMutation("INVALID_D049_STUDENT_DELETION_MATRIX", (model) => {
+    objectById(model, "DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT")
+      .inventorySnapshotContract.hiddenObjectAllowed = true;
+  });
+  assertSemanticMutation("INVALID_D049_STUDENT_DELETION_MATRIX", (model) => {
+    objectById(model, "DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT")
+      .matrixAggregationContract.exactOneDecisionPerInventoryItem = false;
+  });
+  assertSemanticMutation("INVALID_D049_STUDENT_DELETION_MATRIX", (model) => {
+    objectById(model, "DGV-OBJ-STUDENT-DELETION-CASE")
+      .identityDeletionGate.nonReleasableDecisionStates = ["FROZEN"];
+  });
+  assertSemanticMutation("INVALID_D049_STUDENT_DELETION_MATRIX", (model) => {
+    delete scenarioFor(
+      model,
+      "DGV-ACT-COMPLETE-STUDENT-DELETION-MATRIX-SNAPSHOT",
+      "FAILED_DECISION",
+    ).failurePredicate;
+  });
+  assertSemanticMutation("INVALID_D049_STUDENT_DELETION_MATRIX", (model) => {
+    actionById(model, "DGV-ACT-COMPLETE-STUDENT-DELETION-MATRIX")
+      .relatedStateGuards[0].requiredState = "READY";
+  });
+});
+
+test("rejects split-source material rights and owner-derived rights", () => {
+  assertSemanticMutation("INVALID_D067_MATERIAL_RIGHTS", (model) => {
+    actionById(model, "CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS")
+      .rightsResolution.sourceGraphConsistencyFieldIds.pop();
+  });
+  assertSemanticMutation("INVALID_D067_MATERIAL_RIGHTS", (model) => {
+    actionById(model, "CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS").targetObjectId =
+      "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE";
+  });
+  assertSemanticMutation("INVALID_D067_MATERIAL_RIGHTS", (model) => {
+    moduleById(model, "CONTENT-001").relationships
+      .find(({ id }) => id === "CONTENT-REL-SCOPE-RIGHTS").toObjectId =
+      "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH";
+  });
+});
+
+test("rejects metadata-only or incompletely reviewed platform-public promotion", () => {
+  assertSemanticMutation("INVALID_D069_NO_STUDENT_PUBLIC_PROMOTION", (model) => {
+    actionById(model, "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC").metadataOnly = true;
+  });
+  assertSemanticMutation("INVALID_D069_NO_STUDENT_PUBLIC_PROMOTION", (model) => {
+    actionById(model, "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC")
+      .requiredManagementScopeCode = "SCHOOL_PRIVATE";
+  });
+  assertSemanticMutation("INVALID_D069_NO_STUDENT_PUBLIC_PROMOTION", (model) => {
+    actionById(model, "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC")
+      .relatedStateGuards = actionById(
+        model,
+        "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC",
+      ).relatedStateGuards.filter(({ targetObjectId }) => (
+        targetObjectId !== "CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW"
+      ));
+  });
 });
 
 test("semantic validation rejects destructive governance contract mutations", () => {
