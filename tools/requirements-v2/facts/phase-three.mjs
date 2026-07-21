@@ -689,7 +689,7 @@ function plannedPhaseThreeModule(module, overrides = {}) {
   });
 }
 
-export const phaseThreeModules = deepFreeze([
+const phaseThreeModuleFacts = [
   extendModule(longTermEvidenceModule, {
     objects: masteryObjects,
     relationships: [{
@@ -766,7 +766,31 @@ export const phaseThreeModules = deepFreeze([
       phaseTwoDependencyRule: "the phase-two minimum video Flow never depends on this composition contract",
     },
   }),
+];
+
+const phaseThreeEventActionBindings = new Map([
+  ["INS-ACT-CREATE-CANDIDATE", "EVT-PH3-UPSTREAM-CORRECTION-READY"],
+  ["INS-ACT-MARK-STALE", "EVT-PH3-UPSTREAM-DERIVED-EVIDENCE-INVALIDATED"],
+  ["PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", "EVT-PH3-UPSTREAM-DERIVED-EVIDENCE-INVALIDATED"],
 ]);
+
+export const phaseThreeModules = deepFreeze(phaseThreeModuleFacts.map((module) => {
+  const replacement = structuredClone(module);
+  for (const actionValue of replacement.actions) {
+    const eventId = phaseThreeEventActionBindings.get(actionValue.id);
+    if (!eventId) continue;
+    actionValue.executionMode = SYSTEM_EVENT;
+    delete actionValue.clients;
+    delete actionValue.deferredFlowRegistration;
+    actionValue.trigger = { kind: "EVENT", eventId };
+  }
+  for (const scenario of replacement.scenarios) {
+    const eventId = phaseThreeEventActionBindings.get(scenario.actionId);
+    if (!eventId) continue;
+    scenario.trigger = { kind: "EVENT", eventId };
+  }
+  return replacement;
+}));
 
 export const phaseThreeOptionSets = deepFreeze([
   optionSet("OPT-PH3-001", "masteryNodeStatus", "能力节点状态", [
@@ -788,6 +812,21 @@ export const phaseThreeOptionSets = deepFreeze([
   ]),
 ]);
 export const phaseThreeEvents = deepFreeze([
+  {
+    id: "EVT-PH3-UPSTREAM-CORRECTION-READY",
+    label: "上游纠正事实可供长期认知使用",
+    definition: "第二阶段纠正形成可追溯事实后，第三阶段创建新的证据候选，不覆盖原结果。",
+    triggeredActionIds: ["INS-ACT-CREATE-CANDIDATE"],
+  },
+  {
+    id: "EVT-PH3-UPSTREAM-DERIVED-EVIDENCE-INVALIDATED",
+    label: "上游派生证据已失效",
+    definition: "上游结果被纠正或失效时，第三阶段将关联证据标为陈旧并使计划进入待重新确认。",
+    triggeredActionIds: [
+      "INS-ACT-MARK-STALE",
+      "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
+    ],
+  },
   {
     id: "EVT-PH3-MASTERY-EVIDENCE-SUFFICIENT",
     label: "能力节点独立证据达到规则",

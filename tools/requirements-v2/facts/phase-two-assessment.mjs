@@ -3974,9 +3974,6 @@ export function replacePhaseTwoAssessmentModules(modules) {
 
 export function deferPhaseThreeFlowActions(modules) {
   const deferredActionIds = new Set([
-    "INS-ACT-CREATE-CANDIDATE",
-    "INS-ACT-MARK-STALE",
-    "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
     "LPATH-ACT-APPEND-CORRECTION-TIMELINE",
     "LPATH-ACT-APPEND-EVIDENCE-TIMELINE",
     "LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE",

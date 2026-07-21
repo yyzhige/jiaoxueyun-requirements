@@ -120,14 +120,19 @@ export const currentReleaseModuleIds = deepFreeze(
     .filter(({ releaseStatus }) => releaseStatus === RELEASE_STATUS.BUILD_READY)
     .map(({ id }) => id),
 );
-export const flows = deepFreeze(replacePhaseTwoAssessmentFlows([
+const sourceFlows = [
   ...foundationFlows,
   ...teachingLoopFlows,
   ...aiReportingFlows,
   ...extensionFlows,
   ...phaseTwoFlows,
+];
+const deferredPhaseThreeFlow = sourceFlows.find(({ id }) => id === "DF-011");
+export const flows = deepFreeze([
+  ...replacePhaseTwoAssessmentFlows(sourceFlows),
+  ...(deferredPhaseThreeFlow ? [deferredPhaseThreeFlow] : []),
   ...phaseThreeFlows,
-]));
+]);
 export const aiTasks = deepFreeze(replacePhaseTwoAssessmentAiTasks([
   ...aiReportingAiTasks,
   ...extensionAiTasks,
