@@ -560,11 +560,11 @@ export function validateModelReferences(model) {
   }
 
   for (const objectEntry of index.objects) {
-    const phase = index.moduleById.get(objectEntry.moduleId)?.value?.phase;
+    const module = index.moduleById.get(objectEntry.moduleId)?.value;
     const objectFields = index.fields.filter((fieldEntry) => (
       fieldEntry.objectId === objectEntry.value?.id
     ));
-    if (phase === 1) {
+    if (module?.contractKind !== "TASK8_REPORT_FUTURE_METADATA") {
       const identityFields = objectFields.filter((fieldEntry) => (
         fieldEntry.value?.idempotencyRole === "OBJECT_ID"
       ));
@@ -1006,7 +1006,18 @@ export function validateModelReferences(model) {
       const actualFlowIds = index.flows
         .filter(({ value }) => list(value?.steps).some(({ actionId }) => actionId === action?.id))
         .map(({ value }) => value?.id);
-      if (!sameStringSet(action?.trigger?.flowIds, actualFlowIds)) {
+      const deferred = action?.deferredFlowRegistration;
+      const deferredRegistrationValid = actualFlowIds.length === 0
+        && deferred?.flowId === "DF-011"
+        && deferred?.targetPhase === 3
+        && deferred?.releaseStatus === "PLANNED"
+        && deferred?.executionAllowedBeforeRegistration === false
+        && sameStringSet(action?.trigger?.flowIds, [deferred.flowId])
+        && !index.flows.some(({ value }) => value?.id === deferred.flowId);
+      if (
+        !sameStringSet(action?.trigger?.flowIds, actualFlowIds)
+        && !deferredRegistrationValid
+      ) {
         errors.push(
           `INVALID_ACTION_TRIGGER ${formatValidationValue(action?.id)} requires exact containing Flow references`,
         );

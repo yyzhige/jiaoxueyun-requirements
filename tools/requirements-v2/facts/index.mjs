@@ -47,17 +47,27 @@ import {
   extensionModules,
   extensionOptionSets,
 } from "./extensions.mjs";
+import {
+  deferPhaseThreeFlowActions,
+  phaseTwoAssessmentEvents,
+  phaseTwoAssessmentOptionSets,
+  replacePhaseTwoAssessmentFlows,
+  replacePhaseTwoAssessmentModules,
+  replacePhaseTwoAssessmentOptionSets,
+} from "./phase-two-assessment.mjs";
 
-export const optionSets = deepFreeze([
+export const optionSets = deepFreeze(replacePhaseTwoAssessmentOptionSets([
   ...catalogOptionSets,
   ...teachingLoopOptionSets,
   ...extensionOptionSets,
-]);
+  ...phaseTwoAssessmentOptionSets,
+]));
 
 export const events = deepFreeze([
   ...catalogEvents,
   ...teachingLoopEvents,
   ...extensionEvents,
+  ...phaseTwoAssessmentEvents,
 ]);
 
 export {
@@ -71,23 +81,23 @@ export {
   sensitivities,
 };
 
-export const modules = deepFreeze([
+export const modules = deepFreeze(deferPhaseThreeFlowActions(replacePhaseTwoAssessmentModules([
   ...foundationModules,
   ...teachingLoopModules,
   ...aiReportingModules,
   ...extensionModules,
-]);
+])));
 export const currentReleaseModuleIds = deepFreeze(
   modules
     .filter(({ releaseStatus }) => releaseStatus === RELEASE_STATUS.BUILD_READY)
     .map(({ id }) => id),
 );
-export const flows = deepFreeze([
+export const flows = deepFreeze(replacePhaseTwoAssessmentFlows([
   ...foundationFlows,
   ...teachingLoopFlows,
   ...aiReportingFlows,
   ...extensionFlows,
-]);
+]));
 export const aiTasks = deepFreeze([
   ...aiReportingAiTasks,
   ...extensionAiTasks,

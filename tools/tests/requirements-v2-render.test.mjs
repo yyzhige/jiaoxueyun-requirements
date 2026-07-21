@@ -48,7 +48,7 @@ test("publishes the passed semantic review status as a source fact", () => {
   });
 });
 
-test("renders grading score rationale and teacher decision facts", () => {
+test("renders AI assessment rationale and bounded professional exception facts", () => {
   const output = renderModulePrd(moduleById("GRD-001"), requirementModel);
 
   for (const expected of [
@@ -59,10 +59,12 @@ test("renders grading score rationale and teacher decision facts", () => {
     "GRD-DECISION-F-SCORING-RATIONALE",
     "Scoring Rationale",
     "GRD-DECISION-F-OFFICIAL-SCORE",
-    "Teacher Official Score",
+    "Effective Activity Score or Level \\(optional\\)",
+    "Professional Exception Feedback \\(exception only\\)",
     "GRD-ACT-OVERRIDE-SCORE",
     "GRD-ACT-MANUAL-GRADE",
   ]) assert.match(output, new RegExp(expected));
+  assert.doesNotMatch(output, /Teacher Official Score|Teacher Feedback/);
   assert.doesNotMatch(output, /对象查询与范围筛选|创建\/修改\/确认主动作/);
 });
 
@@ -255,8 +257,9 @@ test("renders Flow failure granularity providers compensation and invalidation",
   assert.match(output, /providedInputs/);
   assert.match(output, /EXPIRE_PARTIAL_CONTEXT/);
   assert.match(output, /INVALIDATE_PREVIOUS_CONTEXT_DERIVATIONS/);
-  assert.match(output, /PUBLISHED_RESULT_SOURCE/);
-  assert.match(output, /LPATH-ENTRY-F-PUBLISHED-RESULT-REF/);
+  assert.match(output, /DF-009 Batch AI Assessment Impact Location, Correction, Notification, and Recalculation/);
+  assert.match(output, /KEEP_ORIGINAL_FACTS_AND_PRIOR_RESULT_VERSIONS/);
+  assert.doesNotMatch(output, /## DF-011\b|PUBLISHED_RESULT_SOURCE|LPATH-ENTRY-F-PUBLISHED-RESULT-REF/);
 });
 
 test("renders metric statistic target and event calculation facts", () => {

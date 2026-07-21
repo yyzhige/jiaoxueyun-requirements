@@ -387,7 +387,7 @@ function academicAccessBoundaryErrors(index) {
   const errors = [];
   for (const { moduleId, value: action } of index.actions) {
     const module = index.moduleById.get(moduleId)?.value;
-    if (module?.phase !== 1) continue;
+    if (module?.contractKind === "TASK8_REPORT_FUTURE_METADATA") continue;
     const permissions = records(action?.permissions);
     const allows = permissions.filter(({ effect }) => effect === "ALLOW");
     const subjectTeacherAllows = permissions.filter(({ effect, dutyRef }) => (
@@ -813,7 +813,7 @@ function stateReachabilityErrors(index) {
   for (const objectEntry of index.objects) {
     const object = objectEntry.value;
     const module = index.moduleById.get(objectEntry.moduleId)?.value;
-    if (module?.phase !== 1) continue;
+    if (module?.contractKind === "TASK8_REPORT_FUTURE_METADATA") continue;
 
     const policy = object?.stateReachability;
     const declaredStates = stateIds(object);
@@ -2993,7 +2993,7 @@ function learningPathErrors(index) {
     ["PLAN_EXECUTION", "APP-OBJ-TODO", "APP-TODO-F-ID", "APP-TODO-F-AGGREGATION-VERSION", 4, "PLAN-EXECUTION"],
     ["TEACHER_CONFIRMATION", "GRD-OBJ-DECISION", "GRD-DECISION-F-ID", "GRD-DECISION-F-DECISION-VERSION", 5, "TEACHER-CONFIRMATION"],
   ];
-  const sourcePathsValid = flow?.routingPolicy === "ACTION_CHOICE_REQUIRED"
+  const sourcePathsValid = flow === undefined || (flow?.routingPolicy === "ACTION_CHOICE_REQUIRED"
     && setEquals(
       new Set(list(flow?.sourceOnlyModuleIds)),
       new Set(["PUB-001", "INS-001", "CORR-001", "APP-001", "GRD-001"]),
@@ -3020,7 +3020,7 @@ function learningPathErrors(index) {
         && binding?.targetRefFieldId === `LPATH-ENTRY-F-${kind}-REF`
         && binding?.targetVersionFieldId === `LPATH-ENTRY-F-${kind}-VERSION`
         && binding?.cardinality === "ONE";
-    });
+    }));
 
   const history = pathModule.historyPolicy;
   const historyValid = hasExactKeys(history, [
@@ -5302,7 +5302,7 @@ function gradingCapabilityErrors(index) {
         && (
           !subjectiveQuestionTypes.has(questionType)
           || (
-            rule.teacherReviewRequired === "YES"
+            rule.teacherReviewRequired === "NO"
             && rule.batchConfirmEligibility === "INELIGIBLE"
             && rule.scoringLevel !== "AUTO-SCORE"
           )
@@ -6470,6 +6470,517 @@ function studentHomeErrors(index) {
   return errors;
 }
 
+const PHASE_TWO_AI_MODULE_IDS = ["GRD-001", "PUB-001", "CORR-001", "AIX-001"];
+const PHASE_TWO_AI_FLOW_IDS = ["DF-006", "DF-007", "DF-008", "DF-009", "DF-010"];
+const AI_RESULT_STATUS_AXES = [
+  "PROCESSING_STATUS",
+  "PUBLICATION_STATUS",
+  "DISPUTE_CORRECTION_STATUS",
+  "VALIDITY_STATUS",
+];
+const AI_ASSESSMENT_NEXT_STEPS = [
+  "COMPLETED",
+  "CORRECTION_REQUIRED",
+  "MORE_INPUT_REQUIRED",
+  "UNABLE_TO_DETERMINE",
+  "EXCEPTION_REVIEW_REQUIRED",
+];
+const AI_FEEDBACK_LAYERS = [
+  "RESULT_AND_ERROR_LOCATION",
+  "NON_ANSWER_SCAFFOLD",
+  "TARGETED_TEACHING",
+  "COMPLETE_ANSWER_AND_SOLUTION",
+];
+const ANSWER_OPEN_SURFACES = [
+  "PAGE",
+  "SEARCH",
+  "EXPORT",
+  "NOTIFICATION",
+  "AI_CONVERSATION",
+  "VIDEO",
+  "CACHE",
+  "DIRECT_LINK",
+];
+const ASSESSMENT_STANDARD_OBJECT_ID = "GRD-OBJ-ASSESSMENT-STANDARD-VERSION";
+const ASSESSMENT_STANDARD_EVENT_ID = "EVT-ACTIVITY-ASSESSMENT-STANDARD-REQUIRED";
+const ASSESSMENT_NOTIFICATION_EVENT_ID = "EVT-AI-ASSESSMENT-CORRECTION-NOTIFICATION-REQUESTED";
+const ASSESSMENT_STANDARD_REQUIRED_CONTENT_FIELDS = [
+  "GRD-STANDARD-F-ANSWER-OR-DIMENSIONS",
+  "GRD-STANDARD-F-KEY-POINTS",
+  "GRD-STANDARD-F-ACCEPTABLE-ANSWERS",
+  "GRD-STANDARD-F-COMMON-ERRORS",
+  "GRD-STANDARD-F-SCORE-OR-LEVEL-RULE",
+  "GRD-STANDARD-F-COMPLETION-THRESHOLD",
+  "GRD-STANDARD-F-HELP-BOUNDARY",
+];
+const STUDENT_ANSWER_ACTION_IDS = [
+  "SUB-ACT-SAVE-DRAFT",
+  "SUB-ACT-UPLOAD-CHUNK",
+  "SUB-ACT-RETRY-UPLOAD",
+  "SUB-ACT-SUBMIT",
+];
+const ANSWER_OPEN_POLICY_FIELD_IDS = [
+  "PUB-RESULT-F-ANSWER-OPEN-POLICY-ID",
+  "PUB-RESULT-F-ANSWER-OPEN-POLICY-VERSION",
+];
+const ANSWER_OPEN_TIME_FIELD_IDS = [
+  "PUB-RESULT-F-ANSWER-OPEN-AT",
+  "PUB-RESULT-F-SOLUTION-OPEN-AT",
+  "PUB-RESULT-F-RUBRIC-OPEN-AT",
+];
+const ANSWER_OPEN_ENFORCEMENT_REFS = new Map([
+  ["PAGE", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
+  ["SEARCH", { kind: "POLICY_POINT", id: "ANSWER-OPEN-SEARCH-FILTER" }],
+  ["EXPORT", { kind: "POLICY_POINT", id: "ANSWER-OPEN-EXPORT-SERIALIZER" }],
+  ["NOTIFICATION", { kind: "POLICY_POINT", id: "ANSWER-OPEN-NOTIFICATION-PAYLOAD" }],
+  ["AI_CONVERSATION", {
+    kind: "ACTION",
+    ids: [
+      "AIX-ACT-PREPARE-TASK-PREVIEW",
+      "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
+      "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
+    ],
+  }],
+  ["VIDEO", { kind: "POLICY_POINT", id: "ANSWER-OPEN-VIDEO-DELIVERY" }],
+  ["CACHE", { kind: "POLICY_POINT", id: "ANSWER-OPEN-CACHE-GATE" }],
+  ["DIRECT_LINK", { kind: "POLICY_POINT", id: "ANSWER-OPEN-DIRECT-LINK-RESOLVER" }],
+]);
+const PROHIBITED_AI_PERSISTENCE_FIELD = /(?:hidden[-_ ]*chain[-_ ]*of[-_ ]*thought|chain[-_ ]*of[-_ ]*thought|vendor[-_ ]*debug|full[-_ ]*upstream[-_ ]*request|隐藏.{0,6}思维链|供应商.{0,6}调试)/iu;
+
+function phaseTwoAiAssessmentErrors(index) {
+  if (!task8ProfileEnabled(index)) return [];
+  let valid = true;
+  const module = (id) => index.moduleById.get(id)?.value;
+  const grading = module("GRD-001");
+  const publication = module("PUB-001");
+  const correction = module("CORR-001");
+  const aix = module("AIX-001");
+
+  valid = valid && PHASE_TWO_AI_MODULE_IDS.every((id) => {
+    const value = module(id);
+    return value?.phase === PHASE.SECOND
+      && value?.releaseStatus === RELEASE_STATUS.PLANNED
+      && list(value?.pages).length > 0
+      && list(value.pages).every(({ availability }) => availability === RELEASE_STATUS.PLANNED);
+  });
+  valid = valid && PHASE_TWO_AI_FLOW_IDS.every((id) => (
+    index.flows.find(({ value }) => value?.id === id)?.value?.phase === PHASE.SECOND
+  ));
+
+  const assessment = grading?.aiAssessmentContract;
+  const statusAxes = records(assessment?.statusAxes);
+  valid = valid
+    && assessment?.productTerm === "AI 评定与完成判定"
+    && assessment?.routineTeacherAssessment === false
+    && statusAxes.length === AI_RESULT_STATUS_AXES.length
+    && sameStringSet(statusAxes.map(({ axis }) => axis), AI_RESULT_STATUS_AXES)
+    && statusAxes.every((axis) => {
+      const fieldEntry = index.fieldById.get(axis?.fieldId);
+      return index.objectById.get(axis?.objectId)
+        && index.optionSetById.has(axis?.optionSetId)
+        && fieldEntry?.objectId === axis?.objectId
+        && fieldEntry?.value?.valueSource?.kind === "OPTION_SET"
+        && fieldEntry.value.valueSource.optionSetId === axis?.optionSetId;
+    });
+  const nextStep = assessment?.nextStep;
+  const nextStepField = index.fieldById.get(nextStep?.fieldId);
+  const assessmentRouteOptions = index.optionSetById.get("OPT-TL-011")?.value;
+  valid = valid
+    && nextStep?.optionSetId === "OPT-AI2-005"
+    && nextStep?.requiredForEverySubmission === true
+    && sameStringSet(nextStep?.values, AI_ASSESSMENT_NEXT_STEPS)
+    && nextStepField?.objectId === "GRD-OBJ-DECISION"
+    && nextStepField?.value?.valueSource?.optionSetId === nextStep?.optionSetId;
+  valid = valid
+    && assessmentRouteOptions?.key === "aiAssessmentRoute"
+    && sameStringSet(
+      records(assessmentRouteOptions?.values).map(({ code }) => code),
+      [
+        "AI-DETERMINATION",
+        "CONCRETE-SUPPLEMENT",
+        "PERMITTED-ALTERNATE-REVIEW",
+        "PROFESSIONAL-EXCEPTION-REVIEW",
+      ],
+    );
+  valid = valid
+    && sameStringSet(assessment?.structuredResult?.requiredComponents, [
+      "ACTIVITY_PUBLICATION_RULE",
+      "ACTUAL_HELP_ENVIRONMENT",
+      "ORIGINAL_SUBMISSION",
+      "RECOGNITION_VERSION",
+      "INPUT_QUALITY",
+      "ASSESSMENT_STANDARD_VERSION",
+      "EVIDENCE_REFERENCES",
+      "CONCLUSION",
+      "FEEDBACK",
+      "NEXT_STEP",
+    ])
+    && assessment?.structuredResult?.sourceVersionPinned === true
+    && sameStringSet(assessment?.unableToDetermine?.stages, [
+      "SOURCE_QUALITY_CHECK",
+      "CONCRETE_SUPPLEMENT_REQUEST",
+      "PERMITTED_ALTERNATE_REVIEW",
+      "PROFESSIONAL_EXCEPTION_QUEUE",
+    ])
+    && assessment?.unableToDetermine?.routineTeacherAssessment === false
+    && assessment?.unableToDetermine?.unresolvedState === "UNPUBLISHED_UNDECIDED";
+
+  const standardContract = grading?.assessmentStandardContract;
+  const standardObject = index.objectById.get(standardContract?.objectId)?.value;
+  const standardFields = records(standardObject?.fields);
+  const standardFieldIds = new Set(standardFields.map(({ id }) => id));
+  const standardEvent = index.eventById.get(standardContract?.generationEventId)?.value;
+  const generateStandard = index.actionById.get(standardContract?.generateActionId)?.value;
+  const resolveStandard = index.actionById.get(standardContract?.resolveActionId)?.value;
+  const decisionStandardRef = index.fieldById.get("GRD-DECISION-F-RUBRIC-REF")?.value;
+  const decisionStandardLineage = records(index.objectById.get("GRD-OBJ-DECISION")?.value?.lineageBindings)
+    .find(({ refFieldId }) => refFieldId === "GRD-DECISION-F-RUBRIC-REF");
+  const assessmentFlow = index.flows.find(({ value }) => value?.id === "DF-006")?.value;
+  const processAssessment = index.actionById.get("GRD-ACT-PROCESS")?.value;
+  valid = valid
+    && standardContract?.objectId === ASSESSMENT_STANDARD_OBJECT_ID
+    && standardContract?.generationEventId === ASSESSMENT_STANDARD_EVENT_ID
+    && standardContract?.identityFieldId === "GRD-STANDARD-F-ID"
+    && standardContract?.versionFieldId === "GRD-STANDARD-F-VERSION"
+    && sameStringSet(standardContract?.requiredContentFieldIds, ASSESSMENT_STANDARD_REQUIRED_CONTENT_FIELDS)
+    && sameStringSet(standardContract?.studentAnswerGateActionIds, STUDENT_ANSWER_ACTION_IDS)
+    && standardContract?.generatedBeforeStudentAnswer === true
+    && standardContract?.immutableAfterGeneration === true
+    && standardContract?.replacementPolicy === "NEW_ACTIVITY_OR_STANDARD_VERSION_ONLY"
+    && standardContract?.aiUseMode === "EXACT_SUBMISSION_BOUND_VERSION_ONLY"
+    && standardContract?.scoreOrLevelOptional === true
+    && standardContract?.feedbackOnlyAllowed === true
+    && standardContract?.defaultIdentifiedCompositeRankingAllowed === false
+    && standardContract?.permanentStudentLabelAllowed === false
+    && standardObject?.states?.length === 1
+    && standardObject.states[0] === "FROZEN"
+    && standardObject?.immutabilityPolicy === "CREATE_NEW_VERSION_ONLY"
+    && [
+      "GRD-STANDARD-F-ID",
+      "GRD-STANDARD-F-VERSION",
+      "GRD-STANDARD-F-ACTIVITY-SNAPSHOT-REF",
+      "GRD-STANDARD-F-ACTIVITY-SNAPSHOT-VERSION",
+      ...ASSESSMENT_STANDARD_REQUIRED_CONTENT_FIELDS,
+      "GRD-STANDARD-F-FROZEN-AT",
+    ].every((fieldId) => standardFieldIds.has(fieldId))
+    && standardFields.every(({ mutability }) => mutability === "IMMUTABLE")
+    && generateStandard?.targetObjectId === ASSESSMENT_STANDARD_OBJECT_ID
+    && generateStandard?.operationKind === "CREATE"
+    && generateStandard?.executionMode === "SYSTEM_EVENT"
+    && generateStandard?.trigger?.eventId === ASSESSMENT_STANDARD_EVENT_ID
+    && standardFields.every(({ id }) => list(generateStandard?.outputFieldIds).includes(id))
+    && resolveStandard?.targetObjectId === ASSESSMENT_STANDARD_OBJECT_ID
+    && resolveStandard?.operationKind === "READ"
+    && resolveStandard?.executionMode === "FLOW_INTERNAL"
+    && sameStringSet(resolveStandard?.trigger?.flowIds, ["DF-006"])
+    && sameStringSet(resolveStandard?.outputFieldIds, [
+      "GRD-STANDARD-F-ID",
+      "GRD-STANDARD-F-VERSION",
+    ])
+    && resolveStandard?.snapshotMatch === "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION"
+    && sameStringSet(standardEvent?.producerActionIds, [
+      "HW-ACT-PUBLISH-NOW",
+      "HW-ACT-PUBLISH-SCHEDULED",
+    ])
+    && sameStringSet(standardEvent?.triggeredActionIds, [generateStandard?.id])
+    && list(standardEvent?.producerActionIds).every((actionId) => (
+      list(index.actionById.get(actionId)?.value?.producedEventIds).includes(ASSESSMENT_STANDARD_EVENT_ID)
+    ))
+    && STUDENT_ANSWER_ACTION_IDS.every((actionId) => {
+      const gate = index.actionById.get(actionId)?.value?.assessmentStandardGate;
+      return gate?.standardObjectId === ASSESSMENT_STANDARD_OBJECT_ID
+        && gate?.requiredState === "FROZEN"
+        && gate?.matchMode === "EXACT_ACTIVITY_SNAPSHOT_ID_AND_VERSION"
+        && gate?.missingBehavior === "BLOCK_STUDENT_ANSWER";
+    })
+    && decisionStandardRef?.valueSource?.targetObjectId === ASSESSMENT_STANDARD_OBJECT_ID
+    && decisionStandardRef?.versionBinding?.versionFieldId === "GRD-DECISION-F-RUBRIC-VERSION"
+    && decisionStandardRef?.versionBinding?.targetVersionFieldId === "GRD-STANDARD-F-VERSION"
+    && decisionStandardLineage?.targetObjectId === ASSESSMENT_STANDARD_OBJECT_ID
+    && decisionStandardLineage?.targetVersionFieldId === "GRD-STANDARD-F-VERSION"
+    && list(assessmentFlow?.steps).some(({ actionId }) => actionId === resolveStandard?.id)
+    && ["GRD-STANDARD-F-ID", "GRD-STANDARD-F-VERSION"].every((fieldId) => (
+      list(assessmentFlow?.sourceDataRefs).some((reference) => reference?.fieldId === fieldId)
+    ))
+    && list(assessmentFlow?.idempotencyKeyParts?.identityFieldIds).includes("GRD-STANDARD-F-ID")
+    && list(assessmentFlow?.idempotencyKeyParts?.versionFieldIds).includes("GRD-STANDARD-F-VERSION")
+    && assessmentFlow?.aiAssessmentContract?.assessmentStandardObjectId === ASSESSMENT_STANDARD_OBJECT_ID
+    && assessmentFlow?.aiAssessmentContract?.assessmentStandardUse === "EXACT_SUBMISSION_BOUND_FROZEN_VERSION_ONLY"
+    && processAssessment?.assessmentStandardBinding?.refFieldId === "GRD-DECISION-F-RUBRIC-REF"
+    && processAssessment?.assessmentStandardBinding?.versionFieldId === "GRD-DECISION-F-RUBRIC-VERSION"
+    && processAssessment?.assessmentStandardBinding?.requiredState === "FROZEN"
+    && processAssessment?.assessmentStandardBinding?.matchMode === "EXACT_SUBMISSION_BOUND_VERSION";
+
+  const highImpact = grading?.highImpactUseContract;
+  valid = valid
+    && sameStringSet(highImpact?.routineAssessmentSoleBasisForbiddenFor, [
+      "DISCIPLINE",
+      "PUBLIC_RANKING",
+      "ADMISSION_OR_ADVANCEMENT",
+      "IDENTITY_OR_BENEFIT_ELIGIBILITY",
+      "OTHER_HIGH_IMPACT_DECISION",
+    ])
+    && sameStringSet(highImpact?.allowedTeachingUses, [
+      "CORRECTION_ROUTING",
+      "TEACHING_RECOMMENDATION",
+      "VERSIONED_LEARNING_EVIDENCE",
+    ])
+    && highImpact?.independentAuthorizedEvidenceRequired === true
+    && highImpact?.defaultIdentifiedCompositeRankingAllowed === false
+    && highImpact?.publicWeaknessRankingAllowed === false;
+  const externalAi = grading?.externalAiProcessingContract;
+  valid = valid
+    && externalAi?.id === "EXTERNAL-AI-STUDENT-DATA-V2"
+    && externalAi?.defaultStudentDataUses?.trainingAllowed === false
+    && externalAi?.defaultStudentDataUses?.unrelatedReuseAllowed === false
+    && externalAi?.defaultStudentDataUses?.unauthorizedTransferAllowed === false
+    && sameStringSet(externalAi?.activationPreconditions, [
+      "PROCESSING_CHAIN_AND_SUBPROCESSORS",
+      "PROCESSING_REGION",
+      "RETENTION_PERIOD",
+      "DELETION_COMMITMENT_OR_EVIDENCE",
+      "SECURITY_INCIDENT_RESPONSIBILITY",
+      "EXIT_AND_TERMINATION_METHOD",
+      "TASK_MINIMUM_NECESSARY_SCOPE",
+    ])
+    && externalAi?.realStudentDataBlockedUntilComplete === true
+    && externalAi?.taskMinimumNecessaryDataOnly === true
+    && externalAi?.exceptionAuthorization?.separateFromGeneralServiceConsent === true
+    && externalAi?.exceptionAuthorization?.explicit === true
+    && externalAi?.exceptionAuthorization?.applicableToDeclaredPurpose === true
+    && externalAi?.exceptionAuthorization?.revocableWhenLegallyPermitted === true
+    && externalAi?.exceptionAuthorization?.legalValidityRequired === true
+    && externalAi?.exceptionAuthorization?.defaultAllowed === false
+    && processAssessment?.externalAiProcessingGuard?.contractId === externalAi?.id
+    && processAssessment?.externalAiProcessingGuard?.failureResult === "EXTERNAL_AI_CONTRACT_INCOMPLETE"
+    && processAssessment?.externalAiProcessingGuard?.failClosed === true
+    && list(processAssessment?.failureResults).includes("EXTERNAL_AI_CONTRACT_INCOMPLETE");
+
+  const exceptionActionIds = [
+    "GRD-ACT-ACCEPT-SUGGESTION",
+    "GRD-ACT-OVERRIDE-SCORE",
+    "GRD-ACT-MANUAL-GRADE",
+    "GRD-ACT-BATCH-CONFIRM",
+    "GRD-ACT-OPEN-CONFIRMED-REVISION",
+    "GRD-ACT-CONFIRM-REVISION",
+    "CORR-ACT-CONFIRM-JUDGMENT",
+    "CORR-ACT-REQUEST-RETRY",
+  ];
+  valid = valid && exceptionActionIds.every((id) => {
+    const action = index.actionById.get(id)?.value;
+    return action?.assessmentRole === "PROFESSIONAL_EXCEPTION_ONLY"
+      && action?.routineAssessmentAllowed === false;
+  });
+
+  const publicationContract = publication?.aiPublicationContract;
+  const publishAction = index.actionById.get(publicationContract?.publishActionId)?.value;
+  valid = valid
+    && sameStringSet(publicationContract?.requiredGates, [
+      "PERMISSION",
+      "SAFETY",
+      "TEACHING_CORRECTNESS",
+    ])
+    && list(publicationContract?.gateFieldIds).length === 3
+    && list(publicationContract.gateFieldIds).every((fieldId) => (
+      index.fieldById.get(fieldId)?.objectId === "PUB-OBJ-RESULT"
+    ))
+    && publicationContract?.failureBehavior === "KEEP_UNPUBLISHED"
+    && publicationContract?.bypassAllowed === false
+    && publicationContract?.originalFactAcceptanceIndependent === true
+    && publishAction?.targetObjectId === "PUB-OBJ-RESULT"
+    && sameStringSet(publishAction?.gateEvaluation?.gateFieldIds, publicationContract?.gateFieldIds)
+    && publishAction?.gateEvaluation?.requiredPassCode === "PASS"
+    && publishAction?.gateEvaluation?.anyOtherOutcome === "KEEP_UNPUBLISHED"
+    && publishAction?.gateEvaluation?.evaluatedAtomicallyWithPublication === true
+    && list(publicationContract?.gateFieldIds).every((fieldId) => (
+      list(publishAction?.outputFieldIds).includes(fieldId)
+    ))
+    && [
+      "PERMISSION_GATE_FAILED",
+      "SAFETY_GATE_FAILED",
+      "TEACHING_CORRECTNESS_GATE_FAILED",
+      "GATE_UNAVAILABLE",
+    ].every((code) => list(publishAction?.failureResults).includes(code));
+
+  const batch = publication?.batchCorrectionContract;
+  valid = valid
+    && sameStringSet(batch?.steps, [
+      "LOCATE_AFFECTED_RESULTS",
+      "FREEZE_CURRENT_DERIVED_USE",
+      "REVIEW_CAUSE_AND_SCOPE",
+      "RECALCULATE_DERIVED_RESULTS",
+      "NOTIFY_AFFECTED_USERS",
+    ])
+    && list(batch?.actionIds).length >= 4
+    && list(batch.actionIds).every((actionId) => index.actionById.has(actionId))
+    && batch?.preserveOriginalFacts === true
+    && batch?.preserveSupersededResultVersions === true
+    && batch?.notificationEventId === ASSESSMENT_NOTIFICATION_EVENT_ID
+    && sameStringSet(batch?.impactCauses, [
+      "QUESTION",
+      "ANSWER",
+      "ASSESSMENT_STANDARD",
+      "MODEL",
+      "RULE",
+    ]);
+  const impactFlow = index.flows.find(({ value }) => value?.id === "DF-009")?.value;
+  const notificationBoundary = impactFlow?.notificationBoundary;
+  const notificationEvent = index.eventById.get(notificationBoundary?.eventId)?.value;
+  const notificationProducer = index.actionById.get(notificationBoundary?.producerActionId)?.value;
+  valid = valid
+    && notificationBoundary?.eventId === ASSESSMENT_NOTIFICATION_EVENT_ID
+    && notificationBoundary?.producerActionId === "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION"
+    && notificationBoundary?.downstreamModuleId === "NOTI-001"
+    && notificationBoundary?.answerOpenPolicyPointId === "ANSWER-OPEN-NOTIFICATION-PAYLOAD"
+    && notificationBoundary?.sourceResultVersionRequired === true
+    && sameStringSet(notificationBoundary?.payloadFieldIds, [
+      "PUB-RESULT-F-ID",
+      "PUB-RESULT-F-RESULT-VERSION",
+      "PUB-RESULT-F-NOTIFICATION-STATUS",
+    ])
+    && list(impactFlow?.steps).some(({ actionId }) => actionId === notificationProducer?.id)
+    && sameStringSet(notificationEvent?.producerActionIds, [notificationProducer?.id])
+    && list(notificationProducer?.producedEventIds).includes(ASSESSMENT_NOTIFICATION_EVENT_ID)
+    && list(notificationBoundary?.payloadFieldIds).every((fieldId) => (
+      list(notificationProducer?.inputFieldIds).includes(fieldId)
+      || list(notificationProducer?.outputFieldIds).includes(fieldId)
+    ));
+
+  valid = valid
+    && sameStringSet(publication?.feedbackContract?.layers, AI_FEEDBACK_LAYERS)
+    && publication?.feedbackContract?.completeAnswerRequiresOpenPolicy === true
+    && sameStringSet(publication?.feedbackContract?.layerSelectionInputs, [
+      "ACTIVITY_PURPOSE",
+      "VALID_ATTEMPT",
+      "ANSWER_OPEN_POLICY",
+    ]);
+  const answerOpen = publication?.answerOpenContract;
+  valid = valid
+    && answerOpen?.policyId === "ANSWER-OPEN-POLICY-V2"
+    && sameStringSet(answerOpen?.independentTimes, [
+      "ANSWER_OPEN_AT",
+      "SOLUTION_OPEN_AT",
+      "RUBRIC_OPEN_AT",
+    ])
+    && sameStringSet(answerOpen?.surfaces, ANSWER_OPEN_SURFACES)
+    && answerOpen?.sharedPolicy === true
+    && answerOpen?.reauthorizeEveryAccess === true
+    && Object.values(answerOpen?.fieldBindings ?? {}).every((fieldId) => (
+      index.fieldById.get(fieldId)?.objectId === "PUB-OBJ-RESULT"
+    ));
+  const enforcementBindings = records(answerOpen?.enforcementBindings);
+  valid = valid
+    && enforcementBindings.length === ANSWER_OPEN_SURFACES.length
+    && sameStringSet(enforcementBindings.map(({ surface }) => surface), ANSWER_OPEN_SURFACES)
+    && enforcementBindings.every((binding) => {
+      const expected = ANSWER_OPEN_ENFORCEMENT_REFS.get(binding?.surface);
+      const common = binding?.policyId === answerOpen?.policyId
+        && sameStringSet(binding?.policyFieldIds, ANSWER_OPEN_POLICY_FIELD_IDS)
+        && sameStringSet(binding?.openTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
+        && binding?.reauthorizeAtAccess === true
+        && binding?.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT"
+        && binding?.enforcementKind === expected?.kind;
+      if (!common) return false;
+      if (expected.kind === "POLICY_POINT") {
+        return binding?.policyPointId === expected.id
+          && !Object.hasOwn(binding, "actionIds");
+      }
+      return sameStringSet(binding?.actionIds, expected.ids)
+        && list(binding?.actionIds).every((actionId) => index.actionById.has(actionId))
+        && !Object.hasOwn(binding, "policyPointId");
+    });
+  const pageAnswerEnforcement = index.actionById.get("PUB-ACT-VIEW-RESULT")?.value?.answerOpenEnforcement;
+  valid = valid
+    && pageAnswerEnforcement?.policyId === answerOpen?.policyId
+    && sameStringSet(pageAnswerEnforcement?.policyFieldIds, ANSWER_OPEN_POLICY_FIELD_IDS)
+    && sameStringSet(pageAnswerEnforcement?.openTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
+    && pageAnswerEnforcement?.reauthorizeAtAccess === true
+    && pageAnswerEnforcement?.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT";
+  valid = valid
+    && aix?.answerOpenEnforcement?.policyId === answerOpen?.policyId
+    && aix?.answerOpenEnforcement?.surface === "AI_CONVERSATION"
+    && aix?.answerOpenEnforcement?.reauthorizeEveryAccess === true
+    && list(aix?.answerOpenEnforcement?.policyFieldIds).every((fieldId) => (
+      index.fieldById.get(fieldId)?.objectId === "AIX-OBJ-TASK-PREVIEW"
+    ));
+
+  const validAttempt = correction?.validAttemptContract;
+  valid = valid
+    && index.fieldById.get(validAttempt?.fieldId)?.objectId === "CORR-OBJ-ATTEMPT"
+    && index.optionSetById.has(validAttempt?.optionSetId)
+    && sameStringSet(validAttempt?.valid, ["SUBSTANTIVE_RESPONSE", "EXPLICIT_DONT_KNOW"])
+    && sameStringSet(validAttempt?.invalid, ["BLANK", "UNRELATED", "PLACEHOLDER"])
+    && validAttempt?.explicitDontKnowMeansCompleted === false
+    && validAttempt?.explicitDontKnowUnlocksCompleteAnswer === false
+    && correction?.correctionReassessmentContract?.routinePath === "AI_REASSESSMENT"
+    && correction?.correctionReassessmentContract?.reassessmentFlowId === "DF-006"
+    && correction?.correctionReassessmentContract?.returnsExplicitNextStep === true
+    && correction?.correctionReassessmentContract?.routineTeacherAssessment === false
+    && correction?.answerExposedEvidenceContract?.independentEvidence === false
+    && correction?.answerExposedEvidenceContract?.evidenceKind === "REMEDIAL_AFTER_ANSWER_EXPOSURE"
+    && correction?.answerExposedEvidenceContract?.independentEvidenceRequiresNewActivity === true;
+
+  const separation = grading?.dataSeparationContract;
+  valid = valid
+    && sameStringSet(separation?.originalFactObjectIds, ["SUB-OBJ-ATTEMPT"])
+    && sameStringSet(separation?.derivedJudgmentObjectIds, [
+      "GRD-OBJ-DECISION",
+      "PUB-OBJ-RESULT",
+    ])
+    && separation?.overwriteOriginalFactAllowed === false
+    && separation?.sourceIdentityAndVersionRequired === true
+    && separation?.derivedValidityDisputeAndSupersessionRequired === true
+    && index.objectById.get("GRD-OBJ-DECISION")?.value?.dataNature === "AI_DERIVED_JUDGMENT"
+    && index.objectById.get("PUB-OBJ-RESULT")?.value?.dataNature === "AI_DERIVED_JUDGMENT";
+  const trace = grading?.aiTraceContract;
+  const traceFields = [
+    "BUSINESS_TASK_ID",
+    "EXTERNAL_REFERENCE",
+    "MODEL_VERSION",
+    "CAPABILITY_VERSION",
+    "RULE_VERSION",
+    "SAFETY_VERSION",
+    "EVIDENCE_REFERENCES",
+    "RESULT_REFERENCE",
+    "GATE_OUTCOMES",
+  ];
+  valid = valid
+    && sameStringSet(trace?.persistedFields, traceFields)
+    && hasExactKeys(trace?.fieldBindings, traceFields)
+    && traceFields.every((key) => (
+      index.fieldById.get(trace?.fieldBindings?.[key])?.objectId === "GRD-OBJ-DECISION"
+    ))
+    && sameStringSet(trace?.prohibitedPersistence, [
+      "HIDDEN_CHAIN_OF_THOUGHT",
+      "VENDOR_DEBUG_FIELDS",
+      "FULL_UPSTREAM_REQUEST_BODY",
+    ])
+    && trace?.duplicateStudentContentInTrace === false;
+  const prohibitedPersistedFieldExists = PHASE_TWO_AI_MODULE_IDS
+    .flatMap((id) => list(module(id)?.objects))
+    .flatMap(({ fields }) => list(fields))
+    .some((field) => PROHIBITED_AI_PERSISTENCE_FIELD.test(
+      `${field?.id ?? ""} ${field?.label ?? ""}`,
+    ));
+  valid = valid && !prohibitedPersistedFieldExists;
+
+  const teachingLabels = PHASE_TWO_AI_MODULE_IDS.flatMap((id) => {
+    const value = module(id);
+    return [
+      value?.title,
+      value?.objective,
+      ...list(value?.objects).map(({ label }) => label),
+      ...list(value?.actions).map(({ label }) => label),
+      ...list(value?.pages).map(({ label }) => label),
+    ];
+  }).filter(isValidId).join("\n");
+  valid = valid && !/(?:日常|例行|常规).{0,12}审批|审批.{0,12}(?:日常|例行|常规)/u.test(teachingLabels);
+
+  return valid
+    ? []
+    : ["INVALID_PHASE_TWO_AI_ASSESSMENT_CONTRACT GRD/PUB/CORR/AIX must implement the finalized D058-D078 phase-two assessment, feedback, answer-open, correction, and AI trace contract"];
+}
+
 export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
@@ -6519,5 +7030,6 @@ export function validateModelSemantics(model) {
     ...rawSubmissionFactErrors(index),
     ...teacherActionSeparationErrors(index),
     ...studentHomeErrors(index),
+    ...phaseTwoAiAssessmentErrors(index),
   ];
 }

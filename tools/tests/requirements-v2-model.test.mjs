@@ -827,6 +827,9 @@ function addCompletePrivilegedRead(model, {
     actionIds: [actionId],
     regions: ["CONTEXT_HEADER", "TASK_WORK_AREA", "RESULT_AND_FAILURE_STATUS"],
     viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN"],
+    ...(module.releaseStatus === RELEASE_STATUS.PLANNED
+      ? { availability: RELEASE_STATUS.PLANNED }
+      : {}),
   });
   module.scenarios.push(
     {
@@ -883,11 +886,11 @@ function addCompleteGradingProfessionalWrite(
   const failureResults = ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT"];
   module.actions.push({
     id: actionId,
-    label: "Record a subject-teacher professional grading decision",
+    label: "Record a bounded professional assessment exception",
     targetObjectId: "GRD-OBJ-DECISION",
     inputFieldIds: ["GRD-DECISION-F-ID"],
     outputFieldIds: ["GRD-DECISION-F-ROUTE"],
-    transition: { from: "ROUTED_MANUAL", to: "ROUTED_MANUAL" },
+    transition: { from: "EXCEPTION_REVIEW_REQUIRED", to: "EXCEPTION_REVIEW_REQUIRED" },
     operationKind: "UPDATE",
     writes: true,
     risk: RISK.LOW,
@@ -925,6 +928,7 @@ function addCompleteGradingProfessionalWrite(
     actionIds: [actionId],
     regions: ["CONTEXT_HEADER", "TASK_WORK_AREA", "RESULT_AND_FAILURE_STATUS"],
     viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN"],
+    availability: RELEASE_STATUS.PLANNED,
   });
   module.scenarios.push({
     id: successScenarioId,
@@ -934,8 +938,8 @@ function addCompleteGradingProfessionalWrite(
     given: "the subject teacher has an assigned grading decision",
     when: "the subject teacher records the professional decision",
     then: {
-      expectedData: "the professional grading route is retained",
-      expectedState: { mode: "STATE", value: "ROUTED_MANUAL" },
+      expectedData: "the bounded professional exception route is retained",
+      expectedState: { mode: "STATE", value: "EXCEPTION_REVIEW_REQUIRED" },
       expectedPermission: "ALLOW",
       expectedVisibility: "assigned subject-course scope only",
     },
@@ -2584,18 +2588,18 @@ test("requires a mandatory closed route on every execution path", () => {
 test("binds every DF-007 path to one explicit action choice", () => {
   const flow = flows.find(({ id }) => id === "DF-007");
   assert.deepEqual(flow.executionPaths.map(({ id, route }) => ({ id, route })), [
-    { id: "ACCEPT_SUGGESTION", route: { kind: "ACTION_CHOICE", consumerStepOrder: 2 } },
+    { id: "USE_EXISTING_AI_RESULT", route: { kind: "ACTION_CHOICE", consumerStepOrder: 2 } },
     {
-      id: "CORRECT_RECOGNITION_AND_ACCEPT",
+      id: "CORRECT_RECOGNITION_AND_USE_AI_RESULT",
       route: { kind: "ACTION_CHOICE", consumerStepOrder: 2 },
     },
-    { id: "OVERRIDE_SCORE", route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 } },
+    { id: "EVIDENCE_BACKED_EXCEPTION_CORRECTION", route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 } },
     {
-      id: "CORRECT_RECOGNITION_AND_OVERRIDE",
+      id: "CORRECT_RECOGNITION_AND_EXCEPTION_CORRECTION",
       route: { kind: "ACTION_CHOICE", consumerStepOrder: 3 },
     },
-    { id: "MANUAL_GRADE", route: { kind: "ACTION_CHOICE", consumerStepOrder: 4 } },
-    { id: "BATCH_CONFIRM", route: { kind: "ACTION_CHOICE", consumerStepOrder: 5 } },
+    { id: "PROFESSIONAL_EXCEPTION_RESOLUTION", route: { kind: "ACTION_CHOICE", consumerStepOrder: 4 } },
+    { id: "BOUNDED_BATCH_EXCEPTION_RESOLUTION", route: { kind: "ACTION_CHOICE", consumerStepOrder: 5 } },
     {
       id: "RESOLVE_VERSION_CONFLICT",
       route: { kind: "ACTION_CHOICE", consumerStepOrder: 6 },
@@ -2777,7 +2781,6 @@ test("declares one closed routing policy for every Flow", () => {
     ["DF-012", "NONE"],
     ["DF-014", "NONE"],
     ["DF-015", "NONE"],
-    ["DF-011", "ACTION_CHOICE_REQUIRED"],
     ["DF-013", "ACTION_CHOICE_REQUIRED"],
   ]));
 });
@@ -2869,16 +2872,16 @@ test("requires each Flow path terminal state to satisfy its conditional fields",
   );
 });
 
-test("requires every Flow step concrete state to satisfy its required fields", () => {
+test("requires every executable action concrete state to satisfy its required fields", () => {
   const mutations = [
-    ["intermediate UPDATE", (model) => {
+    ["intermediate UPDATE", "INVALID_FLOW_TERMINAL_STATE", (model) => {
       const action = moduleById(model, "CORR-001").actions
         .find(({ id }) => id === "CORR-ACT-CONFIRM-JUDGMENT");
       action.outputFieldIds = action.outputFieldIds.filter((fieldId) => (
         fieldId !== "CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF"
       ));
     }],
-    ["intermediate CREATE", (model) => {
+    ["deferred CREATE", "INVALID_ACTION_REQUIRED_FIELD", (model) => {
       const evidence = moduleById(model, "INS-001");
       evidence.objects.find(({ id }) => id === "INS-OBJ-EVIDENCE").fields
         .find(({ id }) => id === "INS-EVIDENCE-F-SOURCE-CORRECTION-REF").required = {
@@ -2893,10 +2896,10 @@ test("requires every Flow step concrete state to satisfy its required fields", (
   ];
 
   const missedMutations = [];
-  for (const [name, mutate] of mutations) {
+  for (const [name, expectedCode, mutate] of mutations) {
     const model = structuredClone(requirementModel);
     mutate(model);
-    if (!errorCodes(validateRequirementModel(model)).includes("INVALID_FLOW_TERMINAL_STATE")) {
+    if (!errorCodes(validateRequirementModel(model)).includes(expectedCode)) {
       missedMutations.push(name);
     }
   }
@@ -2904,25 +2907,26 @@ test("requires every Flow step concrete state to satisfy its required fields", (
 });
 
 test("does not let CREATE borrow target required fields from Flow sources", () => {
-  const model = structuredClone(requirementModel);
-  const evidence = moduleById(model, "INS-001");
-  evidence.objects.find(({ id }) => id === "INS-OBJ-EVIDENCE").fields
-    .find(({ id }) => id === "INS-EVIDENCE-F-SOURCE-CORRECTION-REF").required = {
-      description: "required for a correction evidence candidate",
-      whenStates: ["CANDIDATE"],
-    };
-  const createCandidate = evidence.actions
-    .find(({ id }) => id === "INS-ACT-CREATE-CANDIDATE");
-  createCandidate.outputFieldIds = createCandidate.outputFieldIds.filter((fieldId) => (
-    fieldId !== "INS-EVIDENCE-F-SOURCE-CORRECTION-REF"
-  ));
-  model.flows.find(({ id }) => id === "DF-010").sourceDataRefs.push({
-    objectId: "INS-OBJ-EVIDENCE",
-    fieldId: "INS-EVIDENCE-F-SOURCE-CORRECTION-REF",
-    version: "INS-EVIDENCE-F-EVIDENCE-VERSION",
+  const model = validFixture();
+  const submission = moduleById(model, "SUB-001");
+  submission.objects[0].fields.find(({ id }) => id === "SUB-F001").required = {
+    description: "required when the created submission reaches SUBMITTED",
+    whenStates: ["SUBMITTED"],
+  };
+  submission.objects[0].stateReachability.initialStateIds = [];
+  submission.actions[0].operationKind = "CREATE";
+  delete submission.actions[0].transition;
+  submission.actions[0].inputFieldIds = [];
+  submission.actions[0].outputFieldIds = ["SUB-F000", "SUB-F002"];
+  model.flows[0].steps[0].providedInputs = [];
+  model.flows[0].sourceDataRefs.push({
+    objectId: "SUB-OBJ-ATTEMPT",
+    fieldId: "SUB-F001",
+    version: "SUB-F002",
     cardinality: "ONE",
   });
   assertHasCode(validateRequirementModel(model), "INVALID_FLOW_TERMINAL_STATE");
+  assertHasCode(validateRequirementModel(model), "INVALID_ACTION_REQUIRED_FIELD");
 });
 
 test("allows CREATE to populate a target required field from its explicit input", () => {
@@ -2942,7 +2946,7 @@ test("allows CREATE to populate a target required field from its explicit input"
   assert.deepEqual(validateRequirementModel(model), []);
 });
 
-test("requires plan evaluation fields when entering PENDING_RECONFIRM", () => {
+test("requires deferred plan actions to remain internally state-complete", () => {
   const model = structuredClone(requirementModel);
   const plan = moduleById(model, "PLN-001");
   const planObject = plan.objects.find(({ id }) => id === "PLN-OBJ-PLAN");
@@ -2962,7 +2966,7 @@ test("requires plan evaluation fields when entering PENDING_RECONFIRM", () => {
     "PLN-PLAN-F-INVALIDATION-VERSION",
     "PLN-PLAN-F-PLAN-VERSION",
   ];
-  assertHasCode(validateRequirementModel(model), "INVALID_FLOW_TERMINAL_STATE");
+  assertHasCode(validateRequirementModel(model), "INVALID_ACTION_REQUIRED_FIELD");
 });
 
 test("inherits required fields only when every UPDATE from state requires them", () => {
@@ -3044,18 +3048,18 @@ test("keeps terminal completeness path-local and closes DF-007 batch confirmatio
   }
 });
 
-test("declares path-specific teacher inputs for every DF-007 grading branch", () => {
-  const confirmation = flows.find(({ id }) => id === "DF-007");
-  assert.ok(Array.isArray(confirmation.executionPaths));
+test("declares path-specific specialist inputs for every DF-007 professional exception branch", () => {
+  const exceptionResolution = flows.find(({ id }) => id === "DF-007");
+  assert.ok(Array.isArray(exceptionResolution.executionPaths));
   assert.deepEqual(
-    confirmation.executionPaths.map(({ id, stepOrders }) => ({ id, stepOrders })),
+    exceptionResolution.executionPaths.map(({ id, stepOrders }) => ({ id, stepOrders })),
     [
-      { id: "ACCEPT_SUGGESTION", stepOrders: [2] },
-      { id: "CORRECT_RECOGNITION_AND_ACCEPT", stepOrders: [1, 2] },
-      { id: "OVERRIDE_SCORE", stepOrders: [3] },
-      { id: "CORRECT_RECOGNITION_AND_OVERRIDE", stepOrders: [1, 3] },
-      { id: "MANUAL_GRADE", stepOrders: [4] },
-      { id: "BATCH_CONFIRM", stepOrders: [5] },
+      { id: "USE_EXISTING_AI_RESULT", stepOrders: [2] },
+      { id: "CORRECT_RECOGNITION_AND_USE_AI_RESULT", stepOrders: [1, 2] },
+      { id: "EVIDENCE_BACKED_EXCEPTION_CORRECTION", stepOrders: [3] },
+      { id: "CORRECT_RECOGNITION_AND_EXCEPTION_CORRECTION", stepOrders: [1, 3] },
+      { id: "PROFESSIONAL_EXCEPTION_RESOLUTION", stepOrders: [4] },
+      { id: "BOUNDED_BATCH_EXCEPTION_RESOLUTION", stepOrders: [5] },
       { id: "RESOLVE_VERSION_CONFLICT", stepOrders: [6] },
     ],
   );
@@ -3065,11 +3069,11 @@ test("declares path-specific teacher inputs for every DF-007 grading branch", ()
     "GRD-DECISION-F-TEACHER-FEEDBACK",
   ]);
   for (const pathId of [
-    "OVERRIDE_SCORE",
-    "CORRECT_RECOGNITION_AND_OVERRIDE",
-    "MANUAL_GRADE",
+    "EVIDENCE_BACKED_EXCEPTION_CORRECTION",
+    "CORRECT_RECOGNITION_AND_EXCEPTION_CORRECTION",
+    "PROFESSIONAL_EXCEPTION_RESOLUTION",
   ]) {
-    const path = confirmation.executionPaths.find(({ id }) => id === pathId);
+    const path = exceptionResolution.executionPaths.find(({ id }) => id === pathId);
     assert.deepEqual(
       new Set(path.providedInputs.map(({ fieldId }) => fieldId)),
       expectedFinalFields,
@@ -3082,14 +3086,14 @@ test("declares path-specific teacher inputs for every DF-007 grading branch", ()
 
   const missingFinalInput = structuredClone(requirementModel);
   missingFinalInput.flows.find(({ id }) => id === "DF-007").executionPaths
-    .find(({ id }) => id === "MANUAL_GRADE").providedInputs.pop();
+    .find(({ id }) => id === "PROFESSIONAL_EXCEPTION_RESOLUTION").providedInputs.pop();
   assertHasCode(
     validateRequirementModel(missingFinalInput),
     "INVALID_FLOW_INPUT_RESOLUTION",
   );
 });
 
-test("routes DF-010 final judgments to evidence and retry judgments to termination", () => {
+test("routes DF-010 exception judgments to versioned invalidation without executing phase-three actions", () => {
   const flow = flows.find(({ id }) => id === "DF-010");
   assert.ok(Array.isArray(flow.executionPaths));
   const actionByOrder = new Map(flow.steps.map(({ order, actionId }) => [order, actionId]));
@@ -3127,11 +3131,6 @@ test("routes DF-010 final judgments to evidence and retry judgments to terminati
     "CORR-ACT-CONFIRM-JUDGMENT",
     "CORR-ACT-COMPLETE-TASK",
     "CORR-ACT-RECORD-INVALIDATION",
-    "INS-ACT-MARK-STALE",
-    "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
-    "INS-ACT-CREATE-CANDIDATE",
-    "INS-ACT-CONFIRM-MASTERY",
-    "INS-ACT-PUBLISH-INTERPRETATION",
   ];
   assert.deepEqual(
     passedPath.stepOrders.map((order) => actionByOrder.get(order)),
@@ -3167,6 +3166,14 @@ test("routes DF-010 final judgments to evidence and retry judgments to terminati
   assert.equal(needsMorePath.stepOrders.at(-2), retryOrder);
   assert.equal(notPassedPath.stepOrders.at(-1), awaitingRetryOrder);
   assert.equal(needsMorePath.stepOrders.at(-1), awaitingRetryOrder);
+  assert.equal(flow.steps.some(({ actionId }) => (
+    actionId.startsWith("INS-") || actionId.startsWith("PLN-")
+  )), false);
+  assert.deepEqual(flow.downstreamInvalidation.targets, [
+    "CURRENT_RESULT",
+    "FUTURE_COGNITION",
+    "FUTURE_PLAN",
+  ]);
 });
 
 test("requires closed actor-aware step input providers and rejects legacy bindings", () => {
@@ -3234,12 +3241,16 @@ test("keeps candidate generation separate from teacher-provided final learning f
       .providedInputs.map(({ fieldId, provider }) => [fieldId, provider]),
   );
 
-  const evidenceProviders = providerFields("DF-010", 11);
-  assert.deepEqual(evidenceProviders, new Map([
-    ["INS-EVIDENCE-F-MASTERY-INTERPRETATION", { dutyRef: "DUTY-SUBJECT-TEACHER" }],
-    ["INS-EVIDENCE-F-TEACHER-CONFIRMATION", { dutyRef: "DUTY-SUBJECT-TEACHER" }],
-  ]));
   const evidenceCandidate = moduleActions.get("INS-ACT-CREATE-CANDIDATE");
+  assert.equal(flowById.get("DF-010").steps.some(({ actionId }) => (
+    actionId === evidenceCandidate.id
+  )), false);
+  assert.deepEqual(evidenceCandidate.deferredFlowRegistration, {
+    flowId: "DF-011",
+    targetPhase: PHASE.THIRD,
+    releaseStatus: RELEASE_STATUS.PLANNED,
+    executionAllowedBeforeRegistration: false,
+  });
   assert.ok(evidenceCandidate.outputFieldIds.includes("INS-EVIDENCE-F-MASTERY-CANDIDATE"));
   assert.equal(
     evidenceCandidate.outputFieldIds.includes("INS-EVIDENCE-F-MASTERY-INTERPRETATION"),
@@ -3719,11 +3730,11 @@ test("authors reachability and Flow profiles in source facts without assembly de
   assert.equal(flows[0], foundationFactExports.foundationFlows[0]);
 });
 
-test("declares the direct read mode for every phase-one object", () => {
-  const phaseOneObjects = modules
-    .filter(({ phase }) => phase === PHASE.FIRST)
+test("declares the direct read mode for every executable object", () => {
+  const executableObjects = modules
+    .filter(({ contractKind }) => contractKind !== "TASK8_REPORT_FUTURE_METADATA")
     .flatMap(({ objects }) => objects);
-  const readModeCounts = Object.groupBy(phaseOneObjects, ({ readMode }) => readMode);
+  const readModeCounts = Object.groupBy(executableObjects, ({ readMode }) => readMode);
   assert.deepEqual(
     Object.fromEntries(Object.entries(readModeCounts).map(([mode, objects]) => (
       [mode, objects.length]
@@ -3735,19 +3746,19 @@ test("declares the direct read mode for every phase-one object", () => {
     },
   );
   assert.equal(
-    phaseOneObjects.find(({ id }) => id === "PUB-OBJ-RESULT")?.readMode,
+    executableObjects.find(({ id }) => id === "PUB-OBJ-RESULT")?.readMode,
     "STUDENT_TIMED_RELEASE",
   );
   assert.equal(
-    phaseOneObjects.find(({ id }) => id === "INS-OBJ-EVIDENCE")?.readMode,
+    executableObjects.find(({ id }) => id === "INS-OBJ-EVIDENCE")?.readMode,
     "STUDENT_TIMED_RELEASE",
   );
   assert.equal(
-    phaseOneObjects.find(({ id }) => id === "APP-OBJ-TODO")?.readMode,
+    executableObjects.find(({ id }) => id === "APP-OBJ-TODO")?.readMode,
     "STUDENT_TIMED_RELEASE",
   );
 
-  for (const object of phaseOneObjects) {
+  for (const object of executableObjects) {
     const model = structuredClone(requirementModel);
     const mutableObject = model.modules.flatMap(({ objects }) => objects)
       .find(({ id }) => id === object.id);
@@ -3756,13 +3767,13 @@ test("declares the direct read mode for every phase-one object", () => {
   }
 });
 
-test("declares one standard system identity for all 113 phase-one objects", () => {
-  const phaseOneObjects = modules
-    .filter(({ phase }) => phase === PHASE.FIRST)
+test("declares one standard system identity for every executable object", () => {
+  const executableObjects = modules
+    .filter(({ contractKind }) => contractKind !== "TASK8_REPORT_FUTURE_METADATA")
     .flatMap(({ objects }) => objects);
-  assert.equal(phaseOneObjects.length, 113);
+  assert.equal(executableObjects.length, 113);
 
-  const violations = phaseOneObjects.flatMap((object) => {
+  const violations = executableObjects.flatMap((object) => {
     const identities = object.fields
       .filter(({ idempotencyRole }) => idempotencyRole === "OBJECT_ID");
     if (identities.length !== 1) return [`${object.id}:identity-count=${identities.length}`];
@@ -3825,7 +3836,6 @@ test("defines all phase-one modules the REPORT metadata module and phase-one Flo
       "DF-012",
       "DF-014",
       "DF-015",
-      "DF-011",
       "DF-013",
     ],
   );
@@ -3836,8 +3846,14 @@ test("defines all phase-one modules the REPORT metadata module and phase-one Flo
   );
   assert.deepEqual(
     modules.filter(({ phase }) => phase === PHASE.SECOND)
-      .map(({ id, priority }) => ({ id, priority })),
-    [{ id: "REPORT-001", priority: "P1" }],
+      .map(({ id, priority, releaseStatus }) => ({ id, priority, releaseStatus })),
+    [
+      { id: "GRD-001", priority: "P0", releaseStatus: RELEASE_STATUS.PLANNED },
+      { id: "PUB-001", priority: "P0", releaseStatus: RELEASE_STATUS.PLANNED },
+      { id: "CORR-001", priority: "P0", releaseStatus: RELEASE_STATUS.PLANNED },
+      { id: "AIX-001", priority: "P0", releaseStatus: RELEASE_STATUS.PLANNED },
+      { id: "REPORT-001", priority: "P1", releaseStatus: RELEASE_STATUS.PLANNED },
+    ],
   );
 });
 
@@ -4897,33 +4913,19 @@ test("appends each learning-path timeline entry from exactly one of five source 
   }
 });
 
-test("routes DF-011 through five closed exactly-one source-binding paths", () => {
-  const flow = flows.find(({ id }) => id === "DF-011");
-  assert.equal(flow.routingPolicy, "ACTION_CHOICE_REQUIRED");
-  assert.deepEqual(flow.executionPaths.map(({ id, sourceBindings }) => ({
-    id,
-    sourceObjectIds: sourceBindings.map(({ sourceObjectId }) => sourceObjectId),
-  })), [
-    { id: "PUBLISHED_RESULT", sourceObjectIds: ["PUB-OBJ-RESULT"] },
-    { id: "EVIDENCE", sourceObjectIds: ["INS-OBJ-EVIDENCE"] },
-    { id: "CORRECTION", sourceObjectIds: ["CORR-OBJ-ATTEMPT"] },
-    { id: "PLAN_EXECUTION", sourceObjectIds: ["APP-OBJ-TODO"] },
-    { id: "TEACHER_CONFIRMATION", sourceObjectIds: ["GRD-OBJ-DECISION"] },
-  ]);
-  assert.ok(flow.executionPaths.every(({ sourceBindings }) => sourceBindings.length === 1));
-
-  const model = structuredClone(requirementModel);
-  model.flows.find(({ id }) => id === "DF-011").executionPaths
-    .find(({ id }) => id === "EVIDENCE").sourceBindings.push({
-      sourceObjectId: "PUB-OBJ-RESULT",
-      sourceIdentityFieldId: "PUB-RESULT-F-ID",
-      sourceVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
-      consumerStepOrder: 2,
-      targetRefFieldId: "LPATH-ENTRY-F-PUBLISHED-RESULT-REF",
-      targetVersionFieldId: "LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION",
-      cardinality: "ONE",
-    });
-  assertHasCode(validateRequirementModel(model), "INVALID_LEARNING_PATH_SOURCE_PATH");
+test("keeps DF-011 unregistered until its phase-three contract is rebuilt", () => {
+  assert.equal(flows.some(({ id }) => id === "DF-011"), false);
+  const deferredActions = modules.flatMap(({ actions }) => actions)
+    .filter(({ deferredFlowRegistration }) => deferredFlowRegistration?.flowId === "DF-011");
+  assert.ok(deferredActions.length > 0);
+  assert.equal(deferredActions.every(({ trigger, deferredFlowRegistration }) => (
+    trigger.kind === "FLOW"
+    && trigger.flowIds.length === 1
+    && trigger.flowIds[0] === "DF-011"
+    && deferredFlowRegistration.targetPhase === PHASE.THIRD
+    && deferredFlowRegistration.releaseStatus === RELEASE_STATUS.PLANNED
+    && deferredFlowRegistration.executionAllowedBeforeRegistration === false
+  )), true);
 });
 
 test("versions every teacher-confirmed learning path interpretation", () => {
@@ -5563,7 +5565,7 @@ test("requires the exact unique in-product notification channel tuple", () => {
   }
 });
 
-test("adds DF-015 to the teaching loop while preserving AI reporting Flow boundaries", () => {
+test("registers DF-015 and DF-013 while deferring DF-011", () => {
   assert.deepEqual(
     teachingLoopFactExports.teachingLoopFlows.map(({ id }) => id),
     [
@@ -5599,7 +5601,6 @@ test("adds DF-015 to the teaching loop while preserving AI reporting Flow bounda
       "DF-012",
       "DF-014",
       "DF-015",
-      "DF-011",
       "DF-013",
     ],
   );
@@ -5622,13 +5623,11 @@ test("requires one closed contract profile for every Flow", () => {
       ["DF-012", "GENERIC"],
       ["DF-014", "GENERIC"],
       ["DF-015", "GENERIC"],
-      ["DF-011", "LEARNING_PATH_AGGREGATION"],
       ["DF-013", "REPORT_MATERIALIZATION"],
     ],
   );
 
   for (const mutate of [
-    (model) => { delete model.flows.find(({ id }) => id === "DF-011").contractProfile; },
     (model) => {
       model.flows.find(({ id }) => id === "DF-013").contractProfile = "GENERIC";
     },
@@ -5641,24 +5640,7 @@ test("requires one closed contract profile for every Flow", () => {
 });
 
 test("validates specialized Flow profiles from closed semantic roles", () => {
-  const learningPathFlow = flows.find(({ id }) => id === "DF-011");
   const reportFlow = flows.find(({ id }) => id === "DF-013");
-  assert.deepEqual(learningPathFlow.participantRoles?.map(({ role }) => role), [
-    "PUBLISHED_RESULT_SOURCE",
-    "EVIDENCE_SOURCE",
-    "CORRECTION_SOURCE",
-    "PLAN_EXECUTION_SOURCE",
-    "TEACHER_CONFIRMATION_SOURCE",
-    "LEARNING_PATH_DERIVATION",
-  ]);
-  assert.deepEqual(learningPathFlow.steps.map(({ semanticRole }) => semanticRole), [
-    "APPEND_PUBLISHED_RESULT",
-    "APPEND_EVIDENCE",
-    "APPEND_CORRECTION",
-    "APPEND_PLAN_EXECUTION",
-    "APPEND_TEACHER_CONFIRMATION",
-    "CREATE_INTERPRETATION_CANDIDATE",
-  ]);
   assert.deepEqual(reportFlow.participantRoles?.map(({ role }) => role), [
     "STUDENT_EXECUTION_SOURCE",
     "PLAN_COORDINATION_SOURCE",
@@ -5678,10 +5660,6 @@ test("validates specialized Flow profiles from closed semantic roles", () => {
   ]);
 
   const mutations = [
-    (model) => {
-      const steps = model.flows.find(({ id }) => id === "DF-011").steps;
-      [steps[0].actionId, steps[1].actionId] = [steps[1].actionId, steps[0].actionId];
-    },
     (model) => {
       const retryable = model.flows.find(({ id }) => id === "DF-013")
         .retryPolicy.retryableFailureResults;
@@ -5708,10 +5686,6 @@ test("validates specialized Flow profiles from closed semantic roles", () => {
       ];
     },
     (model) => {
-      model.flows.find(({ id }) => id === "DF-011").executionPaths[0]
-        .sourceBindings[0].targetRefFieldId = "LPATH-ENTRY-F-EVIDENCE-REF";
-    },
-    (model) => {
       model.flows.find(({ id }) => id === "DF-013").executionPaths[0]
         .idempotencyKeyParts.versionFieldIds.pop();
     },
@@ -5719,19 +5693,8 @@ test("validates specialized Flow profiles from closed semantic roles", () => {
       model.flows.find(({ id }) => id === "DF-013").compensation.strategy = "ROLLBACK_SOURCE";
     },
     (model) => {
-      model.flows.find(({ id }) => id === "DF-011").failureGranularity = "FLOW";
-    },
-    (model) => {
-      model.flows.find(({ id }) => id === "DF-011").sourceDataRefs[0].semanticRole
-        = "SOURCE_PAYLOAD";
-    },
-    (model) => {
       model.flows.find(({ id }) => id === "DF-013").targetDataRefs[0].semanticRole
         = "TARGET_PAYLOAD";
-    },
-    (model) => {
-      model.flows.find(({ id }) => id === "DF-011").participantRoles[0].role
-        = "EVIDENCE_SOURCE";
     },
   ];
   for (const mutate of mutations) {
@@ -5741,50 +5704,20 @@ test("validates specialized Flow profiles from closed semantic roles", () => {
   }
 });
 
-test("defines DF-011 as five-source learning-path versioned aggregation", () => {
-  const flow = flows.find(({ id }) => id === "DF-011");
-  assert.ok(flow, "DF-011 must exist");
-  assert.equal(flow.routingPolicy, "ACTION_CHOICE_REQUIRED");
-  assert.deepEqual(flow.moduleIds, [
-    "PUB-001",
-    "INS-001",
-    "CORR-001",
-    "APP-001",
-    "GRD-001",
-    "LPATH-001",
-  ]);
-  assert.deepEqual(flow.sourceOnlyModuleIds, [
-    "PUB-001",
-    "INS-001",
-    "CORR-001",
-    "APP-001",
-    "GRD-001",
-  ]);
-  assert.deepEqual(flow.steps.map(({ actionId, providedInputs }) => ({
-    actionId,
-    providedInputs,
-  })), [
-    { actionId: "LPATH-ACT-APPEND-PUBLISHED-RESULT-TIMELINE", providedInputs: [] },
-    { actionId: "LPATH-ACT-APPEND-EVIDENCE-TIMELINE", providedInputs: [] },
-    { actionId: "LPATH-ACT-APPEND-CORRECTION-TIMELINE", providedInputs: [] },
-    { actionId: "LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE", providedInputs: [] },
-    { actionId: "LPATH-ACT-APPEND-TEACHER-CONFIRMATION-TIMELINE", providedInputs: [] },
-    { actionId: "LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE", providedInputs: [] },
-  ]);
+test("declares a closed non-executable DF-011 registration on every future consumer", () => {
+  const deferred = modules.flatMap(({ actions }) => actions)
+    .filter(({ deferredFlowRegistration }) => deferredFlowRegistration?.flowId === "DF-011");
   assert.deepEqual(
-    [...new Set(flow.sourceDataRefs.map(({ objectId }) => objectId))],
-    [
-      "PUB-OBJ-RESULT",
-      "INS-OBJ-EVIDENCE",
-      "CORR-OBJ-ATTEMPT",
-      "APP-OBJ-TODO",
-      "GRD-OBJ-DECISION",
-    ],
+    [...new Set(deferred.map(({ deferredFlowRegistration }) => (
+      `${deferredFlowRegistration.targetPhase}:${deferredFlowRegistration.releaseStatus}:${deferredFlowRegistration.executionAllowedBeforeRegistration}`
+    )))],
+    [`${PHASE.THIRD}:${RELEASE_STATUS.PLANNED}:false`],
   );
-  assert.deepEqual(
-    [...new Set(flow.targetDataRefs.map(({ objectId }) => objectId))],
-    ["LPATH-OBJ-TIMELINE-ENTRY", "LPATH-OBJ-INTERPRETATION"],
-  );
+  const model = structuredClone(requirementModel);
+  model.modules.flatMap(({ actions }) => actions)
+    .find(({ deferredFlowRegistration }) => deferredFlowRegistration?.flowId === "DF-011")
+    .deferredFlowRegistration.executionAllowedBeforeRegistration = true;
+  assertHasCode(validateRequirementModel(model), "INVALID_ACTION_TRIGGER");
 });
 
 test("defines DF-013 as student execution report materialization with in-product delivery", () => {
@@ -6109,13 +6042,13 @@ test("publishes an authoritative all-subject grading capability matrix", () => {
   ));
   assert.ok(subjectiveRows.length > 0);
   assert.equal(subjectiveRows.every((row) => (
-    row.teacherReviewRequired === "YES"
+    row.teacherReviewRequired === "NO"
     && row.batchConfirmEligibility === "INELIGIBLE"
     && row.scoringLevel !== "AUTO-SCORE"
   )), true);
   assert.equal(grading.capabilityMatrix.every(({ unavailableFallback }) => (
-    unavailableFallback === "MANUAL-GRADING"
-    || unavailableFallback === "MANUAL-TRANSCRIPTION-THEN-GRADING"
+    unavailableFallback === "PROFESSIONAL-EXCEPTION-REVIEW"
+    || unavailableFallback === "CONCRETE-SUPPLEMENT-THEN-ALTERNATE-REVIEW"
   )), true);
 });
 
@@ -6158,11 +6091,11 @@ test("covers every declared grading combination with exactly one explicit decisi
   assert.deepEqual(unsupportedRule.exceptCombinationIds.toSorted(), supportedIds.toSorted());
   assert.deepEqual(unsupportedRule.decision, {
     recognitionLevel: "NONE",
-    scoringLevel: "MANUAL-ONLY",
-    requiredEvidence: ["TEACHER-JUDGMENT"],
+    scoringLevel: "EXCEPTION-ONLY",
+    requiredEvidence: ["PROFESSIONAL-EXCEPTION-EVIDENCE"],
     teacherReviewRequired: "YES",
     batchConfirmEligibility: "INELIGIBLE",
-    unavailableFallback: "MANUAL-GRADING",
+    unavailableFallback: "PROFESSIONAL-EXCEPTION-REVIEW",
   });
 
   const dimensions = applicability.dimensions;
@@ -6187,7 +6120,11 @@ test("covers every declared grading combination with exactly one explicit decisi
         const decisions = [...exactMatches, ...fallbackMatches];
         assert.equal(decisions.length, 1, id);
         if (subjectiveQuestionTypes.has(questionType)) {
-          assert.equal(decisions[0].teacherReviewRequired, "YES", id);
+          assert.equal(
+            decisions[0].teacherReviewRequired,
+            exactMatches.length === 1 ? "NO" : "YES",
+            id,
+          );
         }
         coveredCombinationCount += 1;
       }
@@ -6252,9 +6189,9 @@ test("rejects grading capability overlap, gaps, implicit fallback, and review by
     ["missing fallback decision", (grading) => {
       delete grading.capabilityApplicability.unsupportedRule.decision.unavailableFallback;
     }],
-    ["subjective review bypass", (grading) => {
+    ["routine subjective teacher insertion", (grading) => {
       grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
-        .teacherReviewRequired = "NO";
+        .teacherReviewRequired = "YES";
     }],
     ["subjective batch bypass", (grading) => {
       grading.capabilityMatrix.find(({ questionType }) => questionType === "ESSAY")
@@ -6366,7 +6303,7 @@ test("returns stable validation errors for malformed grading Option Set values",
   }
 });
 
-test("keeps formal grading under corresponding subject-teacher confirmation", () => {
+test("keeps routine AI assessment separate from bounded professional exceptions", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   assert.deepEqual(grading.actions.map(({ id }) => id), [
     "GRD-ACT-SYNC-CAPABILITY-RULE",
@@ -6383,6 +6320,8 @@ test("keeps formal grading under corresponding subject-teacher confirmation", ()
     "GRD-ACT-OPEN-CONFIRMED-REVISION",
     "GRD-ACT-CONFIRM-REVISION",
     "GRD-ACT-RESOLVE-VERSION-CONFLICT",
+    "GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD",
+    "GRD-ACT-READ-FROZEN-ASSESSMENT-STANDARD",
   ]);
   const decisionFieldIds = new Set(
     grading.objects.find(({ id }) => id === "GRD-OBJ-DECISION")
@@ -6403,28 +6342,30 @@ test("keeps formal grading under corresponding subject-teacher confirmation", ()
     "GRD-DECISION-F-CORRECTION-REASON",
     "GRD-DECISION-F-DECISION-VERSION",
   ].every((fieldId) => decisionFieldIds.has(fieldId)), true);
-  const formalActionIds = new Set([
+  const exceptionActionIds = new Set([
     "GRD-ACT-ACCEPT-SUGGESTION",
     "GRD-ACT-OVERRIDE-SCORE",
     "GRD-ACT-MANUAL-GRADE",
     "GRD-ACT-BATCH-CONFIRM",
     "GRD-ACT-OPEN-CONFIRMED-REVISION",
     "GRD-ACT-CONFIRM-REVISION",
-    "GRD-ACT-RESOLVE-VERSION-CONFLICT",
   ]);
-  for (const action of grading.actions.filter(({ id }) => formalActionIds.has(id))) {
-    assert.ok(action.permissions.some(({ effect, dutyRef, condition }) => (
+  for (const action of grading.actions.filter(({ id }) => exceptionActionIds.has(id))) {
+    assert.equal(action.assessmentRole, "PROFESSIONAL_EXCEPTION_ONLY", action.id);
+    assert.equal(action.routineAssessmentAllowed, false, action.id);
+    assert.ok(action.permissions.some(({ effect, dutyRef, scope }) => (
       effect === "ALLOW"
       && dutyRef === "DUTY-SUBJECT-TEACHER"
-      && /corresponding|对应/.test(condition)
+      && scope?.kind === "ASSIGNED_SUBJECT_COURSE"
     )), action.id);
-    assert.ok(action.permissions.some(({ effect, condition }) => (
-      effect === "DENY" && /other subject|其他学科|unconfirmed subjective/i.test(condition)
+    assert.ok(action.permissions.some(({ effect, dutyRef }) => (
+      effect === "DENY" && dutyRef === "DUTY-HOMEROOM"
     )), action.id);
   }
+  assert.equal(grading.aiAssessmentContract.routineTeacherAssessment, false);
 });
 
-test("makes supported, unsupported, and AI-unavailable grading routes state-reachable", () => {
+test("makes AI determination supplementation alternate review and exception routes state-reachable", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   const actionById = new Map(grading.actions.map((action) => [action.id, action]));
   const successState = (actionId) => grading.scenarios.find(({ actionId: id, kind }) => (
@@ -6433,13 +6374,13 @@ test("makes supported, unsupported, and AI-unavailable grading routes state-reac
   const successData = (actionId) => grading.scenarios.find(({ actionId: id, kind }) => (
     id === actionId && kind === "SUCCESS"
   )).then.expectedData;
-  const routeOptionSet = optionSets.find(({ key }) => key === "gradingRoute");
-  assert.ok(routeOptionSet, "gradingRoute Option Set must exist independently of fallback choices");
+  const routeOptionSet = optionSets.find(({ key }) => key === "aiAssessmentRoute");
+  assert.ok(routeOptionSet, "AI assessment route Option Set must exist independently of next steps");
   assert.deepEqual(routeOptionSet.values.map(({ code }) => code), [
-    "AI-SUGGESTION-REVIEW",
-    "AUTO-SCORE-CONFIRMATION",
-    "MANUAL-GRADING",
-    "MANUAL-TRANSCRIPTION-THEN-GRADING",
+    "AI-DETERMINATION",
+    "CONCRETE-SUPPLEMENT",
+    "PERMITTED-ALTERNATE-REVIEW",
+    "PROFESSIONAL-EXCEPTION-REVIEW",
   ]);
 
   assert.equal(successState("GRD-ACT-ENQUEUE"), "QUEUED");
@@ -6449,27 +6390,28 @@ test("makes supported, unsupported, and AI-unavailable grading routes state-reac
   });
   assert.deepEqual(actionById.get("GRD-ACT-ROUTE").transition, {
     from: "PROCESSING",
-    to: "ROUTED_REVIEW",
+    to: "AI_DETERMINED",
   });
   assert.deepEqual(actionById.get("GRD-ACT-ROUTE-UNSUPPORTED").transition, {
     from: "QUEUED",
-    to: "ROUTED_MANUAL",
+    to: "EXCEPTION_REVIEW_REQUIRED",
   });
   assert.deepEqual(actionById.get("GRD-ACT-ROUTE-AI-UNAVAILABLE").transition, {
     from: "PROCESSING",
-    to: "ROUTED_MANUAL",
+    to: "EXCEPTION_REVIEW_REQUIRED",
   });
-  assert.match(successData("GRD-ACT-ROUTE"), /AI-SUGGESTION-REVIEW.*AUTO-SCORE-CONFIRMATION/i);
-  assert.match(successData("GRD-ACT-ROUTE-UNSUPPORTED"), /MANUAL-GRADING.*MANUAL-TRANSCRIPTION/i);
-  assert.match(successData("GRD-ACT-ROUTE-AI-UNAVAILABLE"), /MANUAL.*fallback/i);
-  assert.equal(actionById.get("GRD-ACT-MANUAL-GRADE").transition.from, "ROUTED_MANUAL");
-  assert.equal(actionById.get("GRD-ACT-ACCEPT-SUGGESTION").transition.from, "ROUTED_REVIEW");
-  assert.equal(actionById.get("GRD-ACT-BATCH-CONFIRM").transition.from, "ROUTED_REVIEW");
+  assert.match(successData("GRD-ACT-ROUTE"), /five closed next steps/i);
+  assert.match(successData("GRD-ACT-ROUTE-UNSUPPORTED"), /missing source|input evidence/i);
+  assert.match(successData("GRD-ACT-ROUTE-AI-UNAVAILABLE"), /alternate review/i);
+  assert.equal(actionById.get("GRD-ACT-MANUAL-GRADE").transition.from, "EXCEPTION_REVIEW_REQUIRED");
+  assert.equal(actionById.get("GRD-ACT-ACCEPT-SUGGESTION").transition.from, "AI_DETERMINED");
+  assert.equal(actionById.get("GRD-ACT-BATCH-CONFIRM").transition.from, "AI_DETERMINED");
 
   const routing = flows.find(({ id }) => id === "DF-006");
   assert.deepEqual(routing.steps.map(({ actionId }) => actionId), [
     "SUB-ACT-HANDOFF-ACCEPTED",
     "HW-ACT-RESOLVE-GRADING-SNAPSHOT",
+    "GRD-ACT-READ-FROZEN-ASSESSMENT-STANDARD",
     "GRD-ACT-ENQUEUE",
     "GRD-ACT-ROUTE-UNSUPPORTED",
     "GRD-ACT-PROCESS",
@@ -6498,8 +6440,8 @@ test("writes grading lineage through system outputs and recovers conflicts throu
     {
       refFieldId: "GRD-DECISION-F-RUBRIC-REF",
       versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
-      targetObjectId: "HW-OBJ-RUBRIC",
-      targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
+      targetObjectId: "GRD-OBJ-ASSESSMENT-STANDARD-VERSION",
+      targetVersionFieldId: "GRD-STANDARD-F-VERSION",
     },
     {
       refFieldId: "GRD-DECISION-F-CAPABILITY-RULE-REF",
@@ -7043,7 +6985,7 @@ test("models publication preview from authoritative visibility and notification 
   }
 });
 
-test("revises confirmed decisions before correcting immutable published results", () => {
+test("versions authorized exception corrections before replacing current published derived use", () => {
   const grading = moduleById(requirementModel, "GRD-001");
   const publication = moduleById(requirementModel, "PUB-001");
   const gradingActionById = new Map(grading.actions.map((action) => [action.id, action]));
@@ -7053,21 +6995,21 @@ test("revises confirmed decisions before correcting immutable published results"
   assert.ok(openRevision, "confirmed decision revision must be opened explicitly");
   assert.ok(confirmRevision, "a revision must be confirmed into a new decision version");
   assert.deepEqual(openRevision.transition, {
-    from: "TEACHER_CONFIRMED",
-    to: "REVISION_PENDING",
+    from: "EXCEPTION_RESOLVED",
+    to: "CORRECTION_PENDING",
   });
   assert.ok(openRevision.inputFieldIds.includes("GRD-DECISION-F-CORRECTION-REASON"));
   assert.ok(openRevision.outputFieldIds.includes("GRD-DECISION-F-PRIOR-DECISION-VERSION"));
   assert.deepEqual(confirmRevision.transition, {
-    from: "REVISION_PENDING",
-    to: "TEACHER_CONFIRMED",
+    from: "CORRECTION_PENDING",
+    to: "EXCEPTION_RESOLVED",
   });
   assert.ok(confirmRevision.outputFieldIds.includes("GRD-DECISION-F-DECISION-VERSION"));
   assert.match(
     grading.scenarios.find(({ actionId, kind }) => (
       actionId === confirmRevision.id && kind === "SUCCESS"
     )).then.expectedData,
-    /new decision version.*retain.*prior/i,
+    /versioned exception resolution.*preserving.*superseded AI result/i,
   );
 
   const correct = publicationActionById.get("PUB-ACT-CORRECT-RESULT");
@@ -7087,8 +7029,6 @@ test("revises confirmed decisions before correcting immutable published results"
     "GRD-ACT-CONFIRM-REVISION",
     "PUB-ACT-CORRECT-RESULT",
     "CORR-ACT-RECORD-INVALIDATION",
-    "INS-ACT-MARK-STALE",
-    "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
     "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
   ]);
   assert.equal(correction.steps.some(({ actionId }) => actionId === "GRD-ACT-OVERRIDE-SCORE"), false);
@@ -7100,13 +7040,11 @@ test("revises confirmed decisions before correcting immutable published results"
   )), true);
 });
 
-test("routes published score correction through structured evidence plan and future interpretation invalidation", () => {
+test("routes published result correction through versioned future-owner invalidation boundaries", () => {
   const correction = flows.find(({ id }) => id === "DF-009");
   assert.deepEqual(correction.moduleIds, [
     "GRD-001",
     "PUB-001",
-    "INS-001",
-    "PLN-001",
     "CORR-001",
   ]);
   assert.deepEqual(correction.steps.map(({ actionId }) => actionId), [
@@ -7115,22 +7053,13 @@ test("routes published score correction through structured evidence plan and fut
     "GRD-ACT-CONFIRM-REVISION",
     "PUB-ACT-CORRECT-RESULT",
     "CORR-ACT-RECORD-INVALIDATION",
-    "INS-ACT-MARK-STALE",
-    "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
     "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
   ]);
 
   const sourceFieldIds = new Set(correction.sourceDataRefs.map(({ fieldId }) => fieldId));
-  assert.equal([
-    "INS-EVIDENCE-F-ID",
-    "INS-EVIDENCE-F-SOURCE-RESULT-REF",
-    "INS-EVIDENCE-F-SOURCE-RESULT-VERSION",
-    "INS-EVIDENCE-F-EVIDENCE-VERSION",
-    "PLN-PLAN-F-ID",
-    "PLN-PLAN-F-SOURCE-EVIDENCE-REF",
-    "PLN-PLAN-F-SOURCE-EVIDENCE-VERSION",
-    "PLN-PLAN-F-PLAN-VERSION",
-  ].every((fieldId) => sourceFieldIds.has(fieldId)), true);
+  assert.equal([...sourceFieldIds].some((fieldId) => (
+    fieldId.startsWith("INS-") || fieldId.startsWith("PLN-")
+  )), false);
 
   const targetFieldIds = new Set(correction.targetDataRefs.map(({ fieldId }) => fieldId));
   assert.equal([
@@ -7138,11 +7067,6 @@ test("routes published score correction through structured evidence plan and fut
     "CORR-INVALIDATION-F-TARGET-TRANSITIONS",
     "CORR-INVALIDATION-F-TARGET-VERSIONS",
     "CORR-INVALIDATION-F-HISTORY-PRESERVATION",
-    "INS-EVIDENCE-F-VALIDITY",
-    "INS-EVIDENCE-F-EVIDENCE-VERSION",
-    "PLN-PLAN-F-INVALIDATION-REF",
-    "PLN-PLAN-F-EVALUATION-STATE",
-    "PLN-PLAN-F-EVALUATION-VERSION",
   ].every((fieldId) => targetFieldIds.has(fieldId)), true);
   assert.deepEqual(correction.idempotencyKeyParts, {
     identityFieldIds: [
@@ -7158,7 +7082,6 @@ test("routes published score correction through structured evidence plan and fut
     fanoutFieldId: "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET",
   });
   assert.deepEqual(correction.retryPolicy.retryableFailureResults, [
-    "STALE_DECISION_VERSION",
     "SOURCE_VERSION_STALE",
     "VERSION_CONFLICT",
     "AUDIT_FAILED",
@@ -7167,15 +7090,20 @@ test("routes published score correction through structured evidence plan and fut
   const actionById = new Map(modules.flatMap((module) => (
     module.actions.map((action) => [action.id, action])
   )));
+  assert.deepEqual(actionById.get("CORR-ACT-RECORD-INVALIDATION").trigger, {
+    kind: "FLOW",
+    flowIds: ["DF-009", "DF-010"],
+  });
   for (const actionId of [
-    "CORR-ACT-RECORD-INVALIDATION",
     "INS-ACT-MARK-STALE",
     "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
   ]) {
-    assert.deepEqual(actionById.get(actionId).trigger, {
-      kind: "FLOW",
-      flowIds: ["DF-009", "DF-010"],
-    }, actionId);
+    assert.deepEqual(actionById.get(actionId).deferredFlowRegistration, {
+      flowId: "DF-011",
+      targetPhase: PHASE.THIRD,
+      releaseStatus: RELEASE_STATUS.PLANNED,
+      executionAllowedBeforeRegistration: false,
+    });
   }
 
   const invalidation = moduleById(requirementModel, "CORR-001").objects
@@ -7400,7 +7328,7 @@ test("uses declared version roles and disjoint key parts in every executable Flo
   assert.deepEqual(invalidKeys, []);
 });
 
-test("fans DF-009 out over zero or many structured dependency snapshots", () => {
+test("fans DF-009 over one immutable structured dependency snapshot", () => {
   const correction = flows.find(({ id }) => id === "DF-009");
   const publication = moduleById(requirementModel, "PUB-001");
   const correctionModule = moduleById(requirementModel, "CORR-001");
@@ -7420,14 +7348,7 @@ test("fans DF-009 out over zero or many structured dependency snapshots", () => 
   });
   assert.match(dependencySet.validation, /zero or more.*targetKind.*targetRef.*targetVersion/i);
 
-  const dependencyRefs = correction.sourceDataRefs.filter(({ objectId }) => (
-    objectId === "INS-OBJ-EVIDENCE" || objectId === "PLN-OBJ-PLAN"
-  ));
-  assert.ok(dependencyRefs.length > 0);
-  assert.equal(dependencyRefs.every(({ cardinality }) => cardinality === "ZERO_MANY"), true);
-  assert.equal(correction.sourceDataRefs.filter(({ objectId }) => (
-    objectId !== "INS-OBJ-EVIDENCE" && objectId !== "PLN-OBJ-PLAN"
-  )).every(({ cardinality }) => cardinality === "ONE"), true);
+  assert.equal(correction.sourceDataRefs.every(({ cardinality }) => cardinality === "ONE"), true);
   assert.deepEqual(correction.idempotencyKeyParts, {
     identityFieldIds: [
       "GRD-DECISION-F-ID",
@@ -7453,13 +7374,15 @@ test("fans DF-009 out over zero or many structured dependency snapshots", () => 
   );
   assert.match(dependencySet.validation, /REPORT_INTERPRETATION.*LEARNING_PATH_EXPLANATION/i);
 
-  const fixedDependency = structuredClone(requirementModel);
-  fixedDependency.flows.find(({ id }) => id === "DF-009").sourceDataRefs
-    .find(({ cardinality }) => cardinality === "ZERO_MANY").cardinality = "ONE";
-  assertHasCode(validateRequirementModel(fixedDependency), "INVALID_FLOW_IDEMPOTENCY");
+  const invalidFanout = structuredClone(requirementModel);
+  moduleById(invalidFanout, "PUB-001").objects
+    .find(({ id }) => id === "PUB-OBJ-DEPENDENCY-SNAPSHOT").fields
+    .find(({ id }) => id === "PUB-DEPENDENCY-SNAPSHOT-F-DEPENDENCY-SET")
+    .idempotencyRole = "OBJECT_REF";
+  assertHasCode(validateRequirementModel(invalidFanout), "INVALID_FLOW_IDEMPOTENCY");
 });
 
-test("defines DF-004 through DF-009 as a versioned retryable teaching loop with manual fallback", () => {
+test("defines DF-004 through DF-009 as versioned retryable teaching loops without routine manual fallback", () => {
   const teachingFlows = flows.filter(({ id }) => /^DF-00[4-9]$/.test(id));
   assert.deepEqual(teachingFlows.map(({ id }) => id), [
     "DF-004",
@@ -7519,22 +7442,24 @@ test("defines DF-004 through DF-009 as a versioned retryable teaching loop with 
       true,
       flow.id,
     );
-    assert.match(flow.failureGranularity, /OBJECT/, flow.id);
+    assert.match(flow.failureGranularity, /OBJECT|VERSION/, flow.id);
     assert.ok(flow.retryPolicy.maxAttempts >= 2, flow.id);
     assert.ok(flow.retryPolicy.retryableFailureResults.length > 0, flow.id);
     assert.ok(flow.downstreamInvalidation.targets.length > 0, flow.id);
   }
   const routing = teachingFlows.find(({ id }) => id === "DF-006");
-  assert.match(JSON.stringify(routing.steps), /AI.*unavailable.*manual/i);
+  assert.doesNotMatch(JSON.stringify(routing), /manual grading|manual fallback/i);
+  assert.match(routing.compensation.strategy, /EXPLICIT_RECOVERY_NEXT_STEP/);
   const confirmation = teachingFlows.find(({ id }) => id === "DF-007");
   assert.ok(confirmation.steps.some(({ actionId }) => actionId === "GRD-ACT-MANUAL-GRADE"));
+  assert.equal(confirmation.routineTeacherAssessment, false);
   const release = teachingFlows.find(({ id }) => id === "DF-008");
   assert.ok(release.steps.some(({ actionId }) => actionId === "PUB-ACT-PUBLISH-SELECTED"));
   const correction = teachingFlows.find(({ id }) => id === "DF-009");
   assert.ok(correction.steps.some(({ actionId }) => actionId === "PUB-ACT-CORRECT-RESULT"));
 });
 
-test("defines score evidence plan student execution and correction modules with the three phase-one Flows", () => {
+test("defines the phase-aware module registry and excludes the unregistered phase-three Flow", () => {
   assert.deepEqual(
     modules.map(({ id }) => id),
     [
@@ -7583,7 +7508,6 @@ test("defines score evidence plan student execution and correction modules with 
       "DF-012",
       "DF-014",
       "DF-015",
-      "DF-011",
       "DF-013",
     ],
   );
@@ -8402,19 +8326,19 @@ test("rejects structurally complete privileged reads across every student-detail
   }
 });
 
-test("classifies every phase-one object with a closed student-data access fact", () => {
-  const phaseOneObjects = modules
-    .filter(({ phase }) => phase === PHASE.FIRST)
+test("classifies every executable object with a closed student-data access fact", () => {
+  const executableObjects = modules
+    .filter(({ contractKind }) => contractKind !== "TASK8_REPORT_FUTURE_METADATA")
     .flatMap((module) => module.objects);
-  assert.equal(phaseOneObjects.length, 113);
+  assert.equal(executableObjects.length, 113);
   assert.deepEqual(
-    phaseOneObjects.reduce((counts, object) => ({
+    executableObjects.reduce((counts, object) => ({
       ...counts,
       [object.studentDataClassification.kind]: counts[object.studentDataClassification.kind] + 1,
     }), { NONE: 0, DETAIL: 0, AGGREGATE: 0 }),
     { NONE: 68, DETAIL: 40, AGGREGATE: 5 },
   );
-  assert.equal(phaseOneObjects.every((object) => {
+  assert.equal(executableObjects.every((object) => {
     const classification = object.studentDataClassification;
     return classification
       && Object.keys(classification).toSorted().join(",") === "kind,privilegedReadPolicy"
@@ -8427,7 +8351,7 @@ test("classifies every phase-one object with a closed student-data access fact",
       );
   }), true);
 
-  const objectById = new Map(phaseOneObjects.map((object) => [object.id, object]));
+  const objectById = new Map(executableObjects.map((object) => [object.id, object]));
   assert.deepEqual(objectById.get("ORG-OBJ-STUDENT").studentDataClassification, {
     kind: "NONE",
     privilegedReadPolicy: "NOT_APPLICABLE",
@@ -8448,7 +8372,7 @@ test("classifies every phase-one object with a closed student-data access fact",
 
 test("locks every mixed broad data subject to its registered object classification", () => {
   const mixedObjects = modules
-    .filter(({ phase }) => phase === PHASE.FIRST)
+    .filter(({ contractKind }) => contractKind !== "TASK8_REPORT_FUTURE_METADATA")
     .flatMap((module) => module.objects)
     .filter(({ dataSubject }) => [
       "SUBJECT_TEACHING_TASK",
@@ -8562,7 +8486,13 @@ test("models evidence candidates teacher confirmation student visibility and imm
   const invalidate = actionById.get("INS-ACT-MARK-STALE");
   const studentRead = actionById.get("INS-ACT-VIEW-MASTERY");
   assert.equal(createCandidate.operationKind, "CREATE");
-  assert.deepEqual(createCandidate.trigger, { kind: "FLOW", flowIds: ["DF-010"] });
+  assert.deepEqual(createCandidate.trigger, { kind: "FLOW", flowIds: ["DF-011"] });
+  assert.deepEqual(createCandidate.deferredFlowRegistration, {
+    flowId: "DF-011",
+    targetPhase: PHASE.THIRD,
+    releaseStatus: RELEASE_STATUS.PLANNED,
+    executionAllowedBeforeRegistration: false,
+  });
   assert.deepEqual(confirm.transition, { from: "CANDIDATE", to: "TEACHER_CONFIRMED" });
   assert.deepEqual(publish.transition, { from: "TEACHER_CONFIRMED", to: "STUDENT_VISIBLE" });
   assert.deepEqual(invalidate.transition, { from: "STUDENT_VISIBLE", to: "STALE" });
@@ -9389,8 +9319,9 @@ test("records the closed result-correction invalidation chain with source and ta
   assert.deepEqual(markPending.transition, { from: "ACTIVE", to: "PENDING_RECONFIRM" });
   assert.deepEqual(markPending.trigger, {
     kind: "FLOW",
-    flowIds: ["DF-009", "DF-010"],
+    flowIds: ["DF-011"],
   });
+  assert.equal(markPending.deferredFlowRegistration.executionAllowedBeforeRegistration, false);
   assert.ok(markPending.outputFieldIds.includes("PLN-PLAN-F-INVALIDATION-REF"));
   assert.ok(markPending.outputFieldIds.includes("PLN-PLAN-F-EVALUATION-STATE"));
   assert.ok(plan.lineageBindings.some(({ refFieldId, targetObjectId }) => (
@@ -9402,7 +9333,7 @@ test("records the closed result-correction invalidation chain with source and ta
 test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidation contracts", () => {
   const expected = {
     "DF-010": {
-      modules: ["PUB-001", "INS-001", "PLN-001", "CORR-001"],
+      modules: ["PUB-001", "CORR-001"],
       actions: [
         "PUB-ACT-VIEW-RESULT",
         "CORR-ACT-NORMALIZE-SUBMISSION",
@@ -9411,26 +9342,17 @@ test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidati
         "CORR-ACT-COMPLETE-TASK",
         "CORR-ACT-MARK-TASK-AWAITING-RETRY",
         "CORR-ACT-RECORD-INVALIDATION",
-        "INS-ACT-MARK-STALE",
-        "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
-        "INS-ACT-CREATE-CANDIDATE",
-        "INS-ACT-CONFIRM-MASTERY",
-        "INS-ACT-PUBLISH-INTERPRETATION",
       ],
       identities: [
         "PUB-RESULT-F-ID",
         "CORR-TASK-F-ID",
-        "CORR-ATTEMPT-F-ID",
-        "PLN-PLAN-F-ID",
       ],
       versions: [
         "PUB-RESULT-F-RESULT-VERSION",
         "CORR-TASK-F-TASK-VERSION",
         "CORR-ATTEMPT-F-CORRECTION-VERSION",
-        "INS-EVIDENCE-F-EVIDENCE-VERSION",
-        "PLN-PLAN-F-PLAN-VERSION",
       ],
-      fanout: "INS-EVIDENCE-F-ID",
+      fanout: "CORR-ATTEMPT-F-ID",
       retry: ["VERSION_CONFLICT", "AUDIT_FAILED"],
     },
     "DF-012": {
@@ -9485,7 +9407,7 @@ test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidati
       fanoutFieldId: contract.fanout,
     });
     assert.deepEqual(flow.retryPolicy.retryableFailureResults, contract.retry);
-    assert.match(flow.failureGranularity, /OBJECT/, flowId);
+    assert.match(flow.failureGranularity, /OBJECT|VERSION/, flowId);
     assert.ok(flow.downstreamInvalidation.targets.length > 0, flowId);
 
     const stepActions = flow.steps.map(({ actionId }) => actionById.get(actionId));
@@ -9519,7 +9441,7 @@ test("publishes task-specific actions, pages, and complete scenario coverage", (
 
   assert.equal(modules.length, 27);
   for (const module of modules) {
-    if (module.phase === PHASE.SECOND) {
+    if (module.contractKind === "TASK8_REPORT_FUTURE_METADATA") {
       assert.deepEqual(module.actions, [], module.id);
       assert.deepEqual(module.pages, [], module.id);
       assert.deepEqual(module.scenarios, [], module.id);
@@ -9527,6 +9449,11 @@ test("publishes task-specific actions, pages, and complete scenario coverage", (
     }
     assert.equal(module.actions.length > 0, true, module.id);
     assert.equal(module.pages.length > 0, true, module.id);
+    if (module.releaseStatus === RELEASE_STATUS.PLANNED) {
+      assert.equal(module.pages.every(({ availability }) => (
+        availability === RELEASE_STATUS.PLANNED
+      )), true, module.id);
+    }
     assert.equal(module.actions.every(({ label }) => !genericActionLabels.has(label)), true);
     assert.equal(module.pages.every(({ label }) => !genericPageLabels.has(label)), true);
     for (const action of module.actions) {
@@ -9607,6 +9534,8 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["GRD-ACT-ROUTE", "FLOW_INTERNAL"],
     ["GRD-ACT-ROUTE-UNSUPPORTED", "FLOW_INTERNAL"],
     ["GRD-ACT-ROUTE-AI-UNAVAILABLE", "FLOW_INTERNAL"],
+    ["GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD", "SYSTEM_EVENT"],
+    ["GRD-ACT-READ-FROZEN-ASSESSMENT-STANDARD", "FLOW_INTERNAL"],
     ["PUB-ACT-MATERIALIZE-RESULT", "FLOW_INTERNAL"],
     ["PUB-ACT-PUBLISH-RESULT", "FLOW_INTERNAL"],
     ["PUB-ACT-FINALIZE-BATCH", "FLOW_INTERNAL"],
@@ -10324,7 +10253,7 @@ test("keeps every Flow action participant and data reference valid and symmetric
     module.objects.map((object) => [object.id, { moduleId: module.id, object }])
   )));
 
-  assert.equal(flows.length, 15);
+  assert.equal(flows.length, 14);
   for (const flow of flows) {
     const actionModuleIds = new Set(flow.steps.map(({ actionId }) => moduleByActionId.get(actionId)));
     const sourceOnlyModuleIds = new Set(flow.sourceOnlyModuleIds ?? []);
@@ -10343,13 +10272,13 @@ test("keeps every Flow action participant and data reference valid and symmetric
   }
 });
 
-test("the validation CLI reports twenty-seven modules and fifteen Flows", () => {
+test("the validation CLI reports twenty-seven modules and fourteen registered Flows", () => {
   const output = execFileSync(
     process.execPath,
     ["tools/validate_v2_requirements.mjs"],
     { cwd: new URL("../..", import.meta.url), encoding: "utf8" },
   );
-  assert.equal(output, "validated modules=27 flows=15\n");
+  assert.equal(output, "validated modules=27 flows=14\n");
 });
 
 test("defines the immutable baseline decisions and teacher duty model", () => {
@@ -10674,9 +10603,18 @@ test("registers every required Option Set concept with stable code-label values"
     "recognitionLevel",
     "scoringLevel",
     "gradingEvidenceRequirement",
-    "batchConfirmEligibility",
-    "gradingRoute",
-    "gradingUnavailableFallback",
+    "automatedBatchDeterminationEligibility",
+    "aiAssessmentRoute",
+    "unableToDetermineRecovery",
+    "aiAssessmentProcessingStatus",
+    "aiResultPublicationStatus",
+    "aiResultDisputeCorrectionStatus",
+    "aiResultValidityStatus",
+    "aiAssessmentNextStep",
+    "aiPublicationGateOutcome",
+    "feedbackLayer",
+    "validAttemptClassification",
+    "answerExposureCondition",
     "scoreState",
     "evidenceStage",
     "answerResult",
@@ -10929,7 +10867,7 @@ test("registers every required Option Set concept with stable code-label values"
       "INFORMATION-TECHNOLOGY",
     ],
     recognitionLevel: ["NONE", "METADATA", "CONTENT", "STRUCTURED"],
-    scoringLevel: ["AUTO-SCORE", "RULE-SUGGESTION", "AI-SUGGESTION", "MANUAL-ONLY"],
+    scoringLevel: ["AUTO-SCORE", "RULE-SUGGESTION", "AI-SUGGESTION", "EXCEPTION-ONLY"],
     gradingEvidenceRequirement: [
       "ANSWER-PAYLOAD",
       "MEDIA",
@@ -10937,16 +10875,65 @@ test("registers every required Option Set concept with stable code-label values"
       "IMAGE-QUALITY",
       "ITEM-VERSION",
       "RUBRIC-VERSION",
-      "TEACHER-JUDGMENT",
+      "PROFESSIONAL-EXCEPTION-EVIDENCE",
     ],
-    batchConfirmEligibility: ["ELIGIBLE", "INELIGIBLE"],
-    gradingRoute: [
-      "AI-SUGGESTION-REVIEW",
-      "AUTO-SCORE-CONFIRMATION",
-      "MANUAL-GRADING",
-      "MANUAL-TRANSCRIPTION-THEN-GRADING",
+    automatedBatchDeterminationEligibility: ["ELIGIBLE", "INELIGIBLE"],
+    aiAssessmentRoute: [
+      "AI-DETERMINATION",
+      "CONCRETE-SUPPLEMENT",
+      "PERMITTED-ALTERNATE-REVIEW",
+      "PROFESSIONAL-EXCEPTION-REVIEW",
     ],
-    gradingUnavailableFallback: ["MANUAL-GRADING", "MANUAL-TRANSCRIPTION-THEN-GRADING"],
+    unableToDetermineRecovery: [
+      "PROFESSIONAL-EXCEPTION-REVIEW",
+      "CONCRETE-SUPPLEMENT-THEN-ALTERNATE-REVIEW",
+    ],
+    aiAssessmentProcessingStatus: [
+      "QUEUED",
+      "PROCESSING",
+      "DETERMINED",
+      "MORE_INPUT_REQUIRED",
+      "UNABLE_TO_DETERMINE",
+      "EXCEPTION_PENDING",
+      "FAILED",
+    ],
+    aiResultPublicationStatus: ["UNPUBLISHED", "PENDING_GATES", "PUBLISHED", "WITHHELD"],
+    aiResultDisputeCorrectionStatus: [
+      "UNCHALLENGED",
+      "CHALLENGED",
+      "UNDER_REVIEW",
+      "CORRECTED",
+      "REPLACED",
+    ],
+    aiResultValidityStatus: [
+      "CURRENT",
+      "PROVISIONAL",
+      "INVALID",
+      "SUPERSEDED",
+      "ACCESS_RESTRICTED",
+    ],
+    aiAssessmentNextStep: [
+      "COMPLETED",
+      "CORRECTION_REQUIRED",
+      "MORE_INPUT_REQUIRED",
+      "UNABLE_TO_DETERMINE",
+      "EXCEPTION_REVIEW_REQUIRED",
+    ],
+    aiPublicationGateOutcome: ["PASS", "FAIL", "TIMEOUT", "UNAVAILABLE"],
+    feedbackLayer: [
+      "RESULT_AND_ERROR_LOCATION",
+      "NON_ANSWER_SCAFFOLD",
+      "TARGETED_TEACHING",
+      "COMPLETE_ANSWER_AND_SOLUTION",
+    ],
+    validAttemptClassification: [
+      "SUBSTANTIVE_RESPONSE",
+      "EXPLICIT_DONT_KNOW",
+      "BLANK",
+      "UNRELATED",
+      "PLACEHOLDER",
+    ],
+    answerExposureCondition: ["NOT_EXPOSED", "ANSWER_EXPOSED", "UNKNOWN"],
     scoreState: ["UNPUBLISHED", "PUBLISHED", "MISSING", "EXEMPT", "INVALID", "CORRECTED"],
     evidenceStage: ["FIRST-ANSWER", "CORRECTION", "RETEST", "FORMATIVE"],
     answerResult: ["CORRECT", "PARTIAL", "INCORRECT", "UNDETERMINED"],
