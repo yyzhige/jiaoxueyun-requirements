@@ -10648,6 +10648,176 @@ function finalizedGovernanceBaselineErrors(index) {
   return errors;
 }
 
+function commercialContinuityErrors(index) {
+  const enabled = index.productDecisionById.has("D088")
+    || index.objectById.has("PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY")
+    || index.objectById.has("PLAT-OBJ-SERVICE-CONTINUITY-WINDOW");
+  if (!enabled) return [];
+
+  const module = index.moduleById.get("PLAT-001")?.value;
+  const commercial = index.objectById.get("PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY")?.value;
+  const continuity = index.objectById.get("PLAT-OBJ-SERVICE-CONTINUITY-WINDOW")?.value;
+  const action = (id) => index.actionById.get(id)?.value;
+  const field = (id) => index.fieldById.get(id)?.value;
+  const optionCodes = (id) => records(index.optionSetById.get(id)?.value?.values)
+    .map(({ code }) => code);
+  const hasAllow = (actionValue, property, subject, pattern) => records(actionValue?.permissions)
+    .some((permission) => permission.effect === "ALLOW"
+      && permission[property] === subject
+      && (!pattern || pattern.test(permission.condition ?? "")));
+  const hasDeny = (actionValue, property, subject) => records(actionValue?.permissions)
+    .some((permission) => permission.effect === "DENY" && permission[property] === subject);
+
+  const boundary = module?.commercialBoundaryContract;
+  const continuityContract = module?.serviceContinuityContract;
+  const prohibitedConsumerModels = [
+    "STUDENT_PAYMENT",
+    "GUARDIAN_PAYMENT",
+    "ADVERTISING",
+    "WEAKNESS_BASED_COMMERCE",
+    "CONTENT_MARKETPLACE",
+    "TEACHER_REVENUE_SHARE",
+  ];
+  const coreEntitlements = ["CORE_AI_ASSESSMENT", "MINIMUM_VIDEO_HELP"];
+  const packageExpansion = ["CAPACITY", "CONCURRENCY", "ANALYTICS", "GENERAL_SUPPORT"];
+  const protectedOperations = [
+    "COMPLETE_PUBLISHED_ACTIVITY",
+    "HISTORICAL_READ",
+    "LEGAL_EXPORT",
+    "TRANSFER",
+    "DELETION",
+    "SECURITY_SUPPORT",
+  ];
+
+  const createBoundary = action("PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY");
+  const confirmBoundary = action("PLAT-ACT-CONFIRM-COMMERCIAL-BOUNDARY");
+  const activateBoundary = action("PLAT-ACT-ACTIVATE-COMMERCIAL-BOUNDARY");
+  const createBoundarySuccess = index.scenarioById
+    .get("PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY-SCN-SUCCESS")?.value;
+  const payerPartition = records(createBoundary?.acceptedInputValues)
+    .find(({ fieldId }) => fieldId === "PLAT-COMM-F-PAYER-KIND");
+  const boundaryValid = module?.phase === PHASE.FIRST
+    && module?.releaseStatus === RELEASE_STATUS.BUILD_READY
+    && boundary?.objectId === commercial?.id
+    && boundary?.payerOptionSetId === "OPT-EXT-019"
+    && sameStringSet(boundary?.allowedPayerCodes, ["SCHOOL"])
+    && sameStringSet(optionCodes("OPT-EXT-019"), ["SCHOOL"])
+    && boundary?.financialContactFieldId === "PLAT-COMM-F-FINANCIAL-CONTACT-REF"
+    && boundary?.governanceAdministratorFieldId === "PLAT-COMM-F-GOVERNANCE-ADMIN-REF"
+    && boundary?.contactsMustDiffer === true
+    && /distinct from the governance administrator/i.test(
+      field("PLAT-COMM-F-FINANCIAL-CONTACT-REF")?.validation ?? "",
+    )
+    && /distinct from the financial contact/i.test(
+      field("PLAT-COMM-F-GOVERNANCE-ADMIN-REF")?.validation ?? "",
+    )
+    && sameStringSet(boundary?.coreEntitlements, coreEntitlements)
+    && sameStringSet(optionCodes("OPT-EXT-021"), coreEntitlements)
+    && sameStringSet(boundary?.packageExpansionScope, packageExpansion)
+    && sameStringSet(optionCodes("OPT-EXT-020"), packageExpansion)
+    && sameStringSet(boundary?.prohibitedConsumerModels, prohibitedConsumerModels)
+    && boundary?.coreLearningLoopPaywallAllowed === false
+    && sameStringSet(commercial?.states, ["DRAFT", "CONFIRMED", "ACTIVE"])
+    && createBoundary?.operationKind === "CREATE"
+    && createBoundarySuccess?.then?.expectedState?.mode === "STATE"
+    && createBoundarySuccess?.then?.expectedState?.value === "DRAFT"
+    && payerPartition?.optionSetId === "OPT-EXT-019"
+    && payerPartition?.partitionId === "PLAT-COMMERCIAL-PAYER-KIND"
+    && sameStringSet(payerPartition?.codes, ["SCHOOL"])
+    && [
+      "PLAT-COMM-F-CORE-AI-ENTITLEMENTS",
+      "PLAT-COMM-F-PACKAGE-EXPANSION-SCOPE",
+      "PLAT-COMM-F-PROHIBITED-CONSUMER-MODELS",
+    ].every((fieldId) => list(createBoundary?.outputFieldIds).includes(fieldId))
+    && hasAllow(createBoundary, "roleRef", "ROLE-PLATFORM-GOVERNANCE")
+    && hasDeny(createBoundary, "roleRef", "ROLE-PLATFORM-OPS")
+    && confirmBoundary?.transition?.from === "DRAFT"
+    && confirmBoundary?.transition?.to === "CONFIRMED"
+    && hasAllow(
+      confirmBoundary,
+      "roleRef",
+      "ROLE-SCHOOL-ADMIN",
+      /governance administrator.*distinct from.*financial contact/i,
+    )
+    && hasDeny(confirmBoundary, "roleRef", "ROLE-PLATFORM-OPS")
+    && activateBoundary?.transition?.from === "CONFIRMED"
+    && activateBoundary?.transition?.to === "ACTIVE";
+
+  const openContinuity = action("PLAT-ACT-OPEN-SERVICE-CONTINUITY");
+  const activityCreationGuard = action("PLAT-ACT-EVALUATE-NEW-ACTIVITY-ENTITLEMENT");
+  const enterExit = action("PLAT-ACT-ENTER-EXIT-WINDOW");
+  const closeContinuity = action("PLAT-ACT-CLOSE-SERVICE-CONTINUITY");
+  const viewContinuity = action("PLAT-ACT-VIEW-SERVICE-CONTINUITY");
+  const openContinuitySuccess = index.scenarioById
+    .get("PLAT-ACT-OPEN-SERVICE-CONTINUITY-SCN-SUCCESS")?.value;
+  const continuityValid = continuityContract?.objectId === continuity?.id
+    && continuityContract?.openActionId === openContinuity?.id
+    && continuityContract?.viewActionId === viewContinuity?.id
+    && continuityContract?.publishedActivityProtectionFieldId
+      === "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL"
+    && continuityContract?.protectedActivityManifestFieldId
+      === "PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST"
+    && continuityContract?.exitWindowFieldId === "PLAT-CONT-F-EXIT-WINDOW-UNTIL"
+    && sameStringSet(continuityContract?.protectedOperations, protectedOperations)
+    && sameStringSet(optionCodes("OPT-EXT-023"), protectedOperations)
+    && continuityContract?.newActivityPolicy
+      === "BLOCK_NEW_ACTIVITY_OUTSIDE_CURRENT_ENTITLEMENT"
+    && continuityContract?.activityCreationGuardActionId === activityCreationGuard?.id
+    && continuityContract?.continuingDataRightsBasis === "LAW_AND_CONTRACT"
+    && continuityContract?.finiteWindowsRequired === true
+    && continuityContract?.unlimitedFreeFullServiceAfterTermination === false
+    && /finite time/i.test(field("PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL")?.validation ?? "")
+    && /already-published activity identity.*publication version.*still-open window/i.test(
+      field("PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST")?.validation ?? "",
+    )
+    && /finite documented exit deadline/i.test(field("PLAT-CONT-F-EXIT-WINDOW-UNTIL")?.validation ?? "")
+    && /cannot promise indefinite free operation/i.test(
+      field("PLAT-CONT-F-CONTINUING-DATA-RIGHTS-BASIS")?.validation ?? "",
+    )
+    && sameStringSet(
+      continuity?.states,
+      ["ACTIVITY_PROTECTION_OPEN", "EXIT_WINDOW_OPEN", "CLOSED"],
+    )
+    && sameStringSet(
+      optionCodes("OPT-EXT-024"),
+      ["ACTIVITY_PROTECTION_OPEN", "EXIT_WINDOW_OPEN", "CLOSED"],
+    )
+    && openContinuity?.operationKind === "CREATE"
+    && openContinuitySuccess?.then?.expectedState?.mode === "STATE"
+    && openContinuitySuccess?.then?.expectedState?.value === "ACTIVITY_PROTECTION_OPEN"
+    && [
+      "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL",
+      "PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST",
+      "PLAT-CONT-F-EXIT-WINDOW-UNTIL",
+      "PLAT-CONT-F-CONTINUING-DATA-RIGHTS-BASIS",
+    ].every((fieldId) => list(openContinuity?.inputFieldIds).includes(fieldId))
+    && [
+      "PLAT-CONT-F-PROTECTED-OPERATIONS",
+      "PLAT-CONT-F-NEW-ACTIVITY-POLICY",
+    ].every((fieldId) => list(openContinuity?.outputFieldIds).includes(fieldId))
+    && hasAllow(openContinuity, "roleRef", "ROLE-PLATFORM-GOVERNANCE")
+    && activityCreationGuard?.operationKind === "READ"
+    && activityCreationGuard?.targetObjectId === continuity?.id
+    && list(activityCreationGuard?.outputFieldIds).includes("PLAT-CONT-F-NEW-ACTIVITY-POLICY")
+    && list(activityCreationGuard?.failureResults).includes("ACTIVITY_ENTITLEMENT_BLOCKED")
+    && hasAllow(
+      activityCreationGuard,
+      "actorRef",
+      "CURRENT_ACTOR",
+      /allowed only inside the current active entitlement.*never by a protection window/i,
+    )
+    && enterExit?.transition?.from === "ACTIVITY_PROTECTION_OPEN"
+    && enterExit?.transition?.to === "EXIT_WINDOW_OPEN"
+    && closeContinuity?.transition?.from === "EXIT_WINDOW_OPEN"
+    && closeContinuity?.transition?.to === "CLOSED"
+    && viewContinuity?.operationKind === "READ"
+    && protectedOperations.every((code) => optionCodes("OPT-EXT-023").includes(code));
+
+  return boundaryValid && continuityValid
+    ? []
+    : ["INVALID_COMMERCIAL_CONTINUITY_CONTRACT PLAT-001 must enforce school-only payment, separated finance/governance contacts, no consumer monetization, school-wide core AI entitlement, and finite protected-activity and exit windows without unlimited free full-service operation"];
+}
+
 export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
@@ -10700,5 +10870,6 @@ export function validateModelSemantics(model) {
     ...studentHomeErrors(index),
     ...phaseTwoAiAssessmentErrors(index),
     ...finalizedGovernanceBaselineErrors(index),
+    ...commercialContinuityErrors(index),
   ];
 }

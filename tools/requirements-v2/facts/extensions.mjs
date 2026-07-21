@@ -111,6 +111,37 @@ export const extensionOptionSets = deepFreeze([
     ["CONFIRM", "确认"],
     ["REJECT", "驳回"],
   ]),
+  optionSet("OPT-EXT-019", "schoolCommercialPayerKind", "学校商业付费主体", [
+    ["SCHOOL", "学校"],
+  ]),
+  optionSet("OPT-EXT-020", "schoolPackageExpansionScope", "学校套餐可扩展范围", [
+    ["CAPACITY", "容量"],
+    ["CONCURRENCY", "并发"],
+    ["ANALYTICS", "分析"],
+    ["GENERAL_SUPPORT", "一般支持"],
+  ]),
+  optionSet("OPT-EXT-021", "schoolCoreAiEntitlement", "学校核心 AI 基础权益", [
+    ["CORE_AI_ASSESSMENT", "核心 AI 评定与完成判定"],
+    ["MINIMUM_VIDEO_HELP", "最低教学视频帮助"],
+  ]),
+  optionSet("OPT-EXT-022", "serviceRestrictionReason", "服务受限原因", [
+    ["ENTITLEMENT_REDUCED", "权益范围缩减"],
+    ["CONTRACT_RESTRICTED", "合同约定受限"],
+    ["CONTRACT_TERMINATED", "合同终止"],
+  ]),
+  optionSet("OPT-EXT-023", "serviceContinuityOperation", "服务连续性保留操作", [
+    ["COMPLETE_PUBLISHED_ACTIVITY", "完成已发布活动"],
+    ["HISTORICAL_READ", "依法依合同读取历史"],
+    ["LEGAL_EXPORT", "法定或合同导出"],
+    ["TRANSFER", "授权迁移"],
+    ["DELETION", "注销与删除"],
+    ["SECURITY_SUPPORT", "安全支持"],
+  ]),
+  optionSet("OPT-EXT-024", "serviceContinuityStatus", "服务连续性窗口状态", [
+    ["ACTIVITY_PROTECTION_OPEN", "已发布活动保护窗口开放"],
+    ["EXIT_WINDOW_OPEN", "退出窗口开放"],
+    ["CLOSED", "连续性窗口关闭"],
+  ]),
 ]);
 
 function field(id, label, overrides = {}) {
@@ -575,6 +606,14 @@ const platformOperations = {
   confirmerRef: "ROLE-SCHOOL-ADMIN",
   stewardRef: "ROLE-SCHOOL-ADMIN",
 };
+const platformCommercialGovernance = {
+  dataSubject: "SCHOOL_SERVICE_CONFIGURATION",
+  controlSubject: "SCHOOL",
+  producerRef: "ROLE-PLATFORM-GOVERNANCE",
+  ownerRef: "ROLE-SCHOOL-ADMIN",
+  confirmerRef: "ROLE-SCHOOL-ADMIN",
+  stewardRef: "ROLE-PLATFORM-GOVERNANCE",
+};
 const schoolSupportAccess = {
   dataSubject: "AUDIT_PINNED_SUPPORT_CASE",
   controlSubject: "SCHOOL",
@@ -614,6 +653,28 @@ const schoolAdminPermissions = permissions(
   ["ROLE-STUDENT", "ROLE-PLATFORM-OPS"],
   "the school administrator controls the school's explicit time-bound support access",
 );
+const platformCommercialPermissions = permissions(
+  "ROLE-PLATFORM-GOVERNANCE",
+  ["ROLE-STUDENT", "ROLE-GUARDIAN", "ROLE-TEACHER", "ROLE-PLATFORM-OPS"],
+  "platform governance may change only the school's versioned commercial or continuity boundary without opening student learning detail",
+);
+const schoolCommercialConfirmationPermissions = [
+  {
+    effect: "ALLOW",
+    roleRef: "ROLE-SCHOOL-ADMIN",
+    condition: "the current actor matches the active governance administrator profile pinned on the commercial boundary and is distinct from its financial contact profile",
+  },
+  {
+    effect: "DENY",
+    roleRef: "ROLE-PLATFORM-OPS",
+    condition: "platform operations cannot confirm a school's payer, entitlement, or governance separation",
+  },
+  {
+    effect: "DENY",
+    actorRef: "CURRENT_ACTOR",
+    condition: "the current actor is only the financial contact or does not match the pinned governance administrator profile",
+  },
+];
 
 const lessonPlanFields = [
   optionField("PREP-LESSON-F-SUBJECT", "Subject", "OPT-COM-007", { dataType: "ID" }),
@@ -2536,6 +2597,155 @@ const supportSessionAccessGuard = {
   auditActionId: "AUD-ACT-APPEND-EVENT",
   auditOrdering: "BEFORE_DATA_RETURN",
 };
+const schoolCommercialBoundaryFields = [
+  field("PLAT-COMM-F-SCHOOL-PROFILE-REF", "Commercial School Profile", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ACC-OBJ-SCHOOL-PROFILE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: { requiredActionIds: ["PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY"] },
+    versionBinding: {
+      versionFieldId: "PLAT-COMM-F-SCHOOL-PROFILE-VERSION",
+      targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+    },
+  }),
+  systemField("PLAT-COMM-F-SCHOOL-PROFILE-VERSION", "Commercial School Profile Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
+  optionField("PLAT-COMM-F-PAYER-KIND", "Commercial Payer Kind", "OPT-EXT-019", {
+    mutability: "IMMUTABLE",
+  }),
+  field("PLAT-COMM-F-FINANCIAL-CONTACT-REF", "School Financial Contact Profile", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ACC-OBJ-SCHOOL-PROFILE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: { requiredActionIds: ["PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY"] },
+    versionBinding: {
+      versionFieldId: "PLAT-COMM-F-FINANCIAL-CONTACT-VERSION",
+      targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+    },
+    validation: "must identify an active school profile distinct from the governance administrator profile",
+  }),
+  systemField("PLAT-COMM-F-FINANCIAL-CONTACT-VERSION", "Financial Contact Profile Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
+  field("PLAT-COMM-F-GOVERNANCE-ADMIN-REF", "School Governance Administrator Profile", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ACC-OBJ-SCHOOL-PROFILE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: { requiredActionIds: ["PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY"] },
+    versionBinding: {
+      versionFieldId: "PLAT-COMM-F-GOVERNANCE-ADMIN-VERSION",
+      targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+    },
+    validation: "must identify an active school governance administrator profile distinct from the financial contact profile",
+  }),
+  systemField("PLAT-COMM-F-GOVERNANCE-ADMIN-VERSION", "Governance Administrator Profile Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
+  optionField("PLAT-COMM-F-CORE-AI-ENTITLEMENTS", "School-wide Core AI Entitlements", "OPT-EXT-021", {
+    dataType: "STRING_ARRAY",
+    mutability: "SYSTEM_MANAGED",
+    validation: "must include both CORE_AI_ASSESSMENT and MINIMUM_VIDEO_HELP for every school using phase-two service and cannot be split into student or guardian payment",
+  }),
+  optionField("PLAT-COMM-F-PACKAGE-EXPANSION-SCOPE", "Permitted Package Expansion Scope", "OPT-EXT-020", {
+    dataType: "STRING_ARRAY",
+    mutability: "SYSTEM_MANAGED",
+    validation: "may expand only capacity, concurrency, analytics, and general support; safety, appeal, data rights, and the core learning loop are never paid add-ons",
+  }),
+  systemField("PLAT-COMM-F-PROHIBITED-CONSUMER-MODELS", "Prohibited Consumer Monetization Models", "STRING_ARRAY", {
+    mutability: "IMMUTABLE",
+    validation: "must prohibit STUDENT_PAYMENT, GUARDIAN_PAYMENT, ADVERTISING, WEAKNESS_BASED_COMMERCE, CONTENT_MARKETPLACE, and TEACHER_REVENUE_SHARE",
+  }),
+  systemField("PLAT-COMM-F-SCHOOL-CONFIRMED-AT", "School Commercial Boundary Confirmation Time", "DATETIME", {
+    required: false,
+  }),
+  optionField("PLAT-COMM-F-STATUS", "School Commercial Boundary Status", "OPT-EXT-008", {
+    mutability: "SYSTEM_MANAGED",
+  }),
+  systemField("PLAT-COMM-F-VERSION", "School Commercial Boundary Version", "INTEGER", {
+    idempotencyRole: "OBJECT_VERSION",
+  }),
+];
+
+const serviceContinuityFields = [
+  field("PLAT-CONT-F-SCHOOL-PROFILE-REF", "Restricted Service School Profile", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "ACC-OBJ-SCHOOL-PROFILE" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: { requiredActionIds: ["PLAT-ACT-OPEN-SERVICE-CONTINUITY"] },
+    versionBinding: {
+      versionFieldId: "PLAT-CONT-F-SCHOOL-PROFILE-VERSION",
+      targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+    },
+  }),
+  systemField("PLAT-CONT-F-SCHOOL-PROFILE-VERSION", "Restricted Service School Profile Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
+  field("PLAT-CONT-F-COMMERCIAL-BOUNDARY-REF", "Pinned School Commercial Boundary", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: { requiredActionIds: ["PLAT-ACT-OPEN-SERVICE-CONTINUITY"] },
+    versionBinding: {
+      versionFieldId: "PLAT-CONT-F-COMMERCIAL-BOUNDARY-VERSION",
+      targetVersionFieldId: "PLAT-COMM-F-VERSION",
+    },
+  }),
+  systemField("PLAT-CONT-F-COMMERCIAL-BOUNDARY-VERSION", "Pinned School Commercial Boundary Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
+  optionField("PLAT-CONT-F-RESTRICTION-REASON", "Service Restriction Reason", "OPT-EXT-022", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("PLAT-CONT-F-RESTRICTED-AT", "Service Restriction Time", "DATETIME", {
+    mutability: "IMMUTABLE",
+  }),
+  field("PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL", "Published Activity Protection Window End", {
+    dataType: "DATETIME",
+    mutability: "IMMUTABLE",
+    validation: "must be a finite time after restriction and cover already-published activities still inside their open windows",
+  }),
+  field("PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST", "Protected Published Activity Manifest", {
+    dataType: "JSON",
+    mutability: "IMMUTABLE",
+    validation: "each entry must pin an already-published activity identity, publication version, audience, and still-open window as of restriction; later-created activities cannot be added",
+  }),
+  field("PLAT-CONT-F-EXIT-WINDOW-UNTIL", "Explicit Exit Window End", {
+    dataType: "DATETIME",
+    mutability: "IMMUTABLE",
+    validation: "must be a finite documented exit deadline at or after the protected activity window end",
+  }),
+  optionField("PLAT-CONT-F-PROTECTED-OPERATIONS", "Operations Retained during Restricted Service", "OPT-EXT-023", {
+    dataType: "STRING_ARRAY",
+    mutability: "SYSTEM_MANAGED",
+    validation: "must retain published-activity completion plus historical read, legal export, transfer, deletion, and security support only as required by contract and applicable law",
+  }),
+  systemField("PLAT-CONT-F-NEW-ACTIVITY-POLICY", "New Activity Creation under Restricted Service", "STRING", {
+    mutability: "IMMUTABLE",
+    validation: "must equal BLOCK_NEW_ACTIVITY_OUTSIDE_CURRENT_ENTITLEMENT",
+  }),
+  field("PLAT-CONT-F-CONTINUING-DATA-RIGHTS-BASIS", "Continuing Data Rights Basis", {
+    dataType: "TEXT",
+    mutability: "IMMUTABLE",
+    validation: "must cite applicable law and contract; cannot promise indefinite free operation of the full service",
+  }),
+  optionField("PLAT-CONT-F-STATUS", "Service Continuity Status", "OPT-EXT-024", {
+    mutability: "SYSTEM_MANAGED",
+  }),
+  systemField("PLAT-CONT-F-VERSION", "Service Continuity Version", "INTEGER", {
+    idempotencyRole: "OBJECT_VERSION",
+  }),
+];
 const platformObjects = [
   domainObject({
     id: "PLAT-OBJ-ONBOARDING-CASE",
@@ -2577,6 +2787,64 @@ const platformObjects = [
         targetObjectId: "AUD-OBJ-ACCESS-SESSION",
         targetVersionFieldId: "AUD-SESSION-F-VERSION",
       }],
+    },
+  }),
+  domainObject({
+    id: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+    label: "School-only Payer and Core Entitlement Boundary",
+    identityFieldId: "PLAT-COMM-F-ID",
+    responsibility: platformCommercialGovernance,
+    states: ["DRAFT", "CONFIRMED", "ACTIVE"],
+    fields: schoolCommercialBoundaryFields,
+    sensitivityId: "S3",
+    lifecyclePolicyId: "LIFE-001",
+    overrides: {
+      lineageBindings: [
+        {
+          refFieldId: "PLAT-COMM-F-SCHOOL-PROFILE-REF",
+          versionFieldId: "PLAT-COMM-F-SCHOOL-PROFILE-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+        },
+        {
+          refFieldId: "PLAT-COMM-F-FINANCIAL-CONTACT-REF",
+          versionFieldId: "PLAT-COMM-F-FINANCIAL-CONTACT-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+        },
+        {
+          refFieldId: "PLAT-COMM-F-GOVERNANCE-ADMIN-REF",
+          versionFieldId: "PLAT-COMM-F-GOVERNANCE-ADMIN-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+        },
+      ],
+    },
+  }),
+  domainObject({
+    id: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+    label: "Protected Activity and Exit Window",
+    identityFieldId: "PLAT-CONT-F-ID",
+    responsibility: platformCommercialGovernance,
+    states: ["ACTIVITY_PROTECTION_OPEN", "EXIT_WINDOW_OPEN", "CLOSED"],
+    fields: serviceContinuityFields,
+    sensitivityId: "S3",
+    lifecyclePolicyId: "LIFE-001",
+    overrides: {
+      lineageBindings: [
+        {
+          refFieldId: "PLAT-CONT-F-SCHOOL-PROFILE-REF",
+          versionFieldId: "PLAT-CONT-F-SCHOOL-PROFILE-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          targetVersionFieldId: "ACC-PROFILE-F-VERSION",
+        },
+        {
+          refFieldId: "PLAT-CONT-F-COMMERCIAL-BOUNDARY-REF",
+          versionFieldId: "PLAT-CONT-F-COMMERCIAL-BOUNDARY-VERSION",
+          targetObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+          targetVersionFieldId: "PLAT-COMM-F-VERSION",
+        },
+      ],
     },
   }),
 ];
@@ -2632,6 +2900,210 @@ const platformActions = [
     permissions: platformPermissions,
     clients: [CLIENT.WEB],
     transition: { from: "CONFIRMED", to: "ACTIVE" },
+  }),
+  action({
+    id: "PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY",
+    label: "Create a School-only Payer and Core Entitlement Boundary",
+    targetObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+    operationKind: "CREATE",
+    inputFieldIds: [
+      "PLAT-COMM-F-SCHOOL-PROFILE-REF",
+      "PLAT-COMM-F-SCHOOL-PROFILE-VERSION",
+      "PLAT-COMM-F-PAYER-KIND",
+      "PLAT-COMM-F-FINANCIAL-CONTACT-REF",
+      "PLAT-COMM-F-FINANCIAL-CONTACT-VERSION",
+      "PLAT-COMM-F-GOVERNANCE-ADMIN-REF",
+      "PLAT-COMM-F-GOVERNANCE-ADMIN-VERSION",
+    ],
+    outputFieldIds: [
+      "PLAT-COMM-F-ID",
+      "PLAT-COMM-F-CORE-AI-ENTITLEMENTS",
+      "PLAT-COMM-F-PACKAGE-EXPANSION-SCOPE",
+      "PLAT-COMM-F-PROHIBITED-CONSUMER-MODELS",
+      "PLAT-COMM-F-STATUS",
+      "PLAT-COMM-F-VERSION",
+    ],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    successState: "DRAFT",
+    risk: RISK.HIGH,
+    extras: {
+      acceptedInputValues: [{
+        fieldId: "PLAT-COMM-F-PAYER-KIND",
+        optionSetId: "OPT-EXT-019",
+        partitionId: "PLAT-COMMERCIAL-PAYER-KIND",
+        codes: ["SCHOOL"],
+      }],
+      relatedStateGuards: [
+        {
+          refFieldId: "PLAT-COMM-F-SCHOOL-PROFILE-REF",
+          versionFieldId: "PLAT-COMM-F-SCHOOL-PROFILE-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          requiredState: "ACTIVE",
+        },
+        {
+          refFieldId: "PLAT-COMM-F-FINANCIAL-CONTACT-REF",
+          versionFieldId: "PLAT-COMM-F-FINANCIAL-CONTACT-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          requiredState: "ACTIVE",
+        },
+        {
+          refFieldId: "PLAT-COMM-F-GOVERNANCE-ADMIN-REF",
+          versionFieldId: "PLAT-COMM-F-GOVERNANCE-ADMIN-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          requiredState: "ACTIVE",
+        },
+      ],
+    },
+  }),
+  action({
+    id: "PLAT-ACT-CONFIRM-COMMERCIAL-BOUNDARY",
+    label: "Confirm the School Commercial and Governance Separation",
+    targetObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+    operationKind: "UPDATE",
+    outputFieldIds: [
+      "PLAT-COMM-F-SCHOOL-CONFIRMED-AT",
+      "PLAT-COMM-F-STATUS",
+      "PLAT-COMM-F-VERSION",
+    ],
+    permissions: schoolCommercialConfirmationPermissions,
+    clients: [CLIENT.WEB],
+    transition: { from: "DRAFT", to: "CONFIRMED" },
+    risk: RISK.HIGH,
+  }),
+  action({
+    id: "PLAT-ACT-ACTIVATE-COMMERCIAL-BOUNDARY",
+    label: "Activate a Confirmed School Commercial Boundary",
+    targetObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+    operationKind: "UPDATE",
+    outputFieldIds: ["PLAT-COMM-F-STATUS", "PLAT-COMM-F-VERSION"],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    transition: { from: "CONFIRMED", to: "ACTIVE" },
+    risk: RISK.HIGH,
+  }),
+  action({
+    id: "PLAT-ACT-OPEN-SERVICE-CONTINUITY",
+    label: "Open Protected Activity and Exit Windows for Restricted Service",
+    targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+    operationKind: "CREATE",
+    inputFieldIds: [
+      "PLAT-CONT-F-SCHOOL-PROFILE-REF",
+      "PLAT-CONT-F-SCHOOL-PROFILE-VERSION",
+      "PLAT-CONT-F-COMMERCIAL-BOUNDARY-REF",
+      "PLAT-CONT-F-COMMERCIAL-BOUNDARY-VERSION",
+      "PLAT-CONT-F-RESTRICTION-REASON",
+      "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL",
+      "PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST",
+      "PLAT-CONT-F-EXIT-WINDOW-UNTIL",
+      "PLAT-CONT-F-CONTINUING-DATA-RIGHTS-BASIS",
+    ],
+    outputFieldIds: [
+      "PLAT-CONT-F-ID",
+      "PLAT-CONT-F-RESTRICTED-AT",
+      "PLAT-CONT-F-PROTECTED-OPERATIONS",
+      "PLAT-CONT-F-NEW-ACTIVITY-POLICY",
+      "PLAT-CONT-F-STATUS",
+      "PLAT-CONT-F-VERSION",
+    ],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    successState: "ACTIVITY_PROTECTION_OPEN",
+    risk: RISK.HIGH,
+    extras: {
+      relatedStateGuards: [
+        {
+          refFieldId: "PLAT-CONT-F-SCHOOL-PROFILE-REF",
+          versionFieldId: "PLAT-CONT-F-SCHOOL-PROFILE-VERSION",
+          targetObjectId: "ACC-OBJ-SCHOOL-PROFILE",
+          requiredState: "ACTIVE",
+        },
+        {
+          refFieldId: "PLAT-CONT-F-COMMERCIAL-BOUNDARY-REF",
+          versionFieldId: "PLAT-CONT-F-COMMERCIAL-BOUNDARY-VERSION",
+          targetObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+          requiredState: "ACTIVE",
+        },
+      ],
+    },
+  }),
+  action({
+    id: "PLAT-ACT-EVALUATE-NEW-ACTIVITY-ENTITLEMENT",
+    label: "Evaluate New Activity Creation against Current Entitlement",
+    targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+    operationKind: "READ",
+    outputFieldIds: [
+      "PLAT-CONT-F-NEW-ACTIVITY-POLICY",
+      "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL",
+      "PLAT-CONT-F-EXIT-WINDOW-UNTIL",
+      "PLAT-CONT-F-STATUS",
+      "PLAT-CONT-F-VERSION",
+    ],
+    permissions: [
+      {
+        effect: "ALLOW",
+        actorRef: "CURRENT_ACTOR",
+        condition: "the current school relationship may request an entitlement decision, but activity creation is allowed only inside the current active entitlement and never by a protection window alone",
+      },
+      {
+        effect: "DENY",
+        roleRef: "ROLE-PLATFORM-OPS",
+        condition: "platform operations cannot bypass the school entitlement or create teaching activities",
+      },
+    ],
+    clients: [CLIENT.WEB],
+    failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "ACTIVITY_ENTITLEMENT_BLOCKED"],
+  }),
+  action({
+    id: "PLAT-ACT-ENTER-EXIT-WINDOW",
+    label: "Enter the Explicit Service Exit Window",
+    targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+    operationKind: "UPDATE",
+    outputFieldIds: ["PLAT-CONT-F-STATUS", "PLAT-CONT-F-VERSION"],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    transition: { from: "ACTIVITY_PROTECTION_OPEN", to: "EXIT_WINDOW_OPEN" },
+    risk: RISK.HIGH,
+  }),
+  action({
+    id: "PLAT-ACT-CLOSE-SERVICE-CONTINUITY",
+    label: "Close the Finite Service Continuity Window",
+    targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+    operationKind: "UPDATE",
+    outputFieldIds: ["PLAT-CONT-F-STATUS", "PLAT-CONT-F-VERSION"],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    transition: { from: "EXIT_WINDOW_OPEN", to: "CLOSED" },
+    risk: RISK.HIGH,
+  }),
+  action({
+    id: "PLAT-ACT-VIEW-SERVICE-CONTINUITY",
+    label: "View Current Protected Operations and Exit Deadlines",
+    targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+    operationKind: "READ",
+    outputFieldIds: [
+      "PLAT-CONT-F-RESTRICTION-REASON",
+      "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL",
+      "PLAT-CONT-F-EXIT-WINDOW-UNTIL",
+      "PLAT-CONT-F-PROTECTED-OPERATIONS",
+      "PLAT-CONT-F-NEW-ACTIVITY-POLICY",
+      "PLAT-CONT-F-CONTINUING-DATA-RIGHTS-BASIS",
+      "PLAT-CONT-F-STATUS",
+      "PLAT-CONT-F-VERSION",
+    ],
+    permissions: [
+      {
+        effect: "ALLOW",
+        actorRef: "CURRENT_ACTOR",
+        condition: "the current school relationship authorizes only the caller's protected operation and exposes no student learning detail",
+      },
+      {
+        effect: "DENY",
+        roleRef: "ROLE-PLATFORM-OPS",
+        condition: "platform operations cannot use a continuity window to inspect student learning detail",
+      },
+    ],
+    clients: [CLIENT.WEB],
   }),
   action({
     id: "PLAT-ACT-CREATE-POLICY-TEMPLATE",
@@ -2795,15 +3267,71 @@ const platformModule = moduleFact({
   phase: PHASE.FIRST,
   releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
-  title: "School Onboarding Service and Support Access",
-  objective: "Operate school onboarding and service metadata while requiring school confirmation and expiring audited support access",
+  title: "School Onboarding, Commercial Boundary, Service Continuity, and Support Access",
+  objective: "Operate school onboarding and support while enforcing school-only payment, separated financial and governance contacts, non-consumer monetization, core AI entitlement, and finite protected-activity and exit windows",
   entryConditions: ["the school has authorized a service onboarding context"],
-  exitConditions: ["service state is school-confirmed and every support access is scoped expiring and auditable"],
+  exitConditions: [
+    "service state and the school-only payer boundary are school-confirmed",
+    "financial contact and governance administrator profiles remain distinct",
+    "every support access is scoped expiring and auditable",
+    "restricted service protects already-published activities and explicit exit operations only through finite versioned windows",
+  ],
   baselineDecisionIds: ["BASE-001", "BASE-007"],
+  productDecisionIds: ["D085", "D088", "D089", "D090", "D091"],
   nfrIds: ["NFR-003", "NFR-006", "NFR-008"],
   objects: platformObjects,
-  relationships: [],
+  relationships: [
+    {
+      id: "PLAT-REL-CONTINUITY-COMMERCIAL-BOUNDARY",
+      fromObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+      toObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+      type: "REQUIRES",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SCHOOL",
+      onSourceInvalidation: "freeze new operations, preserve the last auditable window version, and require a new current commercial boundary before any further entitlement decision",
+    },
+  ],
   actionFacts: platformActions,
+  commercialBoundaryContract: {
+    objectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+    payerOptionSetId: "OPT-EXT-019",
+    allowedPayerCodes: ["SCHOOL"],
+    financialContactFieldId: "PLAT-COMM-F-FINANCIAL-CONTACT-REF",
+    governanceAdministratorFieldId: "PLAT-COMM-F-GOVERNANCE-ADMIN-REF",
+    contactsMustDiffer: true,
+    coreEntitlements: ["CORE_AI_ASSESSMENT", "MINIMUM_VIDEO_HELP"],
+    packageExpansionScope: ["CAPACITY", "CONCURRENCY", "ANALYTICS", "GENERAL_SUPPORT"],
+    prohibitedConsumerModels: [
+      "STUDENT_PAYMENT",
+      "GUARDIAN_PAYMENT",
+      "ADVERTISING",
+      "WEAKNESS_BASED_COMMERCE",
+      "CONTENT_MARKETPLACE",
+      "TEACHER_REVENUE_SHARE",
+    ],
+    coreLearningLoopPaywallAllowed: false,
+  },
+  serviceContinuityContract: {
+    objectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+    openActionId: "PLAT-ACT-OPEN-SERVICE-CONTINUITY",
+    viewActionId: "PLAT-ACT-VIEW-SERVICE-CONTINUITY",
+    publishedActivityProtectionFieldId: "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL",
+    protectedActivityManifestFieldId: "PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST",
+    exitWindowFieldId: "PLAT-CONT-F-EXIT-WINDOW-UNTIL",
+    protectedOperations: [
+      "COMPLETE_PUBLISHED_ACTIVITY",
+      "HISTORICAL_READ",
+      "LEGAL_EXPORT",
+      "TRANSFER",
+      "DELETION",
+      "SECURITY_SUPPORT",
+    ],
+    newActivityPolicy: "BLOCK_NEW_ACTIVITY_OUTSIDE_CURRENT_ENTITLEMENT",
+    activityCreationGuardActionId: "PLAT-ACT-EVALUATE-NEW-ACTIVITY-ENTITLEMENT",
+    continuingDataRightsBasis: "LAW_AND_CONTRACT",
+    finiteWindowsRequired: true,
+    unlimitedFreeFullServiceAfterTermination: false,
+  },
   pages: [
     page(
       "PLAT-PAGE-SCHOOL-SERVICE-OPERATIONS",
