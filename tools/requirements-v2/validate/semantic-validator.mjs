@@ -2247,6 +2247,10 @@ function flowProfileErrors(index) {
       const snapshotObject = index.objectById.get(snapshotAction?.targetObjectId)?.value;
       const deliveryObject = index.objectById.get(deliveryAction?.targetObjectId)?.value;
       const notificationObject = index.objectById.get(notificationAction?.targetObjectId)?.value;
+      const notificationModule = index.moduleById.get(notificationModuleId)?.value;
+      const notificationDeliveryObject = index.objectById.get(
+        notificationModule?.operationalSeparationContract?.deliveryObjectId,
+      )?.value;
       valid = valid
         && [startRun, completeRun].every((action) => (
           action?.operationKind === "UPDATE"
@@ -2271,7 +2275,9 @@ function flowProfileErrors(index) {
         && deliveryObject?.channelPolicy?.mode === "PHASE_ONE_CLOSED"
         && actionByRole.get("CREATE_NOTIFICATION")?.moduleId === notificationModuleId
         && notificationAction?.operationKind === "CREATE"
-        && notificationObject?.channelPolicy?.mode === "PHASE_ONE_CLOSED";
+        && notificationModule?.operationalSeparationContract?.messageObjectId
+          === notificationObject?.id
+        && notificationDeliveryObject?.channelPolicy?.mode === "PHASE_ONE_CLOSED";
 
       const sourceRefs = records(flow.sourceDataRefs);
       const sourceRefByFieldId = new Map(sourceRefs.map((dataRef) => [dataRef.fieldId, dataRef]));
@@ -3103,24 +3109,24 @@ function learningPathErrors(index) {
 }
 
 function notificationErrors(index) {
-  const notification = index.objectById.get("NOTI-OBJ-NOTIFICATION")?.value;
-  if (!notification) return [];
-  const requiredFieldIds = [
-    "NOTI-NOTIFICATION-F-SOURCE-EVENT",
-    "NOTI-NOTIFICATION-F-RECIPIENT",
-    "NOTI-NOTIFICATION-F-SUMMARY-TEMPLATE",
-    "NOTI-NOTIFICATION-F-DEEP-LINK",
-    "NOTI-NOTIFICATION-F-DELIVERED-AT",
-    "NOTI-NOTIFICATION-F-READ-AT",
-    "NOTI-NOTIFICATION-F-HANDLED-AT",
-    "NOTI-NOTIFICATION-F-FAILURE-CODE",
-    "NOTI-NOTIFICATION-F-RETRY-COUNT",
-  ];
-  const fieldIds = new Set(records(notification.fields).map(({ id }) => id));
-  const policy = notification.deliveryFailurePolicy;
-  const recipientPolicy = notification.recipientPolicy;
+  const module = index.moduleById.get("NOTI-001")?.value;
+  if (!module) return [];
+  const contract = module.operationalSeparationContract;
+  const expectedContract = {
+    businessEventObjectId: "NOTI-OBJ-BUSINESS-EVENT",
+    actionTodoObjectId: "NOTI-OBJ-ACTION-TODO",
+    messageObjectId: "NOTI-OBJ-NOTIFICATION",
+    deliveryObjectId: "NOTI-OBJ-CHANNEL-DELIVERY",
+    messageReadChangesTodo: false,
+  };
+  const businessEvent = index.objectById.get(expectedContract.businessEventObjectId)?.value;
+  const todo = index.objectById.get(expectedContract.actionTodoObjectId)?.value;
+  const notification = index.objectById.get(expectedContract.messageObjectId)?.value;
+  const delivery = index.objectById.get(expectedContract.deliveryObjectId)?.value;
+  const recipientPolicy = notification?.recipientPolicy;
+  const deliveryPolicy = delivery?.deliveryFailurePolicy;
   const notificationActionById = new Map(index.actions
-    .filter(({ moduleId }) => moduleId === "NOTI-001")
+    .filter(({ moduleId }) => module.id)
     .map(({ value }) => [value.id, value]));
   const recipientActionsValid = ["NOTI-ACT-MARK-READ", "NOTI-ACT-MARK-HANDLED"]
     .every((actionId) => {
@@ -3139,8 +3145,19 @@ function notificationErrors(index) {
         effect === "DENY" && roleRef === "ROLE-PLATFORM-OPS"
       ));
     });
-  const valid = requiredFieldIds.every((fieldId) => fieldIds.has(fieldId))
-    && notification?.stateReachability?.mode === "ACTION_GRAPH"
+  const objectIds = [
+    expectedContract.businessEventObjectId,
+    expectedContract.actionTodoObjectId,
+    expectedContract.messageObjectId,
+    expectedContract.deliveryObjectId,
+  ];
+  const valid = hasExactValues(contract, expectedContract)
+    && new Set(objectIds).size === objectIds.length
+    && objectIds.every((objectId) => index.objectById.get(objectId)?.moduleId === module.id)
+    && businessEvent?.dataSubject === "TEACHING_BUSINESS_EVENT"
+    && todo?.dataSubject === "TEACHING_ACTION_TODO"
+    && notification?.dataSubject === "NOTIFICATION_MESSAGE"
+    && delivery?.dataSubject === "NOTIFICATION_CHANNEL_DELIVERY"
     && recipientActionsValid
     && hasExactKeys(recipientPolicy, [
       "subjectFieldId",
@@ -3161,14 +3178,21 @@ function notificationErrors(index) {
     && list(recipientPolicy.allowedRecipientSubjects).length === 4
     && recipientPolicy.mutationSubject === "CURRENT_ACTOR"
     && recipientPolicy.ownershipMode === "OWN_RECORD_ONLY"
-    && hasExactKeys(policy, [
+    && hasExactKeys(deliveryPolicy, [
       "sourceBusinessFactRollback",
+      "messageStateRollback",
       "retryScope",
-      "preserveAcceptedSourceVersion",
     ])
-    && policy.sourceBusinessFactRollback === false
-    && policy.retryScope === "NOTIFICATION_DELIVERY_ONLY"
-    && policy.preserveAcceptedSourceVersion === true;
+    && deliveryPolicy.sourceBusinessFactRollback === false
+    && deliveryPolicy.messageStateRollback === false
+    && deliveryPolicy.retryScope === "CHANNEL_DELIVERY_ONLY"
+    && notificationActionById.get("NOTI-ACT-MARK-READ")?.targetObjectId === notification?.id
+    && notificationActionById.get("NOTI-ACT-MARK-READ")?.businessTodoEffect === "NONE"
+    && notificationActionById.get("NOTI-ACT-MARK-HANDLED")?.targetObjectId === notification?.id
+    && notificationActionById.get("NOTI-ACT-MARK-HANDLED")?.businessTodoEffect === "NONE"
+    && notificationActionById.get("NOTI-ACT-RESOLVE-ACTION-TODO")?.targetObjectId === todo?.id
+    && ["NOTI-ACT-DELIVER", "NOTI-ACT-FAIL-DELIVERY", "NOTI-ACT-RETRY-DELIVERY"]
+      .every((actionId) => notificationActionById.get(actionId)?.targetObjectId === delivery?.id);
   return valid ? [] : [
     "INVALID_NOTIFICATION_CONTRACT NOTI-001 must retry delivery independently without rolling back source facts",
   ];
@@ -4361,7 +4385,7 @@ function contentGovernanceErrors(index) {
 
   const lineageBindings = records(question?.lineageBindings);
   valid = valid
-    && lineageBindings.length === expectedRefs.length
+    && lineageBindings.length >= expectedRefs.length
     && expectedRefs.every((expected) => lineageBindings.some((binding) => (
       hasExactValues(binding, expected)
     )));
@@ -4388,7 +4412,7 @@ function contentGovernanceErrors(index) {
   ];
   const relationships = records(moduleEntry.value?.relationships);
   valid = valid
-    && relationships.length === expectedRelationships.length
+    && relationships.length >= expectedRelationships.length
     && expectedRelationships.every((expected) => relationships.some((relationship) => (
       hasExactValues(relationship, expected)
     )));
@@ -4408,15 +4432,15 @@ function contentGovernanceErrors(index) {
     && publish?.operationKind === "UPDATE"
     && publish?.transition?.from === "DRAFT"
     && publish?.transition?.to === "PUBLISHED"
-    && sameStringSet(publish?.inputFieldIds, expectedRefs.flatMap((expected) => [
+    && expectedRefs.flatMap((expected) => [
       expected.refFieldId,
       expected.versionFieldId,
-    ]))
+    ]).every((fieldId) => list(publish?.inputFieldIds).includes(fieldId))
     && sameStringSet(publish?.outputFieldIds, [
       "CONTENT-QUESTION-F-VERSION",
       "CONTENT-QUESTION-F-AVAILABILITY",
     ])
-    && guards.length === expectedGuards.length
+    && guards.length >= expectedGuards.length
     && expectedGuards.every((expected) => guards.some((guard) => (
       hasExactValues(guard, expected)
     )))
@@ -9672,6 +9696,448 @@ function phaseTwoAiAssessmentErrors(index) {
   return errors;
 }
 
+function finalizedGovernanceBaselineErrors(index) {
+  if (!task8ProfileEnabled(index)) return [];
+  const errors = [];
+  const module = (id) => index.moduleById.get(id)?.value;
+  const object = (id) => index.objectById.get(id)?.value;
+  const action = (id) => index.actionById.get(id)?.value;
+  const exactOrder = (actual, expected) => list(actual).length === expected.length
+    && list(actual).every((value, position) => value === expected[position]);
+  const includesAll = (actual, expected) => expected.every((value) => list(actual).includes(value));
+  const objectHasFields = (objectId, fieldIds) => {
+    const actual = new Set(records(object(objectId)?.fields).map(({ id }) => id));
+    return fieldIds.every((fieldId) => actual.has(fieldId));
+  };
+  const boundaryScenario = (actionId, resultCode) => index.scenarios
+    .map(({ value }) => value)
+    .find((scenario) => (
+      scenario?.actionId === actionId
+      && scenario?.resultCode === resultCode
+      && scenario?.kind === "BOUNDARY"
+    ));
+  const guardMatches = (guard, expected) => hasExactValues(guard, expected);
+
+  const ownerDecisionIds = new Map([
+    ["ACC-001", ["D019", "D020"]],
+    ["TEA-001", ["D027", "D028", "D041"]],
+    ["NOTI-001", ["D039"]],
+    ["DGV-001", ["D047", "D048", "D049"]],
+    ["CONTENT-001", ["D067", "D068", "D069"]],
+  ]);
+  const ownerModulesValid = [...ownerDecisionIds].every(([moduleId, decisionIds]) => {
+    const occurrences = index.modules.filter(({ value }) => value?.id === moduleId);
+    const owner = occurrences[0]?.value?.governanceBaselineOwner;
+    return occurrences.length === 1
+      && hasExactKeys(owner, ["moduleId", "decisionIds"])
+      && owner.moduleId === moduleId
+      && exactOrder(owner.decisionIds, decisionIds);
+  });
+  if (!ownerModulesValid) {
+    errors.push("INVALID_GOVERNANCE_BASELINE_OWNER finalized governance decisions require one declared owner module each");
+  }
+
+  const account = module("ACC-001");
+  const schoolBoundaryAction = action("ACC-ACT-RESOLVE-SCHOOL-DATA-BOUNDARY");
+  const schoolStructureObjectIds = [
+    "ACC-OBJ-CAMPUS",
+    "ACC-OBJ-EDUCATION-GROUP",
+    "ACC-OBJ-SCHOOL-NAME-VERSION",
+    "ACC-OBJ-SCHOOL-REORGANIZATION",
+  ];
+  const schoolBoundaryScenario = boundaryScenario(
+    "ACC-ACT-RESOLVE-SCHOOL-DATA-BOUNDARY",
+    "IMPLICIT_DATA_SHARING_DENIED",
+  );
+  const d019Valid = account
+    && objectHasFields("ACC-OBJ-SCHOOL", [
+      "ACC-SCHOOL-F-GOVERNANCE-BOUNDARY-ID",
+      "ACC-SCHOOL-F-LEGAL-SUBJECT-REF",
+    ])
+    && schoolStructureObjectIds.every((objectId) => (
+      index.objectById.get(objectId)?.moduleId === "ACC-001"
+    ))
+    && object("ACC-OBJ-EDUCATION-GROUP")?.dataBoundaryPolicy
+      === "group membership never implies cross-school data access"
+    && schoolBoundaryAction?.targetObjectId === "ACC-OBJ-SCHOOL"
+    && schoolBoundaryAction?.operationKind === "READ"
+    && includesAll(schoolBoundaryAction?.outputFieldIds, [
+      "ACC-SCHOOL-F-GOVERNANCE-BOUNDARY-ID",
+      "ACC-SCHOOL-F-LEGAL-SUBJECT-REF",
+    ])
+    && exactOrder(schoolBoundaryAction?.implicitSharingSourcesDenied, [
+      "NAME_SIMILARITY",
+      "CAMPUS_RELATION",
+      "GROUP_MEMBERSHIP",
+    ])
+    && schoolBoundaryScenario?.then?.expectedPermission === "DENY"
+    && schoolBoundaryScenario?.then?.expectedState?.mode === "UNCHANGED";
+  if (!d019Valid) {
+    errors.push("INVALID_D019_SCHOOL_GOVERNANCE_ENTITY school, campus, group, name history, reorganization, and data boundary resolution must remain separate");
+  }
+
+  const readinessObjectIds = [
+    "ACC-OBJ-SCHOOL-APPLICATION-REVIEW",
+    "ACC-OBJ-SCHOOL",
+    "ACC-OBJ-SCHOOL-INITIALIZATION",
+    "ACC-OBJ-SCHOOL-SUBSCRIPTION",
+    "ACC-OBJ-CLASS-COURSE-READINESS",
+  ];
+  const expectedReadinessGuards = [
+    { refFieldId: "ACC-ACTIVATION-F-APPLICATION-REF", versionFieldId: "ACC-ACTIVATION-F-APPLICATION-VERSION", targetObjectId: "ACC-OBJ-SCHOOL-APPLICATION-REVIEW", requiredState: "APPROVED" },
+    { refFieldId: "ACC-ACTIVATION-F-SCHOOL-REF", versionFieldId: "ACC-ACTIVATION-F-SCHOOL-VERSION", targetObjectId: "ACC-OBJ-SCHOOL", requiredState: "ACTIVE" },
+    { refFieldId: "ACC-ACTIVATION-F-INITIALIZATION-REF", versionFieldId: "ACC-ACTIVATION-F-INITIALIZATION-VERSION", targetObjectId: "ACC-OBJ-SCHOOL-INITIALIZATION", requiredState: "READY" },
+    { refFieldId: "ACC-ACTIVATION-F-SUBSCRIPTION-REF", versionFieldId: "ACC-ACTIVATION-F-SUBSCRIPTION-VERSION", targetObjectId: "ACC-OBJ-SCHOOL-SUBSCRIPTION", requiredState: "ACTIVE" },
+    { refFieldId: "ACC-ACTIVATION-F-CLASS-COURSE-REF", versionFieldId: "ACC-ACTIVATION-F-CLASS-COURSE-VERSION", targetObjectId: "ACC-OBJ-CLASS-COURSE-READINESS", requiredState: "READY" },
+  ];
+  const activateTeaching = action("ACC-ACT-ACTIVATE-SCHOOL-TEACHING");
+  const readinessGuards = records(activateTeaching?.relatedStateGuards);
+  const d020Valid = hasExactKeys(account?.schoolReadinessContract, [
+    "axisObjectIds",
+    "teachingActivationActionId",
+    "activationProjectionObjectId",
+    "singleStatusAuthoritative",
+  ])
+    && exactOrder(account.schoolReadinessContract.axisObjectIds, readinessObjectIds)
+    && new Set(readinessObjectIds).size === readinessObjectIds.length
+    && account.schoolReadinessContract.teachingActivationActionId
+      === "ACC-ACT-ACTIVATE-SCHOOL-TEACHING"
+    && account.schoolReadinessContract.activationProjectionObjectId
+      === "ACC-OBJ-SCHOOL-ACTIVATION"
+    && account.schoolReadinessContract.singleStatusAuthoritative === false
+    && readinessObjectIds.every((objectId) => index.objectById.get(objectId)?.moduleId === "ACC-001")
+    && readinessGuards.length === expectedReadinessGuards.length
+    && expectedReadinessGuards.every((expected) => readinessGuards.some((guard) => (
+      guardMatches(guard, expected)
+    )))
+    && includesAll(
+      activateTeaching?.inputFieldIds,
+      expectedReadinessGuards.flatMap(({ refFieldId, versionFieldId }) => [refFieldId, versionFieldId]),
+    );
+  if (!d020Valid) {
+    errors.push("INVALID_D020_SCHOOL_READINESS_AXES teaching activation requires five independent pinned readiness sources");
+  }
+
+  const teacher = module("TEA-001");
+  const teacherDomains = [
+    "WORKBENCH",
+    "TEACHING_SPACE",
+    "LEARNING_ACTIVITIES",
+    "MATERIALS_ASSETS",
+    "NOTIFICATION_COLLABORATION",
+    "ACCOUNT_HANDOVER",
+  ];
+  const schoolAdminDomains = [
+    "OVERVIEW_READINESS",
+    "TEACHING_ORGANIZATION",
+    "PEOPLE_RELATIONSHIPS",
+    "PERMISSIONS_ACCOUNT_SECURITY",
+    "ASSETS_HANDOVER",
+    "AUDIT_DATA_SERVICES",
+  ];
+  const expectedResponsibilityContracts = [
+    { experienceKind: "TEACHER", domainIds: teacherDomains, fixedNavigationRequired: false, resolveActionId: "TEA-ACT-RESOLVE-TEACHER-EXPERIENCE" },
+    { experienceKind: "SCHOOL_ADMIN", domainIds: schoolAdminDomains, fixedNavigationRequired: false, resolveActionId: "TEA-ACT-RESOLVE-SCHOOL-ADMIN-EXPERIENCE" },
+  ];
+  const responsibilityContracts = records(teacher?.responsibilityDomainContracts);
+  const responsibilityResolversValid = expectedResponsibilityContracts.every((expected) => {
+    const contract = responsibilityContracts.find(({ experienceKind }) => (
+      experienceKind === expected.experienceKind
+    ));
+    const resolver = action(expected.resolveActionId);
+    return hasExactKeys(contract, [
+      "experienceKind",
+      "domainIds",
+      "fixedNavigationRequired",
+      "resolveActionId",
+    ])
+      && exactOrder(contract.domainIds, expected.domainIds)
+      && contract.fixedNavigationRequired === false
+      && contract.resolveActionId === expected.resolveActionId
+      && resolver?.targetObjectId === "TEA-OBJ-EXPERIENCE-RESOLUTION"
+      && hasExactKeys(resolver?.responsibilityResolution, [
+        "experienceKind",
+        "domainIds",
+        "fixedNavigationRequired",
+      ])
+      && resolver.responsibilityResolution.experienceKind === expected.experienceKind
+      && exactOrder(resolver.responsibilityResolution.domainIds, expected.domainIds)
+      && resolver.responsibilityResolution.fixedNavigationRequired === false
+      && list(resolver?.outputFieldIds).includes("TEA-EXPERIENCE-F-RESOLVED-SURFACES")
+      && list(resolver?.scenarioIds).length > 1;
+  });
+  if (
+    responsibilityContracts.length !== expectedResponsibilityContracts.length
+    || !responsibilityResolversValid
+  ) {
+    errors.push("INVALID_D027_D028_RESPONSIBILITY_DOMAINS teacher and school-admin domains must resolve as flexible responsibilities rather than fixed navigation");
+  }
+
+  const notification = module("NOTI-001");
+  const notificationContract = notification?.operationalSeparationContract;
+  const notificationObjectIds = [
+    notificationContract?.businessEventObjectId,
+    notificationContract?.actionTodoObjectId,
+    notificationContract?.messageObjectId,
+    notificationContract?.deliveryObjectId,
+  ];
+  const d039Valid = hasExactValues(notificationContract, {
+    businessEventObjectId: "NOTI-OBJ-BUSINESS-EVENT",
+    actionTodoObjectId: "NOTI-OBJ-ACTION-TODO",
+    messageObjectId: "NOTI-OBJ-NOTIFICATION",
+    deliveryObjectId: "NOTI-OBJ-CHANNEL-DELIVERY",
+    messageReadChangesTodo: false,
+  })
+    && new Set(notificationObjectIds).size === 4
+    && notificationObjectIds.every((objectId) => index.objectById.get(objectId)?.moduleId === "NOTI-001")
+    && action("NOTI-ACT-MARK-READ")?.targetObjectId === "NOTI-OBJ-NOTIFICATION"
+    && action("NOTI-ACT-MARK-READ")?.businessTodoEffect === "NONE"
+    && action("NOTI-ACT-MARK-HANDLED")?.businessTodoEffect === "NONE"
+    && action("NOTI-ACT-RESOLVE-ACTION-TODO")?.targetObjectId === "NOTI-OBJ-ACTION-TODO"
+    && action("NOTI-ACT-RESOLVE-ACTION-TODO")?.resolutionEffect?.requiresNewEvidence === true
+    && ["NOTI-ACT-DELIVER", "NOTI-ACT-FAIL-DELIVERY", "NOTI-ACT-RETRY-DELIVERY"]
+      .every((actionId) => action(actionId)?.targetObjectId === "NOTI-OBJ-CHANNEL-DELIVERY")
+    && object("NOTI-OBJ-CHANNEL-DELIVERY")?.deliveryFailurePolicy?.sourceBusinessFactRollback === false;
+  if (!d039Valid) {
+    errors.push("INVALID_D039_NOTIFICATION_SEPARATION business events, action todos, messages, and deliveries must remain independently stateful");
+  }
+
+  const accessibility = teacher?.accessibilityContract;
+  const accessibilityAction = action("TEA-ACT-RESOLVE-ACCESSIBLE-PRESENTATION");
+  const accessibilityFields = [
+    "TEA-EXPERIENCE-F-SEMANTIC-IA-VERSION",
+    "TEA-EXPERIENCE-F-AGE-ADAPTATION",
+    "TEA-EXPERIENCE-F-KEYBOARD-OPERATION",
+    "TEA-EXPERIENCE-F-NON-VOICE-ALTERNATIVE",
+    "TEA-EXPERIENCE-F-TEXT-SCALING",
+    "TEA-EXPERIENCE-F-VISIBLE-FOCUS",
+  ];
+  const accessibilityBoundary = boundaryScenario(
+    "TEA-ACT-RESOLVE-ACCESSIBLE-PRESENTATION",
+    "ACCESSIBILITY_PROFILE_INCOMPLETE",
+  );
+  const d041Valid = hasExactKeys(accessibility, [
+    "sharedSemanticInformationArchitecture",
+    "ageStages",
+    "ageAdaptationDimensions",
+    "requiredCapabilities",
+    "resolveActionId",
+  ])
+    && accessibility.sharedSemanticInformationArchitecture === true
+    && exactOrder(accessibility.ageStages, ["PRIMARY", "MIDDLE"])
+    && exactOrder(accessibility.ageAdaptationDimensions, ["LANGUAGE", "INFORMATION_DENSITY", "INTERACTION"])
+    && exactOrder(accessibility.requiredCapabilities, ["KEYBOARD_OPERATION", "NON_VOICE_ALTERNATIVE", "TEXT_SCALING", "VISIBLE_FOCUS"])
+    && accessibility.resolveActionId === accessibilityAction?.id
+    && includesAll(accessibilityAction?.outputFieldIds, accessibilityFields)
+    && accessibilityAction?.accessibilityResolution?.sharedSemanticInformationArchitecture === true
+    && accessibilityAction?.accessibilityResolution?.failureMode === "FAIL_CLOSED"
+    && accessibilityBoundary?.then?.expectedPermission === "DENY";
+  if (!d041Valid) {
+    errors.push("INVALID_D041_ACCESSIBILITY_CONTRACT shared semantics, age adaptation, keyboard, non-voice, scaling, and visible focus must resolve together");
+  }
+
+  const catalogAxisFieldIds = [
+    "DGV-CATALOG-F-NATURE",
+    "DGV-CATALOG-F-DATA-SUBJECT",
+    "DGV-CATALOG-F-MANAGEMENT-SCOPE",
+    "DGV-CATALOG-F-SOURCE-RIGHTS",
+    "DGV-CATALOG-F-PURPOSE",
+    "DGV-CATALOG-F-SENSITIVITY",
+    "DGV-CATALOG-F-PORTABILITY",
+    "DGV-CATALOG-F-LIFECYCLE",
+  ];
+  const catalogObject = object("DGV-OBJ-DATA-CATALOG-ENTRY");
+  const catalogResolve = action("DGV-ACT-RESOLVE-DATA-CATALOG");
+  const d047Valid = exactOrder(catalogObject?.dataCatalogContract?.axisFieldIds, catalogAxisFieldIds)
+    && catalogAxisFieldIds.every((fieldId) => {
+      const field = index.fieldById.get(fieldId)?.value;
+      return field?.required === true && field?.valueSource?.kind === "OPTION_SET";
+    })
+    && exactOrder(catalogResolve?.outputFieldIds, catalogAxisFieldIds)
+    && exactOrder(catalogResolve?.requiredAxisFieldIds, catalogAxisFieldIds)
+    && boundaryScenario("DGV-ACT-RESOLVE-DATA-CATALOG", "CATALOG_AXIS_INCOMPLETE")
+      ?.then?.expectedPermission === "DENY";
+  if (!d047Valid) {
+    errors.push("INVALID_D047_DATA_CATALOG every governed data kind requires all eight independently explicit catalog axes");
+  }
+
+  const governanceActionContracts = [
+    ["DGV-ACT-CORRECT-DATA", "CORRECT", "CORRECTED"],
+    ["DGV-ACT-RESTRICT-DATA-ACCESS", "RESTRICT_ACCESS", "ACCESS_RESTRICTED"],
+    ["DGV-ACT-PHYSICALLY-DELETE-DATA", "PHYSICAL_DELETE", "PHYSICALLY_DELETED"],
+    ["DGV-ACT-IRREVERSIBLY-DEIDENTIFY-DATA", "IRREVERSIBLE_DEIDENTIFY", "IRREVERSIBLY_DEIDENTIFIED"],
+  ];
+  const governanceKinds = governanceActionContracts.map(([actionId]) => action(actionId)?.governanceActionKind);
+  const d048Valid = object("DGV-OBJ-DATA-GOVERNANCE-CASE")?.fourActionPolicy?.singleDeleteStatusAllowed === false
+    && new Set(governanceKinds).size === governanceActionContracts.length
+    && governanceActionContracts.every(([actionId, actionKind, successState]) => {
+      const value = action(actionId);
+      const accepted = records(value?.acceptedInputValues)[0];
+      return value?.targetObjectId === "DGV-OBJ-DATA-GOVERNANCE-CASE"
+        && value?.operationKind === "CREATE"
+        && value?.risk === "HIGH"
+        && value?.governanceActionKind === actionKind
+        && accepted?.fieldId === "DGV-GOVCASE-F-ACTION-KIND"
+        && exactOrder(accepted?.codes, [actionKind])
+        && index.scenarios.some(({ value: scenario }) => (
+          scenario?.actionId === actionId
+          && scenario?.kind === "SUCCESS"
+          && scenario?.then?.expectedState?.value === successState
+        ));
+    });
+  if (!d048Valid) {
+    errors.push("INVALID_D048_GOVERNANCE_ACTIONS correction, restriction, physical deletion, and irreversible deidentification must remain distinct actions and outcomes");
+  }
+
+  const deletionCategories = [
+    "RAW_TEXT",
+    "IMAGE",
+    "AUDIO",
+    "AI_RESULT",
+    "LEARNING_PROFILE",
+    "VIDEO",
+    "SCHOOL_FACT",
+    "SHARED_ASSOCIATION",
+    "LEGAL_HOLD_RECORD",
+  ];
+  const deletionBindingFields = [
+    "DGV-DELROW-F-DELETION-CASE-REF",
+    "DGV-DELROW-F-SOURCE-OBJECT-ID",
+    "DGV-DELROW-F-SOURCE-OBJECT-CATEGORY",
+    "DGV-DELROW-F-LEGAL-BASIS",
+    "DGV-DELROW-F-DISPUTE-BASIS",
+    "DGV-DELROW-F-GOVERNANCE-ACTION",
+    "DGV-DELROW-F-EXECUTION-STATUS",
+  ];
+  const deletionDecision = object("DGV-OBJ-STUDENT-DELETION-DECISION");
+  const deletionCase = object("DGV-OBJ-STUDENT-DELETION-CASE");
+  const registerDecision = action("DGV-ACT-REGISTER-STUDENT-DELETION-DECISION");
+  const finalizeMatrix = action("DGV-ACT-FINALIZE-STUDENT-DELETION-MATRIX");
+  const identityDeletion = action("ACC-ACT-COMPLETE-IDENTITY-DELETION");
+  const identityGate = records(identityDeletion?.relatedStateGuards).find(({ targetObjectId }) => (
+    targetObjectId === "DGV-OBJ-STUDENT-DELETION-CASE"
+  ));
+  const d049Valid = exactOrder(deletionDecision?.studentDeletionDecisionContract?.objectCategories, deletionCategories)
+    && exactOrder(deletionDecision?.studentDeletionDecisionContract?.requiredBindingFieldIds, deletionBindingFields)
+    && objectHasFields(deletionDecision?.id, [
+      ...deletionBindingFields,
+      "DGV-DELROW-F-HIGH-IMPACT-AUTHORIZATION-ID",
+      "DGV-DELROW-F-DELETION-CASE-VERSION",
+    ])
+    && deletionBindingFields.every((fieldId) => index.fieldById.get(fieldId)?.value?.required === true)
+    && registerDecision?.targetObjectId === deletionDecision?.id
+    && records(registerDecision?.relatedStateGuards).some((guard) => guardMatches(guard, {
+      refFieldId: "DGV-DELROW-F-DELETION-CASE-REF",
+      versionFieldId: "DGV-DELROW-F-DELETION-CASE-VERSION",
+      targetObjectId: "DGV-OBJ-STUDENT-DELETION-CASE",
+      requiredState: "REQUESTED",
+    }))
+    && exactOrder(finalizeMatrix?.requiredObjectCategories, deletionCategories)
+    && exactOrder(deletionCase?.identityDeletionGate?.requiredObjectCategories, deletionCategories)
+    && deletionCase?.identityDeletionGate?.releaseState === "COMPLETED"
+    && identityGate?.requiredState === "COMPLETED"
+    && includesAll(identityDeletion?.inputFieldIds, [
+      "ACC-PIDENT-F-DELETION-CASE-REF",
+      "ACC-PIDENT-F-DELETION-CASE-VERSION",
+    ]);
+  if (!d049Valid) {
+    errors.push("INVALID_D049_STUDENT_DELETION_MATRIX every object decision requires category, legal and dispute basis, execution state, and a completed identity-deletion gate");
+  }
+
+  const content = module("CONTENT-001");
+  const materialContract = content?.materialRightsContract;
+  const materialObjectIds = [
+    "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
+    "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE",
+    "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE",
+  ];
+  const rightsResolve = action("CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS");
+  const questionPublication = action("CONTENT-ACT-PUBLISH-QUESTION-VERSION");
+  const materialQuestionGuards = records(questionPublication?.relatedStateGuards)
+    .filter(({ targetObjectId }) => materialObjectIds.includes(targetObjectId));
+  const d067Valid = hasExactValues(materialContract, {
+    sourceGraphObjectId: materialObjectIds[0],
+    rightsBundleObjectId: materialObjectIds[1],
+    managementScopeObjectId: materialObjectIds[2],
+    rightsResolveActionId: "CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS",
+    ownerRefDerivesRights: false,
+  })
+    && materialObjectIds.every((objectId) => index.objectById.get(objectId)?.moduleId === "CONTENT-001")
+    && objectHasFields("CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE", [
+      "CONTENT-RIGHTS-F-RIGHTS-BASIS",
+      "CONTENT-RIGHTS-F-USE-SCOPE",
+      "CONTENT-RIGHTS-F-ADAPTATION-SCOPE",
+      "CONTENT-RIGHTS-F-SHARING-SCOPE",
+      "CONTENT-RIGHTS-F-STUDENT-PRIVACY",
+    ])
+    && exactOrder(rightsResolve?.rightsResolution?.sourceObjectIds, materialObjectIds)
+    && rightsResolve?.rightsResolution?.ownerRefUsage === "PROHIBITED"
+    && materialQuestionGuards.length === materialObjectIds.length
+    && materialObjectIds.every((objectId) => materialQuestionGuards.some(({ targetObjectId, requiredState }) => (
+      targetObjectId === objectId && requiredState === "ACTIVE"
+    )));
+  if (!d067Valid) {
+    errors.push("INVALID_D067_MATERIAL_RIGHTS provenance, rights bundle, and product management scope must remain independent and ownerRef must not derive rights");
+  }
+
+  const sampleAuthorization = object("CONTENT-OBJ-STUDENT-WORK-SAMPLE-AUTHORIZATION");
+  const sampleCopy = object("CONTENT-OBJ-STUDENT-WORK-SAMPLE-COPY");
+  const sampleCreate = action("CONTENT-ACT-CREATE-STUDENT-SAMPLE-COPY");
+  const sampleRemove = action("CONTENT-ACT-REMOVE-STUDENT-SAMPLE-COPY");
+  const d068Valid = hasExactValues(sampleCopy?.sampleCopyContract, {
+    authorizationObjectId: "CONTENT-OBJ-STUDENT-WORK-SAMPLE-AUTHORIZATION",
+    independentCopyRequired: true,
+    deidentificationRequired: true,
+    purposeLimitRequired: true,
+    withdrawalActionId: "CONTENT-ACT-WITHDRAW-STUDENT-SAMPLE-AUTHORIZATION",
+    removalActionId: "CONTENT-ACT-REMOVE-STUDENT-SAMPLE-COPY",
+  })
+    && sampleAuthorization?.dataSubject === "STUDENT_WORK_SAMPLE_AUTHORIZATION"
+    && sampleCopy?.dataSubject === "STUDENT_WORK_SAMPLE_COPY"
+    && sampleCreate?.sampleCreationGuard?.independentCopy === true
+    && sampleCreate?.sampleCreationGuard?.deidentified === true
+    && exactOrder(sampleCreate?.sampleCreationGuard?.allowedManagementScopes, ["SCHOOL_PRIVATE"])
+    && records(sampleCreate?.relatedStateGuards).some(({ targetObjectId, requiredState }) => (
+      targetObjectId === sampleAuthorization?.id && requiredState === "AUTHORIZED"
+    ))
+    && records(sampleRemove?.relatedStateGuards).some(({ targetObjectId, requiredState }) => (
+      targetObjectId === sampleAuthorization?.id && requiredState === "WITHDRAWN"
+    ))
+    && sampleRemove?.removalBoundary?.productControlledCopiesOnly === true
+    && sampleRemove?.removalBoundary?.externalRecallGuaranteed === false;
+  if (!d068Valid) {
+    errors.push("INVALID_D068_STUDENT_SAMPLE_COPY student samples require an independent authorized deidentified purpose-limited copy with withdrawal removal");
+  }
+
+  const publicPromotion = action("CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC");
+  const publicGuard = publicPromotion?.publicPromotionGuard;
+  const publicBoundary = boundaryScenario(
+    "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC",
+    "STUDENT_WORK_PUBLIC_PROHIBITED",
+  );
+  const d069Valid = hasExactKeys(publicGuard, [
+    "sourceKindFieldId",
+    "prohibitedSourceKinds",
+    "prohibitedPhaseIds",
+    "requiredReviewKinds",
+  ])
+    && publicGuard.sourceKindFieldId === "CONTENT-SCOPE-F-SOURCE-KIND"
+    && exactOrder(publicGuard.prohibitedSourceKinds, ["STUDENT_WORK"])
+    && exactOrder(publicGuard.prohibitedPhaseIds, ["PHASE-1", "PHASE-2"])
+    && exactOrder(publicGuard.requiredReviewKinds, ["SOURCE_RIGHTS", "PRIVACY", "CONTENT_QUALITY", "PLATFORM_AUTHORIZATION"])
+    && publicPromotion?.targetObjectId === "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE"
+    && publicPromotion?.risk === "HIGH"
+    && list(publicPromotion?.failureResults).includes("STUDENT_WORK_PUBLIC_PROHIBITED")
+    && publicBoundary?.then?.expectedPermission === "DENY"
+    && publicBoundary?.then?.expectedState?.mode === "UNCHANGED"
+    && exactOrder(sampleCreate?.sampleCreationGuard?.allowedManagementScopes, ["SCHOOL_PRIVATE"]);
+  if (!d069Valid) {
+    errors.push("INVALID_D069_NO_STUDENT_PUBLIC_PROMOTION phases one and two must fail closed for student-work platform-public promotion");
+  }
+
+  return errors;
+}
+
 export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
@@ -9723,5 +10189,6 @@ export function validateModelSemantics(model) {
     ...teacherActionSeparationErrors(index),
     ...studentHomeErrors(index),
     ...phaseTwoAiAssessmentErrors(index),
+    ...finalizedGovernanceBaselineErrors(index),
   ];
 }

@@ -68,6 +68,11 @@ import {
   phaseThreeModules,
   phaseThreeOptionSets,
 } from "./phase-three.mjs";
+import {
+  applyGovernanceBaselineContracts,
+  governanceBaselineEvents,
+  governanceBaselineOptionSets,
+} from "./governance-baseline-contracts.mjs";
 
 export const optionSets = deepFreeze(replacePhaseTwoAssessmentOptionSets([
   ...catalogOptionSets,
@@ -76,6 +81,7 @@ export const optionSets = deepFreeze(replacePhaseTwoAssessmentOptionSets([
   ...phaseTwoAssessmentOptionSets,
   ...phaseTwoOptionSets,
   ...phaseThreeOptionSets,
+  ...governanceBaselineOptionSets,
 ]));
 
 export const events = deepFreeze(replacePhaseTwoAssessmentEvents([
@@ -84,6 +90,7 @@ export const events = deepFreeze(replacePhaseTwoAssessmentEvents([
   ...extensionEvents,
   ...phaseTwoEvents,
   ...phaseThreeEvents,
+  ...governanceBaselineEvents,
 ]));
 
 export {
@@ -97,14 +104,17 @@ export {
   sensitivities,
 };
 
-export const modules = deepFreeze(deferPhaseThreeFlowActions(replacePhaseTwoAssessmentModules([
+const sourceModules = [
   ...foundationModules,
   ...teachingLoopModules,
   ...aiReportingModules,
   ...extensionModules,
   ...phaseTwoModules,
   ...phaseThreeModules,
-])));
+];
+export const modules = deepFreeze(applyGovernanceBaselineContracts(
+  deferPhaseThreeFlowActions(replacePhaseTwoAssessmentModules(sourceModules)),
+));
 export const currentReleaseModuleIds = deepFreeze(
   modules
     .filter(({ releaseStatus }) => releaseStatus === RELEASE_STATUS.BUILD_READY)
