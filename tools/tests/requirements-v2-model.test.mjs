@@ -1899,7 +1899,7 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 103);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 119);
   assert.deepEqual(
     moduleById(requirementModel, "CONTENT-001").actions
       .filter(({ targetObjectId, operationKind }) => (
@@ -3679,7 +3679,7 @@ test("authors reachability and Flow profiles in source facts without assembly de
     {
       modules: foundationFactExports.foundationModules,
       flows: foundationFactExports.foundationFlows,
-      objectCount: 36,
+      objectCount: 52,
       flowCount: 3,
     },
     {
@@ -3725,8 +3725,8 @@ test("declares the direct read mode for every phase-one object", () => {
       [mode, objects.length]
     ))),
     {
-      AUTHORIZED: 39,
-      NO_DIRECT_READ: 44,
+      AUTHORIZED: 41,
+      NO_DIRECT_READ: 58,
       STUDENT_TIMED_RELEASE: 4,
     },
   );
@@ -3752,11 +3752,11 @@ test("declares the direct read mode for every phase-one object", () => {
   }
 });
 
-test("declares one standard system identity for all 87 phase-one objects", () => {
+test("declares one standard system identity for all 103 phase-one objects", () => {
   const phaseOneObjects = modules
     .filter(({ phase }) => phase === PHASE.FIRST)
     .flatMap(({ objects }) => objects);
-  assert.equal(phaseOneObjects.length, 87);
+  assert.equal(phaseOneObjects.length, 103);
 
   const violations = phaseOneObjects.flatMap((object) => {
     const identities = object.fields
@@ -8000,6 +8000,7 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
     "STU-ACT-VIEW-ATTENTION",
     "LPATH-ACT-VIEW-PATH",
     "EXM-ACT-VIEW-PUBLISHED-SCORE",
+    "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY",
   ];
   const actionById = new Map(modules.flatMap((module) => (
     module.actions.map((action) => [action.id, action])
@@ -8015,7 +8016,7 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
         ?.privilegedReadPolicy === "DEFAULT_DENY"
     ))
     .map(({ id }) => id);
-  assert.equal(protectedReadActionIds.length, 14);
+  assert.equal(protectedReadActionIds.length, 15);
   assert.deepEqual(
     new Set(protectedReadActionIds),
     new Set(studentDetailReadActionIds),
@@ -8326,13 +8327,13 @@ test("classifies every phase-one object with a closed student-data access fact",
   const phaseOneObjects = modules
     .filter(({ phase }) => phase === PHASE.FIRST)
     .flatMap((module) => module.objects);
-  assert.equal(phaseOneObjects.length, 87);
+  assert.equal(phaseOneObjects.length, 103);
   assert.deepEqual(
     phaseOneObjects.reduce((counts, object) => ({
       ...counts,
       [object.studentDataClassification.kind]: counts[object.studentDataClassification.kind] + 1,
     }), { NONE: 0, DETAIL: 0, AGGREGATE: 0 }),
-    { NONE: 57, DETAIL: 25, AGGREGATE: 5 },
+    { NONE: 65, DETAIL: 33, AGGREGATE: 5 },
   );
   assert.equal(phaseOneObjects.every((object) => {
     const classification = object.studentDataClassification;
@@ -9474,22 +9475,28 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["ACC-ACT-INVALIDATE-CONTEXT", "SYSTEM_EVENT"],
     ["ORG-ACT-FINALIZE-AUDITED-IMPORT", "FLOW_INTERNAL"],
     ["ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT", "FLOW_INTERNAL"],
+    ["ORG-ACT-EXPIRE-SUBSTITUTE-RELATION", "SYSTEM_EVENT"],
     ["IAM-ACT-SYNC-ROLE-POLICY", "SYSTEM_EVENT"],
     ["IAM-ACT-EXPIRE-GRANT", "SYSTEM_EVENT"],
     ["IAM-ACT-MARK-PERMISSION-STALE", "SYSTEM_EVENT"],
     ["IAM-ACT-EVALUATE-PERMISSION", "FLOW_INTERNAL"],
     ["IAM-ACT-RECALCULATE-PERMISSIONS", "FLOW_INTERNAL"],
+    ["IAM-ACT-EXPIRE-TASK-ASSISTANCE-SESSION", "SYSTEM_EVENT"],
     ["DGV-ACT-SYNC-POLICY", "SYSTEM_EVENT"],
     ["DGV-ACT-GENERATE-EXPORT", "SYSTEM_EVENT"],
     ["DGV-ACT-COMPLETE-EXPORT", "SYSTEM_EVENT"],
     ["DGV-ACT-FAIL-EXPORT", "SYSTEM_EVENT"],
     ["DGV-ACT-EXPIRE-EXPORT", "SYSTEM_EVENT"],
+    ["DGV-ACT-CREATE-OLD-SCHOOL-HISTORY-RESTRICTION", "SYSTEM_EVENT"],
+    ["DGV-ACT-DEIDENTIFY-OLD-SCHOOL-HISTORY", "SYSTEM_EVENT"],
+    ["DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE", "SYSTEM_EVENT"],
     ["AUD-ACT-APPEND-EVENT", "SYSTEM_EVENT"],
     ["AUD-ACT-ARCHIVE-EVENT", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-ACCESS-REQUEST", "SYSTEM_EVENT"],
     ["AUD-ACT-OPEN-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-ACTIVATE-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-SESSION", "SYSTEM_EVENT"],
+    ["AUD-ACT-CLEAN-SHARED-DEVICE-SESSION", "SYSTEM_EVENT"],
     ["TEA-ACT-SYNC-TODO-VIEW", "SYSTEM_EVENT"],
     ["HW-ACT-SYNC-RUBRIC", "SYSTEM_EVENT"],
     ["HW-ACT-PUBLISH-SCHEDULED", "SYSTEM_EVENT"],
@@ -9550,7 +9557,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 77);
+  assert.equal(expectedModes.size, 83);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -9741,6 +9748,7 @@ test("binds IAM action sets to the global authorizable action registry", () => {
     "IAM-ROLE-F-ACTIONS",
     "IAM-DUTY-F-ACTIONS",
     "IAM-SCOPE-F-ACTIONS",
+    "IAM-SDAUTH-F-ACTIONS",
     "IAM-TEMP-F-ACTIONS",
   ];
   const fields = identity.objects.flatMap((object) => object.fields);
@@ -9877,8 +9885,13 @@ test("assigns explicit object responsibility subjects and accountable actors", (
       object.stewardRef,
     ], expected);
   }
-  assert.equal(objects.every(({ dataSubject, controlSubject }) => (
-    dataSubject.length > 0 && controlSubject === "SCHOOL"
+  const platformControlledObjectIds = new Set([
+    "ACC-OBJ-PLATFORM-IDENTITY",
+    "ACC-OBJ-LOGIN-ACCOUNT",
+  ]);
+  assert.equal(objects.every(({ id, dataSubject, controlSubject }) => (
+    dataSubject.length > 0
+    && controlSubject === (platformControlledObjectIds.has(id) ? "PLATFORM" : "SCHOOL")
   )), true);
 });
 
@@ -10268,10 +10281,12 @@ test("defines the immutable baseline decisions and teacher duty model", () => {
   );
   assert.deepEqual(roles, [
     { id: "ROLE-STUDENT", label: "学生" },
+    { id: "ROLE-GUARDIAN", label: "监护人" },
     { id: "ROLE-TEACHER", label: "教师" },
     { id: "ROLE-ACADEMIC", label: "教务" },
     { id: "ROLE-SCHOOL-ADMIN", label: "学校管理员" },
     { id: "ROLE-PLATFORM-OPS", label: "平台运营" },
+    { id: "ROLE-PLATFORM-GOVERNANCE", label: "平台治理" },
   ]);
   assert.deepEqual(duties, [
     { id: "DUTY-SUBJECT-TEACHER", roleId: "ROLE-TEACHER", label: "任课教师" },
@@ -10292,6 +10307,8 @@ test("defines distinct lifecycle and sensitivity policies", () => {
       { id: "LIFE-006", scope: "REPORT_SUBSCRIPTIONS_RUNS_SNAPSHOTS" },
       { id: "LIFE-007", scope: "CROSS_TERM_LEARNING_PATHS" },
       { id: "LIFE-008", scope: "EXPIRING_EXPORTS" },
+      { id: "LIFE-009", scope: "IDENTITY_RELATIONSHIP_AND_DATA_RIGHTS" },
+      { id: "LIFE-010", scope: "SHORT_LIVED_ASSISTANCE_AND_DEVICE_SESSIONS" },
     ],
   );
   assert.equal(new Set(lifecyclePolicies.map(({ writeRule }) => writeRule)).size > 1, true);
@@ -10536,6 +10553,13 @@ test("registers every required Option Set concept with stable code-label values"
     "timeRange",
     "scopeObject",
     "authorizableAction",
+    "schoolActivationAxis",
+    "authorizationImpact",
+    "guardianAssistanceStatus",
+    "guardianDisputeStatus",
+    "dataRightAction",
+    "exportAudience",
+    "sharedDeviceCleanupScope",
     "yesNo",
     "assignmentType",
     "assignmentNotificationPolicy",
@@ -10723,10 +10747,12 @@ test("registers every required Option Set concept with stable code-label values"
     region: ["CN-HEBEI", "CN-HEBEI-SHIJIAZHUANG"],
     loginRole: [
       "ROLE-STUDENT",
+      "ROLE-GUARDIAN",
       "ROLE-TEACHER",
       "ROLE-ACADEMIC",
       "ROLE-SCHOOL-ADMIN",
       "ROLE-PLATFORM-OPS",
+      "ROLE-PLATFORM-GOVERNANCE",
     ],
     workDuty: ["DUTY-SUBJECT-TEACHER", "DUTY-HOMEROOM", "DUTY-SUBJECT-LEAD"],
     dataRetentionCategory: ["ACCOUNT_IDENTITY", "ORGANIZATION", "TEACHING_CONTENT", "STUDENT_WORK", "SCORE_FEEDBACK", "AUDIT_EXPORT"],
@@ -10838,7 +10864,7 @@ test("registers every required Option Set concept with stable code-label values"
     importResult: ["PASSED", "WARNING", "ERROR", "DUPLICATE", "CONFLICT"],
     auditAction: ["QUERY", "CREATE", "UPDATE", "PUBLISH", "EXPORT", "GRANT", "REVOKE", "LOGIN", "AI-EXECUTE"],
     auditResult: ["SUCCEEDED", "PARTIALLY-SUCCEEDED", "FAILED", "DENIED"],
-    accountIdentifier: ["MOBILE", "EMPLOYEE-NUMBER", "STUDENT-NUMBER"],
+    accountIdentifier: ["MOBILE", "EMAIL", "USERNAME"],
     activationMethod: ["INITIAL-PASSWORD", "ONE-TIME-CODE", "ADMIN-CONFIRMATION"],
     imageQuality: ["USABLE", "BLURRY", "INCOMPLETE", "GLARE", "ORIENTATION-ERROR", "UPLOAD-FAILED"],
     correctionDecision: ["PASSED", "NOT-PASSED", "NEEDS-MORE", "CLOSED"],
@@ -10872,6 +10898,46 @@ test("registers every required Option Set concept with stable code-label values"
     scheduleCandidateStatus: ["GENERATED", "REVIEWED", "CONFIRMED", "PUBLISHED", "STALE"],
     platformCaseStatus: ["OPEN", "SCHOOL_CONFIRMED"],
     policyTemplateStatus: ["DRAFT", "CONFIRMED", "ACTIVE"],
+    schoolActivationAxis: [
+      "PLATFORM_SUBJECT_REVIEW",
+      "FIRST_ADMIN_ACCEPTANCE",
+      "INITIALIZATION_VALIDATION",
+      "SUBSCRIPTION_READINESS",
+      "CLASS_COURSE_READINESS",
+      "TEACHING_ACTIVATION",
+    ],
+    authorizationImpact: [
+      "ORDINARY_DELEGABLE",
+      "CONTROLLED_DELEGABLE",
+      "HIGH_IMPACT",
+      "NON_DELEGABLE",
+    ],
+    guardianAssistanceStatus: [
+      "NOT_AUTHORIZED",
+      "RELATION_CONFIRMED",
+      "SCHOOL_SCOPE_ACTIVE",
+      "TASK_SESSION_ACTIVE",
+      "EXPIRED",
+      "REVOKED",
+    ],
+    guardianDisputeStatus: ["NONE", "OPEN", "FROZEN", "RESOLVED", "REJECTED"],
+    dataRightAction: [
+      "ACCESS",
+      "CORRECT",
+      "EXPORT",
+      "MIGRATE",
+      "DELETE",
+      "RESTRICT",
+      "WITHDRAW_PUBLICATION",
+    ],
+    exportAudience: ["STUDENT", "GUARDIAN", "TEACHER", "SCHOOL"],
+    sharedDeviceCleanupScope: [
+      "PRODUCT_PAGE_STATE",
+      "PRODUCT_CACHE",
+      "PRODUCT_TEMP_FILE",
+      "SENSITIVE_NOTIFICATION_PREVIEW",
+      "PRODUCT_DOWNLOAD_PERMISSION",
+    ],
   };
   for (const source of Object.values(runtimeSources)) {
     source.idKind = source.valueField === "actionId" ? "ACTION_ID" : "OBJECT_ID";
@@ -10935,6 +11001,7 @@ test("publishes explicit runtime-query ID and authorizable-field semantics", () 
       "IAM-DUTY-F-ACTIONS",
       "IAM-ROLE-F-ACTIONS",
       "IAM-SCOPE-F-ACTIONS",
+      "IAM-SDAUTH-F-ACTIONS",
       "IAM-TEMP-F-ACTIONS",
     ],
   );

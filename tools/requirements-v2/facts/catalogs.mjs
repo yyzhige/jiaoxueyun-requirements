@@ -104,10 +104,12 @@ export const baselineDecisions = [
 
 export const roles = [
   { id: "ROLE-STUDENT", label: "学生" },
+  { id: "ROLE-GUARDIAN", label: "监护人" },
   { id: "ROLE-TEACHER", label: "教师" },
   { id: "ROLE-ACADEMIC", label: "教务" },
   { id: "ROLE-SCHOOL-ADMIN", label: "学校管理员" },
   { id: "ROLE-PLATFORM-OPS", label: "平台运营" },
+  { id: "ROLE-PLATFORM-GOVERNANCE", label: "平台治理" },
 ];
 
 export const duties = [
@@ -180,6 +182,22 @@ export const lifecyclePolicies = [
     historyRule: "长期保留导出请求、权限判定和访问审计，不长期保留临时下载文件。",
     retentionOwner: "ROLE-SCHOOL-ADMIN",
     expiryOrArchival: "文件达到显式有效期后立即失效并删除；未配置保留期限时禁止敏感导出。",
+  },
+  {
+    id: "LIFE-009",
+    scope: "IDENTITY_RELATIONSHIP_AND_DATA_RIGHTS",
+    writeRule: "身份、监护、学校数据授权与高影响事项必须通过独立关系或授权事实写入，任何职责不得合成关系。",
+    historyRule: "保留授权来源、范围、期限、争议冻结、纠正与执行版本；彻底注销后删除可回查身份映射。",
+    retentionOwner: "ROLE-PLATFORM-GOVERNANCE",
+    expiryOrArchival: "按数据主体权利、来源权利、争议保全和法定留存逐对象删除、限制、去标识或保留。",
+  },
+  {
+    id: "LIFE-010",
+    scope: "SHORT_LIVED_ASSISTANCE_AND_DEVICE_SESSIONS",
+    writeRule: "任务辅助与共享设备会话只能在当前已授权任务和显式期限内创建，不能扩大到账户或完整历史。",
+    historyRule: "仅保留必要的参与、范围、开始、结束、清理结果与审计摘要，不保留可复用的敏感会话内容。",
+    retentionOwner: "ROLE-SCHOOL-ADMIN",
+    expiryOrArchival: "任务结束、身份切换、退出或会话超时立即失效并清理产品可控制状态。",
   },
 ];
 
@@ -457,6 +475,42 @@ export const events = [
     definition: "已引用来源版本失效后，将依赖的学习路径解释标记为失效并保留历史。",
     triggeredActionIds: ["LPATH-ACT-MARK-INTERPRETATION-STALE"],
   },
+  {
+    id: "EVT-SUBSTITUTE-TEACHING-RELATION-EXPIRY-REACHED",
+    label: "临时代课任教关系到期",
+    definition: "临时代课关系达到明确结束时间后，立即终止其班级、学科和职责访问。",
+    triggeredActionIds: ["ORG-ACT-EXPIRE-SUBSTITUTE-RELATION"],
+  },
+  {
+    id: "EVT-TASK-ASSISTANCE-SESSION-EXPIRY-REACHED",
+    label: "监护任务辅助会话到期",
+    definition: "当前任务或辅助会话达到明确期限后，立即终止监护辅助访问。",
+    triggeredActionIds: ["IAM-ACT-EXPIRE-TASK-ASSISTANCE-SESSION"],
+  },
+  {
+    id: "EVT-OLD-SCHOOL-HISTORY-ACCESS-EXPIRY-REACHED",
+    label: "旧校可识别历史访问期限到期",
+    definition: "离校学生在旧校的可识别历史访问达到对象级期限后转为不可逆去标识结果。",
+    triggeredActionIds: ["DGV-ACT-DEIDENTIFY-OLD-SCHOOL-HISTORY"],
+  },
+  {
+    id: "EVT-TRANSFER-AUTHORIZATION-EXECUTED",
+    label: "学生转学授权执行完成",
+    definition: "旧校当前访问已经终止且新校仅获得经授权可迁移子集后，创建旧校受限历史访问边界。",
+    triggeredActionIds: ["DGV-ACT-CREATE-OLD-SCHOOL-HISTORY-RESTRICTION"],
+  },
+  {
+    id: "EVT-TEACHER-IDENTITY-DELETION-COMPLETED",
+    label: "教师平台身份彻底注销完成",
+    definition: "教师登录凭据和可删除个人资料完成注销后，为必要教学事实生成不可回查作者替身。",
+    triggeredActionIds: ["DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE"],
+  },
+  {
+    id: "EVT-SHARED-DEVICE-CLEANUP-REQUESTED",
+    label: "共享设备产品状态清理请求",
+    definition: "身份切换、退出或会话超时后，只清理产品可控制的页面状态、缓存、临时文件和敏感通知预览。",
+    triggeredActionIds: ["AUD-ACT-CLEAN-SHARED-DEVICE-SESSION"],
+  },
 ];
 
 export const metrics = [
@@ -647,10 +701,12 @@ export const optionSets = [
   ),
   optionSet("OPT-COM-003", "loginRole", "登录角色", [
     ["ROLE-STUDENT", "学生"],
+    ["ROLE-GUARDIAN", "监护人"],
     ["ROLE-TEACHER", "教师"],
     ["ROLE-ACADEMIC", "教务"],
     ["ROLE-SCHOOL-ADMIN", "学校管理员"],
     ["ROLE-PLATFORM-OPS", "平台运营"],
+    ["ROLE-PLATFORM-GOVERNANCE", "平台治理"],
   ]),
   runtimeOptionSet(
     "OPT-COM-004",
@@ -994,8 +1050,8 @@ export const optionSets = [
   ]),
   optionSet("OPT-ENUM-025", "accountIdentifier", "账号标识类型", [
     ["MOBILE", "手机号"],
-    ["EMPLOYEE-NUMBER", "工号"],
-    ["STUDENT-NUMBER", "学号"],
+    ["EMAIL", "邮箱"],
+    ["USERNAME", "登录账号"],
   ]),
   optionSet("OPT-ENUM-026", "activationMethod", "激活方式", [
     ["INITIAL-PASSWORD", "初始口令"],
@@ -1074,6 +1130,57 @@ export const optionSets = [
     ["SUBJECT_ASSIGNED", "任教学科与班级范围"],
     ["HOMEROOM_ASSIGNED_CLASS_AGGREGATE", "班主任本班全学科汇总"],
     ["ACADEMIC_AUTHORIZED_AGGREGATE", "教务授权范围汇总"],
+  ]),
+  optionSet("OPT-GOV-001", "schoolActivationAxis", "学校启用独立轴", [
+    ["PLATFORM_SUBJECT_REVIEW", "平台学校主体审核"],
+    ["FIRST_ADMIN_ACCEPTANCE", "首位管理员接受授权"],
+    ["INITIALIZATION_VALIDATION", "初始化完整校验"],
+    ["SUBSCRIPTION_READINESS", "订阅就绪"],
+    ["CLASS_COURSE_READINESS", "班级课程就绪"],
+    ["TEACHING_ACTIVATION", "教学启用"],
+  ]),
+  optionSet("OPT-GOV-002", "authorizationImpact", "授权影响等级", [
+    ["ORDINARY_DELEGABLE", "普通可委派"],
+    ["CONTROLLED_DELEGABLE", "受控委派"],
+    ["HIGH_IMPACT", "高影响"],
+    ["NON_DELEGABLE", "不可委派"],
+  ]),
+  optionSet("OPT-GOV-003", "guardianAssistanceStatus", "监护辅助状态", [
+    ["NOT_AUTHORIZED", "未授权"],
+    ["RELATION_CONFIRMED", "监护关系已确认"],
+    ["SCHOOL_SCOPE_ACTIVE", "学校数据授权有效"],
+    ["TASK_SESSION_ACTIVE", "任务辅助会话有效"],
+    ["EXPIRED", "已到期"],
+    ["REVOKED", "已撤销"],
+  ]),
+  optionSet("OPT-GOV-004", "guardianDisputeStatus", "监护争议状态", [
+    ["NONE", "无争议"],
+    ["OPEN", "争议已提出"],
+    ["FROZEN", "高影响事项已冻结"],
+    ["RESOLVED", "争议已解决"],
+    ["REJECTED", "争议不成立"],
+  ]),
+  optionSet("OPT-GOV-005", "dataRightAction", "数据权利动作", [
+    ["ACCESS", "访问"],
+    ["CORRECT", "纠正"],
+    ["EXPORT", "导出"],
+    ["MIGRATE", "迁移"],
+    ["DELETE", "删除或注销"],
+    ["RESTRICT", "限制处理"],
+    ["WITHDRAW_PUBLICATION", "撤回作品公开授权"],
+  ]),
+  optionSet("OPT-GOV-006", "exportAudience", "导出权主体", [
+    ["STUDENT", "学生本人"],
+    ["GUARDIAN", "已授权监护人"],
+    ["TEACHER", "教师本人及其对象归属范围"],
+    ["SCHOOL", "学校自有业务事实范围"],
+  ]),
+  optionSet("OPT-GOV-007", "sharedDeviceCleanupScope", "共享设备产品可控清理范围", [
+    ["PRODUCT_PAGE_STATE", "产品页面状态"],
+    ["PRODUCT_CACHE", "产品缓存"],
+    ["PRODUCT_TEMP_FILE", "产品临时文件"],
+    ["SENSITIVE_NOTIFICATION_PREVIEW", "敏感通知预览"],
+    ["PRODUCT_DOWNLOAD_PERMISSION", "产品内敏感内容普通下载能力"],
   ]),
 ];
 
