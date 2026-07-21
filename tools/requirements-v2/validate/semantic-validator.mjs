@@ -10654,13 +10654,42 @@ function commercialContinuityErrors(index) {
     || index.objectById.has("PLAT-OBJ-SERVICE-CONTINUITY-WINDOW");
   if (!enabled) return [];
 
+  const errors = [];
   const module = index.moduleById.get("PLAT-001")?.value;
+  const phaseTwoModule = index.moduleById.get("PLAT-002")?.value;
+  const servicePlan = index.objectById.get("PLAT-OBJ-SERVICE-PLAN")?.value;
   const commercial = index.objectById.get("PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY")?.value;
   const continuity = index.objectById.get("PLAT-OBJ-SERVICE-CONTINUITY-WINDOW")?.value;
+  const protectedEntry = index.objectById.get("PLAT-OBJ-PROTECTED-ACTIVITY-ENTRY")?.value;
+  const phaseTwoEntitlement = index.objectById
+    .get("PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT")?.value;
   const action = (id) => index.actionById.get(id)?.value;
   const field = (id) => index.fieldById.get(id)?.value;
   const optionCodes = (id) => records(index.optionSetById.get(id)?.value?.values)
     .map(({ code }) => code);
+  const objectRefMatches = (fieldId, targetObjectId, versionFieldId, targetVersionFieldId) => {
+    const value = field(fieldId);
+    return value?.valueSource?.kind === "OBJECT_REF"
+      && value.valueSource.targetObjectId === targetObjectId
+      && value.referenceIntegrity === "VERSION_PINNED"
+      && value.versionBinding?.versionFieldId === versionFieldId
+      && value.versionBinding?.targetVersionFieldId === targetVersionFieldId;
+  };
+  const hasLineage = (objectValue, refFieldId, versionFieldId, targetObjectId, targetVersionFieldId) => (
+    records(objectValue?.lineageBindings).some((binding) => (
+      binding.refFieldId === refFieldId
+      && binding.versionFieldId === versionFieldId
+      && binding.targetObjectId === targetObjectId
+      && binding.targetVersionFieldId === targetVersionFieldId
+    ))
+  );
+  const hasStateGuard = (actionValue, refFieldId, targetObjectId, requiredState) => (
+    records(actionValue?.relatedStateGuards).some((guard) => (
+      guard.refFieldId === refFieldId
+      && guard.targetObjectId === targetObjectId
+      && guard.requiredState === requiredState
+    ))
+  );
   const hasAllow = (actionValue, property, subject, pattern) => records(actionValue?.permissions)
     .some((permission) => permission.effect === "ALLOW"
       && permission[property] === subject
@@ -10668,8 +10697,10 @@ function commercialContinuityErrors(index) {
   const hasDeny = (actionValue, property, subject) => records(actionValue?.permissions)
     .some((permission) => permission.effect === "DENY" && permission[property] === subject);
 
+  const servicePlanContract = module?.servicePlanEntitlementContract;
   const boundary = module?.commercialBoundaryContract;
   const continuityContract = module?.serviceContinuityContract;
+  const phaseTwoContract = phaseTwoModule?.phaseTwoEntitlementContract;
   const prohibitedConsumerModels = [
     "STUDENT_PAYMENT",
     "GUARDIAN_PAYMENT",
@@ -10689,6 +10720,104 @@ function commercialContinuityErrors(index) {
     "SECURITY_SUPPORT",
   ];
 
+  const createServicePlan = action("PLAT-ACT-CREATE-SERVICE-PLAN");
+  const confirmServicePlan = action("PLAT-ACT-CONFIRM-SERVICE-PLAN");
+  const activateServicePlan = action("PLAT-ACT-ACTIVATE-SERVICE-PLAN");
+  const currentEntitlementConstraint = servicePlan?.currentEntitlementConstraint;
+  const activationGuard = activateServicePlan?.currentEntitlementActivationGuard;
+  const servicePlanValid = hasExactKeys(servicePlanContract, [
+    "objectId",
+    "schoolRefFieldId",
+    "schoolVersionFieldId",
+    "stateFieldId",
+    "versionFieldId",
+    "currentState",
+    "maximumCurrentVersionsPerSchool",
+    "selectionRule",
+    "createActionId",
+    "confirmActionId",
+    "activateActionId",
+  ])
+    && hasExactKeys(currentEntitlementConstraint, [
+      "schoolRefFieldId",
+      "stateFieldId",
+      "versionFieldId",
+      "currentState",
+      "maximumCurrentVersionsPerSchool",
+      "selectionRule",
+    ])
+    && hasExactKeys(activationGuard, [
+      "schoolRefFieldId",
+      "stateFieldId",
+      "requiredPriorState",
+      "targetState",
+      "maximumCurrentVersionsPerSchool",
+      "failureResult",
+    ])
+    && servicePlanContract?.objectId === servicePlan?.id
+    && servicePlanContract?.schoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && servicePlanContract?.schoolVersionFieldId === "PLAT-PLAN-F-SCHOOL-VERSION"
+    && servicePlanContract?.stateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && servicePlanContract?.versionFieldId === "PLAT-PLAN-F-VERSION"
+    && servicePlanContract?.currentState === "ACTIVE"
+    && servicePlanContract?.maximumCurrentVersionsPerSchool === 1
+    && servicePlanContract?.selectionRule === "EXACT_PINNED_ACTIVE_VERSION"
+    && servicePlanContract?.createActionId === createServicePlan?.id
+    && servicePlanContract?.confirmActionId === confirmServicePlan?.id
+    && servicePlanContract?.activateActionId === activateServicePlan?.id
+    && objectRefMatches(
+      "PLAT-PLAN-F-SCHOOL-REF",
+      "ACC-OBJ-SCHOOL",
+      "PLAT-PLAN-F-SCHOOL-VERSION",
+      "ACC-SCHOOL-F-SCHOOL-VERSION",
+    )
+    && hasLineage(
+      servicePlan,
+      "PLAT-PLAN-F-SCHOOL-REF",
+      "PLAT-PLAN-F-SCHOOL-VERSION",
+      "ACC-OBJ-SCHOOL",
+      "ACC-SCHOOL-F-SCHOOL-VERSION",
+    )
+    && sameStringSet(servicePlan?.states, ["DRAFT", "CONFIRMED", "ACTIVE"])
+    && currentEntitlementConstraint?.schoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && currentEntitlementConstraint?.stateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && currentEntitlementConstraint?.versionFieldId === "PLAT-PLAN-F-VERSION"
+    && currentEntitlementConstraint?.currentState === "ACTIVE"
+    && currentEntitlementConstraint?.maximumCurrentVersionsPerSchool === 1
+    && currentEntitlementConstraint?.selectionRule === "EXACT_PINNED_ACTIVE_VERSION"
+    && createServicePlan?.operationKind === "CREATE"
+    && [
+      "PLAT-PLAN-F-SCHOOL-REF",
+      "PLAT-PLAN-F-SCHOOL-VERSION",
+      "PLAT-PLAN-F-SCOPE",
+    ].every((fieldId) => list(createServicePlan?.inputFieldIds).includes(fieldId))
+    && [
+      "PLAT-PLAN-F-ID",
+      "PLAT-PLAN-F-SCHOOL-REF",
+      "PLAT-PLAN-F-SCHOOL-VERSION",
+      "PLAT-PLAN-F-SERVICE-STATE",
+      "PLAT-PLAN-F-VERSION",
+    ].every((fieldId) => list(createServicePlan?.outputFieldIds).includes(fieldId))
+    && hasStateGuard(createServicePlan, "PLAT-PLAN-F-SCHOOL-REF", "ACC-OBJ-SCHOOL", "ACTIVE")
+    && confirmServicePlan?.transition?.from === "DRAFT"
+    && confirmServicePlan?.transition?.to === "CONFIRMED"
+    && list(confirmServicePlan?.outputFieldIds).includes("PLAT-PLAN-F-VERSION")
+    && activateServicePlan?.transition?.from === "CONFIRMED"
+    && activateServicePlan?.transition?.to === "ACTIVE"
+    && list(activateServicePlan?.outputFieldIds).includes("PLAT-PLAN-F-VERSION")
+    && activationGuard?.schoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && activationGuard?.stateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && activationGuard?.requiredPriorState === "CONFIRMED"
+    && activationGuard?.targetState === "ACTIVE"
+    && activationGuard?.maximumCurrentVersionsPerSchool === 1
+    && activationGuard?.failureResult === "ACTIVE_SERVICE_PLAN_ALREADY_EXISTS"
+    && list(activateServicePlan?.failureResults).includes("ACTIVE_SERVICE_PLAN_ALREADY_EXISTS");
+  if (!servicePlanValid) {
+    errors.push(
+      "INVALID_SERVICE_PLAN_ENTITLEMENT PLAT-001 must bind each current entitlement to one exact ACTIVE service-plan version for one ACTIVE school",
+    );
+  }
+
   const createBoundary = action("PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY");
   const confirmBoundary = action("PLAT-ACT-CONFIRM-COMMERCIAL-BOUNDARY");
   const activateBoundary = action("PLAT-ACT-ACTIVATE-COMMERCIAL-BOUNDARY");
@@ -10696,25 +10825,60 @@ function commercialContinuityErrors(index) {
     .get("PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY-SCN-SUCCESS")?.value;
   const payerPartition = records(createBoundary?.acceptedInputValues)
     .find(({ fieldId }) => fieldId === "PLAT-COMM-F-PAYER-KIND");
+  const separationConstraint = records(commercial?.referenceSeparationConstraints)[0];
+  const contactGuards = createBoundary?.contactBindingGuards;
   const boundaryValid = module?.phase === PHASE.FIRST
     && module?.releaseStatus === RELEASE_STATUS.BUILD_READY
+    && !list(module?.productDecisionIds).includes("D090")
     && boundary?.objectId === commercial?.id
+    && boundary?.schoolRefFieldId === "PLAT-COMM-F-SCHOOL-REF"
+    && objectRefMatches(
+      "PLAT-COMM-F-SCHOOL-REF",
+      "ACC-OBJ-SCHOOL",
+      "PLAT-COMM-F-SCHOOL-VERSION",
+      "ACC-SCHOOL-F-SCHOOL-VERSION",
+    )
+    && hasLineage(
+      commercial,
+      "PLAT-COMM-F-SCHOOL-REF",
+      "PLAT-COMM-F-SCHOOL-VERSION",
+      "ACC-OBJ-SCHOOL",
+      "ACC-SCHOOL-F-SCHOOL-VERSION",
+    )
     && boundary?.payerOptionSetId === "OPT-EXT-019"
     && sameStringSet(boundary?.allowedPayerCodes, ["SCHOOL"])
     && sameStringSet(optionCodes("OPT-EXT-019"), ["SCHOOL"])
     && boundary?.financialContactFieldId === "PLAT-COMM-F-FINANCIAL-CONTACT-REF"
     && boundary?.governanceAdministratorFieldId === "PLAT-COMM-F-GOVERNANCE-ADMIN-REF"
     && boundary?.contactsMustDiffer === true
-    && /distinct from the governance administrator/i.test(
-      field("PLAT-COMM-F-FINANCIAL-CONTACT-REF")?.validation ?? "",
+    && boundary?.governanceAdministratorRequiredRoleCode === "ROLE-SCHOOL-ADMIN"
+    && objectRefMatches(
+      "PLAT-COMM-F-FINANCIAL-CONTACT-REF",
+      "ACC-OBJ-SCHOOL-PROFILE",
+      "PLAT-COMM-F-FINANCIAL-CONTACT-VERSION",
+      "ACC-PROFILE-F-VERSION",
     )
-    && /distinct from the financial contact/i.test(
-      field("PLAT-COMM-F-GOVERNANCE-ADMIN-REF")?.validation ?? "",
+    && objectRefMatches(
+      "PLAT-COMM-F-GOVERNANCE-ADMIN-REF",
+      "ACC-OBJ-SCHOOL-PROFILE",
+      "PLAT-COMM-F-GOVERNANCE-ADMIN-VERSION",
+      "ACC-PROFILE-F-VERSION",
     )
-    && sameStringSet(boundary?.coreEntitlements, coreEntitlements)
-    && sameStringSet(optionCodes("OPT-EXT-021"), coreEntitlements)
-    && sameStringSet(boundary?.packageExpansionScope, packageExpansion)
-    && sameStringSet(optionCodes("OPT-EXT-020"), packageExpansion)
+    && separationConstraint?.leftRefFieldId === "PLAT-COMM-F-FINANCIAL-CONTACT-REF"
+    && separationConstraint?.rightRefFieldId === "PLAT-COMM-F-GOVERNANCE-ADMIN-REF"
+    && separationConstraint?.comparison === "MUST_DIFFER"
+    && separationConstraint?.scope === "SAME_SCHOOL"
+    && separationConstraint?.schoolRefFieldId === "PLAT-COMM-F-SCHOOL-REF"
+    && separationConstraint?.sourceSchoolFieldId === "ACC-PROFILE-F-SCHOOL-ID"
+    && contactGuards?.schoolRefFieldId === "PLAT-COMM-F-SCHOOL-REF"
+    && contactGuards?.profileSchoolFieldId === "ACC-PROFILE-F-SCHOOL-ID"
+    && contactGuards?.financialContactRefFieldId === "PLAT-COMM-F-FINANCIAL-CONTACT-REF"
+    && contactGuards?.governanceAdministratorRefFieldId === "PLAT-COMM-F-GOVERNANCE-ADMIN-REF"
+    && contactGuards?.governanceAdministratorRoleFieldId === "ACC-PROFILE-F-PROFILE-TYPE"
+    && contactGuards?.governanceAdministratorRequiredRoleCode === "ROLE-SCHOOL-ADMIN"
+    && contactGuards?.contactsMustDiffer === true
+    && contactGuards?.failureResult === "COMMERCIAL_CONTACT_SEPARATION_REQUIRED"
+    && list(createBoundary?.failureResults).includes("COMMERCIAL_CONTACT_SEPARATION_REQUIRED")
     && sameStringSet(boundary?.prohibitedConsumerModels, prohibitedConsumerModels)
     && boundary?.coreLearningLoopPaywallAllowed === false
     && sameStringSet(commercial?.states, ["DRAFT", "CONFIRMED", "ACTIVE"])
@@ -10725,10 +10889,10 @@ function commercialContinuityErrors(index) {
     && payerPartition?.partitionId === "PLAT-COMMERCIAL-PAYER-KIND"
     && sameStringSet(payerPartition?.codes, ["SCHOOL"])
     && [
-      "PLAT-COMM-F-CORE-AI-ENTITLEMENTS",
-      "PLAT-COMM-F-PACKAGE-EXPANSION-SCOPE",
       "PLAT-COMM-F-PROHIBITED-CONSUMER-MODELS",
     ].every((fieldId) => list(createBoundary?.outputFieldIds).includes(fieldId))
+    && !commercial?.fields?.some(({ id }) => id === "PLAT-COMM-F-CORE-AI-ENTITLEMENTS")
+    && !commercial?.fields?.some(({ id }) => id === "PLAT-COMM-F-PACKAGE-EXPANSION-SCOPE")
     && hasAllow(createBoundary, "roleRef", "ROLE-PLATFORM-GOVERNANCE")
     && hasDeny(createBoundary, "roleRef", "ROLE-PLATFORM-OPS")
     && confirmBoundary?.transition?.from === "DRAFT"
@@ -10742,80 +10906,1072 @@ function commercialContinuityErrors(index) {
     && hasDeny(confirmBoundary, "roleRef", "ROLE-PLATFORM-OPS")
     && activateBoundary?.transition?.from === "CONFIRMED"
     && activateBoundary?.transition?.to === "ACTIVE";
+  if (!boundaryValid) {
+    errors.push(
+      "INVALID_COMMERCIAL_SCHOOL_BOUNDARY PLAT-001 must bind the payer contract to ACC-OBJ-SCHOOL and enforce distinct same-school finance and governance profiles through structured guards",
+    );
+  }
+
+  const createPhaseTwo = action("PLAT-ACT-CREATE-PHASE-TWO-ENTITLEMENT");
+  const confirmPhaseTwo = action("PLAT-ACT-CONFIRM-PHASE-TWO-ENTITLEMENT");
+  const activatePhaseTwo = action("PLAT-ACT-ACTIVATE-PHASE-TWO-ENTITLEMENT");
+  const phaseTwoValid = phaseTwoModule?.phase === PHASE.SECOND
+    && phaseTwoModule?.releaseStatus === RELEASE_STATUS.PLANNED
+    && !index.currentReleaseModuleIds.includes("PLAT-002")
+    && sameStringSet(phaseTwoModule?.productDecisionIds, ["D090"])
+    && phaseTwoContract?.objectId === phaseTwoEntitlement?.id
+    && sameStringSet(phaseTwoContract?.coreEntitlements, coreEntitlements)
+    && sameStringSet(optionCodes("OPT-EXT-021"), coreEntitlements)
+    && sameStringSet(phaseTwoContract?.packageExpansionScope, packageExpansion)
+    && sameStringSet(optionCodes("OPT-EXT-020"), packageExpansion)
+    && phaseTwoContract?.schoolWideGuarantee === true
+    && phaseTwoContract?.studentOrGuardianPaymentAllowed === false
+    && phaseTwoContract?.coreLearningLoopPaywallAllowed === false
+    && phaseTwoContract?.activationActionId === activatePhaseTwo?.id
+    && objectRefMatches(
+      "PLAT-P2ENT-F-SCHOOL-REF",
+      "ACC-OBJ-SCHOOL",
+      "PLAT-P2ENT-F-SCHOOL-VERSION",
+      "ACC-SCHOOL-F-SCHOOL-VERSION",
+    )
+    && objectRefMatches(
+      "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF",
+      "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+      "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-VERSION",
+      "PLAT-COMM-F-VERSION",
+    )
+    && createPhaseTwo?.targetObjectId === phaseTwoEntitlement?.id
+    && createPhaseTwo?.operationKind === "CREATE"
+    && hasStateGuard(createPhaseTwo, "PLAT-P2ENT-F-SCHOOL-REF", "ACC-OBJ-SCHOOL", "ACTIVE")
+    && hasStateGuard(
+      createPhaseTwo,
+      "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF",
+      "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+      "ACTIVE",
+    )
+    && confirmPhaseTwo?.transition?.from === "DRAFT"
+    && confirmPhaseTwo?.transition?.to === "CONFIRMED"
+    && activatePhaseTwo?.transition?.from === "CONFIRMED"
+    && activatePhaseTwo?.transition?.to === "ACTIVE";
+  if (!phaseTwoValid) {
+    errors.push(
+      "INVALID_PHASE_TWO_COMMERCIAL_ENTITLEMENT D090 must remain a PLANNED phase-two school-wide entitlement and stay outside the first-stage release manifest",
+    );
+  }
 
   const openContinuity = action("PLAT-ACT-OPEN-SERVICE-CONTINUITY");
+  const captureProtectedEntry = action("PLAT-ACT-CAPTURE-PROTECTED-ACTIVITY-ENTRY");
+  const reconcileManifest = action("PLAT-ACT-RECONCILE-AND-SEAL-PROTECTED-ACTIVITY-MANIFEST");
+  const markCaptureFailed = action("PLAT-ACT-MARK-PROTECTED-ACTIVITY-CAPTURE-FAILED");
+  const retryCapture = action("PLAT-ACT-RETRY-PROTECTED-ACTIVITY-CAPTURE");
+  const captureRequestEvent = index.eventById
+    .get("EVT-PLAT-PROTECTED-ACTIVITY-CAPTURE-REQUESTED")?.value;
+  const reconcileRequestEvent = index.eventById
+    .get("EVT-PLAT-PROTECTED-ACTIVITY-MANIFEST-RECONCILE-REQUESTED")?.value;
+  const captureFailedEvent = index.eventById
+    .get("EVT-PLAT-PROTECTED-ACTIVITY-CAPTURE-FAILED")?.value;
+  const manifestSealedEvent = index.eventById
+    .get("EVT-PLAT-PROTECTED-ACTIVITY-MANIFEST-SEALED")?.value;
   const activityCreationGuard = action("PLAT-ACT-EVALUATE-NEW-ACTIVITY-ENTITLEMENT");
   const enterExit = action("PLAT-ACT-ENTER-EXIT-WINDOW");
   const closeContinuity = action("PLAT-ACT-CLOSE-SERVICE-CONTINUITY");
   const viewContinuity = action("PLAT-ACT-VIEW-SERVICE-CONTINUITY");
   const openContinuitySuccess = index.scenarioById
     .get("PLAT-ACT-OPEN-SERVICE-CONTINUITY-SCN-SUCCESS")?.value;
+  const expectedContinuityStates = [
+    "CAPTURING_PROTECTED_ACTIVITIES",
+    "ACTIVITY_PROTECTION_OPEN",
+    "CAPTURE_FAILED",
+    "EXIT_WINDOW_OPEN",
+    "CLOSED",
+  ];
+  const schoolScopeConstraints = records(continuity?.schoolScopeConsistencyConstraints);
+  const schoolScopeGuard = openContinuity?.schoolScopeGuard;
+  const expectedSchoolScopeBindings = new Map([
+    ["PLAT-CONT-F-SERVICE-PLAN-REF", {
+      relatedObjectId: "PLAT-OBJ-SERVICE-PLAN",
+      relatedSchoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+    }],
+    ["PLAT-CONT-F-COMMERCIAL-BOUNDARY-REF", {
+      relatedObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+      relatedSchoolRefFieldId: "PLAT-COMM-F-SCHOOL-REF",
+    }],
+  ]);
+  const schoolScopeValid = schoolScopeConstraints.length === expectedSchoolScopeBindings.size
+    && schoolScopeConstraints.every((constraint) => {
+      const expected = expectedSchoolScopeBindings.get(constraint.relatedRefFieldId);
+      return expected
+      && constraint.schoolRefFieldId === "PLAT-CONT-F-SCHOOL-REF"
+      && constraint.comparison === "MUST_MATCH_PINNED_SCHOOL_ID"
+      && constraint.relatedObjectId === expected.relatedObjectId
+      && constraint.relatedSchoolRefFieldId === expected.relatedSchoolRefFieldId;
+    })
+    && schoolScopeGuard?.schoolRefFieldId === "PLAT-CONT-F-SCHOOL-REF"
+    && schoolScopeGuard?.comparison === "ALL_PINNED_SCHOOL_IDENTITIES_MUST_MATCH"
+    && schoolScopeGuard?.failureResult === "SCHOOL_SCOPE_MISMATCH"
+    && records(schoolScopeGuard?.bindings).length === expectedSchoolScopeBindings.size
+    && records(schoolScopeGuard?.bindings).every((binding) => {
+      const expected = expectedSchoolScopeBindings.get(binding.relatedRefFieldId);
+      return expected?.relatedSchoolRefFieldId === binding.relatedSchoolRefFieldId;
+    });
+  const eligibleSet = openContinuity?.eligibleSetSnapshotContract;
+  const coverage = openContinuity?.protectionCoverageGuard;
+  const initialization = openContinuity?.manifestInitialization;
+  const currentWindowConstraint = continuity?.currentWindowUniquenessConstraint;
+  const currentWindowContract = continuityContract?.currentWindowUniqueness;
+  const existingCurrentWindowGuard = openContinuity?.existingCurrentWindowGuard;
+  const currentWindowUniquenessValid = hasExactKeys(currentWindowConstraint, [
+    "schoolRefFieldId",
+    "servicePlanRefFieldId",
+    "servicePlanVersionFieldId",
+    "statusFieldId",
+    "excludedState",
+    "maximumCurrentWindowsPerSchoolAndServicePlanVersion",
+    "selectionRule",
+    "ambiguityEffect",
+  ])
+    && currentWindowConstraint?.schoolRefFieldId === "PLAT-CONT-F-SCHOOL-REF"
+    && currentWindowConstraint?.servicePlanRefFieldId === "PLAT-CONT-F-SERVICE-PLAN-REF"
+    && currentWindowConstraint?.servicePlanVersionFieldId
+      === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+    && currentWindowConstraint?.statusFieldId === "PLAT-CONT-F-STATUS"
+    && currentWindowConstraint?.excludedState === "CLOSED"
+    && currentWindowConstraint?.maximumCurrentWindowsPerSchoolAndServicePlanVersion === 1
+    && currentWindowConstraint?.selectionRule
+      === "EXACT_SCHOOL_AND_SERVICE_PLAN_VERSION_WITH_STATUS_NOT_CLOSED"
+    && currentWindowConstraint?.ambiguityEffect === "FAIL_CLOSED"
+    && hasExactKeys(currentWindowContract, [
+      "schoolRefFieldId",
+      "servicePlanRefFieldId",
+      "servicePlanVersionFieldId",
+      "statusFieldId",
+      "excludedState",
+      "maximumCurrentWindowsPerSchoolAndServicePlanVersion",
+      "selectionRule",
+      "openGuardProperty",
+      "openFailureResult",
+      "ambiguityEffect",
+    ])
+    && currentWindowContract?.schoolRefFieldId === "PLAT-CONT-F-SCHOOL-REF"
+    && currentWindowContract?.servicePlanRefFieldId === "PLAT-CONT-F-SERVICE-PLAN-REF"
+    && currentWindowContract?.servicePlanVersionFieldId === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+    && currentWindowContract?.statusFieldId === "PLAT-CONT-F-STATUS"
+    && currentWindowContract?.excludedState === "CLOSED"
+    && currentWindowContract?.maximumCurrentWindowsPerSchoolAndServicePlanVersion === 1
+    && currentWindowContract?.selectionRule
+      === "EXACT_SCHOOL_AND_SERVICE_PLAN_VERSION_WITH_STATUS_NOT_CLOSED"
+    && currentWindowContract?.openGuardProperty === "existingCurrentWindowGuard"
+    && currentWindowContract?.openFailureResult === "EXISTING_CURRENT_CONTINUITY_WINDOW"
+    && currentWindowContract?.ambiguityEffect === "FAIL_CLOSED"
+    && hasExactKeys(existingCurrentWindowGuard, [
+      "lookupObjectId",
+      "schoolRefFieldId",
+      "servicePlanRefFieldId",
+      "servicePlanVersionFieldId",
+      "statusFieldId",
+      "excludedState",
+      "maximumExistingMatchesBeforeCreate",
+      "lookupRule",
+      "ambiguityEffect",
+      "failureResult",
+    ])
+    && existingCurrentWindowGuard?.lookupObjectId === continuity?.id
+    && existingCurrentWindowGuard?.schoolRefFieldId === "PLAT-CONT-F-SCHOOL-REF"
+    && existingCurrentWindowGuard?.servicePlanRefFieldId === "PLAT-CONT-F-SERVICE-PLAN-REF"
+    && existingCurrentWindowGuard?.servicePlanVersionFieldId
+      === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+    && existingCurrentWindowGuard?.statusFieldId === "PLAT-CONT-F-STATUS"
+    && existingCurrentWindowGuard?.excludedState === "CLOSED"
+    && existingCurrentWindowGuard?.maximumExistingMatchesBeforeCreate === 0
+    && existingCurrentWindowGuard?.lookupRule
+      === "EXACT_SCHOOL_AND_SERVICE_PLAN_VERSION_WITH_STATUS_NOT_CLOSED"
+    && existingCurrentWindowGuard?.ambiguityEffect === "BLOCK_CREATE"
+    && existingCurrentWindowGuard?.failureResult === "EXISTING_CURRENT_CONTINUITY_WINDOW"
+    && list(openContinuity?.failureResults).includes("EXISTING_CURRENT_CONTINUITY_WINDOW");
   const continuityValid = continuityContract?.objectId === continuity?.id
+    && continuityContract?.servicePlanObjectId === servicePlan?.id
+    && continuityContract?.servicePlanRefFieldId === "PLAT-CONT-F-SERVICE-PLAN-REF"
+    && continuityContract?.servicePlanVersionFieldId === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+    && continuityContract?.requiredServicePlanState === "ACTIVE"
     && continuityContract?.openActionId === openContinuity?.id
     && continuityContract?.viewActionId === viewContinuity?.id
+    && continuityContract?.reconcileAndSealActionId === reconcileManifest?.id
+    && continuityContract?.markCaptureFailedActionId === markCaptureFailed?.id
+    && continuityContract?.retryCaptureActionId === retryCapture?.id
+    && continuityContract?.captureRequestEventId === captureRequestEvent?.id
+    && continuityContract?.reconcileRequestEventId === reconcileRequestEvent?.id
+    && continuityContract?.captureFailedEventId === captureFailedEvent?.id
+    && continuityContract?.manifestSealedEventId === manifestSealedEvent?.id
+    && continuityContract?.eligibleCountFieldId === "PLAT-CONT-F-ELIGIBLE-ENTRY-COUNT"
+    && continuityContract?.eligibleDigestFieldId === "PLAT-CONT-F-ELIGIBLE-SET-DIGEST"
+    && continuityContract?.eligibleMaximumDueAtFieldId === "PLAT-CONT-F-ELIGIBLE-MAX-DUE-AT"
+    && continuityContract?.capturedCountFieldId === "PLAT-CONT-F-CAPTURED-ENTRY-COUNT"
+    && continuityContract?.capturedDigestFieldId === "PLAT-CONT-F-CAPTURED-SET-DIGEST"
+    && continuityContract?.manifestStatusFieldId === "PLAT-CONT-F-MANIFEST-STATUS"
+    && continuityContract?.manifestStatusOptionSetId === "OPT-EXT-025"
+    && continuityContract?.manifestSealedAtFieldId === "PLAT-CONT-F-MANIFEST-SEALED-AT"
+    && continuityContract?.restrictionEffectiveAtFieldId
+      === "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"
+    && continuityContract?.captureRetryCountFieldId === "PLAT-CONT-F-CAPTURE-RETRY-COUNT"
+    && continuityContract?.captureAttemptEpochFieldId
+      === "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"
+    && continuityContract?.expectedContinuityVersionFieldId
+      === "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"
+    && continuityContract?.captureEntryAttemptEpochFieldId
+      === "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH"
+    && continuityContract?.captureEntryExpectedContinuityVersionFieldId
+      === "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION"
+    && continuityContract?.captureAttemptCasGuardProperty === "captureAttemptCasGuard"
+    && continuityContract?.retryAttemptCasGuardProperty === "retryAttemptCasGuard"
+    && continuityContract?.eventAttemptContextContractProperty
+      === "captureAttemptContextContract"
+    && continuityContract?.staleEventResult === "STALE_EVENT_IGNORED"
+    && continuityContract?.staleEventEffect === "IDEMPOTENT_NO_OP"
+    && continuityContract?.retryAttemptEpochRule === "ATOMIC_INCREMENT_BY_ONE"
+    && continuityContract?.retryExpectedContinuityVersionRule
+      === "EQUAL_RESULTING_CONTINUITY_VERSION"
+    && continuityContract?.initialWindowState === "CAPTURING_PROTECTED_ACTIVITIES"
+    && continuityContract?.sealedWindowState === "ACTIVITY_PROTECTION_OPEN"
+    && continuityContract?.captureFailedWindowState === "CAPTURE_FAILED"
+    && continuityContract?.captureRequiredState === "CAPTURING_PROTECTED_ACTIVITIES"
+    && continuityContract?.sealRule
+      === "ELIGIBLE_AND_CAPTURED_COUNT_PLUS_CANONICAL_DIGEST_MUST_EXACTLY_MATCH"
+    && continuityContract?.restrictionActivationRule === "ONLY_ATOMICALLY_WITH_SEALED_MANIFEST"
+    && continuityContract?.protectedUntilRule === "EQUAL_STUDENT_WINDOW_DUE_AT"
+    && continuityContract?.schoolProtectionCoverageRule
+      === "SCHOOL_PROTECTION_END_GTE_MAX_ELIGIBLE_STUDENT_WINDOW_DUE_AT"
     && continuityContract?.publishedActivityProtectionFieldId
       === "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL"
-    && continuityContract?.protectedActivityManifestFieldId
-      === "PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST"
+    && continuityContract?.protectedActivityEntryObjectId === protectedEntry?.id
+    && continuityContract?.captureProtectedActivityActionId === captureProtectedEntry?.id
     && continuityContract?.exitWindowFieldId === "PLAT-CONT-F-EXIT-WINDOW-UNTIL"
     && sameStringSet(continuityContract?.protectedOperations, protectedOperations)
     && sameStringSet(optionCodes("OPT-EXT-023"), protectedOperations)
-    && continuityContract?.newActivityPolicy
-      === "BLOCK_NEW_ACTIVITY_OUTSIDE_CURRENT_ENTITLEMENT"
-    && continuityContract?.activityCreationGuardActionId === activityCreationGuard?.id
+    && continuityContract?.newActivityPolicy === "BLOCK_NEW_ACTIVITY_OUTSIDE_CURRENT_ENTITLEMENT"
     && continuityContract?.continuingDataRightsBasis === "LAW_AND_CONTRACT"
     && continuityContract?.finiteWindowsRequired === true
     && continuityContract?.unlimitedFreeFullServiceAfterTermination === false
-    && /finite time/i.test(field("PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL")?.validation ?? "")
-    && /already-published activity identity.*publication version.*still-open window/i.test(
-      field("PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST")?.validation ?? "",
+    && !field("PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST")
+    && sameStringSet(continuity?.states, expectedContinuityStates)
+    && sameStringSet(optionCodes("OPT-EXT-024"), expectedContinuityStates)
+    && sameStringSet(optionCodes("OPT-EXT-025"), ["CAPTURING", "SEALED", "CAPTURE_FAILED"])
+    && objectRefMatches(
+      "PLAT-CONT-F-SCHOOL-REF",
+      "ACC-OBJ-SCHOOL",
+      "PLAT-CONT-F-SCHOOL-VERSION",
+      "ACC-SCHOOL-F-SCHOOL-VERSION",
     )
-    && /finite documented exit deadline/i.test(field("PLAT-CONT-F-EXIT-WINDOW-UNTIL")?.validation ?? "")
-    && /cannot promise indefinite free operation/i.test(
-      field("PLAT-CONT-F-CONTINUING-DATA-RIGHTS-BASIS")?.validation ?? "",
+    && objectRefMatches(
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+      "PLAT-PLAN-F-VERSION",
     )
-    && sameStringSet(
-      continuity?.states,
-      ["ACTIVITY_PROTECTION_OPEN", "EXIT_WINDOW_OPEN", "CLOSED"],
+    && hasLineage(
+      continuity,
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "PLAT-PLAN-F-VERSION",
     )
-    && sameStringSet(
-      optionCodes("OPT-EXT-024"),
-      ["ACTIVITY_PROTECTION_OPEN", "EXIT_WINDOW_OPEN", "CLOSED"],
-    )
+    && schoolScopeValid
+    && currentWindowUniquenessValid
     && openContinuity?.operationKind === "CREATE"
     && openContinuitySuccess?.then?.expectedState?.mode === "STATE"
-    && openContinuitySuccess?.then?.expectedState?.value === "ACTIVITY_PROTECTION_OPEN"
+    && openContinuitySuccess?.then?.expectedState?.value === "CAPTURING_PROTECTED_ACTIVITIES"
+    && hasStateGuard(
+      openContinuity,
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "ACTIVE",
+    )
     && [
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-CONT-F-SERVICE-PLAN-VERSION",
       "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL",
-      "PLAT-CONT-F-PROTECTED-ACTIVITY-MANIFEST",
       "PLAT-CONT-F-EXIT-WINDOW-UNTIL",
       "PLAT-CONT-F-CONTINUING-DATA-RIGHTS-BASIS",
     ].every((fieldId) => list(openContinuity?.inputFieldIds).includes(fieldId))
     && [
-      "PLAT-CONT-F-PROTECTED-OPERATIONS",
-      "PLAT-CONT-F-NEW-ACTIVITY-POLICY",
+      "PLAT-CONT-F-ELIGIBLE-ENTRY-COUNT",
+      "PLAT-CONT-F-ELIGIBLE-SET-DIGEST",
+      "PLAT-CONT-F-ELIGIBLE-MAX-DUE-AT",
+      "PLAT-CONT-F-CAPTURED-ENTRY-COUNT",
+      "PLAT-CONT-F-CAPTURED-SET-DIGEST",
+      "PLAT-CONT-F-MANIFEST-STATUS",
+      "PLAT-CONT-F-CAPTURE-RETRY-COUNT",
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
     ].every((fieldId) => list(openContinuity?.outputFieldIds).includes(fieldId))
-    && hasAllow(openContinuity, "roleRef", "ROLE-PLATFORM-GOVERNANCE")
-    && activityCreationGuard?.operationKind === "READ"
-    && activityCreationGuard?.targetObjectId === continuity?.id
-    && list(activityCreationGuard?.outputFieldIds).includes("PLAT-CONT-F-NEW-ACTIVITY-POLICY")
-    && list(activityCreationGuard?.failureResults).includes("ACTIVITY_ENTITLEMENT_BLOCKED")
-    && hasAllow(
-      activityCreationGuard,
-      "actorRef",
-      "CURRENT_ACTOR",
-      /allowed only inside the current active entitlement.*never by a protection window/i,
-    )
+    && sameStringSet(openContinuity?.producedEventIds, [
+      captureRequestEvent?.id,
+      reconcileRequestEvent?.id,
+    ])
+    && eligibleSet?.evaluationTimeFieldId === "PLAT-CONT-F-RESTRICTED-AT"
+    && eligibleSet?.eligibilityRule
+      === "START_AT_LE_CUTOFF_LT_DUE_AT_AND_ACTIVITY_PUBLISHED_WITH_SEALED_SNAPSHOT"
+    && eligibleSet?.expectedCountFieldId === "PLAT-CONT-F-ELIGIBLE-ENTRY-COUNT"
+    && eligibleSet?.expectedDigestFieldId === "PLAT-CONT-F-ELIGIBLE-SET-DIGEST"
+    && eligibleSet?.maximumDueAtFieldId === "PLAT-CONT-F-ELIGIBLE-MAX-DUE-AT"
+    && sameStringSet(eligibleSet?.digestIdentityFieldIds, [
+      "HW-STUDENT-WINDOW-F-ID",
+      "HW-STUDENT-WINDOW-F-VERSION",
+      "HW-ASSIGNMENT-F-ID",
+      "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+      "HW-SNAPSHOT-F-ID",
+      "HW-SNAPSHOT-F-VERSION",
+    ])
+    && eligibleSet?.orderingRule === "LEXICOGRAPHIC_BY_IDENTITY_TUPLE"
+    && eligibleSet?.emptySetDigestRule === "CANONICAL_EMPTY_SET_DIGEST"
+    && eligibleSet?.snapshotMutationAllowed === false
+    && coverage?.schoolProtectionEndFieldId === "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL"
+    && coverage?.eligibleMaximumDueAtFieldId === "PLAT-CONT-F-ELIGIBLE-MAX-DUE-AT"
+    && coverage?.comparison
+      === "SCHOOL_PROTECTION_END_GTE_MAX_ELIGIBLE_STUDENT_WINDOW_DUE_AT"
+    && coverage?.emptySetRule === "FINITE_END_AFTER_ELIGIBILITY_CUTOFF"
+    && list(openContinuity?.failureResults)
+      .includes("PROTECTION_WINDOW_TRUNCATES_ELIGIBLE_ACTIVITY")
+    && initialization?.manifestStatusFieldId === "PLAT-CONT-F-MANIFEST-STATUS"
+    && initialization?.manifestStatus === "CAPTURING"
+    && initialization?.capturedCountFieldId === "PLAT-CONT-F-CAPTURED-ENTRY-COUNT"
+    && initialization?.capturedCount === 0
+    && initialization?.capturedDigestFieldId === "PLAT-CONT-F-CAPTURED-SET-DIGEST"
+    && initialization?.capturedDigestRule === "CANONICAL_EMPTY_SET_DIGEST"
+    && initialization?.retryCountFieldId === "PLAT-CONT-F-CAPTURE-RETRY-COUNT"
+    && initialization?.retryCount === 0
+    && initialization?.attemptEpochFieldId === "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"
+    && initialization?.initialAttemptEpoch === 1
+    && initialization?.expectedContinuityVersionFieldId
+      === "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"
+    && initialization?.expectedContinuityVersionRule === "EQUAL_RESULTING_CONTINUITY_VERSION"
+    && initialization?.restrictionEffectiveAtFieldId
+      === "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"
+    && initialization?.restrictionEffectiveAt === null
     && enterExit?.transition?.from === "ACTIVITY_PROTECTION_OPEN"
     && enterExit?.transition?.to === "EXIT_WINDOW_OPEN"
     && closeContinuity?.transition?.from === "EXIT_WINDOW_OPEN"
     && closeContinuity?.transition?.to === "CLOSED"
-    && viewContinuity?.operationKind === "READ"
-    && protectedOperations.every((code) => optionCodes("OPT-EXT-023").includes(code));
+    && viewContinuity?.operationKind === "READ";
+  if (!continuityValid) {
+    errors.push(
+      "INVALID_SERVICE_CONTINUITY_WINDOW restriction must remain ineffective until an exact version-pinned manifest is sealed, then use finite activity and exit windows",
+    );
+  }
 
-  return boundaryValid && continuityValid
-    ? []
-    : ["INVALID_COMMERCIAL_CONTINUITY_CONTRACT PLAT-001 must enforce school-only payment, separated finance/governance contacts, no consumer monetization, school-wide core AI entitlement, and finite protected-activity and exit windows without unlimited free full-service operation"];
+  const protectedRefContracts = [
+    ["PLAT-PROTECT-F-CONTINUITY-REF", "PLAT-PROTECT-F-CONTINUITY-VERSION", "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW", "PLAT-CONT-F-VERSION", "CAPTURING_PROTECTED_ACTIVITIES"],
+    ["PLAT-PROTECT-F-STUDENT-WINDOW-REF", "PLAT-PROTECT-F-STUDENT-WINDOW-VERSION", "HW-OBJ-STUDENT-ACTIVITY-WINDOW", "HW-STUDENT-WINDOW-F-VERSION", "ACTIVE"],
+    ["PLAT-PROTECT-F-ACTIVITY-REF", "PLAT-PROTECT-F-ACTIVITY-VERSION", "HW-OBJ-ASSIGNMENT", "HW-ASSIGNMENT-F-PUBLICATION-VERSION", "PUBLISHED"],
+    ["PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-REF", "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-VERSION", "HW-OBJ-PUBLICATION-SNAPSHOT", "HW-SNAPSHOT-F-VERSION", "SEALED"],
+  ];
+  const eligibility = captureProtectedEntry?.eligibilityGuard;
+  const membership = captureProtectedEntry?.manifestMembershipGuard;
+  const captureIdempotency = captureProtectedEntry?.captureIdempotencyContract;
+  const reconciliation = reconcileManifest?.manifestReconciliationContract;
+  const captureFailure = markCaptureFailed?.captureFailureContract;
+  const captureRetry = retryCapture?.captureRetryContract;
+  const captureAttemptCas = captureProtectedEntry?.captureAttemptCasGuard;
+  const reconcileAttemptCas = reconcileManifest?.captureAttemptCasGuard;
+  const markFailureAttemptCas = markCaptureFailed?.captureAttemptCasGuard;
+  const retryAttemptCas = retryCapture?.retryAttemptCasGuard;
+  const captureFailureRoute = records(captureProtectedEntry?.failureEventRouting)
+    .find(({ eventId }) => eventId === captureFailedEvent?.id);
+  const reconcileFailureRoute = records(reconcileManifest?.failureEventRouting)
+    .find(({ eventId }) => eventId === captureFailedEvent?.id);
+  const attemptContextBindingValid = (binding, actionId, epochFieldId, versionFieldId) => (
+    binding?.actionId === actionId
+    && binding?.attemptEpochFieldId === epochFieldId
+    && binding?.expectedContinuityVersionFieldId === versionFieldId
+  );
+  const attemptContextSetValid = (bindings, expectedBindings) => (
+    records(bindings).length === expectedBindings.length
+    && expectedBindings.every(([actionId, epochFieldId, versionFieldId]) => (
+      records(bindings).some((binding) => (
+        attemptContextBindingValid(binding, actionId, epochFieldId, versionFieldId)
+      ))
+    ))
+  );
+  const eventAttemptContextValid = (
+    eventValue,
+    producerBindings,
+    consumerBindings,
+    { staleFailureStateWriteAllowed } = {},
+  ) => {
+    const contract = eventValue?.captureAttemptContextContract;
+    return sameStringSet(contract?.contextKeys, [
+      "captureAttemptEpoch",
+      "expectedContinuityVersion",
+    ])
+      && attemptContextSetValid(contract?.producerBindings, producerBindings)
+      && attemptContextSetValid(contract?.consumerBindings, consumerBindings)
+      && (consumerBindings.length === 0
+        || contract?.consumerCasGuardProperty === "captureAttemptCasGuard")
+      && contract?.staleEventResult === "STALE_EVENT_IGNORED"
+      && contract?.staleEventEffect === "IDEMPOTENT_NO_OP"
+      && (staleFailureStateWriteAllowed === undefined
+        || contract?.staleFailureStateWriteAllowed === staleFailureStateWriteAllowed);
+  };
+  const producedAttemptContextValid = (actionValue, expectedBindings) => (
+    records(actionValue?.producedEventContextBindings).length === expectedBindings.length
+    && expectedBindings.every(([eventId, epochFieldId, versionFieldId]) => (
+      records(actionValue?.producedEventContextBindings).some((binding) => (
+        binding?.eventId === eventId
+        && binding?.attemptEpochFieldId === epochFieldId
+        && binding?.expectedContinuityVersionFieldId === versionFieldId
+      ))
+    ))
+  );
+  const captureAttemptCasValid = (
+    guard,
+    eventEpochFieldId,
+    eventVersionFieldId,
+    { continuityRefFieldId } = {},
+  ) => (
+    (continuityRefFieldId === undefined
+      || guard?.continuityRefFieldId === continuityRefFieldId)
+    && guard?.eventAttemptEpochFieldId === eventEpochFieldId
+    && guard?.eventExpectedContinuityVersionFieldId === eventVersionFieldId
+    && guard?.currentAttemptEpochFieldId === "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"
+    && guard?.currentExpectedContinuityVersionFieldId
+      === "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"
+    && guard?.currentContinuityVersionFieldId === "PLAT-CONT-F-VERSION"
+    && guard?.requiredContinuityState === "CAPTURING_PROTECTED_ACTIVITIES"
+    && guard?.matchRule
+      === "EVENT_EPOCH_AND_EXPECTED_VERSION_EQUAL_CURRENT_ATTEMPT_AND_OBJECT_VERSION"
+    && guard?.staleEventResult === "STALE_EVENT_IGNORED"
+    && guard?.staleEventEffect === "IDEMPOTENT_NO_OP"
+    && guard?.staleEventWritesAllowed === false
+    && guard?.staleEventFailureEmissionAllowed === false
+  );
+  const protectedManifestValid = protectedEntry?.studentDataClassification?.kind === "DETAIL"
+    && protectedEntry?.immutableAfterCreate === true
+    && sameStringSet(protectedEntry?.states, ["PROTECTED"])
+    && protectedRefContracts.every(([
+      refFieldId,
+      versionFieldId,
+      targetObjectId,
+      targetVersionFieldId,
+      requiredState,
+    ]) => objectRefMatches(refFieldId, targetObjectId, versionFieldId, targetVersionFieldId)
+      && hasLineage(
+        protectedEntry,
+        refFieldId,
+        versionFieldId,
+        targetObjectId,
+        targetVersionFieldId,
+      )
+      && hasStateGuard(captureProtectedEntry, refFieldId, targetObjectId, requiredState))
+    && captureProtectedEntry?.operationKind === "CREATE"
+    && captureProtectedEntry?.targetObjectId === protectedEntry?.id
+    && captureProtectedEntry?.executionMode === "SYSTEM_EVENT"
+    && captureProtectedEntry?.trigger?.eventId === captureRequestEvent?.id
+    && sameStringSet(captureRequestEvent?.producerActionIds, [openContinuity?.id, retryCapture?.id])
+    && sameStringSet(captureRequestEvent?.triggeredActionIds, [captureProtectedEntry?.id])
+    && sameStringSet(reconcileRequestEvent?.producerActionIds, [
+      openContinuity?.id,
+      captureProtectedEntry?.id,
+      retryCapture?.id,
+    ])
+    && sameStringSet(reconcileRequestEvent?.triggeredActionIds, [reconcileManifest?.id])
+    && sameStringSet(captureFailedEvent?.producerActionIds, [
+      captureProtectedEntry?.id,
+      reconcileManifest?.id,
+    ])
+    && sameStringSet(captureFailedEvent?.triggeredActionIds, [markCaptureFailed?.id])
+    && sameStringSet(manifestSealedEvent?.producerActionIds, [reconcileManifest?.id])
+    && eventAttemptContextValid(captureRequestEvent, [
+      [openContinuity?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+      [retryCapture?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+    ], [[
+      captureProtectedEntry?.id,
+      "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION",
+    ]])
+    && eventAttemptContextValid(reconcileRequestEvent, [
+      [openContinuity?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+      [captureProtectedEntry?.id, "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION"],
+      [retryCapture?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+    ], [[
+      reconcileManifest?.id,
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ]])
+    && eventAttemptContextValid(captureFailedEvent, [
+      [captureProtectedEntry?.id, "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION"],
+      [reconcileManifest?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+    ], [[
+      markCaptureFailed?.id,
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ]], { staleFailureStateWriteAllowed: false })
+    && eventAttemptContextValid(manifestSealedEvent, [[
+      reconcileManifest?.id,
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ]], [])
+    && producedAttemptContextValid(openContinuity, [
+      [captureRequestEvent?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+      [reconcileRequestEvent?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+    ])
+    && producedAttemptContextValid(captureProtectedEntry, [[
+      reconcileRequestEvent?.id,
+      "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION",
+    ]])
+    && producedAttemptContextValid(reconcileManifest, [[
+      manifestSealedEvent?.id,
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ]])
+    && producedAttemptContextValid(retryCapture, [
+      [captureRequestEvent?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+      [reconcileRequestEvent?.id, "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH", "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"],
+    ])
+    && [
+      "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION",
+    ].every((fieldId) => list(captureProtectedEntry?.inputFieldIds).includes(fieldId))
+    && captureAttemptCasValid(
+      captureAttemptCas,
+      "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION",
+      { continuityRefFieldId: "PLAT-PROTECT-F-CONTINUITY-REF" },
+    )
+    && sameStringSet(captureProtectedEntry?.nonFailureNoOpResults, ["STALE_EVENT_IGNORED"])
+    && eligibility?.evaluationTimeFieldId === "PLAT-CONT-F-RESTRICTED-AT"
+    && eligibility?.studentWindowStartFieldId === "HW-STUDENT-WINDOW-F-START-AT"
+    && eligibility?.studentWindowEndFieldId === "HW-STUDENT-WINDOW-F-DUE-AT"
+    && eligibility?.timeRule === "START_AT_LE_RESTRICTION_LT_DUE_AT"
+    && eligibility?.protectedUntilFieldId === "PLAT-PROTECT-F-PROTECTED-UNTIL"
+    && eligibility?.schoolProtectionEndFieldId === "PLAT-CONT-F-ACTIVITY-PROTECTION-UNTIL"
+    && eligibility?.schoolProtectionCoverageRule === "SCHOOL_PROTECTION_END_GTE_STUDENT_DUE_AT"
+    && eligibility?.protectedUntilRule === "EQUAL_STUDENT_WINDOW_DUE_AT"
+    && sameStringSet(eligibility?.deniedPurposeCodes, ["TEACHING_PRESENTATION"])
+    && eligibility?.laterCreatedEntriesAllowed === false
+    && membership?.expectedDigestFieldId === "PLAT-CONT-F-ELIGIBLE-SET-DIGEST"
+    && membership?.attemptEpochFieldId === "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH"
+    && sameStringSet(membership?.entryIdentityFieldIds, [
+      "PLAT-PROTECT-F-STUDENT-WINDOW-REF",
+      "PLAT-PROTECT-F-STUDENT-WINDOW-VERSION",
+      "PLAT-PROTECT-F-ACTIVITY-REF",
+      "PLAT-PROTECT-F-ACTIVITY-VERSION",
+      "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-REF",
+      "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-VERSION",
+    ])
+    && membership?.membershipRule
+      === "EXACT_IDENTITY_TUPLE_MUST_EXIST_IN_IMMUTABLE_ELIGIBLE_SET"
+    && membership?.uniquenessRule === "ONE_ENTRY_PER_CONTINUITY_AND_IDENTITY_TUPLE"
+    && membership?.reconciliationScopeRule
+      === "COUNT_ALL_DISTINCT_ELIGIBLE_ENTRIES_FOR_CONTINUITY_AFTER_CURRENT_EVENT_CAS"
+    && membership?.outOfSetFailureResult === "ENTRY_OUTSIDE_ELIGIBLE_SET"
+    && membership?.duplicateEffect === "IDEMPOTENT_RETURN_EXISTING_IDENTICAL_ENTRY"
+    && sameStringSet(captureIdempotency?.tupleFieldIds, [
+      "PLAT-PROTECT-F-CONTINUITY-REF",
+      "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION",
+      "PLAT-PROTECT-F-STUDENT-WINDOW-REF",
+      "PLAT-PROTECT-F-STUDENT-WINDOW-VERSION",
+      "PLAT-PROTECT-F-ACTIVITY-REF",
+      "PLAT-PROTECT-F-ACTIVITY-VERSION",
+      "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-REF",
+      "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-VERSION",
+    ])
+    && captureIdempotency?.deliverySemantics === "AT_LEAST_ONCE"
+    && captureIdempotency?.duplicateRule
+      === "RETURN_EXISTING_ENTRY_WITHOUT_NEW_WRITE_OR_FAILURE_EVENT"
+    && captureIdempotency?.conflictingTupleResult === "SNAPSHOT_MISMATCH"
+    && captureFailureRoute?.duplicateDeliveryEmitsFailure === false
+    && captureFailureRoute?.emissionRule
+      === "ONLY_WHEN_NON_RETRYABLE_OR_RETRY_BUDGET_EXHAUSTED"
+    && captureFailureRoute?.attemptContextForwarding?.attemptEpochFieldId
+      === "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH"
+    && captureFailureRoute?.attemptContextForwarding?.expectedContinuityVersionFieldId
+      === "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION"
+    && sameStringSet(captureFailureRoute?.eligibleResultCodes, [
+      "ACTIVITY_NOT_ALREADY_PUBLISHED",
+      "STUDENT_WINDOW_NOT_OPEN_AT_RESTRICTION",
+      "SNAPSHOT_MISMATCH",
+      "SCHOOL_SCOPE_MISMATCH",
+      "ENTRY_OUTSIDE_ELIGIBLE_SET",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ])
+    && reconcileManifest?.transition?.from === "CAPTURING_PROTECTED_ACTIVITIES"
+    && reconcileManifest?.transition?.to === "ACTIVITY_PROTECTION_OPEN"
+    && reconcileManifest?.executionMode === "SYSTEM_EVENT"
+    && reconcileManifest?.trigger?.eventId === reconcileRequestEvent?.id
+    && [
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ].every((fieldId) => list(reconcileManifest?.inputFieldIds).includes(fieldId))
+    && captureAttemptCasValid(
+      reconcileAttemptCas,
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    )
+    && sameStringSet(reconcileManifest?.nonFailureNoOpResults, ["STALE_EVENT_IGNORED"])
+    && reconciliation?.entryObjectId === protectedEntry?.id
+    && reconciliation?.continuityEntryRefFieldId === "PLAT-PROTECT-F-CONTINUITY-REF"
+    && reconciliation?.entryCaptureAttemptEpochFieldId
+      === "PLAT-PROTECT-F-CAPTURE-ATTEMPT-EPOCH"
+    && reconciliation?.entryCaptureExpectedContinuityVersionFieldId
+      === "PLAT-PROTECT-F-EXPECTED-CONTINUITY-VERSION"
+    && reconciliation?.entryAttemptFieldsAreProvenanceOnly === true
+    && reconciliation?.entrySelectionRule
+      === "ALL_DISTINCT_ELIGIBLE_ENTRIES_FOR_CONTINUITY_AFTER_CURRENT_EVENT_CAS"
+    && reconciliation?.expectedCountFieldId === "PLAT-CONT-F-ELIGIBLE-ENTRY-COUNT"
+    && reconciliation?.expectedDigestFieldId === "PLAT-CONT-F-ELIGIBLE-SET-DIGEST"
+    && reconciliation?.capturedCountFieldId === "PLAT-CONT-F-CAPTURED-ENTRY-COUNT"
+    && reconciliation?.capturedDigestFieldId === "PLAT-CONT-F-CAPTURED-SET-DIGEST"
+    && reconciliation?.manifestStatusFieldId === "PLAT-CONT-F-MANIFEST-STATUS"
+    && reconciliation?.requiredManifestStatus === "CAPTURING"
+    && reconciliation?.sealedManifestStatus === "SEALED"
+    && reconciliation?.countRule === "DISTINCT_CAPTURED_IDENTITY_COUNT_EQUALS_EXPECTED_COUNT"
+    && reconciliation?.digestRule === "CANONICAL_CAPTURED_SET_DIGEST_EQUALS_EXPECTED_SET_DIGEST"
+    && reconciliation?.zeroEligibleRule
+      === "SEAL_ONLY_WHEN_EXPECTED_COUNT_IS_ZERO_AND_BOTH_DIGESTS_EQUAL_CANONICAL_EMPTY_SET_DIGEST"
+    && reconciliation?.incompleteEffect === "KEEP_CAPTURING_WITH_RESTRICTION_NOT_EFFECTIVE"
+    && reconciliation?.manifestSealedAtFieldId === "PLAT-CONT-F-MANIFEST-SEALED-AT"
+    && reconciliation?.restrictionEffectiveAtFieldId
+      === "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"
+    && reconciliation?.sealAndRestrictionTimestampRule === "WRITE_SAME_ATOMIC_TIMESTAMP"
+    && reconciliation?.partialSealAllowed === false
+    && sameStringSet(reconcileFailureRoute?.eligibleResultCodes, [
+      "PROTECTED_ACTIVITY_MANIFEST_DIGEST_MISMATCH",
+      "PROTECTED_ACTIVITY_MANIFEST_COUNT_OVERFLOW",
+    ])
+    && sameStringSet(reconcileFailureRoute?.excludedResultCodes, [
+      "PROTECTED_ACTIVITY_MANIFEST_INCOMPLETE",
+    ])
+    && reconcileFailureRoute?.emissionRule
+      === "IMMEDIATE_NON_RETRYABLE_RECONCILIATION_FAILURE"
+    && reconcileFailureRoute?.attemptContextForwarding?.attemptEpochFieldId
+      === "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"
+    && reconcileFailureRoute?.attemptContextForwarding?.expectedContinuityVersionFieldId
+      === "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"
+    && markCaptureFailed?.transition?.from === "CAPTURING_PROTECTED_ACTIVITIES"
+    && markCaptureFailed?.transition?.to === "CAPTURE_FAILED"
+    && [
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ].every((fieldId) => list(markCaptureFailed?.inputFieldIds).includes(fieldId))
+    && captureAttemptCasValid(
+      markFailureAttemptCas,
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    )
+    && sameStringSet(markCaptureFailed?.nonFailureNoOpResults, ["STALE_EVENT_IGNORED"])
+    && captureFailure?.manifestStatusFieldId === "PLAT-CONT-F-MANIFEST-STATUS"
+    && captureFailure?.manifestStatus === "CAPTURE_FAILED"
+    && captureFailure?.restrictionEffectiveAtFieldId
+      === "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"
+    && captureFailure?.restrictionEffectiveAtMustRemain === null
+    && captureFailure?.preserveEligibleSetSnapshot === true
+    && captureFailure?.preserveCapturedEntries === true
+    && captureFailure?.staleAttemptRule
+      === "EPOCH_OR_EXPECTED_VERSION_MISMATCH_RETURNS_STALE_EVENT_IGNORED"
+    && captureFailure?.staleAttemptStateWriteAllowed === false
+    && retryCapture?.transition?.from === "CAPTURE_FAILED"
+    && retryCapture?.transition?.to === "CAPTURING_PROTECTED_ACTIVITIES"
+    && hasStateGuard(
+      retryCapture,
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "ACTIVE",
+    )
+    && retryAttemptCas?.requestAttemptEpochFieldId === "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"
+    && retryAttemptCas?.requestExpectedContinuityVersionFieldId
+      === "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"
+    && retryAttemptCas?.currentAttemptEpochFieldId === "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"
+    && retryAttemptCas?.currentExpectedContinuityVersionFieldId
+      === "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"
+    && retryAttemptCas?.currentContinuityVersionFieldId === "PLAT-CONT-F-VERSION"
+    && retryAttemptCas?.requiredContinuityState === "CAPTURE_FAILED"
+    && retryAttemptCas?.matchRule
+      === "REQUEST_EPOCH_AND_EXPECTED_VERSION_EQUAL_FAILED_ATTEMPT_TOKENS"
+    && retryAttemptCas?.targetVersionCasRule
+      === "REQUEST_TARGET_VERSION_EQUALS_CURRENT_CONTINUITY_VERSION"
+    && retryAttemptCas?.staleEventResult === "STALE_EVENT_IGNORED"
+    && retryAttemptCas?.staleEventEffect === "IDEMPOTENT_NO_OP"
+    && retryAttemptCas?.staleEventWritesAllowed === false
+    && sameStringSet(retryCapture?.nonFailureNoOpResults, ["STALE_EVENT_IGNORED"])
+    && [
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ].every((fieldId) => list(retryCapture?.inputFieldIds).includes(fieldId))
+    && [
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+    ].every((fieldId) => list(retryCapture?.outputFieldIds).includes(fieldId))
+    && captureRetry?.expectedCountFieldId === "PLAT-CONT-F-ELIGIBLE-ENTRY-COUNT"
+    && captureRetry?.expectedDigestFieldId === "PLAT-CONT-F-ELIGIBLE-SET-DIGEST"
+    && captureRetry?.retryCountFieldId === "PLAT-CONT-F-CAPTURE-RETRY-COUNT"
+    && captureRetry?.retryCountRule === "INCREMENT_BY_ONE"
+    && captureRetry?.attemptEpochFieldId === "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"
+    && captureRetry?.attemptEpochRule === "ATOMIC_INCREMENT_BY_ONE"
+    && captureRetry?.expectedContinuityVersionFieldId
+      === "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"
+    && captureRetry?.expectedContinuityVersionRule === "EQUAL_RESULTING_CONTINUITY_VERSION"
+    && sameStringSet(captureRetry?.atomicMutationFieldIds, [
+      "PLAT-CONT-F-CAPTURE-RETRY-COUNT",
+      "PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH",
+      "PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION",
+      "PLAT-CONT-F-MANIFEST-STATUS",
+      "PLAT-CONT-F-STATUS",
+      "PLAT-CONT-F-VERSION",
+    ])
+    && captureRetry?.manifestStatusFieldId === "PLAT-CONT-F-MANIFEST-STATUS"
+    && captureRetry?.manifestStatus === "CAPTURING"
+    && captureRetry?.retrySelectionRule === "CAPTURE_ONLY_EXPECTED_IDENTITIES_NOT_ALREADY_PRESENT"
+    && captureRetry?.preserveEligibleSetSnapshot === true
+    && captureRetry?.preserveCapturedEntries === true
+    && captureRetry?.priorAttemptEntriesRule
+      === "REUSE_VALID_DISTINCT_ENTRIES_AND_RETAIN_CAPTURE_ATTEMPT_PROVENANCE"
+    && captureRetry?.duplicateStudentDetailEntriesAllowed === false
+    && captureRetry?.restrictionEffectiveAtFieldId
+      === "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"
+    && captureRetry?.restrictionEffectiveAtMustRemain === null
+    && /must equal.*original student activity-window due time/i.test(
+      field("PLAT-PROTECT-F-PROTECTED-UNTIL")?.validation ?? "",
+    );
+  if (!protectedManifestValid) {
+    errors.push(
+      "INVALID_PROTECTED_ACTIVITY_MANIFEST protection must capture the complete immutable eligible set, seal only on exact count and digest equality, and preserve every original student due time",
+    );
+  }
+
+  const continuityWriteActions = index.actions
+    .map(({ value }) => value)
+    .filter((actionValue) => (
+      actionValue?.targetObjectId === continuity?.id && actionValue?.writes === true
+    ));
+  const writerActionIds = (fieldId) => continuityWriteActions
+    .filter((actionValue) => list(actionValue?.outputFieldIds).includes(fieldId))
+    .map(({ id }) => id);
+  const activityProtectionOpenTransitionActionIds = continuityWriteActions
+    .filter(({ transition }) => (
+      transition?.to === "ACTIVITY_PROTECTION_OPEN"
+      || list(transition?.to).includes("ACTIVITY_PROTECTION_OPEN")
+    ))
+    .map(({ id }) => id);
+  const activityProtectionOpenScenarioActionIds = index.scenarios
+    .map(({ value }) => value)
+    .filter((scenario) => {
+      const scenarioAction = action(scenario?.actionId);
+      return scenario?.kind === "SUCCESS"
+        && scenario?.then?.expectedState?.mode === "STATE"
+        && scenario?.then?.expectedState?.value === "ACTIVITY_PROTECTION_OPEN"
+        && scenarioAction?.targetObjectId === continuity?.id
+        && scenarioAction?.writes === true;
+    })
+    .map(({ actionId }) => actionId);
+  const exclusiveSealWriterValid = sameStringSet(
+    writerActionIds("PLAT-CONT-F-MANIFEST-SEALED-AT"),
+    [reconcileManifest?.id],
+  )
+    && sameStringSet(
+      writerActionIds("PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"),
+      [reconcileManifest?.id],
+    )
+    && sameStringSet(
+      writerActionIds("PLAT-CONT-F-CAPTURE-ATTEMPT-EPOCH"),
+      [openContinuity?.id, retryCapture?.id],
+    )
+    && sameStringSet(
+      writerActionIds("PLAT-CONT-F-EXPECTED-CONTINUITY-VERSION"),
+      [openContinuity?.id, retryCapture?.id],
+    )
+    && sameStringSet(activityProtectionOpenTransitionActionIds, [reconcileManifest?.id])
+    && sameStringSet(activityProtectionOpenScenarioActionIds, [reconcileManifest?.id]);
+  if (!exclusiveSealWriterValid) {
+    errors.push(
+      "INVALID_SERVICE_CONTINUITY_WRITER only reconcile may seal or activate restriction, and only open/retry may write capture-attempt CAS tokens",
+    );
+  }
+
+  const guardedCreationActionIds = ["HW-ACT-CREATE-DRAFT", "HW-ACT-CREATE-REPLACEMENT-DRAFT"];
+  const decisionContract = activityCreationGuard?.entitlementDecisionContract;
+  const expectedDecisionBranches = new Map([
+    ["ACTIVE_PLAN_NO_CONTINUITY", {
+      sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
+      continuityPredicate: "NO_CURRENT_CONTINUITY_WINDOW",
+      scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
+      predicateJoin: "AND",
+      decisionCode: "ACTIVE_ALLOW",
+      effect: "ALLOW",
+    }],
+    ["ACTIVE_PLAN_CONTINUITY_NOT_SEALED", {
+      sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
+      continuityPredicate: "MANIFEST_NOT_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NULL",
+      scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
+      predicateJoin: "AND",
+      decisionCode: "ACTIVE_ALLOW",
+      effect: "ALLOW",
+    }],
+    ["ACTIVE_PLAN_SEALED_RESTRICTION", {
+      sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
+      continuityPredicate: "MANIFEST_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NOT_NULL",
+      scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
+      predicateJoin: "AND",
+      decisionCode: "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT",
+      effect: "ALLOW",
+    }],
+    ["NO_CURRENT_ENTITLEMENT", {
+      sourcePredicate: "SERVICE_PLAN_MISSING_OR_NOT_ACTIVE_OR_VERSION_MISMATCH",
+      continuityPredicate: "ANY",
+      scopePredicate: "MISSING_OR_REQUEST_OUTSIDE_PINNED_SERVICE_PLAN_SCOPE",
+      predicateJoin: "OR_SOURCE_OR_SCOPE",
+      decisionCode: "NO_ENTITLEMENT_BLOCK",
+      effect: "BLOCK",
+    }],
+  ]);
+  const decisionBranchesValid = (branches) => records(branches).length === expectedDecisionBranches.size
+    && records(branches).every((branch) => {
+      const expected = expectedDecisionBranches.get(branch.branchId);
+      return expected
+        && hasExactKeys(branch, [
+          "branchId",
+          "sourcePredicate",
+          "continuityPredicate",
+          "scopePredicate",
+          "predicateJoin",
+          "decisionCode",
+          "effect",
+        ])
+        && Object.entries(expected).every(([property, value]) => branch[property] === value);
+    });
+  const decisionEnvelopeValid = (value) => decisionBranchesValid(value?.decisionBranches)
+    && sameStringSet(value?.allowedDecisionCodes, [
+      "ACTIVE_ALLOW",
+      "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT",
+    ])
+    && sameStringSet(value?.blockedDecisionCodes, ["NO_ENTITLEMENT_BLOCK"])
+    && value?.branchesMutuallyExclusive === true
+    && value?.branchesExhaustive === true
+    && value?.unknownDecisionEffect === "BLOCK";
+  const evidenceContractValid = (value) => hasExactKeys(value, [
+    "persistence",
+    "sourceObjectProperty",
+    "sourceIdentityProperty",
+    "sourceVersionProperty",
+    "sourceStateProperty",
+    "scopeDecisionProperty",
+    "continuityIdentityProperty",
+    "continuityVersionProperty",
+    "decisionCodeProperty",
+  ])
+    && value?.persistence === "AUDIT_WITH_GUARDED_ACTIVITY_CREATE_DECISION"
+    && value?.sourceObjectProperty === "entitlementSourceObjectId"
+    && value?.sourceIdentityProperty === "entitlementSourceId"
+    && value?.sourceVersionProperty === "entitlementSourceVersion"
+    && value?.sourceStateProperty === "entitlementSourceState"
+    && value?.scopeDecisionProperty === "entitlementScopeDecision"
+    && value?.continuityIdentityProperty === "serviceContinuityIdOrNull"
+    && value?.continuityVersionProperty === "serviceContinuityVersionOrNull"
+    && value?.decisionCodeProperty === "entitlementDecisionCode";
+  const currentContinuitySelectionValid = (value) => hasExactKeys(value, [
+    "lookupObjectId",
+    "sourceSchoolRefFieldId",
+    "continuitySchoolRefFieldId",
+    "continuityServicePlanRefFieldId",
+    "continuityServicePlanVersionFieldId",
+    "continuityStatusFieldId",
+    "excludedState",
+    "maximumMatches",
+    "selectionRule",
+    "uniquenessConstraintProperty",
+    "zeroMatchMeaning",
+    "ambiguousMatchResult",
+    "ambiguousMatchEffect",
+  ])
+    && value?.lookupObjectId === continuity?.id
+    && value?.sourceSchoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && value?.continuitySchoolRefFieldId === "PLAT-CONT-F-SCHOOL-REF"
+    && value?.continuityServicePlanRefFieldId === "PLAT-CONT-F-SERVICE-PLAN-REF"
+    && value?.continuityServicePlanVersionFieldId === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+    && value?.continuityStatusFieldId === "PLAT-CONT-F-STATUS"
+    && value?.excludedState === "CLOSED"
+    && value?.maximumMatches === 1
+    && value?.selectionRule
+      === "EXACT_SCHOOL_AND_PINNED_SERVICE_PLAN_VERSION_WITH_STATUS_NOT_CLOSED"
+    && value?.uniquenessConstraintProperty === "currentWindowUniquenessConstraint"
+    && value?.zeroMatchMeaning === "NO_CURRENT_CONTINUITY_WINDOW"
+    && value?.ambiguousMatchResult === "ENTITLEMENT_DECISION_UNAVAILABLE"
+    && value?.ambiguousMatchEffect === "BLOCK";
+  const newActivityGuardValid = hasExactKeys(decisionContract, [
+    "guardedActionIds",
+    "sourceObjectId",
+    "sourceIdentityFieldId",
+    "sourceVersionFieldId",
+    "sourceStateFieldId",
+    "requiredSourceState",
+    "scopeFieldId",
+    "scopeRule",
+    "continuityObjectId",
+    "continuityServicePlanRefFieldId",
+    "continuityServicePlanVersionFieldId",
+    "continuityManifestStatusFieldId",
+    "continuityRestrictionEffectiveAtFieldId",
+    "currentContinuitySelection",
+    "protectionWindowAuthorizesNewActivity",
+    "decisionBranches",
+    "allowedDecisionCodes",
+    "blockedDecisionCodes",
+    "branchesMutuallyExclusive",
+    "branchesExhaustive",
+    "unknownDecisionEffect",
+    "failureResult",
+  ])
+    && continuityContract?.activityCreationGuardActionId === activityCreationGuard?.id
+    && sameStringSet(continuityContract?.guardedActivityCreationActionIds, guardedCreationActionIds)
+    && activityCreationGuard?.operationKind === "READ"
+    && activityCreationGuard?.targetObjectId === servicePlan?.id
+    && !list(activityCreationGuard?.failureResults).includes("NOT_FOUND")
+    && sameStringSet(decisionContract?.guardedActionIds, guardedCreationActionIds)
+    && decisionContract?.sourceObjectId === servicePlan?.id
+    && decisionContract?.sourceIdentityFieldId === "PLAT-PLAN-F-ID"
+    && decisionContract?.sourceVersionFieldId === "PLAT-PLAN-F-VERSION"
+    && decisionContract?.sourceStateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && decisionContract?.requiredSourceState === "ACTIVE"
+    && decisionContract?.scopeFieldId === "PLAT-PLAN-F-SCOPE"
+    && decisionContract?.scopeRule === "REQUESTED_ACTIVITY_CONTEXT_WITHIN_PINNED_SERVICE_PLAN_SCOPE"
+    && decisionContract?.continuityObjectId === continuity?.id
+    && decisionContract?.continuityServicePlanRefFieldId === "PLAT-CONT-F-SERVICE-PLAN-REF"
+    && decisionContract?.continuityServicePlanVersionFieldId
+      === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+    && decisionContract?.continuityManifestStatusFieldId === "PLAT-CONT-F-MANIFEST-STATUS"
+    && decisionContract?.continuityRestrictionEffectiveAtFieldId
+      === "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"
+    && currentContinuitySelectionValid(decisionContract?.currentContinuitySelection)
+    && decisionContract?.protectionWindowAuthorizesNewActivity === false
+    && decisionContract?.failureResult === "ACTIVITY_ENTITLEMENT_BLOCKED"
+    && decisionEnvelopeValid(decisionContract)
+    && guardedCreationActionIds.every((actionId) => {
+      const guardedAction = action(actionId);
+      const guard = guardedAction?.commercialEntitlementGuard;
+      return guardedAction?.targetObjectId === "HW-OBJ-ASSIGNMENT"
+        && hasExactKeys(guard, [
+          "decisionActionId",
+          "sourceObjectId",
+          "sourceIdentityFieldId",
+          "sourceVersionFieldId",
+          "sourceStateFieldId",
+          "requiredSourceState",
+          "scopeFieldId",
+          "scopeRule",
+          "continuityObjectId",
+          "continuityServicePlanRefFieldId",
+          "continuityServicePlanVersionFieldId",
+          "continuityManifestStatusFieldId",
+          "continuityRestrictionEffectiveAtFieldId",
+          "currentContinuitySelection",
+          "protectionWindowAuthorizesNewActivity",
+          "decisionClosure",
+          "decisionEvidenceContract",
+          "failureResult",
+        ])
+        && guard?.decisionActionId === activityCreationGuard?.id
+        && guard?.sourceObjectId === servicePlan?.id
+        && guard?.sourceIdentityFieldId === "PLAT-PLAN-F-ID"
+        && guard?.sourceVersionFieldId === "PLAT-PLAN-F-VERSION"
+        && guard?.sourceStateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+        && guard?.requiredSourceState === "ACTIVE"
+        && guard?.scopeFieldId === "PLAT-PLAN-F-SCOPE"
+        && guard?.scopeRule === "REQUESTED_ACTIVITY_CONTEXT_WITHIN_PINNED_SERVICE_PLAN_SCOPE"
+        && guard?.continuityObjectId === continuity?.id
+        && guard?.continuityServicePlanRefFieldId === "PLAT-CONT-F-SERVICE-PLAN-REF"
+        && guard?.continuityServicePlanVersionFieldId === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+        && guard?.continuityManifestStatusFieldId === "PLAT-CONT-F-MANIFEST-STATUS"
+        && guard?.continuityRestrictionEffectiveAtFieldId
+          === "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT"
+        && currentContinuitySelectionValid(guard?.currentContinuitySelection)
+        && guard?.protectionWindowAuthorizesNewActivity === false
+        && hasExactKeys(guard?.decisionClosure, [
+          "decisionBranches",
+          "allowedDecisionCodes",
+          "blockedDecisionCodes",
+          "branchesMutuallyExclusive",
+          "branchesExhaustive",
+          "unknownDecisionEffect",
+        ])
+        && decisionEnvelopeValid(guard?.decisionClosure)
+        && evidenceContractValid(guard?.decisionEvidenceContract)
+        && guard?.failureResult === "ACTIVITY_ENTITLEMENT_BLOCKED"
+        && list(guardedAction?.failureResults).includes("ACTIVITY_ENTITLEMENT_BLOCKED");
+    });
+  if (!newActivityGuardValid) {
+    errors.push(
+      "INVALID_NEW_ACTIVITY_ENTITLEMENT_GUARD real HW creation must persist one exhaustive decision from the exact current ACTIVE service-plan version and fail closed outside its scope",
+    );
+  }
+
+  const expectedOperationBindings = new Map([
+    ["COMPLETE_PUBLISHED_ACTIVITY", ["SUB-ACT-SUBMIT", "SUB-ACT-SUBMIT-PROTECTED", "SUB-ACT-RESUBMIT"]],
+    ["HISTORICAL_READ", ["DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY"]],
+    ["LEGAL_EXPORT", ["DGV-ACT-REQUEST-EXPORT", "DGV-ACT-APPROVE-EXPORT", "DGV-ACT-DENY-EXPORT", "DGV-ACT-GENERATE-EXPORT", "DGV-ACT-COMPLETE-EXPORT", "DGV-ACT-FAIL-EXPORT", "DGV-ACT-EXPIRE-EXPORT", "DGV-ACT-DOWNLOAD-ROLE-BOUND-FILE"]],
+    ["TRANSFER", ["DGV-ACT-REQUEST-STUDENT-TRANSFER", "DGV-ACT-AUTHORIZE-STUDENT-TRANSFER", "DGV-ACT-FREEZE-STUDENT-TRANSFER", "DGV-ACT-EXECUTE-STUDENT-TRANSFER", "DGV-ACT-DENY-STUDENT-TRANSFER"]],
+    ["DELETION", ["ACC-ACT-REQUEST-IDENTITY-DELETION", "ACC-ACT-FREEZE-IDENTITY-DELETION", "ACC-ACT-RESUME-IDENTITY-DELETION", "ACC-ACT-COMPLETE-IDENTITY-DELETION"]],
+    ["SECURITY_SUPPORT", ["PLAT-ACT-CREATE-SUPPORT-CASE", "PLAT-ACT-USE-SUPPORT-ACCESS"]],
+  ]);
+  const declaredBindingRecords = records(continuityContract?.operationBindings);
+  const declaredBindings = new Map(declaredBindingRecords
+    .map((binding) => [binding.operationCode, binding.actionIds]));
+  const taggedBindings = new Map(protectedOperations.map((operationCode) => [
+    operationCode,
+    index.actions
+      .map(({ value }) => value)
+      .filter(({ serviceContinuityOperationCode }) => (
+        serviceContinuityOperationCode === operationCode
+      ))
+      .map(({ id }) => id),
+  ]));
+  const unknownTaggedActions = index.actions
+    .map(({ value }) => value)
+    .filter(({ serviceContinuityOperationCode }) => (
+      isPresent(serviceContinuityOperationCode)
+      && !protectedOperations.includes(serviceContinuityOperationCode)
+    ));
+  const operationBindingsValid = declaredBindingRecords.length === expectedOperationBindings.size
+    && declaredBindingRecords.every(({ actionIds }) => (
+      list(actionIds).length === new Set(list(actionIds)).size
+    ))
+    && unknownTaggedActions.length === 0
+    && sameStringSet(
+    [...declaredBindings.keys()],
+    [...expectedOperationBindings.keys()],
+  ) && [...expectedOperationBindings].every(([operationCode, actionIds]) => (
+    sameStringSet(declaredBindings.get(operationCode), actionIds)
+    && sameStringSet(taggedBindings.get(operationCode), actionIds)
+    && actionIds.every((actionId) => action(actionId)?.serviceContinuityOperationCode === operationCode)
+  ));
+  const protectedSubmissionValid = sameStringSet(
+    continuityContract?.protectedActivityCompletionActionIds,
+    expectedOperationBindings.get("COMPLETE_PUBLISHED_ACTIVITY"),
+  ) && expectedOperationBindings.get("COMPLETE_PUBLISHED_ACTIVITY").every((actionId) => {
+    const guardedAction = action(actionId);
+    const guard = guardedAction?.serviceContinuityGuard;
+    return guard?.protectedEntryObjectId === protectedEntry?.id
+      && guard?.continuityObjectId === continuity?.id
+      && guard?.activityRefFieldId === "SUB-ATTEMPT-F-ASSIGNMENT-REF"
+      && guard?.activityVersionFieldId === "SUB-ATTEMPT-F-ASSIGNMENT-VERSION"
+      && guard?.publicationSnapshotRefFieldId === "SUB-ATTEMPT-F-PUBLICATION-SNAPSHOT-REF"
+      && guard?.publicationSnapshotVersionFieldId
+        === "SUB-ATTEMPT-F-PUBLICATION-SNAPSHOT-VERSION"
+      && guard?.actorBinding === "CURRENT_STUDENT_MATCHES_PROTECTED_STUDENT_WINDOW"
+      && guard?.timeRule === "CURRENT_TIME_LE_PROTECTED_UNTIL"
+      && guard?.restrictedBehavior === "REQUIRE_EXACT_PROTECTED_ENTRY"
+      && guard?.failureResult === "SERVICE_CONTINUITY_NOT_PROTECTED"
+      && list(guardedAction?.failureResults).includes("SERVICE_CONTINUITY_NOT_PROTECTED");
+  });
+  if (!operationBindingsValid || !protectedSubmissionValid) {
+    errors.push(
+      "INVALID_SERVICE_CONTINUITY_ACTION_BINDING protected completion, historical read, export, migration, deletion, and security support must bind bidirectionally to real guarded actions",
+    );
+  }
+
+  return errors;
 }
 
 export function validateModelSemantics(model) {

@@ -173,6 +173,7 @@ function action({
   successVisibility = "authorized object scope only",
   failureOutcomes = {},
   relatedStateGuards,
+  serviceContinuityOperationCode,
 }) {
   const effectiveOperationKind = operationKind
     ?? (writes === false ? "READ" : transition ? "UPDATE" : undefined);
@@ -260,6 +261,7 @@ function action({
       auditMode: effectiveAuditMode,
       failureResults: effectiveFailureResults,
       ...(relatedStateGuards ? { relatedStateGuards } : {}),
+      ...(serviceContinuityOperationCode ? { serviceContinuityOperationCode } : {}),
     },
     scenarios: [...successScenarios, ...failureScenarios],
   };
@@ -277,6 +279,23 @@ function page(id, label, objectIds, fieldIds, actionIds, clients) {
     viewStates: ["LOADING", "READY", "EMPTY", "ERROR", "FORBIDDEN", "STALE_VERSION"],
   };
 }
+
+const foundationServiceContinuityOperationByActionId = new Map([
+  ["DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY", "HISTORICAL_READ"],
+  ["DGV-ACT-REQUEST-EXPORT", "LEGAL_EXPORT"],
+  ["DGV-ACT-APPROVE-EXPORT", "LEGAL_EXPORT"],
+  ["DGV-ACT-DENY-EXPORT", "LEGAL_EXPORT"],
+  ["DGV-ACT-GENERATE-EXPORT", "LEGAL_EXPORT"],
+  ["DGV-ACT-COMPLETE-EXPORT", "LEGAL_EXPORT"],
+  ["DGV-ACT-FAIL-EXPORT", "LEGAL_EXPORT"],
+  ["DGV-ACT-EXPIRE-EXPORT", "LEGAL_EXPORT"],
+  ["DGV-ACT-DOWNLOAD-ROLE-BOUND-FILE", "LEGAL_EXPORT"],
+  ["DGV-ACT-REQUEST-STUDENT-TRANSFER", "TRANSFER"],
+  ["DGV-ACT-AUTHORIZE-STUDENT-TRANSFER", "TRANSFER"],
+  ["DGV-ACT-FREEZE-STUDENT-TRANSFER", "TRANSFER"],
+  ["DGV-ACT-EXECUTE-STUDENT-TRANSFER", "TRANSFER"],
+  ["DGV-ACT-DENY-STUDENT-TRANSFER", "TRANSFER"],
+]);
 
 function moduleFact({
   actions: actionFacts,
@@ -309,11 +328,16 @@ function moduleFact({
         ?? (readTargetObjectIds.has(objectValue.id) ? "AUTHORIZED" : "NO_DIRECT_READ"),
     })),
     pages,
-    actions: actionFacts.map(({ action: actionValue }) => (
-      actionValue.executionMode === USER_TASK
-        ? { ...actionValue, clients: actionValue.clients ?? defaultClients }
-        : actionValue
-    )),
+    actions: actionFacts.map(({ action: actionValue }) => {
+      const continuityOperationCode = foundationServiceContinuityOperationByActionId
+        .get(actionValue.id);
+      const effectiveAction = continuityOperationCode
+        ? { ...actionValue, serviceContinuityOperationCode: continuityOperationCode }
+        : actionValue;
+      return effectiveAction.executionMode === USER_TASK
+        ? { ...effectiveAction, clients: effectiveAction.clients ?? defaultClients }
+        : effectiveAction;
+    }),
     scenarios: actionFacts.flatMap(({ scenarios }) => scenarios.map((scenario) => (
       actionById.get(scenario.actionId)?.executionMode === USER_TASK
         ? { ...scenario, pageId: pageByActionId.get(scenario.actionId) }
@@ -650,6 +674,7 @@ const accActions = [
       { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations cannot initiate identity deletion by default" },
     ],
     risk: RISK.HIGH,
+    serviceContinuityOperationCode: "DELETION",
     transition: { from: "ACTIVE", to: "DELETION_REQUESTED" },
   }),
   action({
@@ -663,6 +688,7 @@ const accActions = [
       { effect: "DENY", roleRef: "ROLE-SCHOOL-ADMIN", condition: "a school cannot suppress or resolve a guardian authorization dispute" },
     ],
     risk: RISK.HIGH,
+    serviceContinuityOperationCode: "DELETION",
     transition: { from: "DELETION_REQUESTED", to: "DISPUTE_FROZEN" },
   }),
   action({
@@ -676,6 +702,7 @@ const accActions = [
       { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations cannot unfreeze a high-impact identity action" },
     ],
     risk: RISK.HIGH,
+    serviceContinuityOperationCode: "DELETION",
     transition: { from: "DISPUTE_FROZEN", to: "DELETION_REQUESTED" },
   }),
   action({
@@ -690,6 +717,7 @@ const accActions = [
       { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations cannot execute or bypass high-impact authorization" },
     ],
     risk: RISK.HIGH,
+    serviceContinuityOperationCode: "DELETION",
     transition: { from: "DELETION_REQUESTED", to: "DELETED" },
     successData: "the recoverable identity lookup mapping is deleted; legal-hold records remain separately restricted and cannot restore the identity number",
   }),

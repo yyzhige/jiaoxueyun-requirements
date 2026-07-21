@@ -56,6 +56,7 @@ const MODULE_ARTIFACT_META = new Map([
   ["PLAT-001", [27, "platform-onboarding-governance"]],
   ["PROG-001", [28, "phase-two-minimum-learning-progress"]],
   ["VIDEO-001", [29, "phase-two-source-bound-teaching-video"]],
+  ["PLAT-002", [30, "phase-two-school-entitlement"]],
 ]);
 
 function artifactMeta(moduleId) {
