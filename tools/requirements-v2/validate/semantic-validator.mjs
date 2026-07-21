@@ -348,6 +348,17 @@ function task8ProfileEnabled(index) {
     || index.modules.some(({ value }) => ZHIXU_PRODUCTION_MARKER_MODULE_IDS.has(value?.id));
 }
 
+function finalizedTeachingBaselineEnabled(index) {
+  return index.modelProfile === "ZHIXU_V2"
+    || [
+      "HW-OBJ-SCHOOL-TIME-POLICY",
+      "HW-OBJ-STUDENT-ACTIVITY-WINDOW",
+      "SUB-OBJ-INPUT-QUALITY",
+      "TEA-OBJ-TEACHING-PROBLEM",
+      "APP-OBJ-STUDENT-HOME",
+    ].some((objectId) => index.objectById.has(objectId));
+}
+
 function isPresent(value) {
   return value !== undefined
     && value !== null
@@ -1176,9 +1187,15 @@ function actionErrors(index) {
         optionSetId,
         registeredCodes,
         acceptedCodes: new Set(),
+        partialCoverageAllowed: Array.isArray(targetObject?.perStudentStatusAxes)
+          && targetObject.perStudentStatusAxes.includes(action?.axisMutation?.axis),
         valid: true,
       };
       if (partition.optionSetId !== optionSetId) partition.valid = false;
+      if (partition.partialCoverageAllowed !== (
+        Array.isArray(targetObject?.perStudentStatusAxes)
+        && targetObject.perStudentStatusAxes.includes(action?.axisMutation?.axis)
+      )) partition.valid = false;
       for (const code of codes) {
         if (partition.acceptedCodes.has(code)) partition.valid = false;
         partition.acceptedCodes.add(code);
@@ -1204,13 +1221,38 @@ function actionErrors(index) {
       && successScenarios.every(
         ({ value }) => value?.then?.expectedState?.mode === "STATE",
       );
+    const axisMutation = action?.axisMutation;
+    const axisField = index.fieldById.get(axisMutation?.axisFieldId)?.value;
+    const axisCodes = new Set(records(index.optionSetById
+      .get(axisField?.valueSource?.optionSetId)?.value?.values).map(({ code }) => code));
+    const acceptedAxisCodes = records(action?.acceptedInputValues)
+      .filter(({ fieldId }) => fieldId === axisMutation?.axisFieldId)
+      .flatMap(({ codes }) => list(codes));
+    const hasValidAxisMutation = isRecord(axisMutation)
+      && !hasTransition
+      && axisField?.activityStatusAxis === axisMutation?.axis
+      && axisField?.valueSource?.kind === "OPTION_SET"
+      && list(action?.inputFieldIds).includes(axisMutation.axisFieldId)
+      && list(action?.outputFieldIds).includes(axisMutation.axisFieldId)
+      && axisCodes.has(axisMutation.fromCode)
+      && axisCodes.has(axisMutation.toCode)
+      && axisMutation.fromCode !== axisMutation.toCode
+      && setEquals(new Set(acceptedAxisCodes), new Set([axisMutation.toCode]))
+      && axisMutation.lifecycleStateEffect === "UNCHANGED"
+      && successScenarios.every(({ value }) => value?.then?.expectedState?.mode === "UNCHANGED");
     if (
       (operationKind === "READ" && (action?.writes !== false || hasTransition || hasStateEffect))
       || (
         operationKind === "CREATE"
         && (action?.writes !== true || hasTransition || !hasCreatedSuccessState)
       )
-      || (operationKind === "UPDATE" && (action?.writes !== true || !hasTransition))
+      || (operationKind === "UPDATE" && (
+        action?.writes !== true
+        || !(
+          (hasTransition && !isRecord(axisMutation))
+          || (!hasTransition && hasValidAxisMutation)
+        )
+      ))
     ) {
       errors.push(
         `INVALID_ACTION_OPERATION ${formatValidationValue(action?.id)} has an inconsistent ${formatValidationValue(operationKind)} contract`,
@@ -1238,6 +1280,7 @@ function actionErrors(index) {
     if (
       action?.writes === true
       && successScenarios.some(({ value }) => value?.then?.expectedState?.mode !== "STATE")
+      && !hasValidAxisMutation
     ) {
       errors.push(
         `MISSING_ACTION_STATE_EFFECT ${formatValidationValue(action?.id)} requires a concrete success state`,
@@ -1298,7 +1341,8 @@ function actionErrors(index) {
   for (const partition of acceptedInputPartitions.values()) {
     if (
       !partition.valid
-      || !setEquals(partition.acceptedCodes, partition.registeredCodes)
+      || (!partition.partialCoverageAllowed
+        && !setEquals(partition.acceptedCodes, partition.registeredCodes))
     ) {
       errors.push(
         "INVALID_ACTION_INPUT_VALUES accepted action input partitions must be disjoint and exhaust their STATIC Option Set",
@@ -4236,11 +4280,19 @@ function preparationHandoffErrors(index) {
     "HW-ASSIGNMENT-F-LATE-POLICY",
     "HW-ASSIGNMENT-F-RESUBMISSION-POLICY",
     "HW-ASSIGNMENT-F-ASSIGNMENT-TYPE",
+    "HW-ASSIGNMENT-F-PURPOSE",
+    "HW-ASSIGNMENT-F-HELP-RULE-REF",
+    "HW-ASSIGNMENT-F-ANSWER-OPEN-POLICY",
+    "HW-ASSIGNMENT-F-DIAGNOSTIC-USE",
+    "HW-ASSIGNMENT-F-LATE-ENROLLEE-WINDOW-POLICY",
     "HW-ASSIGNMENT-F-QUESTION-ORDER",
     "HW-ASSIGNMENT-F-RUBRIC-VERSION",
     "HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS",
     "HW-ASSIGNMENT-F-FEEDBACK-POLICY",
     "HW-ASSIGNMENT-F-NOTIFICATION-POLICY",
+    "HW-ASSIGNMENT-F-HELP-RULE-VERSION",
+    "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-REF",
+    "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-VERSION",
   ];
   const expectedBindings = [
     { targetFieldId: "HW-ASSIGNMENT-F-TITLE", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-TITLE", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
@@ -4253,11 +4305,19 @@ function preparationHandoffErrors(index) {
     { targetFieldId: "HW-ASSIGNMENT-F-LATE-POLICY", sourceKind: "TEACHER_REQUIRED", payloadPath: "latePolicy" },
     { targetFieldId: "HW-ASSIGNMENT-F-RESUBMISSION-POLICY", sourceKind: "TEACHER_REQUIRED", payloadPath: "resubmissionPolicy" },
     { targetFieldId: "HW-ASSIGNMENT-F-ASSIGNMENT-TYPE", sourceKind: "GENERATED_PAYLOAD", payloadPath: "assignmentType" },
+    { targetFieldId: "HW-ASSIGNMENT-F-PURPOSE", sourceKind: "POLICY_DEFAULT", policyKey: "activity.primaryPurpose.formalAssignment" },
+    { targetFieldId: "HW-ASSIGNMENT-F-HELP-RULE-REF", sourceKind: "PUBLISHED_HELP_RULE_FIELD", sourceObjectId: "HW-OBJ-HELP-RULE", sourceFieldId: "HW-HELP-RULE-F-ID", sourceVersionFieldId: "HW-HELP-RULE-F-VERSION", requiredState: "PUBLISHED" },
+    { targetFieldId: "HW-ASSIGNMENT-F-ANSWER-OPEN-POLICY", sourceKind: "POLICY_DEFAULT", policyKey: "activity.answerOpenPolicy.formalAssignment" },
+    { targetFieldId: "HW-ASSIGNMENT-F-DIAGNOSTIC-USE", sourceKind: "POLICY_DEFAULT", policyKey: "activity.diagnosticUse.notApplicable", fixedCode: "NOT_APPLICABLE" },
+    { targetFieldId: "HW-ASSIGNMENT-F-LATE-ENROLLEE-WINDOW-POLICY", sourceKind: "POLICY_DEFAULT", policyKey: "activity.lateEnrolleeWindow.formalAssignment", fixedCode: "FORMAL_SCHOOL_FULL_DURATION" },
     { targetFieldId: "HW-ASSIGNMENT-F-QUESTION-ORDER", sourceKind: "GENERATED_PAYLOAD", payloadPath: "questionOrder" },
     { targetFieldId: "HW-ASSIGNMENT-F-RUBRIC-VERSION", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-RUBRIC-VERSION", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
     { targetFieldId: "HW-ASSIGNMENT-F-KNOWLEDGE-POINT-IDS", sourceKind: "LESSON_FIELD", sourceFieldId: "PREP-LESSON-F-KNOWLEDGE-POINT-IDS", sourceVersionFieldId: "PREP-LESSON-F-VERSION" },
     { targetFieldId: "HW-ASSIGNMENT-F-FEEDBACK-POLICY", sourceKind: "POLICY_DEFAULT", policyKey: "assignment.feedbackPolicy" },
     { targetFieldId: "HW-ASSIGNMENT-F-NOTIFICATION-POLICY", sourceKind: "POLICY_DEFAULT", policyKey: "assignment.notificationPolicy" },
+    { targetFieldId: "HW-ASSIGNMENT-F-HELP-RULE-VERSION", sourceKind: "PUBLISHED_HELP_RULE_FIELD", sourceObjectId: "HW-OBJ-HELP-RULE", sourceFieldId: "HW-HELP-RULE-F-VERSION", sourceVersionFieldId: "HW-HELP-RULE-F-VERSION", requiredState: "PUBLISHED" },
+    { targetFieldId: "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-REF", sourceKind: "ACTIVE_POLICY_FIELD", sourceObjectId: "HW-OBJ-SCHOOL-TIME-POLICY", sourceFieldId: "HW-TIME-POLICY-F-ID", sourceVersionFieldId: "HW-TIME-POLICY-F-VERSION", requiredState: "ACTIVE" },
+    { targetFieldId: "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-VERSION", sourceKind: "ACTIVE_POLICY_FIELD", sourceObjectId: "HW-OBJ-SCHOOL-TIME-POLICY", sourceFieldId: "HW-TIME-POLICY-F-VERSION", sourceVersionFieldId: "HW-TIME-POLICY-F-VERSION", requiredState: "ACTIVE" },
   ];
   const exactOrderedUniqueStrings = (actual, expected) => (
     Array.isArray(actual)
@@ -4431,7 +4491,7 @@ function preparationHandoffErrors(index) {
     })
     && hasExactValues(handoff?.completionRule, {
       failureResult: "HANDOFF_INCOMPLETE",
-      requiredBindingCount: 15,
+      requiredBindingCount: 23,
       requireAllTeacherInputs: true,
       rejectUnknownPayloadFields: true,
     })
@@ -5316,6 +5376,1100 @@ function gradingCapabilityErrors(index) {
   return errors;
 }
 
+function activityPurposePolicyErrors(index) {
+  const activity = index.objectById.get("HW-OBJ-ASSIGNMENT")?.value;
+  if (!activity || !finalizedTeachingBaselineEnabled(index)) return [];
+  const contract = activity.purposePolicyContract;
+  const expectedPolicyFieldIds = {
+    latePolicy: "HW-ASSIGNMENT-F-LATE-POLICY",
+    resubmissionPolicy: "HW-ASSIGNMENT-F-RESUBMISSION-POLICY",
+    feedbackPolicy: "HW-ASSIGNMENT-F-FEEDBACK-POLICY",
+    helpRuleRef: "HW-ASSIGNMENT-F-HELP-RULE-REF",
+    helpRuleVersion: "HW-ASSIGNMENT-F-HELP-RULE-VERSION",
+    helpMode: "HW-HELP-RULE-F-MODE",
+    answerOpenPolicy: "HW-ASSIGNMENT-F-ANSWER-OPEN-POLICY",
+    diagnosticUse: "HW-ASSIGNMENT-F-DIAGNOSTIC-USE",
+  };
+  const expectedRules = [{
+    purposeCode: "FORMAL_ASSIGNMENT",
+    allowedLatePolicyCodes: ["NOT-ALLOWED", "ALLOW-WITH-MARK", "ALLOW-UNTIL-DATE"],
+    allowedResubmissionPolicyCodes: ["NOT-ALLOWED", "BEFORE-DEADLINE", "AFTER-FEEDBACK", "AUTHORIZED-REOPENING"],
+    allowedHelpModeCodes: ["NO_HELP", "TEACHER_DEFINED"],
+    allowedAnswerOpenPolicyCodes: ["AFTER_SUBMISSION", "AFTER_CORRECTION", "AFTER_DEADLINE", "SCHEDULED", "NEVER"],
+    requiredDiagnosticUseCode: "NOT_APPLICABLE",
+    producesSubmission: true,
+    producesCompletionEvidence: true,
+    producesMasteryByItself: false,
+  }, {
+    purposeCode: "DAILY_PRACTICE",
+    allowedLatePolicyCodes: ["NOT-APPLICABLE"],
+    allowedResubmissionPolicyCodes: ["BEFORE-DEADLINE", "AFTER-FEEDBACK", "AUTHORIZED-REOPENING"],
+    allowedHelpModeCodes: ["TEACHER_DEFINED", "HINTS_ALLOWED", "AI_TUTOR_ALLOWED"],
+    allowedAnswerOpenPolicyCodes: ["AFTER_SUBMISSION", "AFTER_CORRECTION", "AFTER_DEADLINE", "SCHEDULED", "NEVER"],
+    requiredDiagnosticUseCode: "NOT_APPLICABLE",
+    producesSubmission: true,
+    producesCompletionEvidence: false,
+    producesMasteryByItself: false,
+  }, {
+    purposeCode: "DIAGNOSTIC_ASSESSMENT",
+    allowedLatePolicyCodes: ["NOT-ALLOWED"],
+    allowedResubmissionPolicyCodes: ["NOT-ALLOWED", "AUTHORIZED-REOPENING"],
+    allowedHelpModeCodes: ["NO_HELP", "TEACHER_DEFINED"],
+    allowedAnswerOpenPolicyCodes: ["AFTER_DEADLINE", "SCHEDULED", "NEVER"],
+    requiredDiagnosticUseCode: "INTERNAL_LEARNING_DIAGNOSIS",
+    producesSubmission: true,
+    producesCompletionEvidence: false,
+    producesMasteryByItself: false,
+    highImpactUseAllowed: false,
+  }, {
+    purposeCode: "TEACHING_PRESENTATION",
+    allowedLatePolicyCodes: ["NOT-APPLICABLE"],
+    allowedResubmissionPolicyCodes: ["NOT-APPLICABLE"],
+    allowedHelpModeCodes: ["TEACHER_DEFINED", "PRESENTATION_SUPPORT"],
+    allowedAnswerOpenPolicyCodes: ["NOT_APPLICABLE"],
+    requiredDiagnosticUseCode: "NOT_APPLICABLE",
+    producesSubmission: false,
+    producesCompletionEvidence: false,
+    producesMasteryByItself: false,
+  }];
+  const guardedActionIds = [
+    "HW-ACT-CREATE-DRAFT",
+    "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+    "HW-ACT-VALIDATE",
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
+  const serializedContract = JSON.stringify(contract);
+  const valid = contract?.purposeFieldId === "HW-ASSIGNMENT-F-PURPOSE"
+    && JSON.stringify(contract?.policyFieldIds) === JSON.stringify(expectedPolicyFieldIds)
+    && JSON.stringify(contract?.rules) === JSON.stringify(expectedRules)
+    && contract?.attemptEvidenceEnvironmentRequired === true
+    && contract?.failureResult === "PURPOSE_POLICY_CONFLICT"
+    && guardedActionIds.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      return JSON.stringify(action?.purposePolicyGuard) === serializedContract
+        && list(action?.failureResults).includes("PURPOSE_POLICY_CONFLICT");
+    });
+  return valid ? [] : [
+    "INVALID_ACTIVITY_PURPOSE_POLICY_CONTRACT activity purpose must select one closed constrained-policy row and every create, validate, schedule, and publish action must fail closed",
+  ];
+}
+
+function diagnosticUseBoundaryErrors(index) {
+  const activity = index.objectById.get("HW-OBJ-ASSIGNMENT")?.value;
+  if (!activity || !finalizedTeachingBaselineEnabled(index)) return [];
+  const optionCodes = records(index.optionSetById.get("OPT-V2-TL-023")?.value?.values)
+    .map(({ code }) => code);
+  const diagnosticRule = records(activity?.purposePolicyContract?.rules)
+    .find(({ purposeCode }) => purposeCode === "DIAGNOSTIC_ASSESSMENT");
+  const expectedGuard = {
+    purposeFieldId: "HW-ASSIGNMENT-F-PURPOSE",
+    diagnosticUseFieldId: "HW-ASSIGNMENT-F-DIAGNOSTIC-USE",
+    diagnosticPurposeCode: "DIAGNOSTIC_ASSESSMENT",
+    requiredUseCode: "INTERNAL_LEARNING_DIAGNOSIS",
+    otherPurposeRequiredCode: "NOT_APPLICABLE",
+    forbiddenHighImpactUses: [
+      "ADMISSIONS_SELECTION",
+      "LEGAL_GRADE_CERTIFICATION",
+      "HIGH_IMPACT_FORMAL_EXAMINATION",
+    ],
+    failureResult: "DIAGNOSTIC_HIGH_IMPACT_USE_FORBIDDEN",
+  };
+  const guardedActionIds = [
+    "HW-ACT-CREATE-DRAFT",
+    "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+    "HW-ACT-VALIDATE",
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
+  const valid = setEquals(new Set(optionCodes), new Set(["INTERNAL_LEARNING_DIAGNOSIS", "NOT_APPLICABLE"]))
+    && diagnosticRule?.requiredDiagnosticUseCode === "INTERNAL_LEARNING_DIAGNOSIS"
+    && diagnosticRule?.highImpactUseAllowed === false
+    && guardedActionIds.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      return JSON.stringify(action?.diagnosticUseGuard) === JSON.stringify(expectedGuard)
+        && list(action?.failureResults).includes("DIAGNOSTIC_HIGH_IMPACT_USE_FORBIDDEN");
+    });
+  return valid ? [] : [
+    "INVALID_DIAGNOSTIC_USE_BOUNDARY diagnostic assessment is limited to internal learning diagnosis and must reject admissions, legal-grade, or other high-impact reuse",
+  ];
+}
+
+function activityCancellationEffectsErrors(index) {
+  if (!finalizedTeachingBaselineEnabled(index)) return [];
+  const expected = new Map([
+    ["HW-ACT-CANCEL-ADMINISTRATIVE", {
+      unsubmittedHandlingCode: "REMOVE_REQUIRED_TASK",
+      evidenceDispositionCode: "PRESERVE_VALID",
+      evidenceInvalidationScope: "EMPTY",
+      downstreamActionCodes: ["REFRESH_STUDENT_HOME", "REMOVE_UNSUBMITTED_TODOS", "BLOCK_SUBMISSION"],
+    }],
+    ["HW-ACT-CANCEL-CONTENT-RIGHT-ERROR", {
+      unsubmittedHandlingCode: "REMOVE_REQUIRED_TASK",
+      evidenceDispositionCode: "INVALIDATE_AFFECTED_ONLY",
+      evidenceInvalidationScope: "AFFECTED_SOURCE_VERSIONS_ONLY",
+      downstreamActionCodes: ["REFRESH_STUDENT_HOME", "REMOVE_UNSUBMITTED_TODOS", "BLOCK_SUBMISSION", "INVALIDATE_AFFECTED_DERIVATIONS"],
+    }],
+    ["HW-ACT-CANCEL-FOR-REPLACEMENT", {
+      unsubmittedHandlingCode: "REDIRECT_TO_REPLACEMENT",
+      evidenceDispositionCode: "PRESERVE_WITH_ORIGINAL_ACTIVITY",
+      evidenceInvalidationScope: "EMPTY",
+      downstreamActionCodes: ["REFRESH_STUDENT_HOME", "REMOVE_UNSUBMITTED_TODOS", "BLOCK_SUBMISSION", "REDIRECT_TO_REPLACEMENT"],
+    }],
+  ]);
+  const outputFieldIds = [
+    "HW-ASSIGNMENT-F-UNSUBMITTED-HANDLING",
+    "HW-ASSIGNMENT-F-EXISTING-EVIDENCE-DISPOSITION",
+    "HW-ASSIGNMENT-F-EVIDENCE-INVALIDATION-SCOPE",
+    "HW-ASSIGNMENT-F-DOWNSTREAM-INVALIDATION-ACTIONS",
+  ];
+  const valid = [...expected].every(([actionId, effects]) => {
+    const action = index.actionById.get(actionId)?.value;
+    return action?.transition?.to === "CANCELLED"
+      && JSON.stringify(action?.cancellationEffects) === JSON.stringify(effects)
+      && outputFieldIds.every((fieldId) => list(action?.outputFieldIds).includes(fieldId));
+  });
+  return valid ? [] : [
+    "INVALID_ACTIVITY_CANCELLATION_EFFECTS each cancellation kind must return exact unsubmitted handling, evidence disposition, invalidation scope, and downstream action set",
+  ];
+}
+
+function academicIntegritySignalBoundaryErrors(index) {
+  if (!finalizedTeachingBaselineEnabled(index)) return [];
+  const expected = {
+    objective: "RECORD_VERIFIABLE_EVIDENCE_ENVIRONMENT_WITHOUT_AUTOMATIC_MISCONDUCT_CLASSIFICATION",
+    prohibitedSignalSources: [
+      "CAMERA_MONITORING",
+      "FACE_RECOGNITION",
+      "CONTINUOUS_SCREEN_RECORDING",
+      "GAZE_TRACKING",
+      "TYPING_RHYTHM",
+    ],
+    prohibitedAutomaticEffects: [
+      "CHEATING_CLASSIFICATION",
+      "SCORE_DEDUCTION",
+      "DISCIPLINE_ACTION",
+      "INTEGRITY_LABEL",
+      "MASTERY_INVALIDATION",
+    ],
+    unknownConditionMeaning: "INSUFFICIENT_EVIDENCE_ONLY",
+    allowedNextSteps: ["EXPLANATION", "VARIANT", "FEYNMAN", "REASSESSMENT"],
+    publicOrPermanentIntegrityLabelAllowed: false,
+  };
+  const unknownHelp = index.fieldById.get("SUB-ATTEMPT-F-UNKNOWN-HELP-CONDITIONS")?.value;
+  const valid = ["HW-001", "SUB-001", "GRD-001"].every((moduleId) => (
+    JSON.stringify(index.moduleById.get(moduleId)?.value?.academicIntegrityPolicy)
+      === JSON.stringify(expected)
+  ))
+    && unknownHelp?.adverseInferencePolicy === "FORBIDDEN";
+  return valid ? [] : [
+    "INVALID_ACADEMIC_INTEGRITY_SIGNAL_BOUNDARY camera, face, continuous recording, gaze, and typing rhythm cannot produce automatic cheating, score, discipline, integrity-label, or mastery effects",
+  ];
+}
+
+function teachingPresentationTodoBoundaryErrors(index) {
+  if (!finalizedTeachingBaselineEnabled(index)) return [];
+  const todo = index.objectById.get("APP-OBJ-TODO")?.value;
+  const createTodo = index.actionById.get("APP-ACT-CREATE-HOMEWORK-TODO")?.value;
+  const flow = index.flows.find(({ value }) => value?.id === "DF-004")?.value;
+  const guard = createTodo?.activityPurposeGuard;
+  const valid = guard?.refFieldId === "APP-TODO-F-SOURCE-ASSIGNMENT-REF"
+    && guard?.versionFieldId === "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION"
+    && guard?.targetObjectId === "HW-OBJ-ASSIGNMENT"
+    && guard?.purposeFieldId === "HW-ASSIGNMENT-F-PURPOSE"
+    && setEquals(new Set(list(guard?.deniedPurposeCodes)), new Set(["TEACHING_PRESENTATION"]))
+    && guard?.failureResult === "TODO_NOT_ALLOWED_FOR_PURPOSE"
+    && list(createTodo?.failureResults).includes("TODO_NOT_ALLOWED_FOR_PURPOSE")
+    && todo?.evidenceBoundary?.teachingPresentationTodoAllowed === false
+    && todo?.evidenceBoundary?.localProgressIsActivityCompletion === false
+    && todo?.evidenceBoundary?.localCompletionIsMastery === false
+    && flow?.presentationGuard?.todoBehavior === "SKIP_HOMEWORK_TODO_AND_COMPLETION_EVIDENCE";
+  return valid ? [] : [
+    "INVALID_TEACHING_PRESENTATION_TODO_BOUNDARY teaching presentations cannot create APP homework todos, activity completion, or mastery evidence",
+  ];
+}
+
+function perStudentStatusAxisWriterErrors(index) {
+  if (!finalizedTeachingBaselineEnabled(index)) return [];
+  const window = index.objectById.get("HW-OBJ-STUDENT-ACTIVITY-WINDOW")?.value;
+  const participation = index.fieldById
+    .get("HW-STUDENT-WINDOW-F-PARTICIPATION-STATUS")?.value;
+  const time = index.fieldById.get("HW-STUDENT-WINDOW-F-TIME-STATUS")?.value;
+  const createActionIds = [
+    "HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW",
+    "HW-ACT-CREATE-LATE-ENROLLEE-WINDOW",
+  ];
+  const expectedInitialization = {
+    participationFieldId: "HW-STUDENT-WINDOW-F-PARTICIPATION-STATUS",
+    participationByPurpose: {
+      FORMAL_ASSIGNMENT: "NOT_STARTED",
+      DAILY_PRACTICE: "NOT_STARTED",
+      DIAGNOSTIC_ASSESSMENT: "NOT_STARTED",
+      TEACHING_PRESENTATION: "NO_SUBMISSION_EXPECTED",
+    },
+    timeFieldId: "HW-STUDENT-WINDOW-F-TIME-STATUS",
+    timeByPurpose: {
+      FORMAL_ASSIGNMENT: "NOT_DUE",
+      DAILY_PRACTICE: "NOT_DUE",
+      DIAGNOSTIC_ASSESSMENT: "NOT_DUE",
+      TEACHING_PRESENTATION: "TIME_NOT_APPLICABLE",
+    },
+  };
+  const expectedMutations = new Map([
+    ["HW-ACT-MARK-STUDENT-WINDOW-IN-PROGRESS", {
+      axis: "participation",
+      axisFieldId: "HW-STUDENT-WINDOW-F-PARTICIPATION-STATUS",
+      fromCode: "NOT_STARTED",
+      toCode: "IN_PROGRESS",
+      lifecycleStateEffect: "UNCHANGED",
+    }],
+    ["HW-ACT-MARK-STUDENT-WINDOW-SUBMITTED", {
+      axis: "participation",
+      axisFieldId: "HW-STUDENT-WINDOW-F-PARTICIPATION-STATUS",
+      fromCode: "IN_PROGRESS",
+      toCode: "SUBMITTED",
+      lifecycleStateEffect: "UNCHANGED",
+    }],
+    ["HW-ACT-ADVANCE-STUDENT-WINDOW-TIME", {
+      axis: "time",
+      axisFieldId: "HW-STUDENT-WINDOW-F-TIME-STATUS",
+      fromCode: "NOT_DUE",
+      toCode: "DUE",
+      lifecycleStateEffect: "UNCHANGED",
+    }],
+  ]);
+  const submissionFlow = index.flows.find(({ value }) => value?.id === "DF-005")?.value;
+  const submitStepOrder = records(submissionFlow?.steps)
+    .find(({ actionId }) => actionId === "SUB-ACT-SUBMIT")?.order;
+  const statusStepOrder = records(submissionFlow?.steps)
+    .find(({ actionId }) => actionId === "HW-ACT-MARK-STUDENT-WINDOW-SUBMITTED")?.order;
+  const dueEvent = index.eventById.get("EVT-HW-STUDENT-WINDOW-DUE")?.value;
+  const valid = window
+    && participation?.activityStatusAxis === "participation"
+    && participation?.valueSource?.optionSetId === "OPT-V2-TL-005"
+    && time?.activityStatusAxis === "time"
+    && time?.valueSource?.optionSetId === "OPT-V2-TL-006"
+    && createActionIds.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      return list(action?.outputFieldIds).includes(participation.id)
+        && list(action?.outputFieldIds).includes(time.id)
+        && JSON.stringify(action?.statusAxisInitialization)
+          === JSON.stringify(expectedInitialization);
+    })
+    && [...expectedMutations].every(([actionId, mutation]) => {
+      const action = index.actionById.get(actionId)?.value;
+      return action?.targetObjectId === "HW-OBJ-STUDENT-ACTIVITY-WINDOW"
+        && JSON.stringify(action?.axisMutation) === JSON.stringify(mutation);
+    })
+    && Number.isInteger(submitStepOrder)
+    && Number.isInteger(statusStepOrder)
+    && submitStepOrder < statusStepOrder
+    && setEquals(
+      new Set(list(dueEvent?.triggeredActionIds)),
+      new Set(["HW-ACT-ADVANCE-STUDENT-WINDOW-TIME"]),
+    );
+  return valid ? [] : [
+    "INVALID_PER_STUDENT_STATUS_AXIS_WRITER participation and time must be initialized and mutated on each student window through explicit axis-only writers",
+  ];
+}
+
+function firstStageActivityErrors(index) {
+  const errors = [];
+  const module = index.moduleById.get("HW-001")?.value;
+  const activity = index.objectById.get("HW-OBJ-ASSIGNMENT")?.value;
+  if (!module || !activity) return errors;
+  const expectedAxes = ["governance", "openWindow", "archive", "participation", "time", "aiProcessing"];
+  const expectedPurposes = ["FORMAL_ASSIGNMENT", "DAILY_PRACTICE", "DIAGNOSTIC_ASSESSMENT", "TEACHING_PRESENTATION"];
+  const axisFields = records(activity.fields).filter((field) => Object.hasOwn(field, "activityStatusAxis"));
+  const axisValues = axisFields.map((field) => field.activityStatusAxis);
+  const purpose = index.fieldById.get("HW-ASSIGNMENT-F-PURPOSE")?.value;
+  const purposeOptionSet = index.optionSetById.get(purpose?.valueSource?.optionSetId)?.value;
+  const purposeValues = records(purposeOptionSet?.values).map((entry) => entry.code);
+  const snapshot = activity.publicationSnapshot;
+  const snapshotObject = index.objectById.get("HW-OBJ-PUBLICATION-SNAPSHOT")?.value;
+  const createSnapshot = index.actionById.get("HW-ACT-CREATE-PUBLICATION-SNAPSHOT")?.value;
+  const publicationFlow = index.flows.find(({ value }) => value?.id === "DF-004")?.value;
+  const publicationEvent = index.eventById.get("EVT-HW-PUBLICATION-COMMITTED")?.value;
+  const expectedSnapshotFacets = [
+    "HW-SNAPSHOT-F-ITEM-VERSION-MANIFEST",
+    "HW-SNAPSHOT-F-MATERIAL-RIGHTS-MANIFEST",
+    "HW-SNAPSHOT-F-REQUIREMENT-SNAPSHOT",
+    "HW-SNAPSHOT-F-PURPOSE",
+    "HW-SNAPSHOT-F-HELP-RULE-REF",
+    "HW-SNAPSHOT-F-HELP-RULE-VERSION",
+  ];
+  const bindingFieldIds = [
+    "HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-REF",
+    "HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-VERSION",
+  ];
+  const bindBeforeActionIds = [
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
+  const axesValid = setEquals(new Set(activity.statusAxes), new Set(expectedAxes))
+    && activity.statusAxes?.length === expectedAxes.length
+    && setEquals(new Set(axisValues), new Set(expectedAxes))
+    && axisValues.length === expectedAxes.length
+    && !records(activity.fields).some((field) => field.id === "HW-ASSIGNMENT-F-STATUS");
+  const purposeValid = purpose?.valueSource?.kind === "OPTION_SET"
+    && purposeValues.length === expectedPurposes.length
+    && setEquals(new Set(purposeValues), new Set(expectedPurposes));
+  const stepOrderByActionId = new Map(records(publicationFlow?.steps)
+    .map((step) => [step.actionId, step.order]));
+  const snapshotFields = records(snapshotObject?.fields);
+  const assignmentSnapshotRef = index.fieldById
+    .get("HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-REF")?.value;
+  const snapshotValid = snapshot?.snapshotObjectId === "HW-OBJ-PUBLICATION-SNAPSHOT"
+    && snapshot?.createActionId === "HW-ACT-CREATE-PUBLICATION-SNAPSHOT"
+    && snapshot?.requiredState === "SEALED"
+    && snapshot?.bindingRefFieldId === bindingFieldIds[0]
+    && snapshot?.bindingVersionFieldId === bindingFieldIds[1]
+    && setEquals(new Set(list(snapshot?.facetFieldIds)), new Set(expectedSnapshotFacets))
+    && setEquals(new Set(list(snapshot?.bindBeforeActionIds)), new Set(bindBeforeActionIds))
+    && snapshot?.failureEffect === "KEEP_ACTIVITY_UNPUBLISHED"
+    && setEquals(stateIds(snapshotObject), new Set(["SEALED"]))
+    && snapshotFields.length > expectedSnapshotFacets.length
+    && snapshotFields.every((fieldValue) => fieldValue?.mutability === "IMMUTABLE")
+    && assignmentSnapshotRef?.referenceIntegrity === "VERSION_PINNED"
+    && assignmentSnapshotRef?.versionBinding?.versionFieldId === bindingFieldIds[1]
+    && assignmentSnapshotRef?.versionBinding?.targetVersionFieldId === "HW-SNAPSHOT-F-VERSION"
+    && createSnapshot?.operationKind === "CREATE"
+    && createSnapshot?.targetObjectId === "HW-OBJ-PUBLICATION-SNAPSHOT"
+    && concreteActionState(index, createSnapshot) === "SEALED"
+    && snapshotFields.every(({ id }) => list(createSnapshot?.outputFieldIds).includes(id))
+    && createSnapshot?.publicationSnapshotContract?.failureEffect === "KEEP_ACTIVITY_UNPUBLISHED"
+    && setEquals(
+      new Set(list(createSnapshot?.publicationSnapshotContract?.atomicBeforeActionIds)),
+      new Set(bindBeforeActionIds),
+    )
+    && bindBeforeActionIds.every((actionId) => (
+      stepOrderByActionId.get("HW-ACT-CREATE-PUBLICATION-SNAPSHOT")
+        < stepOrderByActionId.get(actionId)
+    ))
+    && setEquals(
+      new Set(list(publicationEvent?.triggeredActionIds)),
+      new Set(["HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW"]),
+    )
+    && !list(publicationEvent?.triggeredActionIds)
+      .includes("HW-ACT-CREATE-PUBLICATION-SNAPSHOT")
+    && !records(activity.fields).some(({ id }) => id?.startsWith("HW-ASSIGNMENT-F-PUBLISHED-"));
+  const publicationActionIds = [
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
+  const publicationActionsValid = publicationActionIds.every((actionId) => {
+    const action = index.actionById.get(actionId)?.value;
+    const guard = records(action?.relatedStateGuards).find((candidate) => (
+      candidate?.refFieldId === bindingFieldIds[0]
+    ));
+    return action
+      && bindingFieldIds.every((fieldId) => list(action.outputFieldIds).includes(fieldId))
+      && guard?.versionFieldId === bindingFieldIds[1]
+      && guard?.targetObjectId === "HW-OBJ-PUBLICATION-SNAPSHOT"
+      && guard?.requiredState === "SEALED"
+      && action?.publicationSnapshotGuard?.failureEffect === "KEEP_ACTIVITY_UNPUBLISHED"
+      && list(action?.failureResults).includes("PUBLICATION_SNAPSHOT_REQUIRED");
+  });
+  const createReplacement = index.actionById.get("HW-ACT-CREATE-REPLACEMENT-DRAFT")?.value;
+  const publishReplacement = index.actionById.get("HW-ACT-PUBLISH-REPLACEMENT")?.value;
+  const replacementCancellation = index.actionById.get("HW-ACT-CANCEL-FOR-REPLACEMENT")?.value;
+  const replacedRef = index.fieldById.get("HW-ASSIGNMENT-F-REPLACED-ACTIVITY-REF")?.value;
+  const correctionIds = ["HW-ACT-VERSION-NON-SEMANTIC-CORRECTION", "HW-ACT-VERSION-ASSESSMENT-STANDARD-CORRECTION"];
+  const acceptedCodes = (action, fieldId) => records(action?.acceptedInputValues)
+    .find((binding) => binding.fieldId === fieldId)?.codes ?? [];
+  const replacementGuard = records(createReplacement?.relatedStateGuards)
+    .find((guard) => guard.refFieldId === "HW-ASSIGNMENT-F-REPLACED-ACTIVITY-REF");
+  const replacementValid = createReplacement?.operationKind === "CREATE"
+    && concreteActionState(index, createReplacement) === "DRAFT"
+    && list(createReplacement.outputFieldIds).includes("HW-ASSIGNMENT-F-ID")
+    && list(createReplacement.outputFieldIds).includes("HW-ASSIGNMENT-F-REPLACED-ACTIVITY-REF")
+    && list(createReplacement.outputFieldIds).includes("HW-ASSIGNMENT-F-REPLACED-ACTIVITY-VERSION")
+    && list(createReplacement.inputFieldIds).includes("HW-ASSIGNMENT-F-REPLACED-ACTIVITY-REF")
+    && list(createReplacement.inputFieldIds).includes("HW-ASSIGNMENT-F-REPLACED-ACTIVITY-VERSION")
+    && replacedRef?.referenceIntegrity === "VERSION_PINNED"
+    && replacedRef?.versionBinding?.versionFieldId === "HW-ASSIGNMENT-F-REPLACED-ACTIVITY-VERSION"
+    && replacementGuard?.targetObjectId === "HW-OBJ-ASSIGNMENT"
+    && replacementGuard?.versionFieldId === "HW-ASSIGNMENT-F-REPLACED-ACTIVITY-VERSION"
+    && replacementGuard?.requiredState === "CANCELLED"
+    && replacementCancellation?.transition?.to === "CANCELLED"
+    && publishReplacement?.operationKind === "UPDATE"
+    && publishReplacement?.transition?.from === "VALIDATED"
+    && publishReplacement?.transition?.to === "PUBLISHED"
+    && setEquals(
+      new Set(list(publishReplacement?.inputFieldIds)),
+      new Set([
+        "HW-ASSIGNMENT-F-REPLACED-ACTIVITY-REF",
+        "HW-ASSIGNMENT-F-REPLACED-ACTIVITY-VERSION",
+      ]),
+    )
+    && !list(publishReplacement?.outputFieldIds).includes("HW-ASSIGNMENT-F-ID")
+    && setEquals(
+      new Set(acceptedCodes(replacementCancellation, "HW-ASSIGNMENT-F-CANCELLATION-KIND")),
+      new Set(["REPLACED"]),
+    )
+    && records(index.scenarios.filter(({ value }) => value?.actionId === createReplacement.id && value?.kind === "SUCCESS"))
+      .some(({ value }) => /new replacement activity identity/i.test(value?.then?.expectedData ?? ""))
+    && records(index.scenarios.filter(({ value }) => value?.actionId === publishReplacement.id && value?.kind === "SUCCESS"))
+      .some(({ value }) => /already-created new replacement activity identity/i.test(value?.then?.expectedData ?? ""));
+  const expectedCorrectionInputs = new Map([
+    ["HW-ACT-VERSION-NON-SEMANTIC-CORRECTION", {
+      code: "NON_SEMANTIC",
+      fields: [
+        "HW-ASSIGNMENT-F-CORRECTION-KIND",
+        "HW-ASSIGNMENT-F-NON-SEMANTIC-CORRECTION-PATCH",
+        "HW-ASSIGNMENT-F-REVISION-REASON",
+      ],
+    }],
+    ["HW-ACT-VERSION-ASSESSMENT-STANDARD-CORRECTION", {
+      code: "ASSESSMENT_STANDARD",
+      fields: [
+        "HW-ASSIGNMENT-F-CORRECTION-KIND",
+        "HW-ASSIGNMENT-F-RUBRIC-VERSION",
+        "HW-ASSIGNMENT-F-REVISION-REASON",
+      ],
+    }],
+  ]);
+  const correctionsValid = correctionIds.every((actionId) => {
+    const action = index.actionById.get(actionId)?.value;
+    const success = index.scenarios.find(({ value }) => value?.actionId === actionId && value?.kind === "SUCCESS")?.value;
+    const expected = expectedCorrectionInputs.get(actionId);
+    return action?.operationKind === "UPDATE"
+      && action?.transition?.to === "REVISION_DRAFT"
+      && setEquals(new Set(list(action?.inputFieldIds)), new Set(expected.fields))
+      && setEquals(
+        new Set(acceptedCodes(action, "HW-ASSIGNMENT-F-CORRECTION-KIND")),
+        new Set([expected.code]),
+      )
+      && /same activity identity/i.test(success?.then?.expectedData ?? "");
+  }) && setEquals(
+    new Set(records(module.actions).filter((action) => {
+      const fromStates = Array.isArray(action?.transition?.from)
+        ? action.transition.from
+        : [action?.transition?.from];
+      return ["HW-OBJ-ASSIGNMENT", "HW-OBJ-ITEM"].includes(action?.targetObjectId)
+        && fromStates.includes("PUBLISHED")
+        && action?.transition?.to === "REVISION_DRAFT";
+    }).map((action) => action.id)),
+    new Set(correctionIds),
+  ) && !list(index.objectById.get("HW-OBJ-ITEM")?.value?.states).includes("REVISION_DRAFT");
+  const purposeGuardValid = ["SUB-ACT-SUBMIT", "SUB-ACT-SUBMIT-PROTECTED", "SUB-ACT-RESUBMIT"].every((actionId) => {
+    const action = index.actionById.get(actionId)?.value;
+    const guard = action?.activityPurposeGuard;
+    return guard?.refFieldId === "SUB-ATTEMPT-F-ASSIGNMENT-REF"
+      && guard?.versionFieldId === "SUB-ATTEMPT-F-ASSIGNMENT-VERSION"
+      && guard?.targetObjectId === "HW-OBJ-ASSIGNMENT"
+      && guard?.purposeFieldId === "HW-ASSIGNMENT-F-PURPOSE"
+      && setEquals(new Set(list(guard?.deniedPurposeCodes)), new Set(["TEACHING_PRESENTATION"]))
+      && guard?.failureResult === "SUBMISSION_NOT_ALLOWED_FOR_PURPOSE"
+      && list(action?.failureResults).includes("SUBMISSION_NOT_ALLOWED_FOR_PURPOSE");
+  });
+  const presentationValid = activity.presentationRestrictions?.producesSubmission === false
+    && activity.presentationRestrictions?.producesLateness === false
+    && activity.presentationRestrictions?.producesCompletion === false
+    && activity.presentationRestrictions?.producesMastery === false
+    && index.flows.find(({ value }) => value?.id === "DF-005")?.value?.presentationGuard?.behavior === "REJECT_SUBMISSION_PATH"
+    && purposeGuardValid;
+  const historyArchivePolicy = activity.historyArchivePolicy;
+  const historyActionIds = [
+    "HW-ACT-CLOSE",
+    "HW-ACT-CANCEL-ADMINISTRATIVE",
+    "HW-ACT-CANCEL-CONTENT-RIGHT-ERROR",
+    "HW-ACT-CANCEL-FOR-REPLACEMENT",
+  ];
+  const archiveField = index.fieldById.get("HW-ASSIGNMENT-F-ARCHIVE-STATUS")?.value;
+  const archiveCodes = records(index.optionSetById.get(archiveField?.valueSource?.optionSetId)?.value?.values)
+    .map(({ code }) => code);
+  const historyArchiveValid = setEquals(
+    new Set(list(historyArchivePolicy?.automaticHistoryEntryStateIds)),
+    new Set(["CLOSED", "CANCELLED"]),
+  )
+    && list(historyArchivePolicy?.automaticHistoryEntryStateIds).length === 2
+    && setEquals(
+      new Set(list(historyArchivePolicy?.automaticHistoryEntryActionIds)),
+      new Set(historyActionIds),
+    )
+    && list(historyArchivePolicy?.automaticHistoryEntryActionIds).length === historyActionIds.length
+    && historyActionIds.every((actionId) => {
+      const action = index.actionById.get(actionId)?.value;
+      const toState = action?.transition?.to;
+      const success = index.scenarios.find(({ value }) => (
+        value?.actionId === actionId && value?.kind === "SUCCESS"
+      ))?.value;
+      return ["CLOSED", "CANCELLED"].includes(toState)
+        && /automatically includes?.*history/i.test(success?.then?.expectedData ?? "");
+    })
+    && historyArchivePolicy?.archiveFieldId === "HW-ASSIGNMENT-F-ARCHIVE-STATUS"
+    && historyArchivePolicy?.archiveOptional === true
+    && historyArchivePolicy?.archiveIndependentFromHistory === true
+    && historyArchivePolicy?.archiveChangesPermissions === false
+    && historyArchivePolicy?.archiveChangesEvidence === false
+    && archiveField?.activityStatusAxis === "archive"
+    && archiveField?.required === false
+    && archiveField?.valueSource?.kind === "OPTION_SET"
+    && setEquals(new Set(archiveCodes), new Set(["ACTIVE", "ARCHIVED"]));
+  if (!axesValid || !purposeValid) errors.push("INVALID_ACTIVITY_STATUS_AXES HW-OBJ-ASSIGNMENT must expose four purposes and six independent status axes");
+  if (!snapshotValid || !publicationActionIds.every((actionId) => index.actionById.has(actionId)) || !publicationActionsValid) {
+    errors.push("INVALID_ACTIVITY_PUBLICATION_FREEZE HW-OBJ-ASSIGNMENT publication snapshot and publication writers must be immutable and complete");
+  }
+  if (!replacementValid) errors.push("INVALID_ACTIVITY_REPLACEMENT_CONTRACT semantic activity changes must cancel the old identity and publish a replacement identity");
+  if (!correctionsValid) errors.push("INVALID_ACTIVITY_CORRECTION_CONTRACT only non-semantic and assessment-standard corrections may version one activity identity");
+  if (!presentationValid) errors.push("INVALID_TEACHING_PRESENTATION_CONTRACT teaching presentation cannot produce submission, lateness, completion, or mastery evidence");
+  if (!historyArchiveValid) errors.push("INVALID_ACTIVITY_HISTORY_ARCHIVE_CONTRACT closed or cancelled activities must enter history automatically while optional archive remains independent from permissions and evidence");
+  return errors;
+}
+
+function lateEnrolleeWindowErrors(index) {
+  const errors = [];
+  if (!finalizedTeachingBaselineEnabled(index)) return errors;
+  const policy = index.objectById.get("HW-OBJ-SCHOOL-TIME-POLICY")?.value;
+  const activity = index.objectById.get("HW-OBJ-ASSIGNMENT")?.value;
+  const studentWindow = index.objectById.get("HW-OBJ-STUDENT-ACTIVITY-WINDOW")?.value;
+  const createWindow = index.actionById.get("HW-ACT-CREATE-LATE-ENROLLEE-WINDOW")?.value;
+  const createInitialWindow = index.actionById
+    .get("HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW")?.value;
+  if (!policy || !activity || !studentWindow || !createWindow || !createInitialWindow) {
+    errors.push("INVALID_LATE_ENROLLEE_WINDOW_CONTRACT school policy, activity policy, and per-student window facts are required");
+    return errors;
+  }
+  const optionSet = index.optionSetById.get("OPT-V2-TL-015")?.value;
+  const optionCodes = records(optionSet?.values).map(({ code }) => code);
+  const expectedCodes = [
+    "FORMAL_SCHOOL_FULL_DURATION",
+    "DIAGNOSTIC_SHARED_WINDOW",
+    "DIAGNOSTIC_INDEPENDENT_WINDOW",
+    "NOT_APPLICABLE",
+  ];
+  const contract = activity.lateEnrolleeWindowContract;
+  const ruleByPurpose = new Map(records(contract?.rules).map((rule) => [rule.purposeCode, rule]));
+  const formal = ruleByPurpose.get("FORMAL_ASSIGNMENT");
+  const diagnostic = ruleByPurpose.get("DIAGNOSTIC_ASSESSMENT");
+  const otherPurposesValid = ["DAILY_PRACTICE", "TEACHING_PRESENTATION"].every((purposeCode) => (
+    setEquals(
+      new Set(list(ruleByPurpose.get(purposeCode)?.allowedPolicyCodes)),
+      new Set(["NOT_APPLICABLE"]),
+    )
+  ));
+  const guardedActionIds = [
+    "HW-ACT-CREATE-DRAFT",
+    "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
+  const guardsValid = guardedActionIds.every((actionId) => {
+    const guard = index.actionById.get(actionId)?.value?.lateEnrolleeWindowGuard;
+    return guard?.purposeFieldId === "HW-ASSIGNMENT-F-PURPOSE"
+      && guard?.policyFieldId === "HW-ASSIGNMENT-F-LATE-ENROLLEE-WINDOW-POLICY"
+      && guard?.reasonFieldId === "HW-ASSIGNMENT-F-LATE-ENROLLEE-WINDOW-REASON"
+      && guard?.schoolPolicyRefFieldId === "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-REF";
+  });
+  const windowOutputIds = new Set(list(createWindow.outputFieldIds));
+  const windowOutputsValid = [
+    "HW-STUDENT-WINDOW-F-SCHOOL-POLICY-REF",
+    "HW-STUDENT-WINDOW-F-SCHOOL-POLICY-VERSION",
+    "HW-STUDENT-WINDOW-F-POLICY",
+    "HW-STUDENT-WINDOW-F-START-AT",
+    "HW-STUDENT-WINDOW-F-DUE-AT",
+    "HW-STUDENT-WINDOW-F-REASON",
+  ].every((fieldId) => windowOutputIds.has(fieldId));
+  const windowGuards = records(createWindow.relatedStateGuards);
+  const windowLineageByRef = new Map(records(studentWindow.lineageBindings)
+    .map((binding) => [binding.refFieldId, binding]));
+  const studentHomeFlow = index.flows.find(({ value }) => value?.id === "DF-015")?.value;
+  const studentHomeWindowSourceFields = new Set(records(studentHomeFlow?.sourceDataRefs)
+    .filter(({ objectId }) => objectId === "HW-OBJ-STUDENT-ACTIVITY-WINDOW")
+    .map(({ fieldId }) => fieldId));
+  const pinnedPolicyGuardValid = [createInitialWindow, createWindow].every((action) => {
+    const guard = action?.pinnedPolicySafetyGuard;
+    return guard?.refFieldId === "HW-STUDENT-WINDOW-F-SCHOOL-POLICY-REF"
+      && guard?.versionFieldId === "HW-STUDENT-WINDOW-F-SCHOOL-POLICY-VERSION"
+      && guard?.targetObjectId === "HW-OBJ-SCHOOL-TIME-POLICY"
+      && setEquals(new Set(list(guard?.allowedStates)), new Set(["ACTIVE", "SUPERSEDED"]))
+      && setEquals(new Set(list(guard?.deniedStates)), new Set(["INVALIDATED", "REVOKED"]))
+      && guard?.failureResult === "PINNED_SCHOOL_TIME_POLICY_UNSAFE"
+      && list(action?.failureResults).includes("PINNED_SCHOOL_TIME_POLICY_UNSAFE");
+  });
+  const valid = setEquals(new Set(optionCodes), new Set(expectedCodes))
+    && setEquals(
+      stateIds(policy),
+      new Set(["ACTIVE", "SUPERSEDED", "INVALIDATED", "REVOKED"]),
+    )
+    && index.fieldById.get("HW-TIME-POLICY-F-FORMAL-FULL-DURATION-MINUTES")?.value?.required === true
+    && formal?.durationSourceFieldId === "HW-TIME-POLICY-F-FORMAL-FULL-DURATION-MINUTES"
+    && setEquals(new Set(list(formal?.allowedPolicyCodes)), new Set(["FORMAL_SCHOOL_FULL_DURATION"]))
+    && diagnostic?.reasonRequired === true
+    && diagnostic?.independentDurationRequiredForCode === "DIAGNOSTIC_INDEPENDENT_WINDOW"
+    && setEquals(
+      new Set(list(diagnostic?.allowedPolicyCodes)),
+      new Set(["DIAGNOSTIC_SHARED_WINDOW", "DIAGNOSTIC_INDEPENDENT_WINDOW"]),
+    )
+    && otherPurposesValid
+    && guardsValid
+    && studentWindow.purposeAwareLateEnrolleeWindow === true
+    && windowLineageByRef.get("HW-STUDENT-WINDOW-F-ACTIVITY-REF")?.versionFieldId
+      === "HW-STUDENT-WINDOW-F-ACTIVITY-VERSION"
+    && windowLineageByRef.get("HW-STUDENT-WINDOW-F-PUBLICATION-SNAPSHOT-REF")?.versionFieldId
+      === "HW-STUDENT-WINDOW-F-PUBLICATION-SNAPSHOT-VERSION"
+    && windowLineageByRef.get("HW-STUDENT-WINDOW-F-SCHOOL-POLICY-REF")?.versionFieldId
+      === "HW-STUDENT-WINDOW-F-SCHOOL-POLICY-VERSION"
+    && [
+      "HW-STUDENT-WINDOW-F-ID",
+      "HW-STUDENT-WINDOW-F-ACTIVITY-REF",
+      "HW-STUDENT-WINDOW-F-ACTIVITY-VERSION",
+      "HW-STUDENT-WINDOW-F-PUBLICATION-SNAPSHOT-REF",
+      "HW-STUDENT-WINDOW-F-PUBLICATION-SNAPSHOT-VERSION",
+      "HW-STUDENT-WINDOW-F-STUDENT-REF",
+      "HW-STUDENT-WINDOW-F-PARTICIPATION-STATUS",
+      "HW-STUDENT-WINDOW-F-TIME-STATUS",
+    ].every((fieldId) => studentHomeWindowSourceFields.has(fieldId))
+    && !records(studentHomeFlow?.sourceDataRefs).some(({ fieldId }) => (
+      fieldId === "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS"
+    ))
+    && createWindow.executionMode === "SYSTEM_EVENT"
+    && createWindow.trigger?.eventId === "EVT-HW-STUDENT-ADDED-AFTER-PUBLICATION"
+    && windowOutputsValid
+    && windowGuards.some((guard) => (
+      guard.refFieldId === "HW-STUDENT-WINDOW-F-ACTIVITY-REF"
+      && guard.requiredState === "PUBLISHED"
+    ))
+    && windowGuards.some((guard) => (
+      guard.refFieldId === "HW-STUDENT-WINDOW-F-PUBLICATION-SNAPSHOT-REF"
+      && guard.requiredState === "SEALED"
+    ))
+    && pinnedPolicyGuardValid;
+  if (!valid) {
+    errors.push("INVALID_LATE_ENROLLEE_WINDOW_CONTRACT formal assignments require pinned school full duration; diagnostics require an explicit shared or independent window and reason");
+  }
+  return errors;
+}
+
+function weakNetworkCredentialErrors(index) {
+  const errors = [];
+  const credential = index.objectById.get("SUB-OBJ-INTENT-CREDENTIAL")?.value;
+  const module = index.moduleById.get("SUB-001")?.value;
+  if (!credential || !module) return errors;
+  const expectedFields = [
+    "SUB-INTENT-F-ACTOR-REF",
+    "SUB-INTENT-F-ACTIVITY-REF",
+    "SUB-INTENT-F-ACTIVITY-VERSION",
+    "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
+    "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
+    "SUB-INTENT-F-SUBMISSION-VERSION",
+    "SUB-INTENT-F-VERSION",
+    "SUB-INTENT-F-ISSUED-AT",
+    "SUB-INTENT-F-CONTENT-MANIFEST",
+    "SUB-INTENT-F-MANIFEST-DIGEST",
+    "SUB-INTENT-F-EXPIRES-AT",
+    "SUB-INTENT-F-COMPLETION-WINDOW",
+    "SUB-INTENT-F-STATUS",
+    "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
+  ];
+  const fields = new Set(records(credential.fields).map((field) => field.id));
+  const expectedStates = new Set(["ISSUED", "COMPLETED", "REJECTED", "EXPIRED", "PLATFORM_FAILURE_PROTECTED"]);
+  const actionsValid = [
+    "SUB-ACT-ISSUE-INTENT-CREDENTIAL",
+    "SUB-ACT-COMPLETE-MANIFEST-INTENT",
+    "SUB-ACT-REJECT-MANIFEST-CHANGE",
+    "SUB-ACT-EXPIRE-INTENT-CREDENTIAL",
+    "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION",
+  ].every((actionId) => index.actionById.has(actionId));
+  const issue = index.actionById.get("SUB-ACT-ISSUE-INTENT-CREDENTIAL")?.value;
+  const complete = index.actionById.get("SUB-ACT-COMPLETE-MANIFEST-INTENT")?.value;
+  const lineageByRef = new Map(records(credential.lineageBindings)
+    .map((binding) => [binding.refFieldId, binding]));
+  const valid = credential.intentCredential === true
+    && setEquals(new Set(credential.states), expectedStates)
+    && expectedFields.every((fieldId) => fields.has(fieldId))
+    && actionsValid
+    && index.fieldById.get("SUB-INTENT-F-ACTIVITY-REF")?.value?.referenceIntegrity === "VERSION_PINNED"
+    && index.fieldById.get("SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF")?.value?.referenceIntegrity === "VERSION_PINNED"
+    && index.fieldById.get("SUB-INTENT-F-VERSION")?.value?.idempotencyRole === "OBJECT_VERSION"
+    && lineageByRef.get("SUB-INTENT-F-ACTIVITY-REF")?.versionFieldId === "SUB-INTENT-F-ACTIVITY-VERSION"
+    && lineageByRef.get("SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF")?.versionFieldId === "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION"
+    && [
+      "SUB-INTENT-F-ACTOR-REF",
+      "SUB-INTENT-F-ACTIVITY-REF",
+      "SUB-INTENT-F-ACTIVITY-VERSION",
+      "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
+      "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
+      "SUB-INTENT-F-SUBMISSION-VERSION",
+      "SUB-INTENT-F-CONTENT-MANIFEST",
+      "SUB-INTENT-F-MANIFEST-DIGEST",
+    ].every((fieldId) => list(issue?.inputFieldIds).includes(fieldId))
+    && complete?.transition?.from === "ISSUED"
+    && complete?.transition?.to === "COMPLETED"
+    && credential.platformFailureProtection
+      === "if the platform cannot issue a credential, apply a uniform system-failure extension or adjusted rule";
+  if (!valid) errors.push("INVALID_WEAK_NETWORK_CREDENTIAL SUB-OBJ-INTENT-CREDENTIAL must bind actor, activity, submission version, fixed manifest digest, expiry, bounded window, and status");
+  return errors;
+}
+
+function weakNetworkAcceptancePathErrors(index) {
+  if (!finalizedTeachingBaselineEnabled(index)) return [];
+  const module = index.moduleById.get("SUB-001")?.value;
+  const attempt = index.objectById.get("SUB-OBJ-ATTEMPT")?.value;
+  const normal = index.actionById.get("SUB-ACT-SUBMIT")?.value;
+  const protectedSubmit = index.actionById.get("SUB-ACT-SUBMIT-PROTECTED")?.value;
+  const resubmit = index.actionById.get("SUB-ACT-RESUBMIT")?.value;
+  const credentialRef = index.fieldById.get("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF")?.value;
+  const snapshotRef = index.fieldById.get("SUB-ATTEMPT-F-PUBLICATION-SNAPSHOT-REF")?.value;
+  const flow = index.flows.find(({ value }) => value?.id === "DF-005")?.value;
+  if (!module || !attempt || !normal || !protectedSubmit || !resubmit || !credentialRef || !snapshotRef || !flow) {
+    return ["INVALID_WEAK_NETWORK_ACCEPTANCE_PATHS normal and completed-credential acceptance paths are both required"];
+  }
+  const matchGuard = protectedSubmit.intentCredentialMatchGuard;
+  const completeIntent = index.actionById.get("SUB-ACT-COMPLETE-MANIFEST-INTENT")?.value;
+  const completionGuard = completeIntent?.intentCredentialMatchGuard;
+  const completionFailureCode = "INTENT_CREDENTIAL_COMPLETION_REJECTED";
+  const completionFailureScenario = records(module.scenarios).find((scenario) => (
+    scenario?.actionId === completeIntent?.id
+    && scenario?.kind === "FAILURE"
+    && scenario?.resultCode === completionFailureCode
+  ));
+  const expectedEqualityBindings = [{
+    credentialFieldId: "SUB-INTENT-F-ACTIVITY-REF",
+    attemptFieldId: "SUB-ATTEMPT-F-ASSIGNMENT-REF",
+  }, {
+    credentialFieldId: "SUB-INTENT-F-ACTIVITY-VERSION",
+    attemptFieldId: "SUB-ATTEMPT-F-ASSIGNMENT-VERSION",
+  }, {
+    credentialFieldId: "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
+    attemptFieldId: "SUB-ATTEMPT-F-PUBLICATION-SNAPSHOT-REF",
+  }, {
+    credentialFieldId: "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
+    attemptFieldId: "SUB-ATTEMPT-F-PUBLICATION-SNAPSHOT-VERSION",
+  }, {
+    credentialFieldId: "SUB-INTENT-F-SUBMISSION-VERSION",
+    attemptFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+  }, {
+    credentialFieldId: "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
+    attemptFieldId: "SUB-ATTEMPT-F-CONTENT-DIGEST",
+  }];
+  const commonReceiptOutputs = [
+    "SUB-ATTEMPT-F-RECEIPT-ID",
+    "SUB-ATTEMPT-F-RECEIPT-ISSUED-AT",
+    "SUB-ATTEMPT-F-TIMELINESS-SOURCE",
+    "SUB-ATTEMPT-F-TIMELINESS-EVALUATED-AT",
+  ];
+  const protectedGuard = records(protectedSubmit.relatedStateGuards)
+    .find(({ refFieldId }) => refFieldId === "SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF");
+  const pathById = new Map(records(flow.executionPaths).map((path) => [path.id, path]));
+  const normalPath = pathById.get("NORMAL_SERVER_RECEIPT");
+  const protectedPath = pathById.get("COMPLETED_INTENT_CREDENTIAL");
+  const optionCodes = records(index.optionSetById.get("OPT-V2-TL-024")?.value?.values)
+    .map(({ code }) => code);
+  const valid = setEquals(
+    new Set(optionCodes),
+    new Set(["SERVER_RECEIPT_ACCEPTED_AT", "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT"]),
+  )
+    && snapshotRef.referenceIntegrity === "VERSION_PINNED"
+    && credentialRef.referenceIntegrity === "VERSION_PINNED"
+    && credentialRef.versionBinding?.versionFieldId === "SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION"
+    && setEquals(
+      new Set(list(credentialRef.actionApplicability?.requiredActionIds)),
+      new Set(["SUB-ACT-SUBMIT-PROTECTED"]),
+    )
+    && normal.timelinessContract?.source === "SERVER_RECEIPT_ACCEPTED_AT"
+    && normal.timelinessContract?.credentialRequired === false
+    && !list(normal.inputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF")
+    && !list(normal.outputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF")
+    && !list(normal.failureResults).some((code) => code.startsWith("INTENT_CREDENTIAL_"))
+    && protectedSubmit.timelinessContract?.source === "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT"
+    && protectedSubmit.timelinessContract?.credentialRequired === true
+    && list(protectedSubmit.inputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF")
+    && list(protectedSubmit.inputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION")
+    && protectedGuard?.versionFieldId === "SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION"
+    && protectedGuard?.targetObjectId === "SUB-OBJ-INTENT-CREDENTIAL"
+    && protectedGuard?.requiredState === "COMPLETED"
+    && matchGuard?.requiredState === "COMPLETED"
+    && matchGuard?.actorMatch?.credentialFieldId === "SUB-INTENT-F-ACTOR-REF"
+    && matchGuard?.actorMatch?.attemptSource === "CURRENT_ACTOR"
+    && JSON.stringify(matchGuard?.equalityBindings) === JSON.stringify(expectedEqualityBindings)
+    && matchGuard?.issuedAtFieldId === "SUB-INTENT-F-ISSUED-AT"
+    && matchGuard?.expiryFieldId === "SUB-INTENT-F-EXPIRES-AT"
+    && matchGuard?.completionWindowFieldId === "SUB-INTENT-F-COMPLETION-WINDOW"
+    && matchGuard?.failureResult === "INTENT_CREDENTIAL_MISMATCH"
+    && completeIntent?.transition?.from === "ISSUED"
+    && completeIntent?.transition?.to === "COMPLETED"
+    && hasExactKeys(completionGuard, [
+      "requiredState",
+      "issuedManifestDigestFieldId",
+      "completedManifestDigestFieldId",
+      "expiryFieldId",
+      "completionWindowFieldId",
+      "failureResult",
+    ])
+    && completionGuard?.requiredState === "ISSUED"
+    && completionGuard?.issuedManifestDigestFieldId === "SUB-INTENT-F-MANIFEST-DIGEST"
+    && completionGuard?.completedManifestDigestFieldId
+      === "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST"
+    && completionGuard?.expiryFieldId === "SUB-INTENT-F-EXPIRES-AT"
+    && completionGuard?.completionWindowFieldId === "SUB-INTENT-F-COMPLETION-WINDOW"
+    && completionGuard?.failureResult === completionFailureCode
+    && list(completeIntent?.failureResults).includes(completionFailureCode)
+    && list(completeIntent?.scenarioIds).includes(completionFailureScenario?.id)
+    && [normal, protectedSubmit, resubmit].every((action) => (
+      commonReceiptOutputs.every((fieldId) => list(action?.outputFieldIds).includes(fieldId))
+    ))
+    && flow.routingPolicy === "ACTION_CHOICE_REQUIRED"
+    && normalPath?.route?.consumerStepOrder === 5
+    && protectedPath?.route?.consumerStepOrder === 6
+    && !list(normalPath?.stepOrders).includes(6)
+    && !list(protectedPath?.stepOrders).includes(5);
+  return valid ? [] : [
+    "INVALID_WEAK_NETWORK_ACCEPTANCE_PATHS normal submission must use full server acceptance time while protected submission requires an exactly matching COMPLETED version-pinned credential and bounded fixed manifest",
+  ];
+}
+
+function rawSubmissionFactErrors(index) {
+  const errors = [];
+  if (!finalizedTeachingBaselineEnabled(index)) return errors;
+  const draft = index.objectById.get("SUB-OBJ-DRAFT")?.value;
+  const attempt = index.objectById.get("SUB-OBJ-ATTEMPT")?.value;
+  const quality = index.objectById.get("SUB-OBJ-INPUT-QUALITY")?.value;
+  if (!draft || !attempt || !quality) {
+    errors.push("INVALID_RAW_SUBMISSION_FACT_CONTRACT draft, immutable attempt, and input-quality facts are required");
+    return errors;
+  }
+  const rawFieldIds = [
+    "SUB-ATTEMPT-F-RAW-ANSWER-PAYLOAD",
+    "SUB-ATTEMPT-F-RAW-IMAGE-REFS",
+    "SUB-ATTEMPT-F-RAW-FILE-REFS",
+    "SUB-ATTEMPT-F-RAW-AUDIO-REFS",
+    "SUB-ATTEMPT-F-RAW-EXPLANATION",
+    "SUB-ATTEMPT-F-CONTENT-MANIFEST",
+    "SUB-ATTEMPT-F-CONTENT-DIGEST",
+  ];
+  const helpEvidenceFieldIds = [
+    "SUB-ATTEMPT-F-ALLOWED-HELP",
+    "SUB-ATTEMPT-F-OBSERVED-HELP",
+    "SUB-ATTEMPT-F-DECLARED-EXTERNAL-HELP",
+    "SUB-ATTEMPT-F-UNKNOWN-HELP-CONDITIONS",
+  ];
+  const acceptedFactFieldIds = [...rawFieldIds, ...helpEvidenceFieldIds];
+  const expectedDraftFields = [
+    "SUB-DRAFT-F-ASSIGNMENT-REF",
+    "SUB-DRAFT-F-ASSIGNMENT-VERSION",
+    "SUB-DRAFT-F-ANSWER-PAYLOAD",
+    "SUB-DRAFT-F-IMAGE-REFS",
+    "SUB-DRAFT-F-FILE-REFS",
+    "SUB-DRAFT-F-AUDIO-REFS",
+    "SUB-DRAFT-F-EXPLANATION",
+  ];
+  const draftFields = new Set(records(draft.fields).map(({ id }) => id));
+  const attemptFields = new Set(records(attempt.fields).map(({ id }) => id));
+  const submitActions = ["SUB-ACT-SUBMIT", "SUB-ACT-SUBMIT-PROTECTED", "SUB-ACT-RESUBMIT"]
+    .map((actionId) => index.actionById.get(actionId)?.value);
+  const lineageBindingByRef = new Map(records(attempt.lineageBindings)
+    .map((binding) => [binding.refFieldId, binding]));
+  const rawFactsValid = expectedDraftFields.every((fieldId) => draftFields.has(fieldId))
+    && rawFieldIds.every((fieldId) => (
+      attemptFields.has(fieldId)
+      && index.fieldById.get(fieldId)?.value?.mutability === "IMMUTABLE"
+    ))
+    && attempt.rawFactBoundary?.derivedRecognitionStoredHere === false
+    && setEquals(new Set(list(attempt.rawFactBoundary?.immutableFieldIds)), new Set(acceptedFactFieldIds))
+    && attempt.states?.length === 1
+    && attempt.states[0] === "SUBMITTED"
+    && index.fieldById.get("SUB-ATTEMPT-F-ASSIGNMENT-REF")?.value?.referenceIntegrity === "VERSION_PINNED"
+    && index.fieldById.get("SUB-ATTEMPT-F-DRAFT-REF")?.value?.referenceIntegrity === "VERSION_PINNED"
+    && lineageBindingByRef.get("SUB-ATTEMPT-F-ASSIGNMENT-REF")?.versionFieldId === "SUB-ATTEMPT-F-ASSIGNMENT-VERSION"
+    && lineageBindingByRef.get("SUB-ATTEMPT-F-DRAFT-REF")?.versionFieldId === "SUB-ATTEMPT-F-DRAFT-VERSION"
+    && submitActions.every((action) => (
+      action?.operationKind === "CREATE"
+      && list(action.outputFieldIds).includes("SUB-ATTEMPT-F-ID")
+      && acceptedFactFieldIds.every((fieldId) => list(action.outputFieldIds).includes(fieldId))
+      && list(action.inputFieldIds).includes("SUB-ATTEMPT-F-DRAFT-REF")
+      && list(action.inputFieldIds).includes("SUB-ATTEMPT-F-DRAFT-VERSION")
+    ));
+  if (!rawFactsValid) {
+    errors.push("INVALID_RAW_SUBMISSION_FACT_CONTRACT every accepted attempt must immutably pin activity, draft identity and version, raw answer, image, file, audio, explanation, manifest, digest, and help-environment facts");
+  }
+
+  const helpPolicy = attempt.helpEnvironmentEvidencePolicy;
+  const allowedHelp = index.fieldById.get("SUB-ATTEMPT-F-ALLOWED-HELP")?.value;
+  const observedHelp = index.fieldById.get("SUB-ATTEMPT-F-OBSERVED-HELP")?.value;
+  const declaredHelp = index.fieldById.get("SUB-ATTEMPT-F-DECLARED-EXTERNAL-HELP")?.value;
+  const unknownHelp = index.fieldById.get("SUB-ATTEMPT-F-UNKNOWN-HELP-CONDITIONS")?.value;
+  const acceptedHandoff = index.actionById.get("SUB-ACT-HANDOFF-ACCEPTED")?.value;
+  const receiptView = index.actionById.get("SUB-ACT-VIEW-RECEIPT")?.value;
+  const submissionFlow = index.flows.find(({ value }) => value?.id === "DF-005")?.value;
+  const gradingFlow = index.flows.find(({ value }) => value?.id === "DF-006")?.value;
+  const flowFields = (flow, property) => new Set(records(flow?.[property])
+    .filter(({ objectId }) => objectId === "SUB-OBJ-ATTEMPT")
+    .map(({ fieldId }) => fieldId));
+  const submissionTargetFields = flowFields(submissionFlow, "targetDataRefs");
+  const gradingSourceFields = flowFields(gradingFlow, "sourceDataRefs");
+  const helpEvidenceValid = setEquals(
+    new Set(list(helpPolicy?.immutableFieldIds)),
+    new Set(helpEvidenceFieldIds),
+  )
+    && list(helpPolicy?.immutableFieldIds).length === helpEvidenceFieldIds.length
+    && helpPolicy?.allowedHelpFieldId === "SUB-ATTEMPT-F-ALLOWED-HELP"
+    && helpPolicy?.observedHelpFieldId === "SUB-ATTEMPT-F-OBSERVED-HELP"
+    && helpPolicy?.declaredExternalHelpFieldId === "SUB-ATTEMPT-F-DECLARED-EXTERNAL-HELP"
+    && helpPolicy?.unknownConditionFieldId === "SUB-ATTEMPT-F-UNKNOWN-HELP-CONDITIONS"
+    && helpPolicy?.allowedHelpSourceRefFieldId === "HW-SNAPSHOT-F-HELP-RULE-REF"
+    && helpPolicy?.allowedHelpSourceVersionFieldId === "HW-SNAPSHOT-F-HELP-RULE-VERSION"
+    && helpPolicy?.unknownMeaning === "INSUFFICIENT_EVIDENCE_ONLY"
+    && helpPolicy?.unknownAdverseInference === false
+    && list(helpPolicy?.evidenceSupplementationPriority).join(",") === "EXPLANATION,VARIANT,FEYNMAN,REASSESSMENT"
+    && allowedHelp?.dataType === "JSON"
+    && allowedHelp?.valueSource?.kind === "SYSTEM"
+    && observedHelp?.dataType === "JSON"
+    && observedHelp?.valueSource?.kind === "SYSTEM"
+    && declaredHelp?.dataType === "JSON"
+    && declaredHelp?.required === false
+    && declaredHelp?.valueSource?.kind === "USER_INPUT"
+    && unknownHelp?.dataType === "BOOLEAN"
+    && unknownHelp?.valueSource?.kind === "SYSTEM"
+    && unknownHelp?.adverseInferencePolicy === "FORBIDDEN"
+    && helpEvidenceFieldIds.every((fieldId) => (
+      index.fieldById.get(fieldId)?.value?.mutability === "IMMUTABLE"
+      && list(acceptedHandoff?.outputFieldIds).includes(fieldId)
+      && list(receiptView?.outputFieldIds).includes(fieldId)
+      && submissionTargetFields.has(fieldId)
+      && gradingSourceFields.has(fieldId)
+    ))
+    && submitActions.every((action) => (
+      list(action?.inputFieldIds).includes("SUB-ATTEMPT-F-DECLARED-EXTERNAL-HELP")
+      && helpEvidenceFieldIds.every((fieldId) => list(action?.outputFieldIds).includes(fieldId))
+    ));
+  if (!helpEvidenceValid) {
+    errors.push("INVALID_HELP_ENVIRONMENT_EVIDENCE accepted attempts must retain allowed, observed, declared, and unknown help facts; unknown conditions forbid adverse inference and flow into assessment");
+  }
+
+  const trustCodes = records(index.optionSetById.get("OPT-V2-TL-016")?.value?.values)
+    .map(({ code }) => code);
+  const trustValid = setEquals(new Set(trustCodes), new Set(["UNTRUSTED_DATA_ONLY"]))
+    && attempt.untrustedContentPolicy?.trustClassCode === "UNTRUSTED_DATA_ONLY"
+    && setEquals(
+      new Set(list(attempt.untrustedContentPolicy?.forbiddenEffects)),
+      new Set(["SYSTEM_INSTRUCTION", "PERMISSION", "GOVERNANCE_RULE"]),
+    )
+    && index.fieldById.get("SUB-ATTEMPT-F-CONTENT-TRUST-CLASS")?.value?.mutability === "IMMUTABLE";
+  if (!trustValid) {
+    errors.push("INVALID_UNTRUSTED_UPLOAD_BOUNDARY uploaded material and student content must remain untrusted data and cannot change system instructions, permissions, or governance");
+  }
+
+  const qualityFieldIds = [
+    "SUB-QUALITY-F-BLUR",
+    "SUB-QUALITY-F-GLARE",
+    "SUB-QUALITY-F-CROP",
+    "SUB-QUALITY-F-MISSING-PAGE",
+    "SUB-QUALITY-F-SEQUENCE",
+  ];
+  const qualityAction = index.actionById.get("SUB-ACT-RECORD-INPUT-QUALITY")?.value;
+  const qualityCodes = records(index.optionSetById.get("OPT-V2-TL-017")?.value?.values)
+    .map(({ code }) => code);
+  const recognition = attempt.recognitionBoundary;
+  const qualityValid = quality.qualityOnly === true
+    && setEquals(
+      new Set(list(quality.forbiddenEffects)),
+      new Set(["CORRECTNESS", "LATENESS", "COMPLETION", "MASTERY"]),
+    )
+    && qualityFieldIds.every((fieldId) => index.fieldById.get(fieldId)?.value?.mutability === "IMMUTABLE")
+    && setEquals(
+      new Set(qualityCodes),
+      new Set(["NOT_DETECTED", "DETECTED", "UNKNOWN", "NOT_APPLICABLE"]),
+    )
+    && qualityAction?.executionMode === "FLOW_INTERNAL"
+    && qualityAction?.trigger?.flowIds?.includes("DF-005")
+    && qualityFieldIds.every((fieldId) => list(qualityAction?.outputFieldIds).includes(fieldId))
+    && recognition?.phase === 2
+    && setEquals(
+      new Set(list(recognition?.protectedContentKinds)),
+      new Set(["MATH_FORMULA", "HANDWRITING", "ESSAY", "SPEAKING"]),
+    )
+    && setEquals(
+      new Set(list(recognition?.allowedFailureOutcomes)),
+      new Set(["NEEDS_SUPPLEMENT", "UNABLE_TO_DETERMINE"]),
+    )
+    && setEquals(
+      new Set(list(recognition?.forbiddenFailureEffects)),
+      new Set(["MARK_INCORRECT", "CREATE_MASTERY_GAP"]),
+    );
+  if (!qualityValid) {
+    errors.push("INVALID_INPUT_QUALITY_FACT blur, glare, crop, missing-page, and sequence checks must remain non-evaluative facts; recognition failure cannot mark protected content incorrect or create mastery gaps");
+  }
+  return errors;
+}
+
+function teacherActionSeparationErrors(index) {
+  const errors = [];
+  const module = index.moduleById.get("TEA-001")?.value;
+  const problem = index.objectById.get("TEA-OBJ-TEACHING-PROBLEM")?.value;
+  const judgment = index.objectById.get("TEA-OBJ-TEACHER-JUDGMENT")?.value;
+  const linkedAction = index.objectById.get("TEA-OBJ-LINKED-TEACHING-ACTION")?.value;
+  if (!module || !problem || !judgment || !linkedAction) return errors;
+  const recordJudgment = index.actionById.get("TEA-ACT-RECORD-TEACHER-JUDGMENT")?.value;
+  const completeAction = index.actionById.get("TEA-ACT-COMPLETE-LINKED-ACTION")?.value;
+  const judgmentSuccess = index.scenarios.find(({ value }) => value?.actionId === recordJudgment?.id && value?.kind === "SUCCESS")?.value;
+  const actionSuccess = index.scenarios.find(({ value }) => value?.actionId === completeAction?.id && value?.kind === "SUCCESS")?.value;
+  const separationValid = module.coreViews?.join(",") === "ACTION_QUEUE,CLASS_INSIGHT,STUDENT_DETAIL"
+    && module.homeroomBoundary === "COORDINATION_OVERVIEW_ONLY"
+    && judgment.rejectionDoesNotResolveProblem === true
+    && linkedAction.completionDoesNotProduceMastery === true
+    && recordJudgment?.targetObjectId === judgment.id
+    && !list(recordJudgment?.outputFieldIds).some((fieldId) => fieldId === "TEA-PROBLEM-F-STATUS")
+    && /does not close/i.test(judgmentSuccess?.then?.expectedData ?? "")
+    && /does not (?:resolve|produce).*mastery|does not.*mastery/i.test(actionSuccess?.then?.expectedData ?? "")
+    && !list(completeAction?.outputFieldIds).some((fieldId) => /MASTERY/i.test(fieldId));
+  if (!separationValid) errors.push("INVALID_TEACHER_ACTION_SEPARATION TEA must keep problem, judgment, and linked action separate; rejection does not resolve and completion does not produce mastery");
+  return errors;
+}
+
+function studentHomeErrors(index) {
+  const errors = [];
+  const home = index.objectById.get("APP-OBJ-STUDENT-HOME")?.value;
+  const module = index.moduleById.get("APP-001")?.value;
+  if (!home || !module) return errors;
+  const expected = ["SCHOOL_REQUIRED", "STUDENT_PENDING", "SYSTEM_PROCESSING", "PERSONAL_OPTIONAL"];
+  const page = index.pageById.get("APP-PAGE-STUDENT-HOME")?.value;
+  const view = index.actionById.get("APP-ACT-VIEW-STUDENT-HOME")?.value;
+  const flow = index.flows.find(({ value }) => value?.id === "DF-015")?.value;
+  const optionalSubmissionRefs = records(flow?.sourceDataRefs).filter(({ objectId }) => (
+    objectId === "SUB-OBJ-ATTEMPT"
+  ));
+  const noSubmissionValid = optionalSubmissionRefs.length === 3
+    && optionalSubmissionRefs.every(({ cardinality }) => cardinality === "ZERO_MANY")
+    && setEquals(
+      new Set(list(flow?.idempotencyKeyParts?.identityFieldIds)),
+      new Set(["HW-ASSIGNMENT-F-ID", "HW-STUDENT-WINDOW-F-ID"]),
+    )
+    && setEquals(
+      new Set(list(flow?.idempotencyKeyParts?.versionFieldIds)),
+      new Set(["HW-ASSIGNMENT-F-PUBLICATION-VERSION", "HW-STUDENT-WINDOW-F-VERSION"]),
+    )
+    && flow?.idempotencyKeyParts?.fanoutFieldId === "HW-STUDENT-WINDOW-F-STUDENT-REF"
+    && records(flow?.sourceDataRefs).some(({ objectId, fieldId }) => (
+      objectId === "HW-OBJ-STUDENT-ACTIVITY-WINDOW"
+      && fieldId === "HW-STUDENT-WINDOW-F-STUDENT-REF"
+    ))
+    && !records(flow?.sourceDataRefs).some(({ fieldId }) => (
+      fieldId === "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS"
+    ))
+    && !JSON.stringify(flow?.idempotencyKeyParts).includes("SUB-ATTEMPT");
+  if (home.processingDelayPolicy !== "DO_NOT_MUTATE_COMPLETION"
+    || !setEquals(new Set(home.compartments), new Set(expected))
+    || home.compartments?.length !== expected.length
+    || !page
+    || !view
+    || !noSubmissionValid
+    || !/never changes|preserves source-owned completion/i.test(index.scenarioById.get("APP-ACT-VIEW-STUDENT-HOME-SCN-SUCCESS")?.value?.then?.expectedData ?? "")) {
+    errors.push("INVALID_STUDENT_HOME_CONTRACT APP-OBJ-STUDENT-HOME must keep four compartments and source-owned completion independent from processing delay");
+  }
+  return errors;
+}
+
 export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
@@ -5352,5 +6506,18 @@ export function validateModelSemantics(model) {
     ...phaseAndTemplateErrors(index),
     ...metricErrors(index),
     ...gradingCapabilityErrors(index),
+    ...activityPurposePolicyErrors(index),
+    ...diagnosticUseBoundaryErrors(index),
+    ...activityCancellationEffectsErrors(index),
+    ...academicIntegritySignalBoundaryErrors(index),
+    ...teachingPresentationTodoBoundaryErrors(index),
+    ...perStudentStatusAxisWriterErrors(index),
+    ...firstStageActivityErrors(index),
+    ...lateEnrolleeWindowErrors(index),
+    ...weakNetworkCredentialErrors(index),
+    ...weakNetworkAcceptancePathErrors(index),
+    ...rawSubmissionFactErrors(index),
+    ...teacherActionSeparationErrors(index),
+    ...studentHomeErrors(index),
   ];
 }

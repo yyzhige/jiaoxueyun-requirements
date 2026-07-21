@@ -996,10 +996,13 @@ function reachableObjectStates(module, objectId, initialStates = []) {
   while (changed) {
     changed = false;
     for (const action of module.actions) {
+      const transitionFrom = Array.isArray(action.transition?.from)
+        ? action.transition.from
+        : [action.transition?.from];
       if (
         action.targetObjectId !== objectId
         || !action.transition
-        || !reachable.has(action.transition.from)
+        || !transitionFrom.some((state) => reachable.has(state))
       ) continue;
       const actionStates = module.scenarios
         .filter(({ actionId }) => actionId === action.id)
@@ -1259,7 +1262,7 @@ test("validates action-specific required rule bindings", () => {
 
 test("requires action-level coverage for action-specific required fields", () => {
   const mutations = [
-    ["HW-ACT-REVISE", "HW-ASSIGNMENT-F-REVISION-REASON"],
+    ["HW-ACT-VERSION-NON-SEMANTIC-CORRECTION", "HW-ASSIGNMENT-F-REVISION-REASON"],
     ["PLN-ACT-CLOSE-PLAN", "PLN-PLAN-F-CLOSE-REASON"],
     ["STU-ACT-SAVE-VIEW", "STU-PROFILE-F-SAVED-VIEW-DEFINITION"],
   ];
@@ -1512,13 +1515,13 @@ test("classifies every phase-one object reference with a closed integrity mode",
       .filter(({ valueSource }) => valueSource?.kind === "OBJECT_REF")
       .map((field) => ({ module, object, field }))
   )));
-  assert.equal(objectRefs.length, 69);
+  assert.equal(objectRefs.length, 94);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "VERSION_PINNED"
-  )).length, 52);
+  )).length, 69);
   assert.equal(objectRefs.filter(({ field }) => (
     field.referenceIntegrity === "IDENTITY_ONLY"
-  )).length, 17);
+  )).length, 25);
 
   const missingPinnedBinding = structuredClone(requirementModel);
   const gradingDecision = moduleById(missingPinnedBinding, "GRD-001").objects
@@ -1899,7 +1902,7 @@ test("uses task-specific CREATE and UPDATE actions for every mixed command surfa
   ));
   assert.deepEqual(mixedCreates, []);
   assert.equal(modules.flatMap(({ actions }) => actions)
-    .filter(({ operationKind }) => operationKind === "CREATE").length, 119);
+    .filter(({ operationKind }) => operationKind === "CREATE").length, 133);
   assert.deepEqual(
     moduleById(requirementModel, "CONTENT-001").actions
       .filter(({ targetObjectId, operationKind }) => (
@@ -2765,7 +2768,7 @@ test("declares one closed routing policy for every Flow", () => {
     ["DF-002", "NONE"],
     ["DF-003", "NONE"],
     ["DF-004", "NONE"],
-    ["DF-005", "NONE"],
+    ["DF-005", "ACTION_CHOICE_REQUIRED"],
     ["DF-006", "NONE"],
     ["DF-007", "ACTION_CHOICE_REQUIRED"],
     ["DF-008", "NONE"],
@@ -2773,6 +2776,7 @@ test("declares one closed routing policy for every Flow", () => {
     ["DF-010", "OPTION_VALUE_REQUIRED"],
     ["DF-012", "NONE"],
     ["DF-014", "NONE"],
+    ["DF-015", "NONE"],
     ["DF-011", "ACTION_CHOICE_REQUIRED"],
     ["DF-013", "ACTION_CHOICE_REQUIRED"],
   ]));
@@ -3679,14 +3683,14 @@ test("authors reachability and Flow profiles in source facts without assembly de
     {
       modules: foundationFactExports.foundationModules,
       flows: foundationFactExports.foundationFlows,
-      objectCount: 52,
+      objectCount: 55,
       flowCount: 3,
     },
     {
       modules: teachingLoopFactExports.teachingLoopModules,
       flows: teachingLoopFactExports.teachingLoopFlows,
-      objectCount: 23,
-      flowCount: 9,
+      objectCount: 30,
+      flowCount: 10,
     },
     {
       modules: aiReportingFactExports.aiReportingModules,
@@ -3725,8 +3729,8 @@ test("declares the direct read mode for every phase-one object", () => {
       [mode, objects.length]
     ))),
     {
-      AUTHORIZED: 41,
-      NO_DIRECT_READ: 58,
+      AUTHORIZED: 45,
+      NO_DIRECT_READ: 64,
       STUDENT_TIMED_RELEASE: 4,
     },
   );
@@ -3752,11 +3756,11 @@ test("declares the direct read mode for every phase-one object", () => {
   }
 });
 
-test("declares one standard system identity for all 103 phase-one objects", () => {
+test("declares one standard system identity for all 113 phase-one objects", () => {
   const phaseOneObjects = modules
     .filter(({ phase }) => phase === PHASE.FIRST)
     .flatMap(({ objects }) => objects);
-  assert.equal(phaseOneObjects.length, 103);
+  assert.equal(phaseOneObjects.length, 113);
 
   const violations = phaseOneObjects.flatMap((object) => {
     const identities = object.fields
@@ -3820,6 +3824,7 @@ test("defines all phase-one modules the REPORT metadata module and phase-one Flo
       "DF-010",
       "DF-012",
       "DF-014",
+      "DF-015",
       "DF-011",
       "DF-013",
     ],
@@ -5558,7 +5563,7 @@ test("requires the exact unique in-product notification channel tuple", () => {
   }
 });
 
-test("adds only DF-011 and DF-013 while preserving the Task 6 Flow boundary", () => {
+test("adds DF-015 to the teaching loop while preserving AI reporting Flow boundaries", () => {
   assert.deepEqual(
     teachingLoopFactExports.teachingLoopFlows.map(({ id }) => id),
     [
@@ -5571,6 +5576,7 @@ test("adds only DF-011 and DF-013 while preserving the Task 6 Flow boundary", ()
       "DF-010",
       "DF-012",
       "DF-014",
+      "DF-015",
     ],
   );
   assert.deepEqual(
@@ -5592,6 +5598,7 @@ test("adds only DF-011 and DF-013 while preserving the Task 6 Flow boundary", ()
       "DF-010",
       "DF-012",
       "DF-014",
+      "DF-015",
       "DF-011",
       "DF-013",
     ],
@@ -5614,6 +5621,7 @@ test("requires one closed contract profile for every Flow", () => {
       ["DF-010", "GENERIC"],
       ["DF-012", "GENERIC"],
       ["DF-014", "GENERIC"],
+      ["DF-015", "GENERIC"],
       ["DF-011", "LEARNING_PATH_AGGREGATION"],
       ["DF-013", "REPORT_MATERIALIZATION"],
     ],
@@ -5833,6 +5841,15 @@ test("models assignment fields and task-specific lifecycle actions", () => {
     "HW-ASSIGNMENT-F-LATE-POLICY",
     "HW-ASSIGNMENT-F-RESUBMISSION-POLICY",
     "HW-ASSIGNMENT-F-ASSIGNMENT-TYPE",
+    "HW-ASSIGNMENT-F-PURPOSE",
+    "HW-ASSIGNMENT-F-HELP-RULE-REF",
+    "HW-ASSIGNMENT-F-HELP-RULE-VERSION",
+    "HW-ASSIGNMENT-F-ANSWER-OPEN-POLICY",
+    "HW-ASSIGNMENT-F-DIAGNOSTIC-USE",
+    "HW-ASSIGNMENT-F-LATE-ENROLLEE-WINDOW-POLICY",
+    "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-REF",
+    "HW-ASSIGNMENT-F-SCHOOL-TIME-POLICY-VERSION",
+    "HW-ASSIGNMENT-F-ARCHIVE-STATUS",
     "HW-ASSIGNMENT-F-QUESTION-ORDER",
     "HW-ITEM-F-PROMPT",
     "HW-ITEM-F-ANSWER-KEY",
@@ -5842,17 +5859,32 @@ test("models assignment fields and task-specific lifecycle actions", () => {
     "HW-ASSIGNMENT-F-FEEDBACK-POLICY",
     "HW-ASSIGNMENT-F-NOTIFICATION-POLICY",
     "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    "HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-REF",
+    "HW-ASSIGNMENT-F-PUBLICATION-SNAPSHOT-VERSION",
     "HW-ASSIGNMENT-F-REVISION-REASON",
   ];
   assert.equal(requiredFieldIds.every((fieldId) => fieldIds.has(fieldId)), true);
   assert.deepEqual(assignment.actions.map(({ id }) => id), [
+    "HW-ACT-CREATE-SCHOOL-TIME-POLICY",
+    "HW-ACT-SUPERSEDE-SCHOOL-TIME-POLICY",
+    "HW-ACT-INVALIDATE-SCHOOL-TIME-POLICY",
+    "HW-ACT-REVOKE-SCHOOL-TIME-POLICY",
+    "HW-ACT-CREATE-HELP-RULE",
+    "HW-ACT-PUBLISH-HELP-RULE",
+    "HW-ACT-CREATE-PUBLICATION-SNAPSHOT",
+    "HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW",
+    "HW-ACT-CREATE-LATE-ENROLLEE-WINDOW",
+    "HW-ACT-MARK-STUDENT-WINDOW-IN-PROGRESS",
+    "HW-ACT-MARK-STUDENT-WINDOW-SUBMITTED",
+    "HW-ACT-ADVANCE-STUDENT-WINDOW-TIME",
+    "HW-ACT-VIEW-STUDENT-ACTIVITY-WINDOW",
     "HW-ACT-SYNC-RUBRIC",
     "HW-ACT-CREATE-DRAFT",
     "HW-ACT-CREATE-ITEM",
+    "HW-ACT-CONFIGURE-DIAGNOSTIC-LATE-ENROLLEE-WINDOW",
     "HW-ACT-EDIT-ITEM",
     "HW-ACT-VALIDATE-ITEM",
     "HW-ACT-VALIDATE",
-    "HW-ACT-REVALIDATE-ITEM",
     "HW-ACT-REVALIDATE-REVISION",
     "HW-ACT-PREVIEW",
     "HW-ACT-PUBLISH-ITEM",
@@ -5860,8 +5892,15 @@ test("models assignment fields and task-specific lifecycle actions", () => {
     "HW-ACT-SCHEDULE-PUBLISH",
     "HW-ACT-PUBLISH-SCHEDULED",
     "HW-ACT-CLOSE",
-    "HW-ACT-REVISE",
-    "HW-ACT-REVISE-ITEM",
+    "HW-ACT-ARCHIVE",
+    "HW-ACT-UNARCHIVE",
+    "HW-ACT-CANCEL-ADMINISTRATIVE",
+    "HW-ACT-CANCEL-CONTENT-RIGHT-ERROR",
+    "HW-ACT-CANCEL-FOR-REPLACEMENT",
+    "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+    "HW-ACT-VERSION-NON-SEMANTIC-CORRECTION",
+    "HW-ACT-VERSION-ASSESSMENT-STANDARD-CORRECTION",
     "HW-ACT-OPEN-PUBLISHED",
     "HW-ACT-RESOLVE-GRADING-SNAPSHOT",
   ]);
@@ -5892,10 +5931,6 @@ test("closes assignment and item publication states through revision and schedul
     from: "REVISION_DRAFT",
     to: "VALIDATED",
   });
-  assert.deepEqual(actionById.get("HW-ACT-REVALIDATE-ITEM").transition, {
-    from: "REVISION_DRAFT",
-    to: "VALIDATED",
-  });
   assert.deepEqual(actionById.get("HW-ACT-PUBLISH-SCHEDULED").transition, {
     from: "SCHEDULED",
     to: "PUBLISHED",
@@ -5913,13 +5948,14 @@ test("closes assignment and item publication states through revision and schedul
   const publication = flows.find(({ id }) => id === "DF-004");
   assert.deepEqual(publication.steps.map(({ actionId }) => actionId), [
     "HW-ACT-VALIDATE-ITEM",
-    "HW-ACT-REVALIDATE-ITEM",
     "HW-ACT-VALIDATE",
     "HW-ACT-REVALIDATE-REVISION",
     "HW-ACT-PREVIEW",
     "HW-ACT-PUBLISH-ITEM",
+    "HW-ACT-CREATE-PUBLICATION-SNAPSHOT",
     "HW-ACT-PUBLISH-NOW",
     "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-REPLACEMENT",
     "APP-ACT-CREATE-HOMEWORK-TODO",
   ]);
 });
@@ -5939,16 +5975,33 @@ test("models submission payloads uploads receipts and App-first weak-network sem
     "SUB-DRAFT-F-WEAK-NETWORK-CHECKPOINT",
     "SUB-ATTEMPT-F-SUBMISSION-VERSION",
     "SUB-ATTEMPT-F-LATE-FLAG",
+    "SUB-ATTEMPT-F-PUBLICATION-SNAPSHOT-REF",
+    "SUB-ATTEMPT-F-PUBLICATION-SNAPSHOT-VERSION",
+    "SUB-ATTEMPT-F-TIMELINESS-SOURCE",
+    "SUB-ATTEMPT-F-TIMELINESS-EVALUATED-AT",
     "SUB-ATTEMPT-F-RESUBMISSION-OF",
     "SUB-ATTEMPT-F-RECEIPT-ID",
     "SUB-ATTEMPT-F-RECEIPT-ISSUED-AT",
+    "SUB-ATTEMPT-F-ALLOWED-HELP",
+    "SUB-ATTEMPT-F-OBSERVED-HELP",
+    "SUB-ATTEMPT-F-DECLARED-EXTERNAL-HELP",
+    "SUB-ATTEMPT-F-UNKNOWN-HELP-CONDITIONS",
+    "SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF",
+    "SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION",
   ].every((fieldId) => fieldIds.has(fieldId)), true);
   assert.deepEqual(submission.actions.map(({ id }) => id), [
-      "SUB-ACT-SAVE-DRAFT",
-      "SUB-ACT-UPLOAD-CHUNK",
-      "SUB-ACT-RETRY-UPLOAD",
-      "SUB-ACT-MARK-DRAFT-READY",
-      "SUB-ACT-SUBMIT",
+    "SUB-ACT-ISSUE-INTENT-CREDENTIAL",
+    "SUB-ACT-COMPLETE-MANIFEST-INTENT",
+    "SUB-ACT-REJECT-MANIFEST-CHANGE",
+    "SUB-ACT-EXPIRE-INTENT-CREDENTIAL",
+    "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION",
+    "SUB-ACT-RECORD-INPUT-QUALITY",
+    "SUB-ACT-SAVE-DRAFT",
+    "SUB-ACT-UPLOAD-CHUNK",
+    "SUB-ACT-RETRY-UPLOAD",
+    "SUB-ACT-MARK-DRAFT-READY",
+    "SUB-ACT-SUBMIT",
+    "SUB-ACT-SUBMIT-PROTECTED",
     "SUB-ACT-RESUBMIT",
     "SUB-ACT-VIEW-RECEIPT",
     "SUB-ACT-HANDOFF-ACCEPTED",
@@ -5963,17 +6016,37 @@ test("models submission payloads uploads receipts and App-first weak-network sem
   )), true);
   const submitAction = submission.actions.find(({ id }) => id === "SUB-ACT-SUBMIT");
   assert.ok(submitAction.failureResults.includes("OFFLINE_FINAL_SUBMISSION_BLOCKED"));
+  assert.deepEqual(submitAction.timelinessContract, {
+    source: "SERVER_RECEIPT_ACCEPTED_AT",
+    evaluatedAtFieldId: "SUB-ATTEMPT-F-ACCEPTED-AT",
+    credentialRequired: false,
+  });
+  assert.equal(
+    submitAction.inputFieldIds.includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF"),
+    false,
+  );
+  assert.equal(
+    [
+      "SUB-ATTEMPT-F-RECEIPT-ID",
+      "SUB-ATTEMPT-F-RECEIPT-ISSUED-AT",
+      "SUB-ATTEMPT-F-TIMELINESS-SOURCE",
+      "SUB-ATTEMPT-F-TIMELINESS-EVALUATED-AT",
+    ].every((fieldId) => submitAction.outputFieldIds.includes(fieldId)),
+    true,
+  );
   const offlineScenario = submission.scenarios.find(({ actionId, resultCode }) => (
     actionId === submitAction.id && resultCode === "OFFLINE_FINAL_SUBMISSION_BLOCKED"
   ));
   assert.match(offlineScenario.then.expectedData, /draft.*successful chunks.*server receipt/i);
   assert.deepEqual(offlineScenario.then.expectedState, { mode: "UNCHANGED" });
-  assert.match(
-    submission.scenarios.find(({ actionId, kind }) => (
-      actionId === submitAction.id && kind === "SUCCESS"
-    )).then.expectedData,
-    /server receipt/i,
-  );
+  const successScenario = submission.scenarios.find(({ actionId, kind }) => (
+    actionId === submitAction.id && kind === "SUCCESS"
+  ));
+  assert.deepEqual(successScenario.then.expectedState, {
+    mode: "STATE",
+    value: "SUBMITTED",
+  });
+  assert.match(successScenario.then.expectedData, /server acceptance time.*receipt/i);
 });
 
 test("publishes an authoritative all-subject grading capability matrix", () => {
@@ -7509,6 +7582,7 @@ test("defines score evidence plan student execution and correction modules with 
       "DF-010",
       "DF-012",
       "DF-014",
+      "DF-015",
       "DF-011",
       "DF-013",
     ],
@@ -7988,6 +8062,10 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
   const studentDetailReadActionIds = [
     "TEA-ACT-QUERY-SUBJECT-TODOS",
     "TEA-ACT-QUERY-HOMEROOM-SUMMARY",
+    "TEA-ACT-QUERY-ACTION-QUEUE",
+    "TEA-ACT-QUERY-CLASS-INSIGHT",
+    "TEA-ACT-QUERY-STUDENT-DETAIL",
+    "HW-ACT-VIEW-STUDENT-ACTIVITY-WINDOW",
     "SUB-ACT-VIEW-RECEIPT",
     "PUB-ACT-VIEW-RESULT",
     "SCO-ACT-READ-GRADEBOOK",
@@ -7996,6 +8074,7 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
     "INS-ACT-VIEW-MASTERY",
     "PLN-ACT-VIEW-HOMEROOM-COORDINATION",
     "APP-ACT-VIEW-TODOS",
+    "APP-ACT-VIEW-STUDENT-HOME",
     "STU-ACT-OPEN-PROFILE",
     "STU-ACT-VIEW-ATTENTION",
     "LPATH-ACT-VIEW-PATH",
@@ -8016,7 +8095,7 @@ test("explicitly denies school-admin and platform-ops default student-detail rea
         ?.privilegedReadPolicy === "DEFAULT_DENY"
     ))
     .map(({ id }) => id);
-  assert.equal(protectedReadActionIds.length, 15);
+  assert.equal(protectedReadActionIds.length, 20);
   assert.deepEqual(
     new Set(protectedReadActionIds),
     new Set(studentDetailReadActionIds),
@@ -8327,13 +8406,13 @@ test("classifies every phase-one object with a closed student-data access fact",
   const phaseOneObjects = modules
     .filter(({ phase }) => phase === PHASE.FIRST)
     .flatMap((module) => module.objects);
-  assert.equal(phaseOneObjects.length, 103);
+  assert.equal(phaseOneObjects.length, 113);
   assert.deepEqual(
     phaseOneObjects.reduce((counts, object) => ({
       ...counts,
       [object.studentDataClassification.kind]: counts[object.studentDataClassification.kind] + 1,
     }), { NONE: 0, DETAIL: 0, AGGREGATE: 0 }),
-    { NONE: 65, DETAIL: 33, AGGREGATE: 5 },
+    { NONE: 68, DETAIL: 40, AGGREGATE: 5 },
   );
   assert.equal(phaseOneObjects.every((object) => {
     const classification = object.studentDataClassification;
@@ -8544,7 +8623,6 @@ test("models subject-owned improvement plans and explicit teacher and homeroom F
     "PLN-ACT-CONFIRM-PLAN",
     "PLN-ACT-SYNC-SUBJECT-TEACHER",
     "PLN-ACT-SYNC-HOMEROOM-COORDINATION",
-    "APP-ACT-CREATE-PLAN-TODO",
   ]);
   assert.ok(flow.targetDataRefs.some(({ objectId, fieldId }) => (
     objectId === "PLN-OBJ-SUBJECT-SYNC"
@@ -8557,13 +8635,11 @@ test("models subject-owned improvement plans and explicit teacher and homeroom F
   assert.equal(JSON.stringify(flow.targetDataRefs).includes("recipient"), false);
 });
 
-test("models student todo navigation and correction judgment without creating second task owners", () => {
+test("models assignment-backed student todo home and correction without second task owners", () => {
   const app = moduleById(requirementModel, "APP-001");
   const todo = app.objects.find(({ id }) => id === "APP-OBJ-TODO");
   const todoFields = new Set(todo.fields.map(({ id }) => id));
   assert.equal([
-    "APP-TODO-F-SOURCE-PLAN-REF",
-    "APP-TODO-F-SOURCE-PLAN-VERSION",
     "APP-TODO-F-SOURCE-ASSIGNMENT-REF",
     "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
     "APP-TODO-F-TASK-DEEP-LINK",
@@ -8574,17 +8650,10 @@ test("models student todo navigation and correction judgment without creating se
   assert.equal(todo.fields.some(({ label }) => /task content|plan content/i.test(label)), false);
   assert.deepEqual(
     new Set(todo.lineageBindings.map(({ targetObjectId }) => targetObjectId)),
-    new Set(["PLN-OBJ-PLAN", "HW-OBJ-ASSIGNMENT"]),
+    new Set(["HW-OBJ-ASSIGNMENT"]),
   );
 
   assert.deepEqual(todo.exclusiveSourceGroups, [
-    {
-      id: "PLAN",
-      fieldIds: [
-        "APP-TODO-F-SOURCE-PLAN-REF",
-        "APP-TODO-F-SOURCE-PLAN-VERSION",
-      ],
-    },
     {
       id: "HOMEWORK",
       fieldIds: [
@@ -8592,27 +8661,30 @@ test("models student todo navigation and correction judgment without creating se
         "APP-TODO-F-SOURCE-ASSIGNMENT-VERSION",
       ],
     },
+    {
+      id: "LOCAL_EXECUTION",
+      fieldIds: [
+        "APP-TODO-F-LOCAL-PROGRESS",
+        "APP-TODO-F-COMPLETION-EVIDENCE",
+      ],
+    },
   ]);
   const createTodoActions = app.actions.filter(({ operationKind }) => operationKind === "CREATE");
   assert.deepEqual(createTodoActions.map(({ id }) => id), [
-    "APP-ACT-CREATE-PLAN-TODO",
+    "APP-ACT-BUILD-STUDENT-HOME",
     "APP-ACT-CREATE-HOMEWORK-TODO",
   ]);
   assert.deepEqual(createTodoActions.map(({ trigger }) => trigger), [
-    { kind: "FLOW", flowIds: ["DF-012"] },
+    { kind: "FLOW", flowIds: ["DF-015"] },
     { kind: "FLOW", flowIds: ["DF-004"] },
   ]);
-  for (const [actionId, expectedGroupId] of [
-    ["APP-ACT-CREATE-PLAN-TODO", "PLAN"],
-    ["APP-ACT-CREATE-HOMEWORK-TODO", "HOMEWORK"],
-  ]) {
-    const action = createTodoActions.find(({ id }) => id === actionId);
-    const covered = new Set([...action.inputFieldIds, ...action.outputFieldIds]);
-    const coveredGroups = todo.exclusiveSourceGroups.filter(({ fieldIds: groupFieldIds }) => (
-      groupFieldIds.every((fieldId) => covered.has(fieldId))
-    ));
-    assert.deepEqual(coveredGroups.map(({ id }) => id), [expectedGroupId], actionId);
-  }
+  const homeworkTodo = createTodoActions.find(({ id }) => (
+    id === "APP-ACT-CREATE-HOMEWORK-TODO"
+  ));
+  const homeworkOutputs = new Set(homeworkTodo.outputFieldIds);
+  assert.equal(todo.exclusiveSourceGroups[0].fieldIds.every((fieldId) => (
+    homeworkOutputs.has(fieldId)
+  )), true);
 
   const assignmentFlow = flows.find(({ id }) => id === "DF-004");
   assert.deepEqual(assignmentFlow.moduleIds, ["HW-001", "APP-001"]);
@@ -8639,8 +8711,32 @@ test("models student todo navigation and correction judgment without creating se
     fanoutFieldId: "HW-ASSIGNMENT-F-STUDENT-FANOUT-IDS",
   });
 
-  const planFlow = flows.find(({ id }) => id === "DF-012");
-  assert.equal(planFlow.steps.at(-1).actionId, "APP-ACT-CREATE-PLAN-TODO");
+  const home = app.objects.find(({ id }) => id === "APP-OBJ-STUDENT-HOME");
+  const homeFields = new Set(home.fields.map(({ id }) => id));
+  assert.equal([
+    "APP-HOME-F-SCHOOL-REQUIRED-REFS",
+    "APP-HOME-F-STUDENT-PENDING-REFS",
+    "APP-HOME-F-SYSTEM-PROCESSING-REFS",
+    "APP-HOME-F-PERSONAL-OPTIONAL-REFS",
+    "APP-HOME-F-COMPLETION-FACT-REFS",
+  ].every((fieldId) => homeFields.has(fieldId)), true);
+  assert.deepEqual(home.compartments, [
+    "SCHOOL_REQUIRED",
+    "STUDENT_PENDING",
+    "SYSTEM_PROCESSING",
+    "PERSONAL_OPTIONAL",
+  ]);
+  assert.equal(home.processingDelayPolicy, "DO_NOT_MUTATE_COMPLETION");
+  assert.match(home.completionOwnerRule, /originating activity, submission, or correction fact/);
+
+  const studentHomeFlow = flows.find(({ id }) => id === "DF-015");
+  assert.deepEqual(studentHomeFlow.moduleIds, ["HW-001", "SUB-001", "APP-001"]);
+  assert.deepEqual(studentHomeFlow.steps.map(({ actionId }) => actionId), [
+    "APP-ACT-BUILD-STUDENT-HOME",
+    "HW-ACT-OPEN-PUBLISHED",
+    "SUB-ACT-VIEW-RECEIPT",
+    "APP-ACT-REFRESH-TODOS",
+  ]);
 
   const correction = moduleById(requirementModel, "CORR-001");
   const attempt = correction.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
@@ -8969,7 +9065,7 @@ test("declares field-derived guard policies for every version-pinned reference",
     "UPDATE_REQUIRED",
     "ALWAYS_REQUIRED",
   ]);
-  assert.equal(pinnedRefs.length, 52);
+  assert.equal(pinnedRefs.length, 69);
   assert.equal(pinnedRefs.every(({ field }) => allowedPolicies.has(field.stateGuardPolicy)), true);
 
   const correction = moduleById(requirementModel, "CORR-001");
@@ -8988,7 +9084,7 @@ test("declares exact action applicability for every version-pinned reference", (
     object.fields.filter(({ referenceIntegrity }) => referenceIntegrity === "VERSION_PINNED")
       .map((field) => ({ module, object, field }))
   )));
-  assert.equal(pinnedRefs.length, 52);
+  assert.equal(pinnedRefs.length, 69);
   assert.equal(pinnedRefs.every(({ field }) => (
     field.actionApplicability
     && Object.keys(field.actionApplicability).length === 1
@@ -9338,14 +9434,13 @@ test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidati
       retry: ["VERSION_CONFLICT", "AUDIT_FAILED"],
     },
     "DF-012": {
-      modules: ["INS-001", "PLN-001", "APP-001"],
+      modules: ["INS-001", "PLN-001"],
       actions: [
         "INS-ACT-READ-CONFIRMED-EVIDENCE",
         "PLN-ACT-CREATE-CANDIDATE",
         "PLN-ACT-CONFIRM-PLAN",
         "PLN-ACT-SYNC-SUBJECT-TEACHER",
         "PLN-ACT-SYNC-HOMEROOM-COORDINATION",
-        "APP-ACT-CREATE-PLAN-TODO",
       ],
       identities: ["INS-EVIDENCE-F-ID"],
       versions: ["INS-EVIDENCE-F-EVIDENCE-VERSION"],
@@ -9353,12 +9448,11 @@ test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidati
       retry: ["SYNC_DELIVERY_FAILED", "VERSION_CONFLICT", "AUDIT_FAILED"],
     },
     "DF-014": {
-      modules: ["SCO-001", "INS-001", "PLN-001", "APP-001", "STU-001"],
+      modules: ["SCO-001", "INS-001", "PLN-001", "STU-001"],
       actions: [
         "SCO-ACT-READ-GRADEBOOK",
         "INS-ACT-READ-CONFIRMED-EVIDENCE",
         "PLN-ACT-VIEW-HOMEROOM-COORDINATION",
-        "APP-ACT-REFRESH-TODOS",
         "STU-ACT-BUILD-PROFILE",
       ],
       identities: [
@@ -9366,17 +9460,15 @@ test("defines exact DF-010 DF-012 and DF-014 action version retry and invalidati
         "INS-EVIDENCE-F-ID",
         "PLN-PLAN-F-ID",
         "PLN-HOMEROOM-F-ID",
-        "APP-TODO-F-ID",
       ],
       versions: [
         "SCO-VIEW-F-VIEW-VERSION",
         "INS-EVIDENCE-F-EVIDENCE-VERSION",
         "PLN-PLAN-F-PLAN-VERSION",
         "PLN-HOMEROOM-F-OUTPUT-VERSION",
-        "APP-TODO-F-AGGREGATION-VERSION",
       ],
-      fanout: "APP-TODO-F-STUDENT-REF",
-      retry: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT", "AUDIT_FAILED"],
+      fanout: "INS-EVIDENCE-F-STUDENT-REF",
+      retry: ["SOURCE_VERSION_STALE", "VERSION_CONFLICT"],
     },
   };
   const actionById = new Map(modules.flatMap((module) => (
@@ -9494,13 +9586,20 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["AUD-ACT-ARCHIVE-EVENT", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-ACCESS-REQUEST", "SYSTEM_EVENT"],
     ["AUD-ACT-OPEN-SESSION", "SYSTEM_EVENT"],
-    ["AUD-ACT-ACTIVATE-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-EXPIRE-SESSION", "SYSTEM_EVENT"],
     ["AUD-ACT-CLEAN-SHARED-DEVICE-SESSION", "SYSTEM_EVENT"],
     ["TEA-ACT-SYNC-TODO-VIEW", "SYSTEM_EVENT"],
+    ["HW-ACT-CREATE-PUBLICATION-SNAPSHOT", "FLOW_INTERNAL"],
+    ["HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW", "SYSTEM_EVENT"],
+    ["HW-ACT-CREATE-LATE-ENROLLEE-WINDOW", "SYSTEM_EVENT"],
+    ["HW-ACT-MARK-STUDENT-WINDOW-SUBMITTED", "FLOW_INTERNAL"],
+    ["HW-ACT-ADVANCE-STUDENT-WINDOW-TIME", "SYSTEM_EVENT"],
     ["HW-ACT-SYNC-RUBRIC", "SYSTEM_EVENT"],
     ["HW-ACT-PUBLISH-SCHEDULED", "SYSTEM_EVENT"],
     ["HW-ACT-RESOLVE-GRADING-SNAPSHOT", "FLOW_INTERNAL"],
+    ["SUB-ACT-EXPIRE-INTENT-CREDENTIAL", "SYSTEM_EVENT"],
+    ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION", "SYSTEM_EVENT"],
+    ["SUB-ACT-RECORD-INPUT-QUALITY", "FLOW_INTERNAL"],
     ["SUB-ACT-HANDOFF-ACCEPTED", "FLOW_INTERNAL"],
     ["GRD-ACT-SYNC-CAPABILITY-RULE", "SYSTEM_EVENT"],
     ["GRD-ACT-ENQUEUE", "FLOW_INTERNAL"],
@@ -9519,7 +9618,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
     ["PLN-ACT-SYNC-SUBJECT-TEACHER", "FLOW_INTERNAL"],
     ["PLN-ACT-SYNC-HOMEROOM-COORDINATION", "FLOW_INTERNAL"],
     ["PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM", "FLOW_INTERNAL"],
-    ["APP-ACT-CREATE-PLAN-TODO", "FLOW_INTERNAL"],
+    ["APP-ACT-BUILD-STUDENT-HOME", "FLOW_INTERNAL"],
     ["APP-ACT-CREATE-HOMEWORK-TODO", "FLOW_INTERNAL"],
     ["APP-ACT-REFRESH-TODOS", "FLOW_INTERNAL"],
     ["CORR-ACT-MARK-OVERDUE", "SYSTEM_EVENT"],
@@ -9557,7 +9656,7 @@ test("separates system and Flow actions from user pages and terminates audit rec
   const pages = modules.flatMap((module) => module.pages);
   const scenarios = modules.flatMap((module) => module.scenarios);
 
-  assert.equal(expectedModes.size, 83);
+  assert.equal(expectedModes.size, 90);
   for (const action of actions) {
     const expectedMode = expectedModes.get(action.id) ?? "USER_TASK";
     assert.equal(action.executionMode, expectedMode, action.id);
@@ -10038,7 +10137,7 @@ test("declares concrete success states for every foundation write action", () =>
     for (const action of module.actions.filter(({ writes }) => writes)) {
       assert.equal(
         successScenarioByActionId.get(action.id)?.then.expectedState.mode,
-        "STATE",
+        action.axisMutation ? "UNCHANGED" : "STATE",
         action.id,
       );
     }
@@ -10225,7 +10324,7 @@ test("keeps every Flow action participant and data reference valid and symmetric
     module.objects.map((object) => [object.id, { moduleId: module.id, object }])
   )));
 
-  assert.equal(flows.length, 14);
+  assert.equal(flows.length, 15);
   for (const flow of flows) {
     const actionModuleIds = new Set(flow.steps.map(({ actionId }) => moduleByActionId.get(actionId)));
     const sourceOnlyModuleIds = new Set(flow.sourceOnlyModuleIds ?? []);
@@ -10244,13 +10343,13 @@ test("keeps every Flow action participant and data reference valid and symmetric
   }
 });
 
-test("the validation CLI reports twenty-seven modules and fourteen Flows", () => {
+test("the validation CLI reports twenty-seven modules and fifteen Flows", () => {
   const output = execFileSync(
     process.execPath,
     ["tools/validate_v2_requirements.mjs"],
     { cwd: new URL("../..", import.meta.url), encoding: "utf8" },
   );
-  assert.equal(output, "validated modules=27 flows=14\n");
+  assert.equal(output, "validated modules=27 flows=15\n");
 });
 
 test("defines the immutable baseline decisions and teacher duty model", () => {
@@ -10631,7 +10730,31 @@ test("registers every required Option Set concept with stable code-label values"
     "supportCaseStatus",
     "contentPermissionScope",
     "contentLicenseStatus",
+    "activityPurpose",
+    "activityHelpMode",
+    "activityAnswerOpenPolicy",
+    "activityGovernanceStatus",
+    "activityOpenWindowStatus",
+    "activityArchiveStatus",
+    "activityParticipationStatus",
+    "activityTimeStatus",
+    "activityAiProcessingStatus",
     "activityStatus",
+    "intentCredentialStatus",
+    "teachingProblemStatus",
+    "teacherJudgmentType",
+    "linkedTeachingActionStatus",
+    "studentHomeCompartment",
+    "activityCancellationKind",
+    "activityCorrectionKind",
+    "lateEnrolleeWindowPolicy",
+    "uploadContentTrustClass",
+    "inputQualityFactStatus",
+    "cancelledActivityUnsubmittedHandling",
+    "cancelledActivityEvidenceDisposition",
+    "cancelledActivityDownstreamAction",
+    "diagnosticActivityUse",
+    "submissionTimelinessSource",
     "assignmentDraftStatus",
     "scheduleCandidateStatus",
     "platformCaseStatus",
@@ -10773,8 +10896,14 @@ test("registers every required Option Set concept with stable code-label values"
       "LEARNING-TASK",
     ],
     questionOrder: ["FIXED", "SHUFFLED"],
-    latePolicy: ["NOT-ALLOWED", "ALLOW-WITH-MARK", "ALLOW-UNTIL-DATE"],
-    resubmissionPolicy: ["NOT-ALLOWED", "BEFORE-DEADLINE", "AFTER-FEEDBACK", "AUTHORIZED-REOPENING"],
+    latePolicy: ["NOT-ALLOWED", "ALLOW-WITH-MARK", "ALLOW-UNTIL-DATE", "NOT-APPLICABLE"],
+    resubmissionPolicy: [
+      "NOT-ALLOWED",
+      "BEFORE-DEADLINE",
+      "AFTER-FEEDBACK",
+      "AUTHORIZED-REOPENING",
+      "NOT-APPLICABLE",
+    ],
     feedbackPolicy: ["WITH-SCORE-PUBLISH", "SCHEDULED", "AFTER-CORRECTION", "CLOSED"],
     aiConfidence: ["HIGH", "MEDIUM", "LOW", "UNAVAILABLE"],
     gradingCorrectionReason: [
@@ -10893,7 +11022,107 @@ test("registers every required Option Set concept with stable code-label values"
     supportCaseStatus: ["OPEN", "CLOSED"],
     contentPermissionScope: ["SCHOOL", "SUBJECT", "COURSE"],
     contentLicenseStatus: ["DRAFT", "ACTIVE"],
+    activityPurpose: [
+      "FORMAL_ASSIGNMENT",
+      "DAILY_PRACTICE",
+      "DIAGNOSTIC_ASSESSMENT",
+      "TEACHING_PRESENTATION",
+    ],
+    activityHelpMode: [
+      "NO_HELP",
+      "TEACHER_DEFINED",
+      "HINTS_ALLOWED",
+      "AI_TUTOR_ALLOWED",
+      "PRESENTATION_SUPPORT",
+    ],
+    activityAnswerOpenPolicy: [
+      "AFTER_SUBMISSION",
+      "AFTER_CORRECTION",
+      "AFTER_DEADLINE",
+      "SCHEDULED",
+      "NEVER",
+      "NOT_APPLICABLE",
+    ],
+    activityGovernanceStatus: ["DRAFT", "VALIDATED", "PUBLISHED", "CANCELLED"],
+    activityOpenWindowStatus: ["NOT_OPEN", "OPEN", "CLOSED"],
+    activityArchiveStatus: ["ACTIVE", "ARCHIVED"],
+    activityParticipationStatus: [
+      "NOT_STARTED",
+      "IN_PROGRESS",
+      "SUBMITTED",
+      "NO_SUBMISSION_EXPECTED",
+    ],
+    activityTimeStatus: ["NOT_DUE", "DUE", "LATE_WINDOW", "TIME_NOT_APPLICABLE"],
+    activityAiProcessingStatus: [
+      "NOT_REQUESTED",
+      "QUEUED",
+      "PROCESSING",
+      "COMPLETED",
+      "UNAVAILABLE",
+    ],
     activityStatus: ["PLANNED", "RECORDED"],
+    intentCredentialStatus: [
+      "ISSUED",
+      "COMPLETED",
+      "REJECTED",
+      "EXPIRED",
+      "PLATFORM_FAILURE_PROTECTED",
+    ],
+    teachingProblemStatus: [
+      "OPEN",
+      "CONFIRMED",
+      "DEFERRED",
+      "OBSERVING",
+      "RESOLVED",
+      "REOPENED",
+    ],
+    teacherJudgmentType: ["ACCEPT", "MODIFY", "REJECT", "DEFER", "MERGE"],
+    linkedTeachingActionStatus: [
+      "PROPOSED",
+      "PLANNED",
+      "IN_PROGRESS",
+      "COMPLETED",
+      "OBSERVING",
+      "CANCELLED",
+    ],
+    studentHomeCompartment: [
+      "SCHOOL_REQUIRED",
+      "STUDENT_PENDING",
+      "SYSTEM_PROCESSING",
+      "PERSONAL_OPTIONAL",
+    ],
+    activityCancellationKind: ["ADMINISTRATIVE", "CONTENT_RIGHT_ERROR", "REPLACED"],
+    activityCorrectionKind: ["NON_SEMANTIC", "ASSESSMENT_STANDARD"],
+    lateEnrolleeWindowPolicy: [
+      "FORMAL_SCHOOL_FULL_DURATION",
+      "DIAGNOSTIC_SHARED_WINDOW",
+      "DIAGNOSTIC_INDEPENDENT_WINDOW",
+      "NOT_APPLICABLE",
+    ],
+    uploadContentTrustClass: ["UNTRUSTED_DATA_ONLY"],
+    inputQualityFactStatus: ["NOT_DETECTED", "DETECTED", "UNKNOWN", "NOT_APPLICABLE"],
+    cancelledActivityUnsubmittedHandling: [
+      "REMOVE_REQUIRED_TASK",
+      "BLOCK_FURTHER_SUBMISSION",
+      "REDIRECT_TO_REPLACEMENT",
+    ],
+    cancelledActivityEvidenceDisposition: [
+      "PRESERVE_VALID",
+      "INVALIDATE_AFFECTED_ONLY",
+      "PRESERVE_WITH_ORIGINAL_ACTIVITY",
+    ],
+    cancelledActivityDownstreamAction: [
+      "REFRESH_STUDENT_HOME",
+      "REMOVE_UNSUBMITTED_TODOS",
+      "BLOCK_SUBMISSION",
+      "INVALIDATE_AFFECTED_DERIVATIONS",
+      "REDIRECT_TO_REPLACEMENT",
+    ],
+    diagnosticActivityUse: ["INTERNAL_LEARNING_DIAGNOSIS", "NOT_APPLICABLE"],
+    submissionTimelinessSource: [
+      "SERVER_RECEIPT_ACCEPTED_AT",
+      "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT",
+    ],
     assignmentDraftStatus: ["DRAFT", "READY_FOR_HANDOFF"],
     scheduleCandidateStatus: ["GENERATED", "REVIEWED", "CONFIRMED", "PUBLISHED", "STALE"],
     platformCaseStatus: ["OPEN", "SCHOOL_CONFIRMED"],
@@ -14280,12 +14509,17 @@ test("maps every formal HW draft input exactly once through a closed PREP handof
     contract.fieldBindings.map(({ targetFieldId }) => targetFieldId),
     formal.inputFieldIds,
   );
-  assert.equal(new Set(contract.fieldBindings.map(({ targetFieldId }) => targetFieldId)).size, 15);
+  assert.equal(
+    new Set(contract.fieldBindings.map(({ targetFieldId }) => targetFieldId)).size,
+    formal.inputFieldIds.length,
+  );
   assert.deepEqual(new Set(contract.fieldBindings.map(({ sourceKind }) => sourceKind)), new Set([
     "LESSON_FIELD",
     "GENERATED_PAYLOAD",
     "POLICY_DEFAULT",
     "TEACHER_REQUIRED",
+    "PUBLISHED_HELP_RULE_FIELD",
+    "ACTIVE_POLICY_FIELD",
   ]));
   const lessonSources = new Set(contract.fieldBindings
     .filter(({ sourceKind }) => sourceKind === "LESSON_FIELD")
@@ -14297,6 +14531,26 @@ test("maps every formal HW draft input exactly once through a closed PREP handof
     "PREP-LESSON-F-RUBRIC-VERSION",
     "PREP-LESSON-F-KNOWLEDGE-POINT-IDS",
   ]));
+  assert.deepEqual(
+    contract.fieldBindings.filter(({ sourceKind }) => (
+      sourceKind === "PUBLISHED_HELP_RULE_FIELD"
+    )),
+    [{
+      targetFieldId: "HW-ASSIGNMENT-F-HELP-RULE-REF",
+      sourceKind: "PUBLISHED_HELP_RULE_FIELD",
+      sourceObjectId: "HW-OBJ-HELP-RULE",
+      sourceFieldId: "HW-HELP-RULE-F-ID",
+      sourceVersionFieldId: "HW-HELP-RULE-F-VERSION",
+      requiredState: "PUBLISHED",
+    }, {
+      targetFieldId: "HW-ASSIGNMENT-F-HELP-RULE-VERSION",
+      sourceKind: "PUBLISHED_HELP_RULE_FIELD",
+      sourceObjectId: "HW-OBJ-HELP-RULE",
+      sourceFieldId: "HW-HELP-RULE-F-VERSION",
+      sourceVersionFieldId: "HW-HELP-RULE-F-VERSION",
+      requiredState: "PUBLISHED",
+    }],
+  );
   const payload = prep.objects.find(({ id }) => id === "PREP-OBJ-ASSIGNMENT-DRAFT")
     .fields.find(({ id }) => id === "PREP-DRAFT-F-CONTENT");
   assert.equal(payload.handoffPayloadSchema.additionalProperties, false);
@@ -14307,7 +14561,7 @@ test("maps every formal HW draft input exactly once through a closed PREP handof
   assert.deepEqual(payloadPaths, boundPayloadPaths);
   assert.deepEqual(contract.completionRule, {
     failureResult: "HANDOFF_INCOMPLETE",
-    requiredBindingCount: 15,
+    requiredBindingCount: formal.inputFieldIds.length,
     requireAllTeacherInputs: true,
     rejectUnknownPayloadFields: true,
   });
