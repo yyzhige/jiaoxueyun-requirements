@@ -18,6 +18,7 @@ import {
 } from "./contracts.mjs";
 import { renderModulePrd } from "./module-prd.mjs";
 import { markdownList, markdownTable, normalizeDocument } from "./markdown.mjs";
+import { isCurrentReleaseModule } from "./release.mjs";
 import { renderModuleWireframe } from "./wireframe.mjs";
 import { assertValidRequirementModel } from "../validate/index.mjs";
 
@@ -92,7 +93,9 @@ function roleActionRows(model) {
     ...list(model.duties).map((duty) => ({ kind: "附加职责", ...duty })),
   ];
   return actors.map((actor) => {
-    const actionIds = list(model.modules).flatMap((module) => (
+    const actionIds = list(model.modules)
+      .filter((module) => isCurrentReleaseModule(module, model))
+      .flatMap((module) => (
       list(module.actions).filter((action) => list(action.permissions).some((permission) => (
         permission.effect === "ALLOW"
         && [permission.actorRef, permission.roleRef, permission.dutyRef].includes(actor.id)
@@ -103,6 +106,8 @@ function roleActionRows(model) {
 }
 
 function renderReadme(model) {
+  const currentReleaseModules = list(model.modules)
+    .filter((module) => isCurrentReleaseModule(module, model));
   return normalizeDocument([
     "# 知序教学云 v2.0 需求交接包",
     markdownTable(
@@ -113,6 +118,8 @@ function renderReadme(model) {
         ["评审日期", model.reviewStatus.reviewedAt],
         ["事实源", "tools/requirements-v2/facts → fail-closed validators → renderers"],
         ["模块", list(model.modules).length],
+        ["第一阶段当前交付模块", currentReleaseModules.length],
+        ["规划模块", list(model.modules).length - currentReleaseModules.length],
         ["数据流", list(model.flows).length],
       ],
     ),
@@ -187,27 +194,28 @@ function renderReviewStatus(model) {
 
 function renderModulePackages(model) {
   return normalizeDocument([
-    "# 当前模块包索引",
+    "# 模块包索引（当前交付与规划）",
     markdownTable(
-      ["序号", "模块", "标题", "阶段", "优先级", "对象", "动作", "页面", "PRD", "页面合同"],
+      ["序号", "模块", "标题", "阶段", "交付状态", "当前交付", "优先级", "对象", "动作", "页面", "PRD", "页面合同"],
       [...list(model.modules)].sort((left, right) => (
         artifactMeta(left.id).index.localeCompare(artifactMeta(right.id).index)
       )).map((module) => {
         const prd = prdPath(module).replace(`${REQUIREMENT_PACKAGE_ROOT}/`, "../");
-        const wireframe = module.phase === 1
-          ? wireframePath(module).replace(`${REQUIREMENT_PACKAGE_ROOT}/`, "../")
-          : "第二阶段无可执行页面";
+        const wireframe = wireframePath(module)
+          .replace(`${REQUIREMENT_PACKAGE_ROOT}/`, "../");
         return [
           artifactMeta(module.id).index,
           module.id,
           module.title,
           module.phase,
+          module.releaseStatus,
+          isCurrentReleaseModule(module, model) ? "是" : "否",
           module.priority,
           list(module.objects).length,
           list(module.actions).length,
           list(module.pages).length,
           `[PRD](${prd})`,
-          module.phase === 1 ? `[页面合同](${wireframe})` : wireframe,
+          `[页面合同](${wireframe})`,
         ];
       }),
     ),
@@ -218,13 +226,15 @@ function renderCapabilityMatrix(model) {
   return normalizeDocument([
     "# 模块能力矩阵",
     markdownTable(
-      ["模块", "目标", "阶段", "优先级", "Web Page", "App Page", "系统/Flow Action", "AI Task", "基线", "NFR"],
+      ["模块", "目标", "阶段", "交付状态", "当前交付", "优先级", "Web Page", "App Page", "系统/Flow Action", "AI Task", "基线", "NFR"],
       list(model.modules).map((module) => {
         const actionIds = new Set(list(module.actions).map((action) => action.id));
         return [
           module.id,
           module.objective,
           module.phase,
+          module.releaseStatus,
+          isCurrentReleaseModule(module, model) ? "是" : "否",
           module.priority,
           list(module.pages).filter((page) => list(page.clients).includes("WEB")).map((page) => page.id).join("<br>"),
           list(module.pages).filter((page) => list(page.clients).includes("APP")).map((page) => page.id).join("<br>"),
@@ -259,11 +269,15 @@ function renderPageMap(model) {
   return normalizeDocument([
     "# Page 与原型映射",
     markdownTable(
-      ["模块", "Page ID", "页面", "端", "对象", "字段数", "Action", "页面合同"],
+      ["模块", "Page ID", "页面", "阶段", "交付状态", "页面可用性", "当前交付", "端", "对象", "字段数", "Action", "页面合同"],
       list(model.modules).flatMap((module) => list(module.pages).map((page) => [
         module.id,
         page.id,
         page.label,
+        module.phase,
+        module.releaseStatus,
+        page.availability ?? module.releaseStatus,
+        isCurrentReleaseModule(module, model) ? "是" : "否",
         list(page.clients).join(" / "),
         list(page.objectIds ?? [page.objectId]).filter(Boolean).join(" / "),
         list(page.fieldIds).length,
@@ -277,15 +291,18 @@ function renderPageMap(model) {
 function renderCurrentPackagesJson(model) {
   return `${JSON.stringify({
     reviewStatus: model.reviewStatus,
+    currentReleaseModuleIds: model.currentReleaseModuleIds,
     modules: [...list(model.modules)].sort((left, right) => (
       artifactMeta(left.id).index.localeCompare(artifactMeta(right.id).index)
     )).map((module) => ({
       id: module.id,
       title: module.title,
       phase: module.phase,
+      releaseStatus: module.releaseStatus,
+      currentRelease: isCurrentReleaseModule(module, model),
       priority: module.priority,
       prd: prdPath(module),
-      wireframe: module.phase === 1 ? wireframePath(module) : null,
+      wireframe: wireframePath(module),
       objectIds: list(module.objects).map((object) => object.id),
       actionIds: list(module.actions).map((action) => action.id),
       pageIds: list(module.pages).map((page) => page.id),
@@ -327,11 +344,12 @@ function renderGovernance(model) {
 }
 
 function renderHandoff(title, audience, model, focus) {
+  const currentReleaseIds = list(model.currentReleaseModuleIds).join(" / ");
   return normalizeDocument([
     `# ${title}`,
     `受众：${audience}。`,
     markdownList([
-      `只以 ${model.reviewStatus.code} 状态下生成的 Object、Field、Action、Flow、Page、Scenario 和 Metric ID 为实现范围。`,
+      `第一阶段实现范围只来自 currentReleaseModuleIds：${currentReleaseIds}；PLANNED 合同只用于目标评审和后续估算。`,
       focus,
       "发现字段、枚举、权限、状态或失败码缺失时，回到事实模型提出缺陷；不得在实现侧静默发明。",
       "第三方渠道和 AI 视频能力不在第一阶段实现范围。",
@@ -373,7 +391,7 @@ export function buildRequirementArtifacts(model) {
 
   for (const module of model.modules) {
     add(prdPath(module), renderModulePrd(module, model));
-    if (module.phase === 1) add(wireframePath(module), renderModuleWireframe(module, model));
+    add(wireframePath(module), renderModuleWireframe(module, model));
   }
 
   add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/authoritative-object-catalog.md`, renderAuthoritativeObjectCatalog(model));

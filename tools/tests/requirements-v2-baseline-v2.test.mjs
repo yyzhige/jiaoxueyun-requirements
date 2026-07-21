@@ -128,6 +128,9 @@ function validFixture(overrides = {}) {
 
   return {
     profile: "GENERIC",
+    currentReleaseModuleIds: module.releaseStatus === RELEASE_STATUS.BUILD_READY
+      ? [module.id]
+      : [],
     baselineDecisions: [{
       id: "BASELINE-DECISION-001",
       statement: "the baseline contract is explicit",
@@ -169,6 +172,17 @@ function assertHasCode(errors, code) {
 
 function assertOnlyCode(errors, code) {
   assert.deepEqual(errorCodes(errors), [code], errors.join("\n"));
+}
+
+function plannedDgvFixture(phase) {
+  const model = structuredClone(requirementModel);
+  const module = model.modules.find(({ id }) => id === "DGV-001");
+  module.phase = phase;
+  module.releaseStatus = RELEASE_STATUS.PLANNED;
+  module.pages.forEach((page) => { page.availability = RELEASE_STATUS.PLANNED; });
+  model.currentReleaseModuleIds = model.currentReleaseModuleIds
+    .filter((id) => id !== module.id);
+  return { model, module };
 }
 
 test("exports the finalized phase and release-status constants", () => {
@@ -316,6 +330,7 @@ test("preserves the legacy missing-model collection error contract", () => {
   for (const collection of LEGACY_MODEL_COLLECTIONS) {
     const fixture = validFixture();
     fixture.modules = [];
+    fixture.currentReleaseModuleIds = [];
     delete fixture[collection];
     assertOnlyCode(
       validateRequirementModel(fixture),
@@ -347,6 +362,9 @@ test("rejects missing and unknown module release statuses", () => {
     const fixture = validFixture();
     if (releaseStatus === undefined) delete fixture.modules[0].releaseStatus;
     else fixture.modules[0].releaseStatus = releaseStatus;
+    fixture.currentReleaseModuleIds = releaseStatus === RELEASE_STATUS.BUILD_READY
+      ? [fixture.modules[0].id]
+      : [];
 
     assertOnlyCode(
       validateRequirementModel(fixture),
@@ -389,4 +407,87 @@ test("keeps malformed and null inputs deterministic", () => {
   fixture.modules = [null];
   assert.doesNotThrow(() => prepareRequirementModel(fixture));
   assertHasCode(prepareRequirementModel(fixture).errors, "INVALID_ENTITY_SHAPE");
+});
+
+test("requires an explicit current-release manifest and excludes planned modules", () => {
+  const missing = validFixture();
+  delete missing.currentReleaseModuleIds;
+  assertHasCode(
+    validateRequirementModel(missing),
+    "INVALID_CURRENT_RELEASE_MANIFEST",
+  );
+
+  const planned = validFixture({
+    phase: PHASE.SECOND,
+    releaseStatus: RELEASE_STATUS.PLANNED,
+  });
+  planned.currentReleaseModuleIds = [planned.modules[0].id];
+  assertHasCode(
+    validateRequirementModel(planned),
+    "INVALID_CURRENT_RELEASE_MANIFEST",
+  );
+});
+
+test("requires planned pages to declare planned availability for phase two and three", () => {
+  for (const phase of [PHASE.SECOND, PHASE.THIRD]) {
+    const { model, module } = plannedDgvFixture(phase);
+    module.pages.forEach((page) => { delete page.availability; });
+
+    assertHasCode(
+      validateRequirementModel(model),
+      "INVALID_PAGE_AVAILABILITY",
+    );
+  }
+});
+
+test("fully validates executable planned modules in phase two and three", () => {
+  for (const phase of [PHASE.SECOND, PHASE.THIRD]) {
+    const { model } = plannedDgvFixture(phase);
+    assert.deepEqual(validateRequirementModel(model), []);
+
+    const invalidAction = plannedDgvFixture(phase);
+    delete invalidAction.module.actions[0].operationKind;
+    assertHasCode(
+      validateRequirementModel(invalidAction.model),
+      "INVALID_ACTION_CONTRACT",
+    );
+
+    const invalidPage = plannedDgvFixture(phase);
+    delete invalidPage.module.pages[0].label;
+    assertHasCode(
+      validateRequirementModel(invalidPage.model),
+      "INVALID_PAGE_CONTRACT",
+    );
+  }
+});
+
+test("rejects a build-ready Flow that contains a planned action", () => {
+  const model = structuredClone(requirementModel);
+  const flow = model.flows.find(({ steps }) => steps.some(({ actionId }) => actionId));
+  const actionId = flow.steps.find(({ actionId }) => actionId)?.actionId;
+  const actionModule = model.modules.find(({ actions }) => (
+    actions.some(({ id }) => id === actionId)
+  ));
+  actionModule.phase = PHASE.SECOND;
+  actionModule.releaseStatus = RELEASE_STATUS.PLANNED;
+  actionModule.pages.forEach((page) => { page.availability = RELEASE_STATUS.PLANNED; });
+  model.currentReleaseModuleIds = model.currentReleaseModuleIds
+    .filter((id) => id !== actionModule.id);
+
+  assertHasCode(
+    validateRequirementModel(model),
+    "INVALID_FLOW_RELEASE_BOUNDARY",
+  );
+});
+
+test("rejects current modules that depend on planned modules", () => {
+  const model = structuredClone(requirementModel);
+  model.modules.find(({ id }) => id === "DGV-001").dependencyModuleIds = [
+    "REPORT-001",
+  ];
+
+  assertHasCode(
+    validateRequirementModel(model),
+    "PHASE_DEPENDENCY_MISMATCH",
+  );
 });

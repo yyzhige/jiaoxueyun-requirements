@@ -1,5 +1,6 @@
 import {
   MODEL_COLLECTIONS,
+  RELEASE_STATUS,
   deepFreeze,
   defineRequirementModel,
 } from "../model.mjs";
@@ -76,6 +77,11 @@ export const modules = deepFreeze([
   ...aiReportingModules,
   ...extensionModules,
 ]);
+export const currentReleaseModuleIds = deepFreeze(
+  modules
+    .filter(({ releaseStatus }) => releaseStatus === RELEASE_STATUS.BUILD_READY)
+    .map(({ id }) => id),
+);
 export const flows = deepFreeze([
   ...foundationFlows,
   ...teachingLoopFlows,
@@ -136,6 +142,7 @@ export const requirementModel = defineRequirementModel({
   deliveryState,
   terminology,
   productInvariants,
+  currentReleaseModuleIds,
   ...Object.fromEntries(
     MODEL_COLLECTIONS.map(({ key }) => [key, collectionFacts[key]]),
   ),

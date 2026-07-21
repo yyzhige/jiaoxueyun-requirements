@@ -1,5 +1,6 @@
 import { buildModelIndex } from "./model-validator.mjs";
 import { formatValidationValue } from "./structure-validator.mjs";
+import { PHASE, RELEASE_STATUS } from "../model.mjs";
 import { resolveStudentDataClassification } from "../facts/student-data-classification.mjs";
 import {
   STUDENT_DETAIL_ACCESS_EXCEPTION_KIND,
@@ -1400,7 +1401,10 @@ function flowErrors(index) {
         .map((moduleId) => index.moduleById.get(moduleId)?.value?.phase)
         .filter((phase) => phase !== undefined),
     );
-    if (participantPhases.size !== 1 || !participantPhases.has(flow?.phase)) {
+    const participantPhasesValid = participantPhases.size > 0
+      && participantPhases.has(flow?.phase)
+      && [...participantPhases].every((phase) => phase <= flow?.phase);
+    if (!participantPhasesValid) {
       errors.push(
         `FLOW_PHASE_MISMATCH ${formatValidationValue(flow?.id)} phase=${formatValidationValue(flow?.phase)} participantPhases=${[...participantPhases].sort().join(",")}`,
       );
@@ -1413,6 +1417,16 @@ function flowErrors(index) {
         actionModuleIds.add(actionEntry.moduleId);
         stepActions.push(actionEntry.value);
       }
+    }
+    const containsPlannedAction = list(flow?.steps).some((step) => {
+      const actionEntry = index.actionById.get(step?.actionId);
+      return index.moduleById.get(actionEntry?.moduleId)?.value?.releaseStatus
+        === RELEASE_STATUS.PLANNED;
+    });
+    if (flow?.phase === PHASE.FIRST && containsPlannedAction) {
+      errors.push(
+        `INVALID_FLOW_RELEASE_BOUNDARY ${formatValidationValue(flow?.id)} a phase-one Flow cannot execute a planned action`,
+      );
     }
     const sourceOnlyModuleIds = new Set(list(flow?.sourceOnlyModuleIds));
     const expectedActionModuleIds = new Set(
@@ -3132,9 +3146,37 @@ function notificationChannelErrors(index) {
 
 function phaseAndTemplateErrors(index) {
   const errors = [];
+  const expectedCurrentReleaseModuleIds = new Set(
+    index.modules
+      .filter(({ value }) => value?.releaseStatus === RELEASE_STATUS.BUILD_READY)
+      .map(({ value }) => value.id),
+  );
+  const actualCurrentReleaseModuleIds = new Set(index.currentReleaseModuleIds);
+  if (!setEquals(expectedCurrentReleaseModuleIds, actualCurrentReleaseModuleIds)) {
+    errors.push(
+      `INVALID_CURRENT_RELEASE_MANIFEST expected=${[...expectedCurrentReleaseModuleIds].sort().join(",")} actual=${[...actualCurrentReleaseModuleIds].sort().join(",")}`,
+    );
+  }
   for (const moduleEntry of index.modules) {
     const module = moduleEntry.value;
-    const phaseTwoExecutable = [
+    for (const dependencyModuleId of list(module?.dependencyModuleIds)) {
+      const dependency = index.moduleById.get(dependencyModuleId)?.value;
+      if (
+        dependency
+        && (
+          dependency.phase > module?.phase
+          || (
+            module?.releaseStatus === RELEASE_STATUS.BUILD_READY
+            && dependency.releaseStatus !== RELEASE_STATUS.BUILD_READY
+          )
+        )
+      ) {
+        errors.push(
+          `PHASE_DEPENDENCY_MISMATCH ${formatValidationValue(module?.id)} -> ${formatValidationValue(dependencyModuleId)}`,
+        );
+      }
+    }
+    const metadataExecutable = [
       "actions",
       "pages",
       "scenarios",
@@ -3144,11 +3186,11 @@ function phaseAndTemplateErrors(index) {
       "deliveryBehavior",
     ].some((property) => list(module?.[property]).length > 0);
     if (
-      module?.phase === 2
-      && phaseTwoExecutable
+      module?.contractKind === "TASK8_REPORT_FUTURE_METADATA"
+      && metadataExecutable
     ) {
       errors.push(
-        `PHASE_BOUNDARY_EXECUTABLE_PAGE ${formatValidationValue(module?.id)} exposes pages or actions in phase two`,
+        `PHASE_BOUNDARY_EXECUTABLE_PAGE ${formatValidationValue(module?.id)} metadata-only contract exposes executable behavior`,
       );
     }
   }

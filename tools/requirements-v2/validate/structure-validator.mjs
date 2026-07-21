@@ -1607,10 +1607,25 @@ function validateAction(errors, action, path, strict) {
   }
 }
 
-function validatePage(errors, page, path, strict) {
+function validatePage(errors, page, path, strict, releaseStatus) {
   requireArray(errors, page, "fieldIds", path);
   requireArray(errors, page, "actionIds", path);
   optionalArray(errors, page, "objectIds", path);
+  if (
+    releaseStatus === RELEASE_STATUS.PLANNED
+    && page.availability !== RELEASE_STATUS.PLANNED
+  ) {
+    errors.push(
+      `INVALID_PAGE_AVAILABILITY ${path}.availability must be ${RELEASE_STATUS.PLANNED} for a planned module`,
+    );
+  } else if (
+    Object.hasOwn(page, "availability")
+    && page.availability !== releaseStatus
+  ) {
+    errors.push(
+      `INVALID_PAGE_AVAILABILITY ${path}.availability=${formatValidationValue(page.availability)} does not match module releaseStatus=${formatValidationValue(releaseStatus)}`,
+    );
+  }
   if (!strict) return;
   contractString(errors, page, "label", path, "INVALID_PAGE_CONTRACT");
   for (const property of ["fieldIds", "actionIds"]) {
@@ -1744,7 +1759,24 @@ function validateModule(errors, module, path) {
       `INVALID_PHASE_RELEASE_STATUS ${path}.releaseStatus=${formatValidationValue(module.releaseStatus)} is not valid for phase=${formatValidationValue(module.phase)}`,
     );
   }
-  const strict = module.phase === PHASE.FIRST;
+  const metadataOnly = (
+    module.contractKind === "TASK8_REPORT_FUTURE_METADATA"
+  );
+  if (metadataOnly && module.releaseStatus !== RELEASE_STATUS.PLANNED) {
+    errors.push(
+      `INVALID_MODULE_CONTRACT ${path}.contractKind=${module.contractKind} is reserved for planned metadata`,
+    );
+  }
+  const strict = !metadataOnly;
+  if (Object.hasOwn(module, "dependencyModuleIds")) {
+    contractStringArray(
+      errors,
+      module,
+      "dependencyModuleIds",
+      path,
+      "INVALID_MODULE_DEPENDENCY",
+    );
+  }
   if (strict) {
     for (const property of ["priority", "title", "objective"]) {
       contractString(errors, module, property, path, "INVALID_MODULE_CONTRACT");
@@ -1805,7 +1837,7 @@ function validateModule(errors, module, path) {
     validateAction(errors, action, actionPath, strict);
   });
   validateEntities(errors, pages, `${path}.pages`, "page", (page, pagePath) => {
-    validatePage(errors, page, pagePath, strict);
+    validatePage(errors, page, pagePath, strict, module.releaseStatus);
   });
   validateEntities(errors, scenarios, `${path}.scenarios`, "scenario", (scenario, scenarioPath) => {
     validateScenario(errors, scenario, scenarioPath, strict);
@@ -1861,8 +1893,8 @@ function validateFlow(errors, flow, path) {
       `INVALID_FLOW_PROFILE ${path} GENERIC forbids specialized participant roles`,
     );
   }
-  if (![1, 2].includes(flow.phase)) {
-    errors.push(`INVALID_FLOW_CONTRACT ${path}.phase must be 1 or 2`);
+  if (!MODULE_PHASES.has(flow.phase)) {
+    errors.push(`INVALID_FLOW_CONTRACT ${path}.phase must be 1, 2, or 3`);
   }
   if (!FLOW_ROUTING_POLICIES.has(flow.routingPolicy)) {
     errors.push(
@@ -3214,6 +3246,13 @@ function validateModelShape(model) {
   } else if (hasProductionMarker && model.profile !== "ZHIXU_V2") {
     errors.push("INVALID_MODEL_PROFILE production foundation modules require ZHIXU_V2");
   }
+  contractStringArray(
+    errors,
+    model,
+    "currentReleaseModuleIds",
+    "model",
+    "INVALID_CURRENT_RELEASE_MANIFEST",
+  );
   if (model.profile === "ZHIXU_V2") validateProductBaselineMetadata(errors, model);
   for (const property of REQUIRED_MODEL_COLLECTIONS) {
     if (!Array.isArray(model[property])) {

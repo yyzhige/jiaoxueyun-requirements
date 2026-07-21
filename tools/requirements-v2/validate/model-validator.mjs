@@ -233,6 +233,7 @@ export function buildModelIndex(model) {
     baselineChapterById: mapById(baselineChapters),
     baselineDecisionById: mapById(baselineDecisions),
     baselineDecisions,
+    currentReleaseModuleIds: list(model?.currentReleaseModuleIds),
     duties,
     dutyIds,
     extensions,
@@ -812,6 +813,13 @@ export function validateModelReferences(model) {
   }
 
   for (const moduleEntry of index.modules) {
+    for (const dependencyModuleId of list(moduleEntry.value?.dependencyModuleIds)) {
+      if (!index.moduleById.has(dependencyModuleId)) {
+        errors.push(
+          `MISSING_MODULE_DEPENDENCY ${formatValidationValue(moduleEntry.value?.id)} -> ${formatValidationValue(dependencyModuleId)}`,
+        );
+      }
+    }
     for (const baselineDecisionId of list(moduleEntry.value?.baselineDecisionIds)) {
       if (!index.baselineDecisionById.has(baselineDecisionId)) {
         errors.push(
@@ -825,6 +833,14 @@ export function validateModelReferences(model) {
           `MISSING_NFR_REFERENCE ${formatValidationValue(moduleEntry.value?.id)} -> ${formatValidationValue(nfrId)}`,
         );
       }
+    }
+  }
+
+  for (const moduleId of index.currentReleaseModuleIds) {
+    if (!index.moduleById.has(moduleId)) {
+      errors.push(
+        `MISSING_CURRENT_RELEASE_MODULE ${formatValidationValue(moduleId)}`,
+      );
     }
   }
 

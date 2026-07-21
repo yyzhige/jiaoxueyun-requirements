@@ -42,9 +42,9 @@ function renderableModel() {
 
 test("publishes the passed semantic review status as a source fact", () => {
   assert.deepEqual(requirementModel.reviewStatus, {
-    code: "PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED",
-    label: "v2.0 product fact source; semantic review passed",
-    reviewedAt: "2026-07-16",
+    code: "PRODUCT_BASELINE_V2_FINALIZED_FACTS_ENCODED",
+    label: "README v2.0 finalized product baseline facts encoded; D003-D096 closed",
+    reviewedAt: "2026-07-20",
   });
 });
 
@@ -90,14 +90,38 @@ test("renders student task pages instead of a generic workbench template", () =>
   assert.doesNotMatch(output, /列表\/工作台|详情\/处理页|历史\/审计页/);
 });
 
-test("renders REPORT as extension metadata without executable contracts", () => {
+test("renders REPORT as an independent planned metadata contract", () => {
   const output = renderModulePrd(moduleById("REPORT-001"), requirementModel);
 
-  assert.match(output, /第二阶段扩展登记/);
+  assert.match(output, /规划元数据登记/);
+  assert.match(output, /^交付状态：PLANNED；本文是目标产品需求合同，不表示该能力已上线或属于第一阶段交付。/);
   assert.match(output, /REPORT-OBJ-FUTURE-CONTRACT/);
   assert.match(output, /unresolvedProductDecisions/);
   assert.doesNotMatch(output, /## 可执行动作|Page ID|Scenario ID/);
-  assert.equal(renderModuleWireframe(moduleById("REPORT-001"), requirementModel), "");
+  assert.match(
+    renderModuleWireframe(moduleById("REPORT-001"), requirementModel),
+    /^交付状态：PLANNED；本文是目标产品需求合同，不表示该能力已上线或属于第一阶段交付。/,
+  );
+});
+
+test("renders phase-two and phase-three modules as planned contracts with banners", () => {
+  for (const phase of [2, 3]) {
+    const module = structuredClone(moduleById("DGV-001"));
+    module.phase = phase;
+    module.releaseStatus = "PLANNED";
+    module.pages.forEach((page) => { page.availability = "PLANNED"; });
+
+    for (const output of [
+      renderModulePrd(module, requirementModel),
+      renderModuleWireframe(module, requirementModel),
+    ]) {
+      assert.match(
+        output,
+        /^交付状态：PLANNED；本文是目标产品需求合同，不表示该能力已上线或属于第一阶段交付。/,
+      );
+      assert.match(output, /DGV-001/);
+    }
+  }
 });
 
 test("renders traceability across every implementation contract namespace", () => {
@@ -245,7 +269,7 @@ test("renders metric statistic target and event calculation facts", () => {
   assert.match(output, /EVT-TEACHER-OPERATION-STARTED/);
 });
 
-test("builds one deterministic artifact set with no phase-two wireframe", () => {
+test("builds one deterministic artifact set with planned contracts and release manifest", () => {
   const missingStatus = structuredClone(requirementModel);
   delete missingStatus.reviewStatus;
   assert.throws(
@@ -256,12 +280,21 @@ test("builds one deterministic artifact set with no phase-two wireframe", () => 
   const first = buildRequirementArtifacts(model);
   const second = buildRequirementArtifacts(model);
   const paths = first.map(({ path }) => path);
+  const manifestArtifact = first.find(({ path }) => (
+    path.endsWith("02-indexes/current-module-packages.json")
+  ));
+  const manifest = JSON.parse(manifestArtifact.content);
 
   assert.deepEqual(first, second);
   assert.equal(new Set(paths).size, paths.length);
   assert.equal(paths.filter((path) => path.includes("/03-full-prd-md/")).length, 27);
-  assert.equal(paths.filter((path) => path.includes("/05-wireframe-contracts/")).length, 26);
-  assert.equal(paths.some((path) => path.includes("REPORT-001") && path.includes("wireframe")), false);
+  assert.equal(paths.filter((path) => path.includes("/05-wireframe-contracts/")).length, 27);
+  assert.equal(paths.some((path) => path.includes("guardian-report-sharing-wireframe")), true);
+  assert.deepEqual(manifest.currentReleaseModuleIds, model.currentReleaseModuleIds);
+  const reportManifest = manifest.modules.find(({ id }) => id === "REPORT-001");
+  assert.equal(reportManifest.releaseStatus, "PLANNED");
+  assert.equal(reportManifest.currentRelease, false);
+  assert.match(reportManifest.wireframe, /05-wireframe-contracts/);
   assert.equal(paths.includes("docs/requirements/zhixu-handoff-v2.0/02-indexes/requirement-traceability.md"), true);
   assert.equal(first.every(({ content }) => content.endsWith("\n")), true);
   assert.equal(first.some(({ content }) => content.includes("[object Object]")), false);
@@ -287,7 +320,7 @@ test("generator validates and writes only the semantic artifact set", () => {
         packageRoot,
         "05-wireframe-contracts/26-guardian-report-sharing-wireframe.zh-CN.md",
       )),
-      false,
+      true,
     );
     const trace = readFileSync(
       path.join(packageRoot, "02-indexes/requirement-traceability.md"),

@@ -7,6 +7,7 @@ import {
   stateText,
   valueSourceText,
 } from "./markdown.mjs";
+import { renderReleaseBanner } from "./release.mjs";
 
 const list = (value) => (Array.isArray(value) ? value : []);
 
@@ -19,8 +20,6 @@ export function renderModuleWireframe(module) {
   if (!module || typeof module !== "object") {
     throw new TypeError("renderModuleWireframe requires a module fact");
   }
-  if (module.phase === 2) return "";
-
   const fieldById = new Map(list(module.objects).flatMap((object) => (
     list(object.fields).map((field) => [field.id, { object, field }])
   )));
@@ -31,8 +30,9 @@ export function renderModuleWireframe(module) {
     return normalizeDocument([
       `## ${page.id} ${page.label}`,
       markdownTable(
-        ["适用端", "对象", "区域", "视图状态"],
+        ["交付可用性", "适用端", "对象", "区域", "视图状态"],
         [[
+          page.availability ?? module.releaseStatus,
           list(page.clients).join(" / "),
           list(page.objectIds ?? [page.objectId]).filter(Boolean).join(" / "),
           list(page.regions).join(" / "),
@@ -89,12 +89,14 @@ export function renderModuleWireframe(module) {
   });
 
   return normalizeDocument([
+    renderReleaseBanner(module),
     `# ${module.id} ${module.title} Web/App 页面合同 v2.0`,
     markdownTable(
       ["属性", "值"],
       [
         ["模块", module.id],
         ["阶段", module.phase],
+        ["交付状态", module.releaseStatus],
         ["页面数量", list(module.pages).length],
         ["端原则", "同一事实与权限合同，按端任务频率和复杂度差异化"],
       ],

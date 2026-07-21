@@ -10,6 +10,7 @@ import {
   stateText,
   valueSourceText,
 } from "./markdown.mjs";
+import { renderReleaseBanner } from "./release.mjs";
 
 const list = (value) => (Array.isArray(value) ? value : []);
 
@@ -29,19 +30,21 @@ function transitionText(action) {
     : "UNCHANGED";
 }
 
-function renderExtensionModule(module) {
+function renderMetadataModule(module) {
   const metadataRows = list(module.objects).flatMap((object) => (
     Object.entries(object)
       .filter(([key]) => !["id", "label", "fields", "states"].includes(key))
       .map(([key, value]) => [object.id, key, JSON.stringify(value)])
   ));
   return normalizeDocument([
-    `# ${module.id} 第二阶段扩展登记`,
+    renderReleaseBanner(module),
+    `# ${module.id} 规划元数据登记`,
     markdownTable(
       ["属性", "值"],
       [
         ["模块标题", module.title],
         ["阶段", module.phase],
+        ["交付状态", module.releaseStatus],
         ["优先级", module.priority],
         ["合同类型", module.contractKind],
         ["目标", module.objective],
@@ -131,24 +134,29 @@ export function renderModulePrd(module, model) {
   if (!module || typeof module !== "object") {
     throw new TypeError("renderModulePrd requires a module fact");
   }
-  if (module.phase === 2) return renderExtensionModule(module);
+  if (module.contractKind === "TASK8_REPORT_FUTURE_METADATA") {
+    return renderMetadataModule(module);
+  }
 
   const moduleFlows = list(model.flows).filter((flow) => list(flow.moduleIds).includes(module.id));
   const actionIds = new Set(list(module.actions).map((action) => action.id));
   const moduleAiTasks = list(model.aiTasks).filter((task) => actionIds.has(task.actionId));
 
   return normalizeDocument([
+    renderReleaseBanner(module),
     `# ${module.id} ${module.title} PRD v2.0`,
     markdownTable(
       ["属性", "值"],
       [
         ["阶段", module.phase],
+        ["交付状态", module.releaseStatus],
         ["优先级", module.priority],
         ["目标", module.objective],
         ["基线决策", joinIds(module.baselineDecisionIds)],
         ["NFR", joinIds(module.nfrIds)],
         ["进入条件", list(module.entryConditions).join("；")],
         ["退出条件", list(module.exitConditions).join("；")],
+        ["依赖模块", joinIds(module.dependencyModuleIds)],
       ],
     ),
     "## 1. 范围与事实边界",
@@ -243,10 +251,11 @@ export function renderModulePrd(module, model) {
     ),
     "## 8. 页面任务合同",
     markdownTable(
-      ["Page ID", "页面", "端", "对象", "字段", "动作", "区域", "视图状态"],
+      ["Page ID", "页面", "交付可用性", "端", "对象", "字段", "动作", "区域", "视图状态"],
       list(module.pages).map((page) => [
         page.id,
         page.label,
+        page.availability ?? module.releaseStatus,
         list(page.clients).join(" / "),
         list(page.objectIds ?? [page.objectId]).filter(Boolean).join("<br>"),
         list(page.fieldIds).join("<br>"),

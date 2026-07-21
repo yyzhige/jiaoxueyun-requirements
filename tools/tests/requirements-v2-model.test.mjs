@@ -24,6 +24,7 @@ import {
 import {
   baselineDecisions,
   baselineChapters,
+  currentReleaseModuleIds,
   deliveryState,
   duties,
   events,
@@ -265,6 +266,7 @@ function validFixture() {
   ];
   return {
     profile: "GENERIC",
+    currentReleaseModuleIds: ["SUB-001", "HW-001"],
     baselineDecisions: [{
       id: "BASE-TEST",
       statement: "fixture baseline decision",
@@ -390,6 +392,7 @@ function validFixture() {
       id: "REPORT-TEST",
       phase: PHASE.SECOND,
       releaseStatus: RELEASE_STATUS.PLANNED,
+      contractKind: "TASK8_REPORT_FUTURE_METADATA",
       objects: [validObject("DAT-REPORT-01", "ROLE-TEACHER", validField("REPORT-F001"), {
         states: ["AVAILABLE", "GENERATED"],
       })],
@@ -3535,6 +3538,19 @@ test("rejects a Flow phase that differs from its participant modules", () => {
   assertHasCode(validateRequirementModel(model), "FLOW_PHASE_MISMATCH");
 });
 
+test("accepts a phase-three Flow with a phase-three planned participant", () => {
+  const model = validFixture();
+  const submission = moduleById(model, "SUB-001");
+  submission.phase = PHASE.THIRD;
+  submission.releaseStatus = RELEASE_STATUS.PLANNED;
+  submission.pages.forEach((page) => { page.availability = RELEASE_STATUS.PLANNED; });
+  model.currentReleaseModuleIds = model.currentReleaseModuleIds
+    .filter((id) => id !== submission.id);
+  model.flows[0].phase = PHASE.THIRD;
+
+  assert.deepEqual(validateRequirementModel(model), []);
+});
+
 test("rejects null and non-object requirement models", () => {
   for (const model of [null, 42, "requirement model"]) {
     assert.deepEqual(validateRequirementModel(model), [
@@ -3548,6 +3564,7 @@ test("rejects missing required top-level collections", () => {
     validateRequirementModel({}),
     [
       "INVALID_MODEL_PROFILE model.profile must be GENERIC or ZHIXU_V2",
+      "INVALID_CURRENT_RELEASE_MANIFEST model.currentReleaseModuleIds must be an array",
       ...REQUIRED_COLLECTION_NAMES
         .map((name) => {
           const code = BASELINE_V2_COLLECTION_NAMES.has(name)
@@ -3593,6 +3610,7 @@ test("publishes one frozen manifest for required top-level collections", () => {
       "deliveryState",
       "terminology",
       "productInvariants",
+      "currentReleaseModuleIds",
       ...expected.map(({ key }) => key),
     ],
   );
@@ -3601,6 +3619,7 @@ test("publishes one frozen manifest for required top-level collections", () => {
 test("accepts explicitly present empty top-level collections", () => {
   assert.deepEqual(validateRequirementModel({
     profile: "GENERIC",
+    currentReleaseModuleIds: [],
     baselineDecisions: [],
     roles: [],
     duties: [],
@@ -3631,6 +3650,7 @@ test("assembles the shared facts into the phase-one executable model", () => {
     deliveryState,
     terminology,
     productInvariants,
+    currentReleaseModuleIds,
     baselineDecisions,
     roles,
     duties,
@@ -12665,7 +12685,7 @@ test("rejects scenario coverage whose IDs do not match the action", () => {
   assertHasCode(errors, "MISSING_ACTION_SCENARIO");
 });
 
-test("rejects phase-two page contracts independently of actions", () => {
+test("rejects metadata-only planned page contracts independently of actions", () => {
   const model = validFixture();
   const reportModule = moduleById(model, "REPORT-TEST");
   assert.deepEqual(reportModule.actions, []);
@@ -12681,7 +12701,7 @@ test("rejects phase-two page contracts independently of actions", () => {
   assertHasCode(errors, "PHASE_BOUNDARY_EXECUTABLE_PAGE");
 });
 
-test("rejects executable phase-two actions independently of pages", () => {
+test("rejects metadata-only planned actions independently of pages", () => {
   const model = validFixture();
   const reportModule = moduleById(model, "REPORT-TEST");
   assert.deepEqual(reportModule.pages, []);
