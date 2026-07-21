@@ -24,6 +24,7 @@ import {
 import {
   baselineDecisions,
   baselineChapters,
+  deliveryState,
   duties,
   events,
   extensions,
@@ -35,7 +36,10 @@ import {
   nfrs,
   optionSets,
   phases,
+  productBaseline,
   productDecisions,
+  productInvariants,
+  terminology,
   aiTasks,
   flows,
   modules,
@@ -3582,7 +3586,15 @@ test("publishes one frozen manifest for required top-level collections", () => {
   assertDeepFrozen(requirementModelExports.MODEL_COLLECTIONS);
   assert.deepEqual(
     Object.keys(requirementModel),
-    ["profile", "reviewStatus", ...expected.map(({ key }) => key)],
+    [
+      "profile",
+      "reviewStatus",
+      "productBaseline",
+      "deliveryState",
+      "terminology",
+      "productInvariants",
+      ...expected.map(({ key }) => key),
+    ],
   );
 });
 
@@ -3615,6 +3627,10 @@ test("assembles the shared facts into the phase-one executable model", () => {
   assert.deepEqual(requirementModel, {
     profile: "ZHIXU_V2",
     reviewStatus,
+    productBaseline,
+    deliveryState,
+    terminology,
+    productInvariants,
     baselineDecisions,
     roles,
     duties,
@@ -10326,6 +10342,20 @@ test("defines measurable metric event contracts and all approved NFRs", () => {
         target: "100%",
         statistic: null,
       },
+      {
+        id: "MET-006",
+        ownerRef: "ROLE-SCHOOL-ADMIN",
+        aggregation: "count",
+        target: "0",
+        statistic: null,
+      },
+      {
+        id: "MET-007",
+        ownerRef: "ROLE-PLATFORM-OPS",
+        aggregation: "count",
+        target: "0",
+        statistic: null,
+      },
     ],
   );
   assert.equal(metrics.every((metric) => (
@@ -10428,12 +10458,12 @@ test("defines measurable metric event contracts and all approved NFRs", () => {
       {
         id: "NFR-005",
         ownerRef: null,
-        statement: "App 在临时断网后保留文本草稿和媒体上传草稿；最终提交成功必须以服务器回执为准。",
+        statement: "App 在临时断网后保留文本草稿和媒体上传草稿；正常提交以服务器回执为准，弱网按时保护使用截止前服务端提交意图凭证、固定内容清单摘要和限定补齐窗口。",
       },
       {
         id: "NFR-006",
         ownerRef: null,
-        statement: "AI 任务采用异步状态并提供排队中、处理中和人工兜底；AI 不得阻断人工评分或发布。",
+        statement: "AI 任务采用异步处理、发布、争议纠正和有效性状态轴；AI 超时、失败或不可用时不得伪造结果、改变按时事实或绕过必要门禁。",
       },
       {
         id: "NFR-007",
@@ -10698,7 +10728,7 @@ test("registers every required Option Set concept with stable code-label values"
     ],
     questionOrder: ["FIXED", "SHUFFLED"],
     latePolicy: ["NOT-ALLOWED", "ALLOW-WITH-MARK", "ALLOW-UNTIL-DATE"],
-    resubmissionPolicy: ["NOT-ALLOWED", "BEFORE-DEADLINE", "AFTER-FEEDBACK", "TEACHER-APPROVAL"],
+    resubmissionPolicy: ["NOT-ALLOWED", "BEFORE-DEADLINE", "AFTER-FEEDBACK", "AUTHORIZED-REOPENING"],
     feedbackPolicy: ["WITH-SCORE-PUBLISH", "SCHEDULED", "AFTER-CORRECTION", "CLOSED"],
     aiConfidence: ["HIGH", "MEDIUM", "LOW", "UNAVAILABLE"],
     gradingCorrectionReason: [

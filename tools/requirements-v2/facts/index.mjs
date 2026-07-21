@@ -4,6 +4,18 @@ import {
   defineRequirementModel,
 } from "../model.mjs";
 import {
+  baselineChapters,
+  deliveryState,
+  phases,
+  productBaseline,
+  productDecisions,
+  productInvariants,
+  releaseStatuses,
+  terminology,
+} from "./product-baseline-v2.mjs";
+import { migrationChanges } from "./baseline-migration.mjs";
+import { launchGates, metricGroups } from "./launch-governance.mjs";
+import {
   baselineDecisions,
   duties,
   events as catalogEvents,
@@ -75,17 +87,24 @@ export const aiTasks = deepFreeze([
   ...extensionAiTasks,
 ]);
 
-export const phases = deepFreeze([]);
-export const productDecisions = deepFreeze([]);
-export const baselineChapters = deepFreeze([]);
-export const migrationChanges = deepFreeze([]);
-export const metricGroups = deepFreeze([]);
-export const launchGates = deepFreeze([]);
+export {
+  baselineChapters,
+  deliveryState,
+  phases,
+  productBaseline,
+  productDecisions,
+  productInvariants,
+  releaseStatuses,
+  terminology,
+  migrationChanges,
+  metricGroups,
+  launchGates,
+};
 
 export const reviewStatus = deepFreeze({
-  code: "PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED",
-  label: "v2.0 product fact source; semantic review passed",
-  reviewedAt: "2026-07-16",
+  code: "PRODUCT_BASELINE_V2_FINALIZED_FACTS_ENCODED",
+  label: "README v2.0 finalized product baseline facts encoded; D003-D096 closed",
+  reviewedAt: "2026-07-20",
 });
 
 const collectionFacts = {
@@ -113,6 +132,10 @@ const collectionFacts = {
 export const requirementModel = defineRequirementModel({
   profile: "ZHIXU_V2",
   reviewStatus,
+  productBaseline,
+  deliveryState,
+  terminology,
+  productInvariants,
   ...Object.fromEntries(
     MODEL_COLLECTIONS.map(({ key }) => [key, collectionFacts[key]]),
   ),

@@ -8,6 +8,18 @@ import {
 } from "../requirements-v2/model.mjs";
 import { validateRequirementModel } from "../requirements-v2/validate/index.mjs";
 import { prepareRequirementModel } from "../requirements-v2/validate/structure-validator.mjs";
+import {
+  baselineChapters,
+  baselineDecisions,
+  launchGates,
+  metricGroups,
+  metrics,
+  migrationChanges,
+  phases,
+  productBaseline,
+  productDecisions,
+  requirementModel,
+} from "../requirements-v2/facts/index.mjs";
 
 const NEW_BASELINE_COLLECTIONS = [
   "phases",
@@ -32,6 +44,66 @@ const LEGACY_MODEL_COLLECTIONS = [
   "flows",
   "aiTasks",
   "extensions",
+];
+
+const EXPECTED_BASELINE_CHAPTER_IDS = [
+  "BASE-CH-PRINCIPLES",
+  "BASE-CH-PRINCIPLES-AI-NATIVE",
+  "BASE-CH-PRINCIPLES-HUMAN-RESPONSIBILITY",
+  "BASE-CH-PRINCIPLES-CHANGE-CONTROL",
+  "BASE-CH-SCOPE-PHASES",
+  "BASE-CH-SCOPE-GRADES-SUBJECTS",
+  "BASE-CH-PHASE-1",
+  "BASE-CH-PHASE-2",
+  "BASE-CH-PHASE-3",
+  "BASE-CH-DATA-KNOWLEDGE",
+  "BASE-CH-COGNITION-LAYERS",
+  "BASE-CH-MATERIAL-RIGHTS",
+  "BASE-CH-CAPABILITY-MAPPING",
+  "BASE-CH-SCHOOL-GOVERNANCE",
+  "BASE-CH-SCHOOL-ACTIVATION",
+  "BASE-CH-TEACHING-RELATIONSHIPS",
+  "BASE-CH-PERMISSION-GOVERNANCE",
+  "BASE-CH-IDENTITY-GUARDIAN",
+  "BASE-CH-IDENTITY-SEPARATION",
+  "BASE-CH-LOGIN-RECOVERY",
+  "BASE-CH-ROSTER-CLAIM",
+  "BASE-CH-GUARDIAN-ASSISTANCE",
+  "BASE-CH-ROLE",
+  "BASE-CH-TEACHER-EXPERIENCE",
+  "BASE-CH-STUDENT-EXPERIENCE",
+  "BASE-CH-NOTIFICATION-ACCESSIBILITY",
+  "BASE-CH-ACTIVITY-EVIDENCE",
+  "BASE-CH-ACTIVITY-PURPOSE",
+  "BASE-CH-ACTIVITY-LIFECYCLE",
+  "BASE-CH-ORIGINAL-SUBMISSION",
+  "BASE-CH-TIMELINESS-CORRECTION",
+  "BASE-CH-HELP-EVIDENCE",
+  "BASE-CH-AI-ASSESSMENT",
+  "BASE-CH-ASSESSMENT-RUBRIC",
+  "BASE-CH-ASSESSMENT-RESULT",
+  "BASE-CH-FEEDBACK-ANSWER",
+  "BASE-CH-AI-SAFETY-BOUNDARY",
+  "BASE-CH-VIDEO",
+  "BASE-CH-VIDEO-TYPES",
+  "BASE-CH-VIDEO-ASSET-ACCESS",
+  "BASE-CH-VIDEO-VERIFICATION",
+  "BASE-CH-PROGRESS",
+  "BASE-CH-DUAL-PROGRESS",
+  "BASE-CH-MASTERY-VISIBILITY",
+  "BASE-CH-CORRECTION-REVIEW",
+  "BASE-CH-DATA-RIGHTS",
+  "BASE-CH-TRANSFER-HISTORY",
+  "BASE-CH-DELETION",
+  "BASE-CH-SEARCH-EXPORT",
+  "BASE-CH-EXTERNAL-AI",
+  "BASE-CH-COMMERCIAL",
+  "BASE-CH-LAYERED-GOVERNANCE",
+  "BASE-CH-COMMERCIAL-BOUNDARY",
+  "BASE-CH-VIDEO-QUOTA",
+  "BASE-CH-LAUNCH",
+  "BASE-CH-METRICS",
+  "BASE-CH-LAUNCH-GATES",
 ];
 
 function validFixture(overrides = {}) {
@@ -109,6 +181,109 @@ test("exports the finalized phase and release-status constants", () => {
   assert.equal(Object.isFrozen(RELEASE_STATUS), true);
 });
 
+test("encodes the finalized README v2.0 baseline and all D003-D096 decisions", () => {
+  assert.deepEqual(productBaseline, {
+    id: "ZHIXU-PRODUCT-BASELINE-V2",
+    version: "v2.0",
+    decisionState: "finalized",
+    baselineDate: "2026-07-20",
+    sourcePath: "/Users/a1234/Desktop/student/README.md",
+  });
+  assert.deepEqual(phases.map(({ id }) => id), ["PHASE-1", "PHASE-2", "PHASE-3"]);
+  assert.deepEqual(
+    productDecisions.map(({ id }) => id),
+    Array.from({ length: 94 }, (_, index) => `D${String(index + 3).padStart(3, "0")}`),
+  );
+  for (const decision of productDecisions) {
+    for (const property of ["statement", "selectedRoute", "rejectedRoutes", "sourceSection", "phaseIds", "chapterIds"]) {
+      assert.ok(Object.hasOwn(decision, property), `${decision.id}.${property}`);
+    }
+  }
+});
+
+test("registers every README heading through 产品验收与上线门 with source anchors", () => {
+  assert.deepEqual(
+    baselineChapters.map(({ id }) => id),
+    EXPECTED_BASELINE_CHAPTER_IDS,
+  );
+  assert.equal(new Set(baselineChapters.map(({ sourceLine }) => sourceLine)).size, baselineChapters.length);
+  for (const chapter of baselineChapters) {
+    assert.equal(chapter.sourcePath, "/Users/a1234/Desktop/student/README.md");
+    assert.match(chapter.sourceAnchor, /^README\.md:\d+$/);
+    assert.ok(chapter.phaseIds.length > 0, chapter.id);
+  }
+});
+
+test("publishes migration changes, six metric groups, and three launch gates", () => {
+  assert.ok(migrationChanges.length >= 20);
+  for (const change of migrationChanges) {
+    assert.ok(change.decisionIds.length > 0, change.id);
+    assert.ok(change.oldRule && change.newRule && change.rejectedReason, change.id);
+    assert.deepEqual(
+      Object.keys(change.affected).sort(),
+      ["actionIds", "flowIds", "metricIds", "moduleIds", "objectIds", "pageIds", "permissionActionIds", "scenarioIds", "stateRefs", "testIds"],
+    );
+  }
+  assert.deepEqual(metricGroups.map(({ id }) => id), [
+    "MET-GROUP-USER-CLOSURE",
+    "MET-GROUP-FACT-RELIABILITY",
+    "MET-GROUP-AI-TEACHING-QUALITY",
+    "MET-GROUP-SAFETY-DATA-RIGHTS",
+    "MET-GROUP-FAIRNESS-ACCESSIBILITY",
+    "MET-GROUP-TEACHER-SCHOOL-EFFICIENCY",
+  ]);
+  assert.ok(metricGroups.every(({ metricIds }) => metricIds.length > 0));
+  assert.deepEqual(launchGates.map(({ id }) => id), [
+    "GATE-ZERO-TOLERANCE",
+    "GATE-QUALITY-THRESHOLD",
+    "GATE-EVIDENCE-COMPLETENESS",
+  ]);
+  assert.ok(launchGates.every(({ blockingConditions, evidenceRequirements, ownerRef }) => (
+    blockingConditions.length > 0 && evidenceRequirements.length > 0 && ownerRef
+  )));
+  assert.ok(metrics.every(({ groupId, phaseId }) => groupId && phaseId));
+});
+
+test("rejects baseline decisions, metadata, and metric contracts with unresolved references", () => {
+  const unknownDecisionPhase = structuredClone(requirementModel);
+  unknownDecisionPhase.productDecisions[0].phaseIds = ["PHASE-UNKNOWN"];
+  assertHasCode(validateRequirementModel(unknownDecisionPhase), "MISSING_PRODUCT_DECISION_PHASE");
+
+  const unknownDecisionChapter = structuredClone(requirementModel);
+  unknownDecisionChapter.productDecisions[0].chapterIds = ["BASE-CH-UNKNOWN"];
+  assertHasCode(validateRequirementModel(unknownDecisionChapter), "MISSING_PRODUCT_DECISION_CHAPTER");
+
+  const invalidMetadata = structuredClone(requirementModel);
+  invalidMetadata.productBaseline.version = "v1.0";
+  assertHasCode(validateRequirementModel(invalidMetadata), "INVALID_BASELINE_METADATA");
+
+  const invalidInvariantPhase = structuredClone(requirementModel);
+  invalidInvariantPhase.productInvariants[0].phaseIds = ["PHASE-UNKNOWN"];
+  assertHasCode(validateRequirementModel(invalidInvariantPhase), "MISSING_PRODUCT_INVARIANT_PHASE");
+
+  const invalidMetadataShape = structuredClone(requirementModel);
+  invalidMetadataShape.productBaseline.unexpected = true;
+  assertHasCode(validateRequirementModel(invalidMetadataShape), "INVALID_ENTITY_SHAPE");
+
+  const invalidMetric = structuredClone(requirementModel);
+  delete invalidMetric.metrics[0].groupId;
+  assertHasCode(validateRequirementModel(invalidMetric), "INVALID_ENTITY_SHAPE");
+  assertHasCode(validateRequirementModel(invalidMetric), "MISSING_METRIC_GROUP");
+
+  const invalidGroup = structuredClone(requirementModel);
+  invalidGroup.metricGroups[0].metricIds = [];
+  assertHasCode(validateRequirementModel(invalidGroup), "INVALID_ENTITY_SHAPE");
+});
+
+test("replaces the baseline rules that conflict with README v2.0", () => {
+  const byId = new Map(baselineDecisions.map((entry) => [entry.id, entry.statement]));
+  assert.match(byId.get("BASE-003"), /事实|原始材料/);
+  assert.doesNotMatch(byId.get("BASE-003"), /主观判断保留教师确认/);
+  assert.match(byId.get("BASE-008"), /概览/);
+  assert.doesNotMatch(byId.get("BASE-008"), /可读取本班全体学生和全学科信息/);
+  assert.match(byId.get("BASE-010"), /第二阶段/);
+});
+
 test("publishes and requires all baseline-v2 top-level collections", () => {
   const collectionKeys = MODEL_COLLECTIONS.map(({ key }) => key);
 
@@ -121,6 +296,19 @@ test("publishes and requires all baseline-v2 top-level collections", () => {
       validateRequirementModel(fixture),
       "MISSING_REQUIRED_COLLECTION",
     );
+  }
+});
+
+test("rejects primitive and null elements in every baseline-v2 collection", () => {
+  for (const collection of NEW_BASELINE_COLLECTIONS) {
+    for (const invalidElement of [null, 7, "x", {}]) {
+      const fixture = validFixture();
+      fixture[collection] = [invalidElement];
+      assertHasCode(
+        validateRequirementModel(fixture),
+        "INVALID_ENTITY_SHAPE",
+      );
+    }
   }
 });
 

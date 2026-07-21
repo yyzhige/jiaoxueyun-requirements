@@ -1,4 +1,4 @@
-import { deepFreeze } from "../model.mjs";
+import { PHASE, deepFreeze } from "../model.mjs";
 
 function optionSet(id, key, label, entries) {
   return {
@@ -54,8 +54,8 @@ export const baselineDecisions = [
   },
   {
     id: "BASE-003",
-    statement: "首阶段覆盖全学科的作业、提交、反馈、成绩、证据和提升闭环，但不承诺所有题型自动判分。",
-    rationale: "业务闭环覆盖全学科，自动能力则按题型和证据质量分级，主观判断保留教师确认。",
+    statement: "首阶段覆盖当前语文、数学和英语的学习活动、提交、原始材料、版本、访问和历史事实闭环，不承诺尚未上线的 AI 反馈、完整画像或视频。",
+    rationale: "第一阶段先保证可安全承载真实未成年学生的事实底座；AI 评定与视频属于第二阶段，长期画像属于第三阶段。",
     immutable: true,
   },
   {
@@ -84,20 +84,20 @@ export const baselineDecisions = [
   },
   {
     id: "BASE-008",
-    statement: "班主任可读取本班全体学生和全学科信息并进行协调，但不能写入其他学科的专业判断。",
-    rationale: "班级治理需要全局视图，学科专业事实仍由对应任课教师负责。",
+    statement: "班主任可读取本班跨学科进度、异常变化和协调事项概览，但不能因班主任身份自动读取各学科原始作答、语音、对话或详细画像。",
+    rationale: "班级治理需要协调视图，学科专业事实和详细证据仍由对应任课关系或专项授权负责。",
     immutable: true,
   },
   {
     id: "BASE-009",
-    statement: "每个学科提升点同步给对应任课教师，班主任拥有本班全局视图。",
-    rationale: "提升任务必须回到学科责任人，同时支持班主任协调跨学科负担和跟进。",
+    statement: "每个学科需要跟进的提升点同步给对应任课教师；班主任获得本班跨学科协调概览并可跟进负担和异常。",
+    rationale: "提升行动必须回到学科责任人，班主任负责跨学科协调而不是替代专业判断。",
     immutable: true,
   },
   {
     id: "BASE-010",
-    statement: "首阶段仅提供产品内报告和通知；第三方通知渠道、AI 讲解视频和 AI 教学视频仅登记为二期扩展。",
-    rationale: "先闭合校内核心流程，避免未具备治理和质量条件的外部渠道或视频能力进入首阶段承诺。",
+    statement: "首阶段以产品内报告和通知为主；短信和邮箱仅用于验证码、安全、申诉和最小摘要；AI 评定与个性化教学视频按第二阶段交付。",
+    rationale: "核心教学事实和通知先在产品内闭环，外部渠道不承载详细学生内容，视频按第二阶段门禁交付。",
     immutable: true,
   },
 ];
@@ -228,14 +228,24 @@ export const events = [
     definition: "学生在归因窗口内从反馈进入订正、再练或提升任务并产生有效动作时记录。",
   },
   {
-    id: "EVT-UNCONFIRMED-SUBJECTIVE-SCORE-PUBLISHED",
-    label: "未确认主观题成绩被发布",
-    definition: "主观题评分没有对应教师确认版本却进入正式发布结果时记录为质量事故。",
+    id: "EVT-AI-PUBLICATION-GATE-BYPASSED",
+    label: "AI结果绕过必要门禁发布",
+    definition: "AI 结果未通过必要的权限、安全或教学正确性检查却进入正式发布时记录为质量事故。",
   },
   {
     id: "EVT-AUTHORIZATION-SCOPE-VIOLATION",
     label: "对象范围授权违规",
     definition: "跨学校、跨班级或跨学生的未授权数据访问或写入被执行或被检测到时记录。",
+  },
+  {
+    id: "EVT-FACT-SOURCE-VERSION-MISMATCH",
+    label: "原始事实与版本链不一致",
+    definition: "服务器接受的原始提交、活动版本、提交回执或历史链无法逐项对应时记录为事实可靠性事故。",
+  },
+  {
+    id: "EVT-ACCESSIBILITY-CORE-FLOW-BLOCKED",
+    label: "核心流程可及性阻断",
+    definition: "在已声明支持的适龄、键盘、非语音替代、文字缩放或弱网场景中，学生无法完成核心学习任务时记录。",
   },
   {
     id: "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-STARTED",
@@ -452,6 +462,8 @@ export const events = [
 export const metrics = [
   {
     id: "MET-001",
+    groupId: "MET-GROUP-TEACHER-SCHOOL-EFFICIENCY",
+    phaseId: "PHASE-1",
     ownerRef: "ROLE-ACADEMIC",
     eventIds: [
       "EVT-TEACHER-OPERATION-STARTED",
@@ -466,6 +478,8 @@ export const metrics = [
   },
   {
     id: "MET-002",
+    groupId: "MET-GROUP-USER-CLOSURE",
+    phaseId: "PHASE-2",
     ownerRef: "ROLE-TEACHER",
     eventIds: [
       "EVT-STUDENT-FEEDBACK-VIEWED",
@@ -480,9 +494,11 @@ export const metrics = [
   },
   {
     id: "MET-003",
+    groupId: "MET-GROUP-AI-TEACHING-QUALITY",
+    phaseId: "PHASE-2",
     ownerRef: "ROLE-ACADEMIC",
-    eventIds: ["EVT-UNCONFIRMED-SUBJECTIVE-SCORE-PUBLISHED"],
-    scope: "试点范围内所有正式发布的主观题成绩",
+    eventIds: ["EVT-AI-PUBLICATION-GATE-BYPASSED"],
+    scope: "试点范围内所有正式发布的 AI 结果",
     aggregation: "count",
     target: "0",
     exclusions: "无",
@@ -490,6 +506,8 @@ export const metrics = [
   },
   {
     id: "MET-004",
+    groupId: "MET-GROUP-SAFETY-DATA-RIGHTS",
+    phaseId: "PHASE-1",
     ownerRef: "ROLE-SCHOOL-ADMIN",
     eventIds: ["EVT-AUTHORIZATION-SCOPE-VIOLATION"],
     scope: "跨学校、班级或学生对象的读取和写入",
@@ -500,6 +518,8 @@ export const metrics = [
   },
   {
     id: "MET-005",
+    groupId: "MET-GROUP-USER-CLOSURE",
+    phaseId: "PHASE-2",
     ownerRef: "ROLE-PLATFORM-OPS",
     eventIds: [
       "EVT-AI-UNAVAILABLE-SUBMISSION-MANUAL-STARTED",
@@ -538,6 +558,30 @@ export const metrics = [
       },
     ],
   },
+  {
+    id: "MET-006",
+    groupId: "MET-GROUP-FACT-RELIABILITY",
+    phaseId: "PHASE-1",
+    ownerRef: "ROLE-SCHOOL-ADMIN",
+    eventIds: ["EVT-FACT-SOURCE-VERSION-MISMATCH"],
+    scope: "试点范围内服务器接受的原始提交、活动版本、回执和历史链不一致事件",
+    aggregation: "count",
+    target: "0",
+    exclusions: "无",
+    window: "持续监控并按日汇总，发布前执行全量对账",
+  },
+  {
+    id: "MET-007",
+    groupId: "MET-GROUP-FAIRNESS-ACCESSIBILITY",
+    phaseId: "PHASE-1",
+    ownerRef: "ROLE-PLATFORM-OPS",
+    eventIds: ["EVT-ACCESSIBILITY-CORE-FLOW-BLOCKED"],
+    scope: "试点范围内已声明适龄、无障碍或弱网场景的核心学习流程阻断事件",
+    aggregation: "count",
+    target: "0",
+    exclusions: "排除用户主动退出和未声明设备能力，但不得排除产品承诺范围内的失败",
+    window: "按学段、学科、输入方式和场景持续监控并按周复核",
+  },
 ];
 
 export const nfrs = [
@@ -563,13 +607,13 @@ export const nfrs = [
   },
   {
     id: "NFR-005",
-    statement: "App 在临时断网后保留文本草稿和媒体上传草稿；最终提交成功必须以服务器回执为准。",
-    verification: "在编辑、上传和提交阶段分别断网恢复，验证本地草稿、续传状态以及无回执不显示成功。",
+    statement: "App 在临时断网后保留文本草稿和媒体上传草稿；正常提交以服务器回执为准，弱网按时保护使用截止前服务端提交意图凭证、固定内容清单摘要和限定补齐窗口。",
+    verification: "在编辑、上传、提交和凭证补齐阶段分别断网恢复，验证本地草稿、续传状态、固定清单约束、平台故障保护以及无回执不显示正常提交成功。",
   },
   {
     id: "NFR-006",
-    statement: "AI 任务采用异步状态并提供排队中、处理中和人工兜底；AI 不得阻断人工评分或发布。",
-    verification: "注入 AI 超时、失败和不可用故障，验证状态可见且人工评分、确认和发布路径均可完成。",
+    statement: "AI 任务采用异步处理、发布、争议纠正和有效性状态轴；AI 超时、失败或不可用时不得伪造结果、改变按时事实或绕过必要门禁。",
+    verification: "注入 AI 超时、失败、不可用、结果质疑和安全检查失败，验证状态可见、人工例外复核可进入、历史版本保留且未通过门禁的结果保持未发布。",
   },
   {
     id: "NFR-007",
@@ -745,7 +789,7 @@ export const optionSets = [
     ["NOT-ALLOWED", "不允许重提"],
     ["BEFORE-DEADLINE", "截止前允许"],
     ["AFTER-FEEDBACK", "反馈后允许"],
-    ["TEACHER-APPROVAL", "教师批准后允许"],
+    ["AUTHORIZED-REOPENING", "经授权重开后允许"],
   ]),
   optionSet("OPT-ENUM-004", "feedbackPolicy", "反馈开放策略", [
     ["WITH-SCORE-PUBLISH", "随成绩发布"],

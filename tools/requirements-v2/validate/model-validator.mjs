@@ -230,6 +230,7 @@ export function buildModelIndex(model) {
     actorIds: new Set([...roleIds, ...dutyIds, ...SYSTEM_ACTOR_CATEGORIES]),
     aiTasks,
     baselineChapters,
+    baselineChapterById: mapById(baselineChapters),
     baselineDecisionById: mapById(baselineDecisions),
     baselineDecisions,
     duties,
@@ -245,6 +246,7 @@ export function buildModelIndex(model) {
     launchGates,
     metrics,
     metricGroups,
+    metricGroupById: mapById(metricGroups),
     migrationChanges,
     modelProfile: model?.profile,
     modules,
@@ -256,7 +258,9 @@ export function buildModelIndex(model) {
     pages,
     pageById: mapById(pages),
     phases,
+    phaseById: mapById(phases),
     productDecisions,
+    productDecisionById: mapById(productDecisions),
     nfrById: mapById(nfrs),
     nfrs,
     relationships,
@@ -1185,6 +1189,145 @@ export function validateModelReferences(model) {
         );
       }
     });
+  }
+
+  for (const decisionEntry of index.productDecisions) {
+    const decision = decisionEntry.value;
+    for (const phaseId of list(decision?.phaseIds)) {
+      if (!index.phaseById.has(phaseId)) {
+        errors.push(
+          `MISSING_PRODUCT_DECISION_PHASE ${formatValidationValue(decision?.id)}.phaseIds -> ${formatValidationValue(phaseId)}`,
+        );
+      }
+    }
+    for (const chapterId of list(decision?.chapterIds)) {
+      if (!index.baselineChapterById.has(chapterId)) {
+        errors.push(
+          `MISSING_PRODUCT_DECISION_CHAPTER ${formatValidationValue(decision?.id)}.chapterIds -> ${formatValidationValue(chapterId)}`,
+        );
+      }
+    }
+  }
+
+  for (const chapterEntry of index.baselineChapters) {
+    const chapter = chapterEntry.value;
+    for (const phaseId of list(chapter?.phaseIds)) {
+      if (!index.phaseById.has(phaseId)) {
+        errors.push(
+          `MISSING_BASELINE_CHAPTER_PHASE ${formatValidationValue(chapter?.id)}.phaseIds -> ${formatValidationValue(phaseId)}`,
+        );
+      }
+    }
+    if (chapter?.parentId && !index.baselineChapterById.has(chapter.parentId)) {
+      errors.push(
+        `MISSING_BASELINE_CHAPTER_PARENT ${formatValidationValue(chapter?.id)}.parentId -> ${formatValidationValue(chapter.parentId)}`,
+      );
+    }
+    if (chapter?.level === 3 && !chapter?.parentId) {
+      errors.push(
+        `MISSING_BASELINE_CHAPTER_PARENT ${formatValidationValue(chapter?.id)}.parentId -> required for level 3 chapter`,
+      );
+    }
+  }
+
+  for (const changeEntry of index.migrationChanges) {
+    const change = changeEntry.value;
+    for (const decisionId of list(change?.decisionIds)) {
+      if (!index.productDecisionById.has(decisionId)) {
+        errors.push(
+          `MISSING_MIGRATION_DECISION ${formatValidationValue(change?.id)}.decisionIds -> ${formatValidationValue(decisionId)}`,
+        );
+      }
+    }
+  }
+
+  for (const invariant of list(model?.productInvariants)) {
+    for (const phaseId of list(invariant?.phaseIds)) {
+      if (!index.phaseById.has(phaseId)) {
+        errors.push(
+          `MISSING_PRODUCT_INVARIANT_PHASE ${formatValidationValue(invariant?.id)}.phaseIds -> ${formatValidationValue(phaseId)}`,
+        );
+      }
+    }
+  }
+
+  for (const metricEntry of index.metrics) {
+    const metric = metricEntry.value;
+    if (!isValidId(metric?.groupId) && index.modelProfile === "ZHIXU_V2") {
+      errors.push(
+        `MISSING_METRIC_GROUP ${formatValidationValue(metric?.id)}.groupId -> required`,
+      );
+    } else if (isValidId(metric?.groupId) && !index.metricGroupById.has(metric.groupId)) {
+      errors.push(
+        `MISSING_METRIC_GROUP ${formatValidationValue(metric?.id)}.groupId -> ${formatValidationValue(metric.groupId)}`,
+      );
+    }
+    if (!isValidId(metric?.phaseId) && index.modelProfile === "ZHIXU_V2") {
+      errors.push(
+        `MISSING_METRIC_PHASE ${formatValidationValue(metric?.id)}.phaseId -> required`,
+      );
+    } else if (isValidId(metric?.phaseId) && !index.phaseById.has(metric.phaseId)) {
+      errors.push(
+        `MISSING_METRIC_PHASE ${formatValidationValue(metric?.id)}.phaseId -> ${formatValidationValue(metric.phaseId)}`,
+      );
+    }
+  }
+
+  const metricIds = new Set(index.metrics.map(({ value }) => value?.id).filter(isValidId));
+  for (const groupEntry of index.metricGroups) {
+    const group = groupEntry.value;
+    for (const phaseId of list(group?.phaseIds)) {
+      if (!index.phaseById.has(phaseId)) {
+        errors.push(
+          `MISSING_METRIC_GROUP_PHASE ${formatValidationValue(group?.id)}.phaseIds -> ${formatValidationValue(phaseId)}`,
+        );
+      }
+    }
+    for (const metricId of list(group?.metricIds)) {
+      if (!metricIds.has(metricId)) {
+        errors.push(
+          `MISSING_METRIC_GROUP_METRIC ${formatValidationValue(group?.id)}.metricIds -> ${formatValidationValue(metricId)}`,
+        );
+      }
+      const metric = index.metrics.find(({ value }) => value?.id === metricId)?.value;
+      if (metric && metric.groupId !== group.id) {
+        errors.push(
+          `METRIC_GROUP_MISMATCH ${formatValidationValue(metricId)}.groupId -> ${formatValidationValue(metric.groupId)}`,
+        );
+      }
+    }
+  }
+  for (const metricEntry of index.metrics) {
+    const metric = metricEntry.value;
+    const group = index.metricGroupById.get(metric?.groupId)?.value;
+    if (!group) continue;
+    const occurrences = list(group.metricIds).filter((metricId) => metricId === metric.id).length;
+    if (occurrences !== 1) {
+      errors.push(
+        `METRIC_GROUP_MEMBERSHIP ${formatValidationValue(metric.id)} must appear exactly once in ${formatValidationValue(group.id)}.metricIds`,
+      );
+    }
+  }
+
+  for (const gateEntry of index.launchGates) {
+    const gate = gateEntry.value;
+    if (Object.hasOwn(gate ?? {}, "ownerRef")) {
+      checkActorReference(errors, index, gate.ownerRef, `${gateEntry.path}.ownerRef`);
+    }
+    for (const phaseId of list(gate?.phaseIds)) {
+      if (!index.phaseById.has(phaseId)) {
+        errors.push(
+          `MISSING_LAUNCH_GATE_PHASE ${formatValidationValue(gate?.id)}.phaseIds -> ${formatValidationValue(phaseId)}`,
+        );
+      }
+    }
+    for (const groupId of list(gate?.metricGroupIds)) {
+      if (!index.metricGroupById.has(groupId)) {
+        errors.push(
+          `MISSING_LAUNCH_GATE_METRIC_GROUP ${formatValidationValue(gate?.id)}.metricGroupIds -> ${formatValidationValue(groupId)}`,
+        );
+      }
+    }
   }
 
   for (const taskEntry of index.aiTasks) {

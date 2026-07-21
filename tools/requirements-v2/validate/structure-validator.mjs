@@ -14,14 +14,14 @@ import {
 } from "../facts/professional-write-authorization.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
-const BASELINE_V2_MODEL_COLLECTIONS = new Set([
-  "phases",
-  "productDecisions",
-  "baselineChapters",
-  "migrationChanges",
-  "metricGroups",
-  "launchGates",
-]);
+const BASELINE_V2_COLLECTION_START = MODEL_COLLECTIONS.findIndex(
+  ({ key }) => key === "phases",
+);
+const BASELINE_V2_MODEL_COLLECTIONS = new Set(
+  MODEL_COLLECTIONS
+    .slice(BASELINE_V2_COLLECTION_START)
+    .map(({ key }) => key),
+);
 const MODULE_PHASES = new Set(Object.values(PHASE));
 const MODULE_RELEASE_STATUSES = new Set(Object.values(RELEASE_STATUS));
 const RELEASE_STATUS_BY_PHASE = new Map([
@@ -365,6 +365,14 @@ function requireString(errors, value, property, path) {
     errors.push(
       `INVALID_ENTITY_SHAPE ${path}.${property} must be a non-empty string`,
     );
+  }
+}
+
+function requireClosedKeys(errors, value, path, allowedKeys) {
+  for (const property of Object.keys(value ?? {})) {
+    if (!allowedKeys.has(property)) {
+      errors.push(`INVALID_ENTITY_SHAPE ${path}.${property} is not allowed`);
+    }
   }
 }
 
@@ -2966,6 +2974,236 @@ function validateNfr(errors, nfr, path) {
   requireString(errors, nfr, "verification", path);
 }
 
+function validatePhase(errors, phase, path) {
+  requireClosedKeys(errors, phase, path, new Set([
+    "id", "number", "title", "releaseStatus", "objective", "completionStandard", "milestoneBoundary",
+  ]));
+  requireString(errors, phase, "title", path);
+  requireString(errors, phase, "releaseStatus", path);
+  requireString(errors, phase, "objective", path);
+  requireString(errors, phase, "completionStandard", path);
+  requireString(errors, phase, "milestoneBoundary", path);
+  if (!MODULE_PHASES.has(phase.number)) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.number must be a supported phase number`);
+  }
+  if (!MODULE_RELEASE_STATUSES.has(phase.releaseStatus)) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.releaseStatus must be a supported release status`);
+  }
+}
+
+function validateProductDecision(errors, decision, path) {
+  requireClosedKeys(errors, decision, path, new Set([
+    "id", "statement", "selectedRoute", "rejectedRoutes", "sourceSection", "phaseIds", "chapterIds",
+  ]));
+  for (const property of ["statement", "selectedRoute", "sourceSection"]) {
+    requireString(errors, decision, property, path);
+  }
+  const rejectedRoutes = contractStringArray(
+    errors,
+    decision,
+    "rejectedRoutes",
+    path,
+    "INVALID_ENTITY_SHAPE",
+    { nonEmpty: true },
+  );
+  validateUniqueStrings(errors, rejectedRoutes, `${path}.rejectedRoutes`, "INVALID_ENTITY_SHAPE");
+  const phaseIds = contractStringArray(
+    errors,
+    decision,
+    "phaseIds",
+    path,
+    "INVALID_ENTITY_SHAPE",
+    { nonEmpty: true },
+  );
+  validateUniqueStrings(errors, phaseIds, `${path}.phaseIds`, "INVALID_ENTITY_SHAPE");
+  const chapterIds = contractStringArray(
+    errors,
+    decision,
+    "chapterIds",
+    path,
+    "INVALID_ENTITY_SHAPE",
+    { nonEmpty: true },
+  );
+  validateUniqueStrings(errors, chapterIds, `${path}.chapterIds`, "INVALID_ENTITY_SHAPE");
+}
+
+function validateBaselineChapter(errors, chapter, path) {
+  requireClosedKeys(errors, chapter, path, new Set([
+    "id", "heading", "sourcePath", "sourceLine", "sourceAnchor", "level", "phaseIds", "requirementSummary", "parentId",
+  ]));
+  for (const property of ["heading", "sourcePath", "sourceAnchor", "requirementSummary"]) {
+    requireString(errors, chapter, property, path);
+  }
+  if (!Number.isInteger(chapter.sourceLine) || chapter.sourceLine < 1) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.sourceLine must be a positive integer`);
+  }
+  if (![2, 3].includes(chapter.level)) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.level must be 2 or 3`);
+  }
+  const phaseIds = contractStringArray(
+    errors,
+    chapter,
+    "phaseIds",
+    path,
+    "INVALID_ENTITY_SHAPE",
+    { nonEmpty: true },
+  );
+  validateUniqueStrings(errors, phaseIds, `${path}.phaseIds`, "INVALID_ENTITY_SHAPE");
+  if (Object.hasOwn(chapter, "parentId")) requireString(errors, chapter, "parentId", path);
+}
+
+function validateStringArrayAllowEmpty(errors, value, property, path) {
+  if (!Array.isArray(value?.[property])) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.${property} must be an array`);
+    return [];
+  }
+  const seen = new Set();
+  value[property].forEach((entry, index) => {
+    if (!isValidId(entry) || seen.has(entry)) {
+      errors.push(`INVALID_ENTITY_SHAPE ${path}.${property}[${index}] must be a non-empty string`);
+    }
+    if (isValidId(entry)) seen.add(entry);
+  });
+  return value[property];
+}
+
+function validateMigrationChange(errors, change, path) {
+  requireClosedKeys(errors, change, path, new Set([
+    "id", "decisionIds", "oldRule", "newRule", "rejectedReason", "affected",
+  ]));
+  for (const property of ["oldRule", "newRule", "rejectedReason"]) {
+    requireString(errors, change, property, path);
+  }
+  for (const property of ["decisionIds"]) {
+    const values = contractStringArray(
+      errors,
+      change,
+      property,
+      path,
+      "INVALID_ENTITY_SHAPE",
+      { nonEmpty: true },
+    );
+    validateUniqueStrings(errors, values, `${path}.${property}`, "INVALID_ENTITY_SHAPE");
+  }
+  const affected = requireRecord(errors, change, "affected", path);
+  if (!affected) return;
+  requireClosedKeys(errors, affected, `${path}.affected`, new Set([
+    "moduleIds", "pageIds", "flowIds", "objectIds", "actionIds", "permissionActionIds", "stateRefs", "metricIds", "scenarioIds", "testIds",
+  ]));
+  for (const property of [
+    "moduleIds",
+    "pageIds",
+    "flowIds",
+    "objectIds",
+    "actionIds",
+    "permissionActionIds",
+    "stateRefs",
+    "metricIds",
+    "scenarioIds",
+    "testIds",
+  ]) {
+    validateStringArrayAllowEmpty(errors, affected, property, `${path}.affected`);
+  }
+}
+
+function validateMetricGroup(errors, group, path) {
+  requireClosedKeys(errors, group, path, new Set([
+    "id", "label", "definition", "phaseIds", "metricIds", "analysisDimensions", "prohibitedUse",
+  ]));
+  for (const property of ["label", "definition", "prohibitedUse"]) {
+    requireString(errors, group, property, path);
+  }
+  for (const property of ["phaseIds", "metricIds", "analysisDimensions"]) {
+    validateStringArrayAllowEmpty(errors, group, property, path);
+  }
+  if (!Array.isArray(group.phaseIds) || group.phaseIds.length === 0) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.phaseIds must be a non-empty array`);
+  }
+  if (!Array.isArray(group.metricIds) || group.metricIds.length === 0) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.metricIds must be a non-empty array`);
+  }
+  if (!Array.isArray(group.analysisDimensions) || group.analysisDimensions.length === 0) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.analysisDimensions must be a non-empty array`);
+  }
+}
+
+function validateLaunchGate(errors, gate, path) {
+  requireClosedKeys(errors, gate, path, new Set([
+    "id", "label", "gateType", "ownerRef", "phaseIds", "metricGroupIds", "blockingConditions", "evidenceRequirements",
+  ]));
+  for (const property of ["label", "gateType", "ownerRef"]) {
+    requireString(errors, gate, property, path);
+  }
+  if (!["ZERO_TOLERANCE", "QUALITY_THRESHOLD", "EVIDENCE_COMPLETENESS"].includes(gate.gateType)) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.gateType must be a supported launch gate type`);
+  }
+  for (const property of ["phaseIds", "metricGroupIds", "blockingConditions", "evidenceRequirements"]) {
+    const values = contractStringArray(
+      errors,
+      gate,
+      property,
+      path,
+      "INVALID_ENTITY_SHAPE",
+      { nonEmpty: true },
+    );
+    validateUniqueStrings(errors, values, `${path}.${property}`, "INVALID_ENTITY_SHAPE");
+  }
+}
+
+function validateProductBaselineMetadata(errors, model) {
+  const path = "productBaseline";
+  const baseline = requireRecord(errors, model, "productBaseline", "model");
+  if (baseline) {
+    requireClosedKeys(errors, baseline, path, new Set([
+      "id", "version", "decisionState", "baselineDate", "sourcePath",
+    ]));
+    for (const property of ["id", "version", "decisionState", "baselineDate", "sourcePath"]) {
+      requireString(errors, baseline, property, path);
+    }
+    if (baseline.id !== "ZHIXU-PRODUCT-BASELINE-V2") {
+      errors.push(`INVALID_BASELINE_METADATA ${path}.id must be ZHIXU-PRODUCT-BASELINE-V2`);
+    }
+    if (baseline.version !== "v2.0") {
+      errors.push(`INVALID_BASELINE_METADATA ${path}.version must be v2.0`);
+    }
+    if (baseline.decisionState !== "finalized") {
+      errors.push(`INVALID_BASELINE_METADATA ${path}.decisionState must be finalized`);
+    }
+    if (baseline.baselineDate !== "2026-07-20") {
+      errors.push(`INVALID_BASELINE_METADATA ${path}.baselineDate must be 2026-07-20`);
+    }
+    if (baseline.sourcePath !== "/Users/a1234/Desktop/student/README.md") {
+      errors.push(`INVALID_BASELINE_METADATA ${path}.sourcePath must reference the authoritative README.md`);
+    }
+  }
+  const deliveryState = requireRecord(errors, model, "deliveryState", "model");
+  if (deliveryState) {
+    requireClosedKeys(errors, deliveryState, "deliveryState", new Set(["code", "statement"]));
+    requireString(errors, deliveryState, "code", "deliveryState");
+    requireString(errors, deliveryState, "statement", "deliveryState");
+    if (deliveryState.code !== "PHASE_ONE_RESEARCH_AND_DEVELOPMENT_READY") {
+      errors.push("INVALID_BASELINE_METADATA deliveryState.code is not the finalized delivery state");
+    }
+  }
+  const terminology = requireArray(errors, model, "terminology", "model");
+  validateEntities(errors, terminology, "terminology", "terminology", (entry, entryPath) => {
+    requireClosedKeys(errors, entry, entryPath, new Set([
+      "id", "canonical", "appliesTo", "prohibitedAlternative", "exception",
+    ]));
+    requireString(errors, entry, "canonical", entryPath);
+    requireString(errors, entry, "appliesTo", entryPath);
+    requireString(errors, entry, "prohibitedAlternative", entryPath);
+    requireString(errors, entry, "exception", entryPath);
+  });
+  const invariants = requireArray(errors, model, "productInvariants", "model");
+  validateEntities(errors, invariants, "productInvariants", "product invariant", (entry, entryPath) => {
+    requireClosedKeys(errors, entry, entryPath, new Set(["id", "statement", "phaseIds"]));
+    requireString(errors, entry, "statement", entryPath);
+    const phaseIds = contractStringArray(errors, entry, "phaseIds", entryPath, "INVALID_ENTITY_SHAPE", { nonEmpty: true });
+    validateUniqueStrings(errors, phaseIds, `${entryPath}.phaseIds`, "INVALID_ENTITY_SHAPE");
+  });
+}
+
 function validateModelShape(model) {
   const errors = [];
   const productionMarkerIds = new Set(["ACC-001", "ORG-001", "IAM-001", "DGV-001", "AUD-001"]);
@@ -2976,6 +3214,7 @@ function validateModelShape(model) {
   } else if (hasProductionMarker && model.profile !== "ZHIXU_V2") {
     errors.push("INVALID_MODEL_PROFILE production foundation modules require ZHIXU_V2");
   }
+  if (model.profile === "ZHIXU_V2") validateProductBaselineMetadata(errors, model);
   for (const property of REQUIRED_MODEL_COLLECTIONS) {
     if (!Array.isArray(model[property])) {
       const code = BASELINE_V2_MODEL_COLLECTIONS.has(property)
@@ -3077,6 +3316,11 @@ function validateModelShape(model) {
       ]) {
         requireString(errors, metric, property, path);
       }
+      for (const property of ["groupId", "phaseId"]) {
+        if (model.profile === "ZHIXU_V2" || Object.hasOwn(metric, property)) {
+          requireString(errors, metric, property, path);
+        }
+      }
       if (Object.hasOwn(metric, "correlationKey")) {
         requireString(errors, metric, "correlationKey", path);
       }
@@ -3120,6 +3364,60 @@ function validateModelShape(model) {
       (extension, path) => {
         validateExtension(errors, extension, path);
       },
+    );
+  }
+  if (Array.isArray(model.phases)) {
+    validateEntities(
+      errors,
+      model.phases,
+      "phases",
+      "phase",
+      (phase, path) => validatePhase(errors, phase, path),
+    );
+  }
+  if (Array.isArray(model.productDecisions)) {
+    validateEntities(
+      errors,
+      model.productDecisions,
+      "productDecisions",
+      "product decision",
+      (decision, path) => validateProductDecision(errors, decision, path),
+    );
+  }
+  if (Array.isArray(model.baselineChapters)) {
+    validateEntities(
+      errors,
+      model.baselineChapters,
+      "baselineChapters",
+      "baseline chapter",
+      (chapter, path) => validateBaselineChapter(errors, chapter, path),
+    );
+  }
+  if (Array.isArray(model.migrationChanges)) {
+    validateEntities(
+      errors,
+      model.migrationChanges,
+      "migrationChanges",
+      "migration change",
+      (change, path) => validateMigrationChange(errors, change, path),
+    );
+  }
+  if (Array.isArray(model.metricGroups)) {
+    validateEntities(
+      errors,
+      model.metricGroups,
+      "metricGroups",
+      "metric group",
+      (group, path) => validateMetricGroup(errors, group, path),
+    );
+  }
+  if (Array.isArray(model.launchGates)) {
+    validateEntities(
+      errors,
+      model.launchGates,
+      "launchGates",
+      "launch gate",
+      (gate, path) => validateLaunchGate(errors, gate, path),
     );
   }
   return errors;
