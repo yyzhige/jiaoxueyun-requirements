@@ -13300,6 +13300,13 @@ function baselineTraceabilityErrors(index) {
       })
       && JSON.stringify(trace?.axisApplicability)
         === JSON.stringify(canonicalTrace?.axisApplicability);
+    for (const actionId of list(trace?.actionIds)) {
+      const actionEntry = index.actionById.get(actionId);
+      valid = valid
+        && Boolean(actionEntry)
+        && list(trace?.moduleIds).includes(actionEntry?.moduleId)
+        && list(trace?.objectIds).includes(actionEntry?.value?.targetObjectId);
+    }
   }
   valid = valid
     && chapterHierarchyValid

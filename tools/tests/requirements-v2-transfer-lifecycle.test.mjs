@@ -104,6 +104,17 @@ test("D052-D053 use ACC as the only membership authority and execute one forward
       .includes("ORG-ACT-TRANSFER-STUDENT"),
     false,
   );
+  const d052 = requirementModel.decisionTraceability
+    .find(({ decisionId }) => decisionId === "D052");
+  const d053 = requirementModel.decisionTraceability
+    .find(({ decisionId }) => decisionId === "D053");
+  assert.ok(d052.actionIds.includes("DGV-ACT-REQUEST-STUDENT-TRANSFER"));
+  assert.ok(d052.actionIds.includes("DGV-ACT-AUTHORIZE-STUDENT-TRANSFER"));
+  assert.equal(d052.actionIds.includes("DGV-ACT-DEIDENTIFY-OLD-SCHOOL-HISTORY"), false);
+  assert.ok(d053.actionIds.includes("DGV-ACT-DEIDENTIFY-OLD-SCHOOL-HISTORY"));
+  assert.equal(d053.actionIds.includes("ACC-ACT-CREATE-PENDING-NEW-SCHOOL-MEMBERSHIP"), false);
+  assert.equal(d053.actionIds.includes("ACC-ACT-ACTIVATE-NEW-SCHOOL-MEMBERSHIP"), false);
+  assert.ok(d053.stateRefs.includes("DGV-OBJ-OLD-SCHOOL-RESTRICTED-HISTORY.DEIDENTIFIED"));
 });
 
 test("D052-D053 destructive mutations fail the dedicated transfer lifecycle gate", () => {
@@ -160,6 +171,14 @@ test("D052-D053 destructive mutations fail the dedicated transfer lifecycle gate
     }],
     ["transfer trace loses the real flow", (model) => {
       model.decisionTraceability.find(({ decisionId }) => decisionId === "D052").flowIds = [];
+    }],
+    ["D052 regains the D053 history-only action union", (model) => {
+      model.decisionTraceability.find(({ decisionId }) => decisionId === "D052")
+        .actionIds.push("DGV-ACT-DEIDENTIFY-OLD-SCHOOL-HISTORY");
+    }],
+    ["D053 regains the D052 new-school membership action union", (model) => {
+      model.decisionTraceability.find(({ decisionId }) => decisionId === "D053")
+        .actionIds.push("ACC-ACT-CREATE-PENDING-NEW-SCHOOL-MEMBERSHIP");
     }],
     ["INVITED entry source event is disconnected", (model) => {
       eventById(model, "EVT-MEMBERSHIP-DIRECTORY-SNAPSHOT-AVAILABLE")

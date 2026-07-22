@@ -385,7 +385,7 @@ const accActions = [
       "platform operations has no school member entry without school authorization",
     ),
     auditMode: AUDIT_NOT_REQUIRED,
-    successData: "school first search reauthorizes the current relationship on every request, returns only authorized schools, computes counts facets ordering and autocomplete from that authorized set, and never auto-enters a recent school",
+    successData: "school first search reauthorizes the current relationship on every request, returns only authorized schools, computes counts facets ordering and autocomplete from that authorized set, and permits no automatic entry into any recent school",
     failureOutcomes: {
       PERMISSION_DENIED: {
         kind: "BOUNDARY",

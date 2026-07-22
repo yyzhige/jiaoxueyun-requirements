@@ -564,7 +564,7 @@ const migrationGroups = [
       moduleIds: ["DGV-001", "ACC-001"],
       pageIds: ["DGV-PAGE-EXPORT-REQUEST", "DGV-PAGE-EXPORT-RESULT", "ACC-PAGE-SCHOOL-ENTRY"],
       actionIds: ["DGV-ACT-REQUEST-EXPORT", "DGV-ACT-GENERATE-EXPORT", "ACC-ACT-SEARCH-SCHOOL"],
-      testIds: ["BASELINE-SEARCH-SIDE-CHANNEL", "BASELINE-ROLE-EXPORT-RIGHTS", "BASELINE-EXPORT-DOUBLE-AUTHORIZATION"],
+      testIds: ["BASELINE-SEARCH-REQUEST-REAUTHORIZATION", "BASELINE-SEARCH-SIDE-CHANNEL", "BASELINE-ROLE-EXPORT-RIGHTS", "BASELINE-EXPORT-DOUBLE-AUTHORIZATION"],
     },
   ),
   migration(
@@ -1518,8 +1518,8 @@ const decisionAffectedByMigrationId = {
       actionIds: ["ACC-ACT-SEARCH-SCHOOL", "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY", "PUB-ACT-SEARCH-PUBLISHED-RESULTS"],
       permissionActionIds: ["ACC-ACT-SEARCH-SCHOOL", "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY", "PUB-ACT-SEARCH-PUBLISHED-RESULTS"],
       stateRefs: ["DGV-OBJ-OLD-SCHOOL-RESTRICTED-HISTORY.RESTRICTED", "PUB-OBJ-RESULT.PUBLISHED"],
-      scenarioIds: ["ACC-ACT-SEARCH-SCHOOL-SCN-PERMISSION_DENIED", "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY-SCN-PERMISSION_DENIED", "PUB-ACT-SEARCH-PUBLISHED-RESULTS-SCN-PERMISSION_DENIED"],
-      testIds: ["BASELINE-SEARCH-SIDE-CHANNEL"],
+      scenarioIds: ["ACC-ACT-SEARCH-SCHOOL-SCN-SUCCESS", "ACC-ACT-SEARCH-SCHOOL-SCN-PERMISSION_DENIED", "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY-SCN-SUCCESS", "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY-SCN-PERMISSION_DENIED", "PUB-ACT-SEARCH-PUBLISHED-RESULTS-SCN-SUCCESS", "PUB-ACT-SEARCH-PUBLISHED-RESULTS-SCN-PERMISSION_DENIED"],
+      testIds: ["BASELINE-SEARCH-REQUEST-REAUTHORIZATION"],
     }, ["moduleIds", "pageIds", "objectIds", "actionIds", "permissionRefs", "stateRefs", "scenarioIds", "testIds"]),
     D055: explicitDecisionImpact("D055", {
       moduleIds: ["ACC-001", "DGV-001", "PUB-001"],
@@ -1864,6 +1864,15 @@ export const migrationChanges = deepFreeze(migrationGroups.map((group) => {
     || declaredDecisionIds.some((decisionId) => !group.decisionIds.includes(decisionId))
   ) {
     throw new Error(`${group.id} must declare exact per-decision affected and applicability truth`);
+  }
+  const decisionImpactSignatures = group.decisionIds.map((decisionId) => (
+    JSON.stringify(decisionAffected[decisionId].affected)
+  ));
+  if (
+    group.decisionIds.length > 1
+    && new Set(decisionImpactSignatures).size !== group.decisionIds.length
+  ) {
+    throw new Error(`${group.id} must not reuse one group-union impact across distinct decisions`);
   }
   return {
     ...group,

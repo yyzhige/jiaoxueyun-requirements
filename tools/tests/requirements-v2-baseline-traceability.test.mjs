@@ -244,26 +244,12 @@ test("rejects incomplete migration impact and orphan migration references", () =
 });
 
 test("requires explicit per-decision sources instead of migration-group unions", () => {
-  const actionById = new Map(requirementModel.modules.flatMap((module) => (
-    module.actions.map((action) => [action.id, { moduleId: module.id, action }])
-  )));
   for (const migration of migrationChanges.filter(({ decisionIds }) => decisionIds.length > 1)) {
     assert.deepEqual(Object.keys(migration.decisionAffected).sort(), [...migration.decisionIds].sort());
     const signatures = migration.decisionIds.map((decisionId) => (
       JSON.stringify(migration.decisionAffected[decisionId].affected)
     ));
-    assert.ok(new Set(signatures).size > 1, migration.id);
-  }
-  for (const trace of decisionTraceability) {
-    for (const actionId of trace.actionIds) {
-      const entry = actionById.get(actionId);
-      assert.ok(entry, `${trace.decisionId}:${actionId}`);
-      assert.ok(trace.moduleIds.includes(entry.moduleId), `${trace.decisionId}:${actionId}:module`);
-      assert.ok(
-        trace.objectIds.includes(entry.action.targetObjectId),
-        `${trace.decisionId}:${actionId}:targetObject`,
-      );
-    }
+    assert.equal(new Set(signatures).size, migration.decisionIds.length, migration.id);
   }
   const d037 = decisionTraceability.find(({ decisionId }) => decisionId === "D037");
   assert.ok(d037.actionIds.includes("IAM-ACT-EXECUTE-HIGH-IMPACT-ACTION"));
@@ -356,12 +342,13 @@ test("closes every traced action to its owning module and target object", () => 
       objectId: action.targetObjectId,
     }])
   )));
-  for (const trace of decisionTraceability) {
+  for (const trace of [...decisionTraceability, ...baselineTraceability]) {
     for (const actionId of trace.actionIds) {
       const topology = actionTopology.get(actionId);
-      assert.ok(topology, `${trace.decisionId}:${actionId}`);
-      assert.ok(trace.moduleIds.includes(topology.moduleId), `${trace.decisionId}:${topology.moduleId}`);
-      assert.ok(trace.objectIds.includes(topology.objectId), `${trace.decisionId}:${topology.objectId}`);
+      const traceId = trace.decisionId ?? trace.chapterId;
+      assert.ok(topology, `${traceId}:${actionId}`);
+      assert.ok(trace.moduleIds.includes(topology.moduleId), `${traceId}:${topology.moduleId}`);
+      assert.ok(trace.objectIds.includes(topology.objectId), `${traceId}:${topology.objectId}`);
     }
   }
 });
