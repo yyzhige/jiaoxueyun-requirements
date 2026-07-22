@@ -385,11 +385,11 @@ const accActions = [
       "platform operations has no school member entry without school authorization",
     ),
     auditMode: AUDIT_NOT_REQUIRED,
-    successData: "school first search returns authorized schools and never auto-enters a recent school",
+    successData: "school first search reauthorizes the current relationship on every request, returns only authorized schools, computes counts facets ordering and autocomplete from that authorized set, and never auto-enters a recent school",
     failureOutcomes: {
       PERMISSION_DENIED: {
         kind: "BOUNDARY",
-        expectedData: "no auto entry occurs when no authorized school matches",
+        expectedData: "return one neutral empty authorized result with no object count facet sort key autocomplete candidate object-specific error or distinguishable existence signal, and do not auto-enter any school",
       },
     },
   }),
@@ -1820,7 +1820,7 @@ const dgvActions = [
     { effect: "ALLOW", roleRef: "ROLE-ACADEMIC", condition: "the role has a current original-teaching, dispute-handling or legal-obligation purpose inside the time-bound old-school scope" },
     { effect: "DENY", roleRef: "ROLE-SCHOOL-ADMIN", condition: "school administration has no default access to an individual departed student's identifiable history" },
     { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations requires a separate approved audited access session" },
-  ], auditMode: AUDIT_REQUIRED, failureOutcomes: { PERMISSION_DENIED: { kind: "BOUNDARY", expectedData: "purpose, role, school or expiry mismatch returns no identifiable history" } } }),
+  ], auditMode: AUDIT_REQUIRED, failureOutcomes: { PERMISSION_DENIED: { kind: "BOUNDARY", expectedData: "purpose role school relationship or expiry mismatch returns the same neutral no-result envelope with no count facet ordering error-shape timing or existence signal" } } }),
   action({ id: "DGV-ACT-DEIDENTIFY-OLD-SCHOOL-HISTORY", label: "Deidentify Old-school History after Restricted Access Expiry", targetObjectId: "DGV-OBJ-OLD-SCHOOL-RESTRICTED-HISTORY", inputFieldIds: ["DGV-OLDHIST-F-EXPIRY"], outputFieldIds: ["DGV-OLDHIST-F-DEIDENTIFIED-REF", "DGV-OLDHIST-F-STATUS", "DGV-OLDHIST-F-VERSION"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "the system removes identifiable access after its explicit deadline and preserves only an irreversible aggregate or legal record", "a user cannot extend identifiable old-school history access"), ...eventTrigger("EVT-OLD-SCHOOL-HISTORY-ACCESS-EXPIRY-REACHED"), risk: RISK.HIGH, transition: { from: "RESTRICTED", to: "DEIDENTIFIED" } }),
   action({ id: "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE", label: "Create a Non-recoverable Teacher Author Surrogate", operationKind: "CREATE", targetObjectId: "DGV-OBJ-TEACHER-AUTHOR-SURROGATE", inputFieldIds: ["DGV-SURROGATE-F-DELETION-EVENT-ID", "DGV-SURROGATE-F-TEACHING-FACT-SCOPE"], outputFieldIds: ["DGV-SURROGATE-F-ID", "DGV-SURROGATE-F-STATUS", "DGV-SURROGATE-F-VERSION"], permissions: permissions("SYSTEM", "CURRENT_ACTOR", "after teacher identity deletion the system preserves necessary teaching authorship through an irreversible surrogate", "no user may choose a surrogate that can resolve back to the deleted teacher identity"), ...eventTrigger("EVT-TEACHER-IDENTITY-DELETION-COMPLETED"), risk: RISK.HIGH, successState: "ACTIVE" }),
 ];

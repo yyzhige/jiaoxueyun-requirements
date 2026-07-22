@@ -15,6 +15,10 @@ import {
   terminology,
 } from "./product-baseline-v2.mjs";
 import { migrationChanges } from "./baseline-migration.mjs";
+import {
+  buildBaselineTraceability,
+  buildDecisionTraceability,
+} from "./baseline-traceability.mjs";
 import { launchGates, metricGroups } from "./launch-governance.mjs";
 import {
   baselineDecisions,
@@ -48,7 +52,7 @@ import {
   extensionOptionSets,
 } from "./extensions.mjs";
 import {
-  deferPhaseThreeFlowActions,
+  bindPhaseThreeFlowActions,
   phaseTwoAssessmentOptionSets,
   replacePhaseTwoAssessmentAiTasks,
   replacePhaseTwoAssessmentEvents,
@@ -70,11 +74,37 @@ import {
 } from "./phase-three.mjs";
 import {
   applyGovernanceBaselineContracts,
+  finalizeDataCatalogCoverage,
   governanceBaselineEvents,
   governanceBaselineOptionSets,
 } from "./governance-baseline-contracts.mjs";
+import { identityLifecycleFlows } from "./identity-lifecycle.mjs";
+import { applyTeacherWriteScopePolicies } from "./teacher-write-scope.mjs";
+import { applySchoolTermReferenceRoles } from "./school-term-reference.mjs";
+import {
+  applyClosedClassificationFieldValueSources,
+  applyClosedClassificationOptionSets,
+} from "./closed-classification-options.mjs";
+import { applyAnswerOpenDeliveryContracts } from "./answer-open-delivery.mjs";
+import {
+  applyVideoRecallSourceContracts,
+  applyVideoRecallSourceEvents,
+  applyVideoRecallSourceFlowContracts,
+} from "./video-recall-source-fanout.mjs";
+import {
+  applyHighImpactAuthorizationConsumptionContracts,
+  applyHighImpactAuthorizationContracts,
+  highImpactAuthorizationEvents,
+} from "./high-impact-authorization.mjs";
+import {
+  applyTransferLifecycleContracts,
+  applyTransferLifecycleEventContracts,
+  transferLifecycleEvents,
+  transferLifecycleFlows,
+} from "./transfer-lifecycle.mjs";
 
-export const optionSets = deepFreeze(replacePhaseTwoAssessmentOptionSets([
+export const optionSets = deepFreeze(applyClosedClassificationOptionSets(
+  replacePhaseTwoAssessmentOptionSets([
   ...catalogOptionSets,
   ...teachingLoopOptionSets,
   ...extensionOptionSets,
@@ -82,16 +112,21 @@ export const optionSets = deepFreeze(replacePhaseTwoAssessmentOptionSets([
   ...phaseTwoOptionSets,
   ...phaseThreeOptionSets,
   ...governanceBaselineOptionSets,
-]));
+])),
+);
 
-export const events = deepFreeze(replacePhaseTwoAssessmentEvents([
-  ...catalogEvents,
-  ...teachingLoopEvents,
-  ...extensionEvents,
-  ...phaseTwoEvents,
-  ...phaseThreeEvents,
-  ...governanceBaselineEvents,
-]));
+export const events = deepFreeze(applyVideoRecallSourceEvents(
+  applyTransferLifecycleEventContracts(replacePhaseTwoAssessmentEvents([
+    ...catalogEvents,
+    ...teachingLoopEvents,
+    ...extensionEvents,
+    ...phaseTwoEvents,
+    ...phaseThreeEvents,
+    ...governanceBaselineEvents,
+    ...transferLifecycleEvents,
+    ...highImpactAuthorizationEvents,
+  ])),
+));
 
 export {
   baselineDecisions,
@@ -112,8 +147,26 @@ const sourceModules = [
   ...phaseTwoModules,
   ...phaseThreeModules,
 ];
-export const modules = deepFreeze(applyGovernanceBaselineContracts(
-  deferPhaseThreeFlowActions(replacePhaseTwoAssessmentModules(sourceModules)),
+export const modules = deepFreeze(finalizeDataCatalogCoverage(
+  applyClosedClassificationFieldValueSources(
+    applyVideoRecallSourceContracts(
+      applyAnswerOpenDeliveryContracts(
+        applySchoolTermReferenceRoles(
+          applyTeacherWriteScopePolicies(
+            applyHighImpactAuthorizationConsumptionContracts(
+              applyTransferLifecycleContracts(
+                applyHighImpactAuthorizationContracts(
+                  applyGovernanceBaselineContracts(
+                    bindPhaseThreeFlowActions(replacePhaseTwoAssessmentModules(sourceModules)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ),
 ));
 export const currentReleaseModuleIds = deepFreeze(
   modules
@@ -122,17 +175,24 @@ export const currentReleaseModuleIds = deepFreeze(
 );
 const sourceFlows = [
   ...foundationFlows,
+  ...identityLifecycleFlows,
   ...teachingLoopFlows,
   ...aiReportingFlows,
   ...extensionFlows,
   ...phaseTwoFlows,
+  ...transferLifecycleFlows,
 ];
-const deferredPhaseThreeFlow = sourceFlows.find(({ id }) => id === "DF-011");
-export const flows = deepFreeze([
+const phaseThreeLearningPathFlow = sourceFlows.find(({ id }) => id === "DF-011");
+export const flows = deepFreeze(applyVideoRecallSourceFlowContracts([
   ...replacePhaseTwoAssessmentFlows(sourceFlows),
-  ...(deferredPhaseThreeFlow ? [deferredPhaseThreeFlow] : []),
+  ...(phaseThreeLearningPathFlow ? [phaseThreeLearningPathFlow] : []),
   ...phaseThreeFlows,
-]);
+]));
+export const decisionTraceability = buildDecisionTraceability(modules);
+export const baselineTraceability = buildBaselineTraceability(
+  modules,
+  decisionTraceability,
+);
 export const aiTasks = deepFreeze(replacePhaseTwoAssessmentAiTasks([
   ...aiReportingAiTasks,
   ...extensionAiTasks,
@@ -153,8 +213,8 @@ export {
 };
 
 export const reviewStatus = deepFreeze({
-  code: "PRODUCT_BASELINE_V2_FINALIZED_FACTS_ENCODED",
-  label: "README v2.0 finalized product baseline facts encoded; D003-D096 closed",
+  code: "PRODUCT_BASELINE_V2_FINALIZED_PRD_REVIEW_PASSED",
+  label: "v2.0 finalized product baseline; production PRD semantic review passed",
   reviewedAt: "2026-07-20",
 });
 
@@ -175,6 +235,8 @@ const collectionFacts = {
   phases,
   productDecisions,
   baselineChapters,
+  baselineTraceability,
+  decisionTraceability,
   migrationChanges,
   metricGroups,
   launchGates,

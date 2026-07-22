@@ -1327,7 +1327,7 @@ const timelineFields = [
   }),
   field("LPATH-ENTRY-F-TERM-ID", "Timeline Entry Term", {
     dataType: "ID",
-    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-003" },
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-COM-004" },
     mutability: "IMMUTABLE",
   }),
   field("LPATH-ENTRY-F-EVENT-TYPE", "Learning Path Event Type", {
@@ -1981,7 +1981,11 @@ const notificationModule = moduleFact({
   objects: [object(
     "NOTI-OBJ-NOTIFICATION",
     "In-product Notification",
-    { ...subjectTeacherResponsibility, producerRef: "CURRENT_ACTOR" },
+    {
+      ...subjectTeacherResponsibility,
+      dataSubject: "NOTIFICATION_MESSAGE",
+      producerRef: "CURRENT_ACTOR",
+    },
     "LIFE-003",
     ["QUEUED", "DELIVERED", "READ", "HANDLED", "FAILED"],
     notificationFields,

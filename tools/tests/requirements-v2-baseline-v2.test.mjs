@@ -10,6 +10,8 @@ import { validateRequirementModel } from "../requirements-v2/validate/index.mjs"
 import { prepareRequirementModel } from "../requirements-v2/validate/structure-validator.mjs";
 import {
   baselineChapters,
+  baselineTraceability,
+  decisionTraceability,
   baselineDecisions,
   launchGates,
   metricGroups,
@@ -25,6 +27,8 @@ const NEW_BASELINE_COLLECTIONS = [
   "phases",
   "productDecisions",
   "baselineChapters",
+  "baselineTraceability",
+  "decisionTraceability",
   "migrationChanges",
   "metricGroups",
   "launchGates",
@@ -104,6 +108,7 @@ const EXPECTED_BASELINE_CHAPTER_IDS = [
   "BASE-CH-LAUNCH",
   "BASE-CH-METRICS",
   "BASE-CH-LAUNCH-GATES",
+  "BASE-CH-DOCUMENT-REPOSITORY-BOUNDARY",
 ];
 
 function validFixture(overrides = {}) {
@@ -156,6 +161,8 @@ function validFixture(overrides = {}) {
     phases: [],
     productDecisions: [],
     baselineChapters: [],
+    baselineTraceability: [],
+    decisionTraceability: [],
     migrationChanges: [],
     metricGroups: [],
     launchGates: [],
@@ -174,9 +181,9 @@ function assertOnlyCode(errors, code) {
   assert.deepEqual(errorCodes(errors), [code], errors.join("\n"));
 }
 
-function plannedDgvFixture(phase) {
+function plannedModuleFixture(phase) {
   const model = structuredClone(requirementModel);
-  const module = model.modules.find(({ id }) => id === "DGV-001");
+  const module = model.modules.find(({ id }) => id === "TEA-001");
   module.phase = phase;
   module.releaseStatus = RELEASE_STATUS.PLANNED;
   module.pages.forEach((page) => { page.availability = RELEASE_STATUS.PLANNED; });
@@ -235,8 +242,21 @@ test("publishes migration changes, six metric groups, and three launch gates", (
     assert.ok(change.oldRule && change.newRule && change.rejectedReason, change.id);
     assert.deepEqual(
       Object.keys(change.affected).sort(),
-      ["actionIds", "flowIds", "metricIds", "moduleIds", "objectIds", "pageIds", "permissionActionIds", "scenarioIds", "stateRefs", "testIds"],
+      ["actionIds", "flowIds", "launchGateIds", "metricIds", "moduleIds", "objectIds", "pageIds", "permissionActionIds", "scenarioIds", "stateRefs", "testIds"],
     );
+    assert.deepEqual(Object.keys(change.decisionAffected).sort(), [...change.decisionIds].sort(), change.id);
+    for (const decisionId of change.decisionIds) {
+      assert.deepEqual(
+        Object.keys(change.decisionAffected[decisionId].affected).sort(),
+        Object.keys(change.affected).sort(),
+        `${change.id}.${decisionId}`,
+      );
+      assert.deepEqual(
+        Object.keys(change.decisionAffected[decisionId].axisApplicability).sort(),
+        ["actionIds", "flowIds", "launchGateIds", "metricIds", "moduleIds", "objectIds", "pageIds", "permissionRefs", "scenarioIds", "stateRefs", "testIds"],
+        `${change.id}.${decisionId}.axisApplicability`,
+      );
+    }
   }
   assert.deepEqual(metricGroups.map(({ id }) => id), [
     "MET-GROUP-USER-CLOSURE",
@@ -256,6 +276,25 @@ test("publishes migration changes, six metric groups, and three launch gates", (
     blockingConditions.length > 0 && evidenceRequirements.length > 0 && ownerRef
   )));
   assert.ok(metrics.every(({ groupId, phaseId }) => groupId && phaseId));
+});
+
+test("publishes one closed trace for every README chapter", () => {
+  assert.equal(baselineTraceability.length, baselineChapters.length);
+  assert.deepEqual(
+    baselineTraceability.map(({ chapterId }) => chapterId),
+    baselineChapters.map(({ id }) => id),
+  );
+});
+
+test("publishes one exact direct-impact trace for every D003-D096 decision", () => {
+  assert.equal(decisionTraceability.length, productDecisions.length);
+  assert.deepEqual(
+    decisionTraceability.map(({ decisionId }) => decisionId),
+    productDecisions.map(({ id }) => id),
+  );
+  assert.ok(decisionTraceability.every(({ migrationIds, moduleIds, testIds }) => (
+    migrationIds.length > 0 && moduleIds.length > 0 && testIds.length > 0
+  )));
 });
 
 test("rejects baseline decisions, metadata, and metric contracts with unresolved references", () => {
@@ -430,7 +469,7 @@ test("requires an explicit current-release manifest and excludes planned modules
 
 test("requires planned pages to declare planned availability for phase two and three", () => {
   for (const phase of [PHASE.SECOND, PHASE.THIRD]) {
-    const { model, module } = plannedDgvFixture(phase);
+    const { model, module } = plannedModuleFixture(phase);
     module.pages.forEach((page) => { delete page.availability; });
 
     assertHasCode(
@@ -442,17 +481,17 @@ test("requires planned pages to declare planned availability for phase two and t
 
 test("fully validates executable planned modules in phase two and three", () => {
   for (const phase of [PHASE.SECOND, PHASE.THIRD]) {
-    const { model } = plannedDgvFixture(phase);
+    const { model } = plannedModuleFixture(phase);
     assert.deepEqual(validateRequirementModel(model), []);
 
-    const invalidAction = plannedDgvFixture(phase);
+    const invalidAction = plannedModuleFixture(phase);
     delete invalidAction.module.actions[0].operationKind;
     assertHasCode(
       validateRequirementModel(invalidAction.model),
       "INVALID_ACTION_CONTRACT",
     );
 
-    const invalidPage = plannedDgvFixture(phase);
+    const invalidPage = plannedModuleFixture(phase);
     delete invalidPage.module.pages[0].label;
     assertHasCode(
       validateRequirementModel(invalidPage.model),

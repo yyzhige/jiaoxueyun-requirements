@@ -13,6 +13,24 @@ const USER_TASK = "USER_TASK";
 const SYSTEM_EVENT = "SYSTEM_EVENT";
 const FLOW_INTERNAL = "FLOW_INTERNAL";
 
+function strictPhaseTwoServicePlanRevalidation() {
+  return {
+    resolverActionId: "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+    servicePlanObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    entitlementServicePlanRefFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+    entitlementServicePlanVersionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+    servicePlanStateFieldId: "PLAT-PLAN-F-SERVICE-STATE",
+    servicePlanVersionFieldId: "PLAT-PLAN-F-VERSION",
+    requiredCurrentState: "ACTIVE",
+    currentVersionMustEqualPinnedVersion: true,
+    checkedAtExecution: true,
+    staleMissingOrAmbiguousBehavior: "FAIL_CLOSED",
+    failureResult: "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+    allowedAuthorizationBranches: ["CURRENT_ACTIVE_SERVICE_PLAN"],
+    continuityFallback: { mode: "NONE" },
+  };
+}
+
 function optionSet(id, key, label, entries) {
   return {
     id,
@@ -84,6 +102,8 @@ function pinnedReference({
   targetObjectId,
   targetVersionFieldId,
   required = true,
+  stateGuardPolicy = "NONE",
+  requiredActionIds = [],
 }) {
   return {
     fields: [
@@ -93,8 +113,8 @@ function pinnedReference({
         valueSource: { kind: "OBJECT_REF", targetObjectId },
         mutability: "IMMUTABLE",
         referenceIntegrity: "VERSION_PINNED",
-        stateGuardPolicy: "NONE",
-        actionApplicability: { requiredActionIds: [] },
+        stateGuardPolicy,
+        actionApplicability: { requiredActionIds },
         versionBinding: { versionFieldId, targetVersionFieldId },
       }),
       systemField(versionFieldId, versionLabel, "INTEGER", {
@@ -181,6 +201,8 @@ function action({
   failureResults,
   failureOutcomes = {},
   acceptedInputValues,
+  relatedStateGuards,
+  phaseTwoEntitlementGuard,
   clients = WEB_APP,
   executionMode = USER_TASK,
   trigger,
@@ -240,6 +262,8 @@ function action({
       inputFieldIds,
       outputFieldIds,
       ...(acceptedInputValues ? { acceptedInputValues } : {}),
+      ...(relatedStateGuards ? { relatedStateGuards } : {}),
+      ...(phaseTwoEntitlementGuard ? { phaseTwoEntitlementGuard } : {}),
       ...(transition ? { transition } : {}),
       operationKind,
       writes,
@@ -382,6 +406,13 @@ export const phaseTwoOptionSets = deepFreeze([
     ["GATE_BLOCK", "必要闸门阻断"],
     ["CONTENT_RECALL", "内容召回"],
     ["AUTOMATIC_RETRY", "自动重试"],
+  ]),
+  optionSet("OPT-P2-VIDEO-RECALL-TRIGGER", "phaseTwoVideoRecallTrigger", "教学视频召回触发来源", [
+    ["IDENTITY_DELETION", "身份注销"],
+    ["STUDENT_TRANSFER", "学生转学"],
+    ["RELATIONSHIP_TERMINATION", "学生关系终止"],
+    ["SOURCE_RIGHTS_WITHDRAWAL", "来源权利撤回"],
+    ["CONTENT_RECALL", "内容召回"],
   ]),
   optionSet("OPT-P2-VIDEO-DOWNLOAD-POLICY", "phaseTwoVideoDownloadPolicy", "个性化视频下载策略", [
     ["BLOCK_PRODUCT_ORDINARY_DOWNLOAD", "产品不提供普通文件下载"],
@@ -535,10 +566,21 @@ const progressCompletionEvidenceRef = pinnedReference({
   targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
   required: false,
 });
+const progressCoreEntitlementRef = pinnedReference({
+  refFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-REF",
+  refLabel: "Pinned Active School Phase-two Core Entitlement",
+  versionFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-VERSION",
+  versionLabel: "Pinned Active School Phase-two Core Entitlement Version",
+  targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+  targetVersionFieldId: "PLAT-P2ENT-F-VERSION",
+  stateGuardPolicy: "CREATE_REQUIRED",
+  requiredActionIds: ["PROG-ACT-SYNC-STUDENT-TARGET"],
+});
 const progressTargetFields = [
   identityField("PROG-TARGET-F-ID", "Student Current Target ID"),
   identityRefField("PROG-TARGET-F-STUDENT-REF", "Student", "ORG-OBJ-STUDENT"),
   ...progressTargetSnapshotRef.fields,
+  ...progressCoreEntitlementRef.fields,
   systemField("PROG-TARGET-F-STATUS", "Current Target Status", "STRING", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-P2-PROG-TARGET-STATUS" },
   }),
@@ -628,7 +670,11 @@ const progressObjects = [
     fields: progressTargetFields,
     identityFieldId: "PROG-TARGET-F-ID",
     overrides: {
-      lineageBindings: [progressTargetSnapshotRef.binding, progressCompletionEvidenceRef.binding],
+      lineageBindings: [
+        progressTargetSnapshotRef.binding,
+        progressCompletionEvidenceRef.binding,
+        progressCoreEntitlementRef.binding,
+      ],
     },
   }),
   domainObject({
@@ -699,6 +745,8 @@ const progressActions = [
       "PROG-TARGET-F-STUDENT-REF",
       "PROG-TARGET-F-SNAPSHOT-REF",
       "PROG-TARGET-F-SNAPSHOT-VERSION",
+      "PROG-TARGET-F-CORE-ENTITLEMENT-REF",
+      "PROG-TARGET-F-CORE-ENTITLEMENT-VERSION",
     ],
     outputFieldIds: [
       "PROG-TARGET-F-ID",
@@ -712,8 +760,39 @@ const progressActions = [
       permission("ALLOW", "SYSTEM", "the target state is derived from current versioned activity and completion evidence without requiring a complete profile"),
       permission("DENY", "AI", "AI cannot declare completion without accepted current-target completion evidence"),
     ],
+    relatedStateGuards: [{
+      refFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-REF",
+      versionFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-VERSION",
+      targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+      requiredState: "ACTIVE",
+    }],
+    phaseTwoEntitlementGuard: {
+      entitlementCode: "CORE_AI_ASSESSMENT",
+      entitlementObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+      entitlementRefFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-REF",
+      entitlementVersionFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-VERSION",
+      entitlementSchoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+      entitlementCodesFieldId: "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS",
+      serviceObjectRefFieldId: "PROG-TARGET-F-STUDENT-REF",
+      serviceObjectSchoolResolution: "CURRENT_ACTIVE_STUDENT_SCHOOL_RELATIONSHIP",
+      requiredEntitlementState: "ACTIVE",
+      exactPinnedVersionRequired: true,
+      schoolMustMatch: true,
+      matchCardinality: "EXACTLY_ONE",
+      missingOrAmbiguousBehavior: "FAIL_CLOSED",
+      failureResult: "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      sourceServicePlanRevalidation: strictPhaseTwoServicePlanRevalidation(),
+    },
     successStates: ["NOT_STARTED", "IN_PROGRESS", "PENDING_COMPLETION_EVIDENCE", "COMPLETED", "PAUSED"],
-    failureResults: ["PERMISSION_DENIED", "SOURCE_VERSION_STALE", "EVIDENCE_NOT_ACCEPTED", "VERSION_CONFLICT"],
+    failureResults: [
+      "PERMISSION_DENIED",
+      "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+      "SCHOOL_SCOPE_MISMATCH",
+      "SOURCE_VERSION_STALE",
+      "EVIDENCE_NOT_ACCEPTED",
+      "VERSION_CONFLICT",
+    ],
   }),
   action({
     id: "PROG-ACT-VIEW-CURRENT-TARGET",
@@ -869,11 +948,19 @@ const progressModule = moduleFact({
   priority: "P0",
   title: "Phase-two Minimum Learning Progress",
   objective: "Provide a version-pinned current grade, course, unit, target, prerequisite, target state, and student-selected next allowed target without requiring a complete cognitive profile",
-  entryConditions: ["the school, course, curriculum target, and student relation are current and authorized"],
+  entryConditions: ["the school, course, curriculum target, student relation, and exact ACTIVE school phase-two entitlement version are current and authorized"],
   exitConditions: ["the student can inspect the minimum progress facts and explicitly select or defer only an evidence-allowed next target"],
   baselineDecisionIds: ["BASE-001", "BASE-003", "BASE-004", "BASE-005", "BASE-007", "BASE-010"],
   nfrIds: ["NFR-002", "NFR-006", "NFR-008"],
-  dependencyModuleIds: ["ACC-001", "ORG-001", "CURR-001", "PUB-001"],
+  dependencyModuleIds: ["ACC-001", "ORG-001", "CURR-001", "PUB-001", "PLAT-002"],
+  phaseTwoCoreEntitlementBindings: [{
+    entitlementCode: "CORE_AI_ASSESSMENT",
+    entitlementObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    consumerObjectId: "PROG-OBJ-STUDENT-TARGET",
+    consumerActionIds: ["PROG-ACT-SYNC-STUDENT-TARGET"],
+    entitlementRefFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-REF",
+    entitlementVersionFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-VERSION",
+  }],
   objects: progressObjects,
   relationships: [
     {
@@ -925,13 +1012,13 @@ const videoDecisionRef = pinnedReference({
   targetObjectId: "GRD-OBJ-DECISION",
   targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
 });
-const videoRubricRef = pinnedReference({
+const videoAssessmentStandardRef = pinnedReference({
   refFieldId: "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF",
   refLabel: "Pinned Assessment Standard",
   versionFieldId: "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-VERSION",
   versionLabel: "Pinned Assessment Standard Version",
-  targetObjectId: "HW-OBJ-RUBRIC",
-  targetVersionFieldId: "HW-RUBRIC-F-RUBRIC-VERSION",
+  targetObjectId: "GRD-OBJ-ASSESSMENT-STANDARD-VERSION",
+  targetVersionFieldId: "GRD-STANDARD-F-VERSION",
 });
 const videoPublishedResultRef = pinnedReference({
   refFieldId: "VIDEO-REQUEST-F-PUBLISHED-RESULT-REF",
@@ -1023,7 +1110,7 @@ const videoRequestFields = [
   ...videoActivityRef.fields,
   ...videoSubmissionRef.fields,
   ...videoDecisionRef.fields,
-  ...videoRubricRef.fields,
+  ...videoAssessmentStandardRef.fields,
   ...videoPublishedResultRef.fields,
   ...videoMinimumProgressRef.fields,
   ...videoNextChoiceRef.fields,
@@ -1164,6 +1251,57 @@ const videoAssetSchoolRequestRef = pinnedReference({
   targetVersionFieldId: "VIDEO-SCHOOL-REQUEST-F-VERSION",
   required: false,
 });
+const videoRecallImpactFields = [
+  identityField("VIDEO-RECALL-F-ID", "Video Recall Impact Snapshot ID"),
+  systemField("VIDEO-RECALL-F-TRIGGER-KIND", "Video Recall Trigger Kind", "STRING", {
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-P2-VIDEO-RECALL-TRIGGER" },
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-SOURCE-EVENT-ID", "Recall Source Event ID", "STRING", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-SOURCE-EVENT-VERSION", "Recall Source Event Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-SOURCE-MODULE-ID", "Recall Source Module ID", "STRING", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-SOURCE-OBJECT-ID", "Recall Source Object ID", "STRING", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-SOURCE-OBJECT-REF", "Recall Source Object Reference", "ID", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-SOURCE-OBJECT-VERSION", "Recall Source Object Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-AFFECTED-ASSET-REFS", "Affected Video Asset References", "STRING_ARRAY", {
+    mutability: "IMMUTABLE",
+    idempotencyRole: "FANOUT_SET",
+    validation: "must be the exact immutable asset set whose pinned service object, request source, material source, rights source, or access relation matches the source event version",
+  }),
+  systemField("VIDEO-RECALL-F-AFFECTED-ASSET-DIGEST", "Affected Video Asset Set Digest", "STRING", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-CAPTURED-AT", "Recall Impact Captured At", "DATETIME", {
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-RECALL-F-STATUS", "Recall Impact Snapshot Status", "STRING", {
+    mutability: "IMMUTABLE",
+  }),
+  objectVersionField("VIDEO-RECALL-F-VERSION", "Video Recall Impact Snapshot Version"),
+];
+const videoAssetRecallImpactRef = pinnedReference({
+  refFieldId: "VIDEO-ASSET-F-RECALL-IMPACT-REF",
+  refLabel: "Pinned Video Recall Impact Snapshot",
+  versionFieldId: "VIDEO-ASSET-F-RECALL-IMPACT-VERSION",
+  versionLabel: "Pinned Video Recall Impact Snapshot Version",
+  targetObjectId: "VIDEO-OBJ-RECALL-IMPACT-SNAPSHOT",
+  targetVersionFieldId: "VIDEO-RECALL-F-VERSION",
+  required: false,
+  stateGuardPolicy: "UPDATE_REQUIRED",
+  requiredActionIds: ["VIDEO-ACT-RECALL"],
+});
 const gateField = (id, label) => systemField(id, label, "STRING", {
   valueSource: { kind: "OPTION_SET", optionSetId: "OPT-P2-VIDEO-GATE-STATUS" },
 });
@@ -1235,12 +1373,48 @@ const videoAssetFields = [
   }),
   systemField("VIDEO-ASSET-F-NOTIFIED-AT", "Student Delivery Notification Time", "DATETIME", { required: false }),
   systemField("VIDEO-ASSET-F-RECALL-REASON", "Video Recall Reason", "TEXT", { required: false }),
+  ...videoAssetRecallImpactRef.fields,
+  systemField("VIDEO-ASSET-F-RECALL-TRIGGER-KIND", "Applied Video Recall Trigger Kind", "STRING", {
+    required: false,
+    valueSource: { kind: "OPTION_SET", optionSetId: "OPT-P2-VIDEO-RECALL-TRIGGER" },
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-ASSET-F-RECALL-SOURCE-EVENT-ID", "Applied Recall Source Event ID", "STRING", {
+    required: false,
+    mutability: "IMMUTABLE",
+  }),
+  systemField("VIDEO-ASSET-F-RECALL-SOURCE-EVENT-VERSION", "Applied Recall Source Event Version", "INTEGER", {
+    required: false,
+    mutability: "IMMUTABLE",
+  }),
   objectVersionField("VIDEO-ASSET-F-VERSION", "Teaching Video Asset Version"),
 ];
+
+const videoStudentCoreEntitlementRef = pinnedReference({
+  refFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-REF",
+  refLabel: "Pinned Active School Phase-two Core Entitlement",
+  versionFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-VERSION",
+  versionLabel: "Pinned Active School Phase-two Core Entitlement Version",
+  targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+  targetVersionFieldId: "PLAT-P2ENT-F-VERSION",
+  stateGuardPolicy: "CREATE_REQUIRED",
+  requiredActionIds: ["VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT"],
+});
+const videoSchoolCoreEntitlementRef = pinnedReference({
+  refFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-REF",
+  refLabel: "Pinned Active School Phase-two Core Entitlement",
+  versionFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-VERSION",
+  versionLabel: "Pinned Active School Phase-two Core Entitlement Version",
+  targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+  targetVersionFieldId: "PLAT-P2ENT-F-VERSION",
+  stateGuardPolicy: "CREATE_REQUIRED",
+  requiredActionIds: ["VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL"],
+});
 
 const videoEntitlementFields = [
   identityField("VIDEO-ENTITLEMENT-F-ID", "Student Minimum Video Entitlement ID"),
   identityRefField("VIDEO-ENTITLEMENT-F-STUDENT-REF", "Active Phase-two Student", "ORG-OBJ-STUDENT"),
+  ...videoStudentCoreEntitlementRef.fields,
   systemField("VIDEO-ENTITLEMENT-F-PERIOD", "Entitlement Period"),
   systemField("VIDEO-ENTITLEMENT-F-MINIMUM-UNITS", "Guaranteed Minimum Usable Video Units", "INTEGER", {
     validation: "must be greater than zero for every active phase-two student and cannot depend on ranking, permanent weakness labels, or family payment",
@@ -1252,7 +1426,8 @@ const videoEntitlementFields = [
 
 const videoOverflowFields = [
   identityField("VIDEO-OVERFLOW-F-ID", "School Video Overflow Pool ID"),
-  identityRefField("VIDEO-OVERFLOW-F-SCHOOL-REF", "School", "ACC-OBJ-SCHOOL-PROFILE"),
+  identityRefField("VIDEO-OVERFLOW-F-SCHOOL-REF", "School", "ACC-OBJ-SCHOOL"),
+  ...videoSchoolCoreEntitlementRef.fields,
   systemField("VIDEO-OVERFLOW-F-PERIOD", "Overflow Pool Period"),
   systemField("VIDEO-OVERFLOW-F-AVAILABLE-UNITS", "School Shared Overflow Units", "INTEGER"),
   systemField("VIDEO-OVERFLOW-F-STATUS", "School Overflow Pool Status"),
@@ -1495,7 +1670,7 @@ const videoObjects = [
         videoActivityRef.binding,
         videoSubmissionRef.binding,
         videoDecisionRef.binding,
-        videoRubricRef.binding,
+        videoAssessmentStandardRef.binding,
         videoPublishedResultRef.binding,
         videoMinimumProgressRef.binding,
         videoNextChoiceRef.binding,
@@ -1525,6 +1700,26 @@ const videoObjects = [
     },
   }),
   domainObject({
+    id: "VIDEO-OBJ-RECALL-IMPACT-SNAPSHOT",
+    label: "Version-pinned Video Recall Impact Snapshot",
+    dataSubject: "STUDENT_LOCAL_TASK_EXECUTION",
+    producerRef: "SYSTEM",
+    ownerRef: "SYSTEM",
+    confirmerRef: "SYSTEM",
+    stewardRef: "ROLE-PLATFORM-GOVERNANCE",
+    states: ["CAPTURED"],
+    fields: videoRecallImpactFields,
+    identityFieldId: "VIDEO-RECALL-F-ID",
+    overrides: {
+      recallSourceBindingContract: {
+        eventId: "EVT-P2-VIDEO-RECALL-SOURCE-CHANGED",
+        exactlyOneSourceBindingRequired: true,
+        sourceIdentityAndVersionRequired: true,
+        affectedAssetSetImmutable: true,
+      },
+    },
+  }),
+  domainObject({
     id: "VIDEO-OBJ-ASSET",
     label: "Gated Controlled-playback Teaching Video Rendition with Record-level Governance",
     dataSubject: "STUDENT_LOCAL_TASK_EXECUTION",
@@ -1549,7 +1744,11 @@ const videoObjects = [
           ],
         },
       ],
-      lineageBindings: [videoAssetRequestRef.binding, videoAssetSchoolRequestRef.binding],
+      lineageBindings: [
+        videoAssetRequestRef.binding,
+        videoAssetSchoolRequestRef.binding,
+        videoAssetRecallImpactRef.binding,
+      ],
     },
   }),
   domainObject({
@@ -1563,6 +1762,7 @@ const videoObjects = [
     states: ["AVAILABLE", "EXHAUSTED", "SUSPENDED"],
     fields: videoEntitlementFields,
     identityFieldId: "VIDEO-ENTITLEMENT-F-ID",
+    overrides: { lineageBindings: [videoStudentCoreEntitlementRef.binding] },
   }),
   domainObject({
     id: "VIDEO-OBJ-SCHOOL-OVERFLOW-POOL",
@@ -1577,6 +1777,7 @@ const videoObjects = [
     states: ["AVAILABLE", "EXHAUSTED", "SUSPENDED"],
     fields: videoOverflowFields,
     identityFieldId: "VIDEO-OVERFLOW-F-ID",
+    overrides: { lineageBindings: [videoSchoolCoreEntitlementRef.binding] },
   }),
   domainObject({
     id: "VIDEO-OBJ-QUOTA-LEDGER",
@@ -1696,7 +1897,75 @@ const videoAssetGovernanceInputFields = [
 ];
 const videoAssetGovernanceOutputFields = [...videoAssetGovernanceInputFields];
 
+const videoRecallImpactAction = action({
+  id: "VIDEO-ACT-LOCATE-RECALL-IMPACT",
+  label: "Capture the Exact Video Recall Impact Set from a Versioned Source Event",
+  targetObjectId: "VIDEO-OBJ-RECALL-IMPACT-SNAPSHOT",
+  operationKind: "CREATE",
+  inputFieldIds: [
+    "VIDEO-RECALL-F-TRIGGER-KIND",
+    "VIDEO-RECALL-F-SOURCE-EVENT-ID",
+    "VIDEO-RECALL-F-SOURCE-EVENT-VERSION",
+    "VIDEO-RECALL-F-SOURCE-MODULE-ID",
+    "VIDEO-RECALL-F-SOURCE-OBJECT-ID",
+    "VIDEO-RECALL-F-SOURCE-OBJECT-REF",
+    "VIDEO-RECALL-F-SOURCE-OBJECT-VERSION",
+    "VIDEO-RECALL-F-AFFECTED-ASSET-REFS",
+    "VIDEO-RECALL-F-AFFECTED-ASSET-DIGEST",
+  ],
+  acceptedInputValues: [{
+    fieldId: "VIDEO-RECALL-F-TRIGGER-KIND",
+    optionSetId: "OPT-P2-VIDEO-RECALL-TRIGGER",
+    partitionId: "VIDEO-RECALL-TRIGGER-KIND",
+    codes: [
+      "IDENTITY_DELETION",
+      "STUDENT_TRANSFER",
+      "RELATIONSHIP_TERMINATION",
+      "SOURCE_RIGHTS_WITHDRAWAL",
+      "CONTENT_RECALL",
+    ],
+  }],
+  outputFieldIds: [
+    "VIDEO-RECALL-F-ID",
+    "VIDEO-RECALL-F-CAPTURED-AT",
+    "VIDEO-RECALL-F-STATUS",
+    "VIDEO-RECALL-F-VERSION",
+  ],
+  executionMode: FLOW_INTERNAL,
+  trigger: { kind: "FLOW", flowIds: ["DF-P2-003"] },
+  permissions: [
+    permission("ALLOW", "SYSTEM", "one registered cross-module source event and source-object version resolves one immutable affected-asset set"),
+    permission("DENY", "AI", "AI cannot invent a recall source, widen the affected asset set, or suppress a matching asset"),
+  ],
+  successState: "CAPTURED",
+  risk: RISK.HIGH,
+  successData: "captures one immutable source-event and source-version bound set of affected video assets before any recall mutation",
+  failureResults: [
+    "PERMISSION_DENIED",
+    "RECALL_SOURCE_EVENT_INVALID",
+    "RECALL_SOURCE_VERSION_STALE",
+    "AFFECTED_ASSET_SET_MISMATCH",
+    "VERSION_CONFLICT",
+  ],
+});
+videoRecallImpactAction.action.recallImpactResolutionContract = {
+  sourceEventId: "EVT-P2-VIDEO-RECALL-SOURCE-CHANGED",
+  exactlyOneSourceBindingRequired: true,
+  sourceIdentityAndVersionRequired: true,
+  affectedAssetSetMode: "EXACT_IMMUTABLE_VERSION_PINNED_SET",
+  locatorIdempotencyKeyParts: [
+    "VIDEO-RECALL-F-SOURCE-EVENT-ID",
+    "VIDEO-RECALL-F-SOURCE-EVENT-VERSION",
+    "VIDEO-RECALL-F-SOURCE-OBJECT-REF",
+    "VIDEO-RECALL-F-SOURCE-OBJECT-VERSION",
+    "VIDEO-RECALL-F-AFFECTED-ASSET-DIGEST",
+  ],
+  zeroMatchBehavior: "CAPTURE_EMPTY_SET_AND_STOP_WITHOUT_RECALL",
+  ambiguousOrExpandedSetBehavior: "FAIL_CLOSED",
+};
+
 const videoActions = [
+  videoRecallImpactAction,
   action({
     id: "VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT",
     label: "Ensure Minimum Video Entitlement for Every Active Phase-two Student",
@@ -1704,6 +1973,8 @@ const videoActions = [
     operationKind: "CREATE",
     inputFieldIds: [
       "VIDEO-ENTITLEMENT-F-STUDENT-REF",
+      "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-REF",
+      "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-VERSION",
       "VIDEO-ENTITLEMENT-F-PERIOD",
       "VIDEO-ENTITLEMENT-F-MINIMUM-UNITS",
       "VIDEO-ENTITLEMENT-F-AVAILABLE-UNITS",
@@ -1719,8 +1990,38 @@ const videoActions = [
       permission("ALLOW", "SYSTEM", "each active phase-two student receives a positive minimum usable-video guarantee for the period"),
       permission("DENY", "CURRENT_ACTOR", "no user may reduce minimum help by ranking, permanent weakness labels, or family payment ability"),
     ],
+    relatedStateGuards: [{
+      refFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-REF",
+      versionFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-VERSION",
+      targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+      requiredState: "ACTIVE",
+    }],
+    phaseTwoEntitlementGuard: {
+      entitlementCode: "MINIMUM_VIDEO_HELP",
+      entitlementObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+      entitlementRefFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-REF",
+      entitlementVersionFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-VERSION",
+      entitlementSchoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+      entitlementCodesFieldId: "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS",
+      serviceObjectRefFieldId: "VIDEO-ENTITLEMENT-F-STUDENT-REF",
+      serviceObjectSchoolResolution: "CURRENT_ACTIVE_STUDENT_SCHOOL_RELATIONSHIP",
+      requiredEntitlementState: "ACTIVE",
+      exactPinnedVersionRequired: true,
+      schoolMustMatch: true,
+      matchCardinality: "EXACTLY_ONE",
+      missingOrAmbiguousBehavior: "FAIL_CLOSED",
+      failureResult: "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      sourceServicePlanRevalidation: strictPhaseTwoServicePlanRevalidation(),
+    },
     successStates: ["AVAILABLE", "EXHAUSTED"],
-    failureResults: ["PERMISSION_DENIED", "INVALID_MINIMUM_GUARANTEE", "VERSION_CONFLICT"],
+    failureResults: [
+      "PERMISSION_DENIED",
+      "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+      "SCHOOL_SCOPE_MISMATCH",
+      "INVALID_MINIMUM_GUARANTEE",
+      "VERSION_CONFLICT",
+    ],
   }),
   action({
     id: "VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL",
@@ -1729,6 +2030,8 @@ const videoActions = [
     operationKind: "CREATE",
     inputFieldIds: [
       "VIDEO-OVERFLOW-F-SCHOOL-REF",
+      "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-REF",
+      "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-VERSION",
       "VIDEO-OVERFLOW-F-PERIOD",
       "VIDEO-OVERFLOW-F-AVAILABLE-UNITS",
     ],
@@ -1743,8 +2046,38 @@ const videoActions = [
       permission("ALLOW", "SYSTEM", "the phase-two school service creates one versioned shared overflow pool for the period"),
       permission("DENY", "ROLE-STUDENT", "a student cannot alter school overflow capacity or priority"),
     ],
+    relatedStateGuards: [{
+      refFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-REF",
+      versionFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-VERSION",
+      targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+      requiredState: "ACTIVE",
+    }],
+    phaseTwoEntitlementGuard: {
+      entitlementCode: "MINIMUM_VIDEO_HELP",
+      entitlementObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+      entitlementRefFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-REF",
+      entitlementVersionFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-VERSION",
+      entitlementSchoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+      entitlementCodesFieldId: "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS",
+      serviceObjectRefFieldId: "VIDEO-OVERFLOW-F-SCHOOL-REF",
+      serviceObjectSchoolResolution: "DIRECT_SCHOOL_REFERENCE",
+      requiredEntitlementState: "ACTIVE",
+      exactPinnedVersionRequired: true,
+      schoolMustMatch: true,
+      matchCardinality: "EXACTLY_ONE",
+      missingOrAmbiguousBehavior: "FAIL_CLOSED",
+      failureResult: "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      sourceServicePlanRevalidation: strictPhaseTwoServicePlanRevalidation(),
+    },
     successStates: ["AVAILABLE", "EXHAUSTED"],
-    failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT"],
+    failureResults: [
+      "PERMISSION_DENIED",
+      "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+      "SCHOOL_SCOPE_MISMATCH",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
   }),
   action({
     id: "VIDEO-ACT-REQUEST-PROBLEM-DRIVEN",
@@ -2250,12 +2583,42 @@ const videoActions = [
     label: "Recall a Delivered or Blocked Teaching Video",
     targetObjectId: "VIDEO-OBJ-ASSET",
     operationKind: "UPDATE",
-    inputFieldIds: ["VIDEO-ASSET-F-RECALL-REASON"],
+    inputFieldIds: [
+      "VIDEO-ASSET-F-RECALL-REASON",
+      "VIDEO-ASSET-F-RECALL-IMPACT-REF",
+      "VIDEO-ASSET-F-RECALL-IMPACT-VERSION",
+      "VIDEO-ASSET-F-RECALL-TRIGGER-KIND",
+      "VIDEO-ASSET-F-RECALL-SOURCE-EVENT-ID",
+      "VIDEO-ASSET-F-RECALL-SOURCE-EVENT-VERSION",
+    ],
+    acceptedInputValues: [{
+      fieldId: "VIDEO-ASSET-F-RECALL-TRIGGER-KIND",
+      optionSetId: "OPT-P2-VIDEO-RECALL-TRIGGER",
+      partitionId: "VIDEO-RECALL-TRIGGER-KIND",
+      codes: [
+        "IDENTITY_DELETION",
+        "STUDENT_TRANSFER",
+        "RELATIONSHIP_TERMINATION",
+        "SOURCE_RIGHTS_WITHDRAWAL",
+        "CONTENT_RECALL",
+      ],
+    }],
     outputFieldIds: [
       "VIDEO-ASSET-F-RECALL-REASON",
+      "VIDEO-ASSET-F-RECALL-IMPACT-REF",
+      "VIDEO-ASSET-F-RECALL-IMPACT-VERSION",
+      "VIDEO-ASSET-F-RECALL-TRIGGER-KIND",
+      "VIDEO-ASSET-F-RECALL-SOURCE-EVENT-ID",
+      "VIDEO-ASSET-F-RECALL-SOURCE-EVENT-VERSION",
       "VIDEO-ASSET-F-DELIVERY-STATUS",
       "VIDEO-ASSET-F-VERSION",
     ],
+    relatedStateGuards: [{
+      refFieldId: "VIDEO-ASSET-F-RECALL-IMPACT-REF",
+      versionFieldId: "VIDEO-ASSET-F-RECALL-IMPACT-VERSION",
+      targetObjectId: "VIDEO-OBJ-RECALL-IMPACT-SNAPSHOT",
+      requiredState: "CAPTURED",
+    }],
     executionMode: FLOW_INTERNAL,
     trigger: { kind: "FLOW", flowIds: ["DF-P2-003"] },
     permissions: [
@@ -2265,7 +2628,14 @@ const videoActions = [
     transition: { from: ["DELIVERED", "GATE_BLOCKED"], to: "RECALLED" },
     risk: RISK.HIGH,
     successData: "stops playback and triggers governed deletion, migration restriction, or access removal without claiming external copies can be recalled",
-    failureResults: ["PERMISSION_DENIED", "RECALL_REASON_REQUIRED", "VERSION_CONFLICT"],
+    failureResults: [
+      "PERMISSION_DENIED",
+      "RECALL_REASON_REQUIRED",
+      "RECALL_IMPACT_NOT_CAPTURED",
+      "RECALL_SOURCE_VERSION_STALE",
+      "ALREADY_RECALLED",
+      "VERSION_CONFLICT",
+    ],
   }),
   action({
     id: "VIDEO-ACT-RELEASE-QUOTA",
@@ -2596,6 +2966,67 @@ const videoActions = [
   }),
 ];
 
+function appendVideoFailure(actionFact, resultCode) {
+  const { action: videoAction, scenarios } = actionFact;
+  if (!videoAction.failureResults.includes(resultCode)) videoAction.failureResults.push(resultCode);
+  const scenarioId = `${videoAction.id}-SCN-${resultCode}`;
+  if (!videoAction.scenarioIds.includes(scenarioId)) videoAction.scenarioIds.push(scenarioId);
+  if (scenarios.some(({ id }) => id === scenarioId)) return;
+  scenarios.push({
+    id: scenarioId,
+    kind: "BOUNDARY",
+    resultCode,
+    actionId: videoAction.id,
+    ...(videoAction.executionMode === USER_TASK
+      ? {}
+      : { trigger: structuredClone(videoAction.trigger) }),
+    given: `${resultCode} blocks ${videoAction.label}`,
+    when: `the authorized actor requests ${videoAction.label}`,
+    then: {
+      expectedData: `${videoAction.label} returns ${resultCode} without delivery, playback, settlement, or hidden source mutation`,
+      expectedState: { mode: "UNCHANGED" },
+      expectedPermission: "DENY",
+      expectedVisibility: "no recalled or unauthorized video content is exposed",
+    },
+  });
+}
+
+const videoActionFactsById = new Map(videoActions.map((entry) => [entry.action.id, entry]));
+const recallAction = videoActionFactsById.get("VIDEO-ACT-RECALL")?.action;
+recallAction.recallExecutionContract = {
+  impactObjectId: "VIDEO-OBJ-RECALL-IMPACT-SNAPSHOT",
+  impactRefFieldId: "VIDEO-ASSET-F-RECALL-IMPACT-REF",
+  impactVersionFieldId: "VIDEO-ASSET-F-RECALL-IMPACT-VERSION",
+  sourceEventIdFieldId: "VIDEO-ASSET-F-RECALL-SOURCE-EVENT-ID",
+  sourceEventVersionFieldId: "VIDEO-ASSET-F-RECALL-SOURCE-EVENT-VERSION",
+  triggerKindFieldId: "VIDEO-ASSET-F-RECALL-TRIGGER-KIND",
+  exactlyCapturedAssetOnly: true,
+  idempotencyKeyParts: [
+    "VIDEO-ASSET-F-ID",
+    "VIDEO-ASSET-F-VERSION",
+    "VIDEO-ASSET-F-RECALL-IMPACT-REF",
+    "VIDEO-ASSET-F-RECALL-IMPACT-VERSION",
+  ],
+  alreadyRecalledBehavior: "RETURN_EXISTING_RECALL_VERSION_WITHOUT_DUPLICATE_RELEASE",
+  externalCopyRecallClaimAllowed: false,
+};
+
+for (const actionId of [
+  "VIDEO-ACT-DELIVER-USABLE",
+  "VIDEO-ACT-VIEW-CONTROLLED",
+  "VIDEO-ACT-VIEW-SCHOOL-PRIVATE",
+]) {
+  const actionFact = videoActionFactsById.get(actionId);
+  actionFact.action.recallConsumptionGuard = {
+    statusFieldId: "VIDEO-ASSET-F-DELIVERY-STATUS",
+    forbiddenStatus: "RECALLED",
+    checkedAtExecution: true,
+    staleOrMissingStatusBehavior: "FAIL_CLOSED",
+    failureResult: "VIDEO_RECALLED",
+  };
+  appendVideoFailure(actionFact, "VIDEO_RECALLED");
+}
+
 const videoPages = [
   page(
     "VIDEO-PAGE-STUDENT-REQUEST",
@@ -2645,7 +3076,22 @@ const videoModule = moduleFact({
   exitConditions: ["authorized learners receive a usable fully gated video or safe alternative, every quota reservation is settled or released exactly once, and any learning claim is backed by a separate new-context verification fact"],
   baselineDecisionIds: ["BASE-001", "BASE-003", "BASE-004", "BASE-005", "BASE-007", "BASE-010"],
   nfrIds: ["NFR-002", "NFR-005", "NFR-006", "NFR-008", "NFR-009"],
-  dependencyModuleIds: ["ORG-001", "CURR-001", "PROG-001", "HW-001", "SUB-001", "GRD-001", "PUB-001", "CONTENT-001"],
+  dependencyModuleIds: ["ORG-001", "CURR-001", "PROG-001", "HW-001", "SUB-001", "GRD-001", "PUB-001", "CONTENT-001", "PLAT-002"],
+  phaseTwoCoreEntitlementBindings: [{
+    entitlementCode: "MINIMUM_VIDEO_HELP",
+    entitlementObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    consumerObjectId: "VIDEO-OBJ-STUDENT-ENTITLEMENT",
+    consumerActionIds: ["VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT"],
+    entitlementRefFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-REF",
+    entitlementVersionFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-VERSION",
+  }, {
+    entitlementCode: "MINIMUM_VIDEO_HELP",
+    entitlementObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    consumerObjectId: "VIDEO-OBJ-SCHOOL-OVERFLOW-POOL",
+    consumerActionIds: ["VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL"],
+    entitlementRefFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-REF",
+    entitlementVersionFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-VERSION",
+  }],
   objects: videoObjects,
   relationships: [
     {

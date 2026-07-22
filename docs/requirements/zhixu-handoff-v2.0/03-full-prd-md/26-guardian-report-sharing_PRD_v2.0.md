@@ -1,9 +1,12 @@
-# REPORT-001 第二阶段扩展登记
+交付状态：PLANNED；本文是目标产品需求合同，不表示该能力已上线或属于第一阶段交付。
+
+# REPORT-001 规划元数据登记
 
 | 属性 | 值 |
 | --- | --- |
 | 模块标题 | Future Extended Reporting Contract |
 | 阶段 | 2 |
+| 交付状态 | PLANNED |
 | 优先级 | P1 |
 | 合同类型 | TASK8_REPORT_FUTURE_METADATA |
 | 目标 | Register unresolved future reporting dependencies without exposing executable behavior |

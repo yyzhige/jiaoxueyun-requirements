@@ -1,100 +1,49 @@
-# 知序教学云产品总基线 v2.0
+# 知序教学云产品 PRD v2.0
 
 | 属性 | 值 |
-|---|---|
-| 版本 | v2.0 |
-| 日期 | 2026-07-16 |
-| 状态 | v2.0 产品事实源（语义评审通过） |
-| 目标市场 | 河北省石家庄市公办初中 |
-| 试点范围 | 一所学校、七年级、三个班、全学科 |
-| 产品端 | Web、App |
+| --- | --- |
+| 产品基线 | v2.0 |
+| 决策状态 | finalized |
+| 基线日期 | 2026-07-20 |
+| 权威来源 | README.md（外部冻结产品基线） |
+| 交付状态 | 产品基线已定版，第一阶段进入研发准备；目标产品中的第二、第三阶段能力不得表述为已经上线。 |
+| 产品决策 | 94（D003-D096） |
+| README 章节追踪 | 58 |
 
-## 1. 第一性原理目标
+## 三阶段产品边界
 
-知序教学云第一阶段要验证的不是页面数量，也不是 AI 能否替代学校教学判断，而是：
+| 阶段 | 名称 | 交付状态 | 目标 | 完成标准 | 里程碑边界 |
+| --- | --- | --- | --- | --- | --- |
+| PHASE-1 | 教学事实底座 | BUILD_READY | 建立不依赖 AI 也能可靠运行的学校、身份、关系、活动、提交、历史和访问事实底座。 | 能够安全承载真实未成年学生，身份、权限、原始事实、弱网保护、监护辅助、迁移注销和申诉均可执行。 | 内部最小闭环只是研发里程碑，不构成第一阶段完成。 |
+| PHASE-2 | AI 评定与个性化教学视频 | PLANNED | 在可信事实底座上提供可质疑、可纠正的 AI 评定与完成判定，以及问题驱动和进度驱动教学视频。 | AI 结果绑定固定规则、原始证据和最小学习状态，反馈、答案开放、视频交付和异常路径通过全部门禁。 | 完整多维画像不是第二阶段最小闭环的前置条件。 |
+| PHASE-3 | 长期认知画像与双轨进度 | PLANNED | 形成以稳定能力图谱为骨架的长期多维画像，并让班级教学进度与学生个人进度长期并行。 | 每项长期认知可回到连续证据，可质疑、纠正和重算，并在跨教材、跨学年与授权转学中保持可追溯。 | 不得用一次分数、永久标签或完整画像的假设替代连续证据。 |
 
-在不降低成绩可信度和教师控制权的前提下，减少教师从收作业到发布反馈的重复劳动，并把作业结果转化为学生可执行、可跟踪、可再验证的下一步学习任务。
+## 产品硬不变量
 
-## 2. 不可变产品决策
+- INV-RAW-FACTS-IMMUTABLE: AI 派生结果不得覆盖学生答案、图片、音频、解释、材料和真实交互等原始事实。
+- INV-NO-DEFAULT-RANKING: 默认不生成综合能力排名、公开弱项榜或跨场景单一总分。
+- INV-HIGH-IMPACT-HUMAN-RESPONSIBILITY: AI 不得独立作出惩戒、公开排名、升学、身份资格或其他高影响决定。
+- INV-PLANNED-NOT-LAUNCHED: 第二、第三阶段合同不得进入第一阶段发布清单或被描述为已上线能力。
 
-- `BASE-001` 学校是采购、数据控制和治理主体。
-- `BASE-002` 试点先固定河北省石家庄市公办初中，一所学校、七年级、三个班。
-- `BASE-003` 全科表示所有学科进入统一作业、提交、反馈、成绩、证据和提升闭环，不承诺所有题型自动判分。
-- `BASE-004` 产品只有 Web 和 App 两端，所有角色均可登录两端。
-- `BASE-005` Web 是完整业务工作台；App 是高频移动协作与学习端，不要求一比一复制 Web。
-- `BASE-006` 不做面向目标用户的终端命令行。“一句话操作”统一定义为 Web/App 内 AI 对话、快捷指令和可视化任务执行。
-- `BASE-007` 教师使用统一工作身份，同时挂载任课教师、班主任等职责；读权限可按职责汇总，写权限按动作和对象逐项校验。
-- `BASE-008` 班主任拥有本班全学科查看与协调权限，不拥有他科学科评分、掌握判断和计划内容修改权。
-- `BASE-009` 学生每个学科的提升点必须同步给对应任课教师，班主任拥有本班全学科查看权限。
-- `BASE-010` 第一阶段只做站内报告与通知；第三方渠道、AI 讲题视频、AI 教学视频作为第二阶段扩展登记。
+## 六组指标与三类上线门
 
-## 3. 第一阶段主闭环
-
-1. 学校、账号、身份、学期和组织主数据建立。
-2. 任课教师创建并发布全科作业。
-3. 学生在 App/Web 在线或拍照提交。
-4. AI 按题型分级完成识别、初评和分流。
-5. 任课教师复核并确认正式评分。
-6. 教师发布成绩与反馈，学生查看后进入订正。
-7. 订正和成绩形成学习证据、知识点归因和掌握候选。
-8. 任课教师确认个性化提升计划，班主任查看全科协调。
-9. 学生执行提升任务并反馈困难。
-10. 定期报告和长期学习路径持续跟踪变化。
-
-## 4. 成功指标
-
-| Metric ID | 目标 | 指标 | 试点目标 |
-| --- | --- | --- | --- |
-| `MET-001` | 降低重复劳动 | 一轮作业反馈闭环的教师中位有效操作时长 | 相比试点前下降至少 30% |
-| `MET-002` | 建立行动闭环 | 查看反馈后进入订正或提升任务的学生比例 | 至少 60% |
-| `MET-003` | 保持教师控制 | 未经教师确认发布的主观题成绩数量 | 0 |
-| `MET-004` | 保持数据安全 | 跨学校、跨班级、跨学生越权事件 | 0 |
-| `MET-005` | 保持人工兜底 | AI 不可用时提交、批改和发布三条人工路径完成率 | 100% |
-
-## 5. 模块基线
-
-| 优先级 | 模块 ID | 模块 | 事实源 |
-| --- | --- | --- | --- |
-| P0 | ACC-001 | 学校入口、登录与工作上下文 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/01-school-entry-access_PRD_v2.0.md) |
-| P0 | ORG-001 | 学校组织、成员与导入 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/02-organization-members-import_PRD_v2.0.md) |
-| P0 | IAM-001 | 工作身份、职责授权与数据范围 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/03-identity-permission-scope_PRD_v2.0.md) |
-| P0 | DGV-001 | 数据治理、生命周期与 AI 数据使用 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/04-data-governance-ai-usage_PRD_v2.0.md) |
-| P0 | AUD-001 | 操作审计与敏感访问 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/05-audit-sensitive-access_PRD_v2.0.md) |
-| P0 | CURR-001 | 课程、教材版本与知识点体系 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/06-curriculum-knowledge-map_PRD_v2.0.md) |
-| P0 | TEA-001 | 教师与班主任工作台 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/07-teacher-homeroom-workbench_PRD_v2.0.md) |
-| P0 | HW-001 | 作业创建与发布 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/08-assignment-create-release_PRD_v2.0.md) |
-| P0 | SUB-001 | 学生作答与提交 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/09-student-answer-submit_PRD_v2.0.md) |
-| P0 | GRD-001 | AI 初评与教师复核 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/10-ai-grading-review_PRD_v2.0.md) |
-| P0 | PUB-001 | 成绩与反馈发布、修正 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/11-result-publish-correction_PRD_v2.0.md) |
-| P0 | SCO-001 | 成绩册与成绩视图 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/12-gradebook-score-view_PRD_v2.0.md) |
-| P0 | STU-001 | 教师学生管理与学生详情 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/13-teacher-student-management_PRD_v2.0.md) |
-| P0 | INS-001 | 学习证据、知识点归因与掌握判断 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/14-mastery-evidence-insight_PRD_v2.0.md) |
-| P0 | PLN-001 | 个性化提升与全科协调 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/15-personalized-improvement-plan_PRD_v2.0.md) |
-| P0 | APP-001 | 学生首页与学习执行 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/16-student-home-learning-execution_PRD_v2.0.md) |
-| P0 | CORR-001 | 反馈、错题与订正 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/17-feedback-correction_PRD_v2.0.md) |
-| P0 | AIX-001 | AI 对话、可视化命令与任务执行 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/18-ai-conversation-task-execution_PRD_v2.0.md) |
-| P0 | RPT-001 | 临时分析、定期报告与订阅 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/19-reports-subscriptions_PRD_v2.0.md) |
-| P0 | LPATH-001 | 长期学习画像与学习路径 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/20-long-term-learning-path_PRD_v2.0.md) |
-| P0 | NOTI-001 | 站内通知、投递与阅读状态 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/21-in-app-notification_PRD_v2.0.md) |
-| P0 | PREP-001 | 教师备课与课堂授课 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/22-lesson-prep-delivery_PRD_v2.0.md) |
-| P0 | CONTENT-001 | 题库与教学内容管理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/23-question-content-management_PRD_v2.0.md) |
-| P0 | EXM-001 | 考试与综合成绩管理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/24-exam-score-management_PRD_v2.0.md) |
-| P0 | SCH-001 | 教务辅助排课 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/25-academic-scheduling_PRD_v2.0.md) |
-| P1 | REPORT-001 | 扩展报告合同（第二阶段元数据） | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/26-guardian-report-sharing_PRD_v2.0.md) |
-| P0 | PLAT-001 | 平台学校入驻与运营治理 | [PRD](../requirements/zhixu-handoff-v2.0/03-full-prd-md/27-platform-onboarding-governance_PRD_v2.0.md) |
-
-## 6. AI 报表与长期学习路径
-
-| 形态 | 定义 | 保存规则 |
+| 指标组 | 定义 | 指标 |
 | --- | --- | --- |
-| 临时 | 当前对话或页面即时生成的查询、分析和临时报表 | 会话内保留，可另存为报告定义 |
-| 定期 | 按日、周、月或自定义周期生成的报告快照 | 保存订阅定义、运行快照、数据时间、源版本和权限结果 |
-| 长期 | 跨学科、知识点和学习活动持续形成的学习路径 | 保存事实引用、教师确认的解释版本和变化时间线 |
+| MET-GROUP-USER-CLOSURE | 学生、教师和学校能否在正常与异常路径中完成各自核心任务。 | MET-002 / MET-005 |
+| MET-GROUP-FACT-RELIABILITY | 身份、关系、权限、提交、版本和历史是否完整、准确、可恢复且可追溯。 | MET-006 |
+| MET-GROUP-AI-TEACHING-QUALITY | AI 评定、反馈、视频和理解验证是否正确、可解释并产生有效下一步。 | MET-003 |
+| MET-GROUP-SAFETY-DATA-RIGHTS | 未成年人保护、授权、纠正、导出、迁移、删除和外部处理是否成立。 | MET-004 |
+| MET-GROUP-FAIRNESS-ACCESSIBILITY | 小学与初中、语数英、不同输入、弱网和无障碍场景是否获得可用的基本学习帮助。 | MET-007 |
+| MET-GROUP-TEACHER-SCHOOL-EFFICIENCY | 产品是否减少人工分析和日常评定负担，同时没有把工作转嫁给学生、教师或平台支持。 | MET-001 |
 
-## 7. 第二阶段扩展登记
+| 上线门 | 类型 | Owner | 阻断条件 |
+| --- | --- | --- | --- |
+| GATE-ZERO-TOLERANCE | ZERO_TOLERANCE | ROLE-PLATFORM-OPS | 跨学校、关系、对象、用途或期限的数据越权<br>学生、教师或监护人身份错绑<br>原始答案、媒体、提交或历史版本被覆盖或丢失<br>删除、转学、取消或归档后无权数据重新参与业务或搜索<br>AI 或平台故障导致学生被判错、迟交、能力下降或失去已发布活动履约<br>未授权外部训练、复用、转交或公共内容晋升<br>必要权限、安全、隐私、权利或教学正确性检查失败后仍发布 |
+| GATE-QUALITY-THRESHOLD | QUALITY_THRESHOLD | ROLE-ACADEMIC | 阶段适用的识别、评定、视频、可及性、闭环或效率指标低于试点前冻结的最低阈值<br>阈值未按学段、学科、任务类型、输入方式、弱网和无障碍场景分层<br>在看到试点结果后倒推刚好通过的阈值或删除失败样本 |
+| GATE-EVIDENCE-COMPLETENESS | EVIDENCE_COMPLETENESS | ROLE-SCHOOL-ADMIN | 关键角色、端到端流程、越权、失败恢复、转学、删除、弱网、无障碍或套餐变化场景缺少证据<br>用页面清单、接口数量、AI 可调用或演示视频替代真实角色验收<br>历史、权限、数据权利或异常路径无法在界面与审计事实中得到证明 |
 
-- 第三方通知与外部消息渠道。
-- AI 讲题视频生成。
-- AI 教学视频生成。
+## 追踪与迁移
 
-以上扩展必须复用现有权限、数据治理、审计、知识点和教师确认合同，不允许重建学生数据事实。
+- 完整章节追踪见 zhixu-handoff-v2.0/02-indexes/product-baseline-v2-traceability.md。
+- D003-D096 逐项裁决见 zhixu-handoff-v2.0/02-indexes/D003-D096-decision-matrix.md。
+- 旧规则到新规则及影响范围见 zhixu-handoff-v2.0/02-indexes/product-baseline-v2-migration-log.md。

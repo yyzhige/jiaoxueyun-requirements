@@ -2,12 +2,14 @@
 
 | 属性 | 值 |
 | --- | --- |
-| 状态 | v2.0 product fact source; semantic review passed |
-| 状态码 | PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED |
-| 评审日期 | 2026-07-16 |
+| 状态 | v2.0 finalized product baseline; production PRD semantic review passed |
+| 状态码 | PRODUCT_BASELINE_V2_FINALIZED_PRD_REVIEW_PASSED |
+| 评审日期 | 2026-07-20 |
 | 事实源 | tools/requirements-v2/facts → fail-closed validators → renderers |
-| 模块 | 27 |
-| 数据流 | 14 |
+| 模块 | 30 |
+| 第一阶段当前交付模块 | 19 |
+| 规划模块 | 11 |
+| 数据流 | 23 |
 
 ## 阅读顺序
 
@@ -21,4 +23,5 @@
 - 产品端只有 Web 与 App，角色不与端绑定；App 不要求一比一复制 Web。
 - AI 一句话能力位于产品内，继承当前学校、身份、学期、职责和数据权限。
 - 正式成绩、学习解释和学科计划的专业确认归对应任课教师；班主任可查看本班全学科并协调，但不能替代他科写入。
-- 第三方通知、AI 讲题视频和 AI 教学视频为第二阶段扩展。
+- 第一阶段只交付教学事实底座；AI 评定与个性化教学视频属于第二阶段 PLANNED，长期认知画像与双轨进度属于第三阶段 PLANNED。
+- 第三方通知渠道暂不进入当前阶段产品合同。

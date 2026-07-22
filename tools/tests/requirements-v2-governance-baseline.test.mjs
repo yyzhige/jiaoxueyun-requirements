@@ -234,20 +234,144 @@ test("makes age adaptation and accessibility part of the experience resolver", (
   }
 });
 
-test("registers an eight-axis data catalog and resolves all axes together", () => {
+test("registers one authoritative active eight-axis classification for every governed object", () => {
   const catalog = objectById(requirementModel, "DGV-OBJ-DATA-CATALOG-ENTRY");
-  assert.deepEqual(catalog.dataCatalogContract.axisFieldIds, DATA_CATALOG_AXIS_FIELD_IDS);
+  const contract = catalog.dataCatalogContract;
+  assert.deepEqual(contract.axisFieldIds, DATA_CATALOG_AXIS_FIELD_IDS);
   for (const fieldId of DATA_CATALOG_AXIS_FIELD_IDS) {
     const field = catalog.fields.find(({ id }) => id === fieldId);
     assert.equal(field.valueSource.kind, "OPTION_SET", fieldId);
   }
+  const governedObjectIds = requirementModel.modules
+    .flatMap((module) => module.objects.map(({ id }) => id))
+    .toSorted();
+  assert.deepEqual(contract.governedObjectIds, governedObjectIds);
+  assert.equal(new Set(contract.governedObjectIds).size, governedObjectIds.length);
+  assert.deepEqual(contract.classificationKey, {
+    scope: "CONTROL_SUBJECT_PARTITION",
+    fieldIds: [
+      "DGV-CATALOG-F-CONTROL-SUBJECT",
+      "DGV-CATALOG-F-CONTROL-SCOPE-REF",
+      "DGV-CATALOG-F-SOURCE-OBJECT-KIND",
+    ],
+  });
+  assert.deepEqual(
+    contract.coveragePartitions.flatMap(({ governedObjectIds: objectIds }) => objectIds)
+      .toSorted(),
+    governedObjectIds,
+  );
+  assert.deepEqual(contract.activeClassification, {
+    cardinality: "EXACTLY_ONE_PER_GOVERNED_OBJECT",
+    statusFieldId: "DGV-CATALOG-F-STATUS",
+    activeState: "ACTIVE",
+    supersededState: "SUPERSEDED",
+    initialActivationActionId: "DGV-ACT-ACTIVATE-DATA-CATALOG",
+    atomicReplacementActionId: "DGV-ACT-SUPERSEDE-DATA-CATALOG",
+    resolveActionId: "DGV-ACT-RESOLVE-DATA-CATALOG",
+    initialActivationRequiresActiveCount: 0,
+    replacementRequiresActiveCount: 1,
+    activeCountAfterCommit: 1,
+  });
+  assert.deepEqual(contract.authoritativeAxisMappings, {
+    dataNature: {
+      fieldId: "DGV-CATALOG-F-NATURE",
+      optionSetId: "OPT-BL2-003",
+      objectProperty: "dataNature",
+    },
+    sensitivity: {
+      fieldId: "DGV-CATALOG-F-SENSITIVITY",
+      optionSetId: "OPT-BL2-008",
+      objectProperty: "sensitivityId",
+      modelCollection: "sensitivities",
+    },
+  });
+  const dataNatureCodes = requirementModel.optionSets
+    .find(({ id }) => id === "OPT-BL2-003").values.map(({ code }) => code);
+  assert.deepEqual(dataNatureCodes, [
+    "RAW_FACT",
+    "TEACHING_BASELINE",
+    "AI_DERIVED",
+    "SYSTEM_GOVERNANCE",
+  ]);
+  assert.equal(requirementModel.modules.flatMap((module) => module.objects).every((object) => (
+    !Object.hasOwn(object, "dataNature") || dataNatureCodes.includes(object.dataNature)
+  )), true);
+  const sensitivityCodes = requirementModel.optionSets
+    .find(({ id }) => id === "OPT-BL2-008").values.map(({ code }) => code);
+  assert.deepEqual(
+    sensitivityCodes.toSorted(),
+    requirementModel.sensitivities.map(({ id }) => id).toSorted(),
+  );
+  const activate = actionById(requirementModel, "DGV-ACT-ACTIVATE-DATA-CATALOG");
+  assert.deepEqual(activate.activeClassificationEffect, {
+    mode: "INITIAL_ACTIVATION",
+    uniquenessKeyFieldIds: [
+      "DGV-CATALOG-F-CONTROL-SUBJECT",
+      "DGV-CATALOG-F-CONTROL-SCOPE-REF",
+      "DGV-CATALOG-F-SOURCE-OBJECT-KIND",
+    ],
+    requiredActiveCountBefore: 0,
+    activeCountAfterCommit: 1,
+  });
+  const replace = actionById(requirementModel, "DGV-ACT-SUPERSEDE-DATA-CATALOG");
+  assert.equal(replace.atomicCatalogReplacement.commitMode, "ATOMIC");
+  assert.deepEqual(replace.atomicCatalogReplacement.replacementStateTransition, {
+    from: "DRAFT",
+    to: "ACTIVE",
+  });
+  assert.equal(
+    scenarioFor(requirementModel, activate.id, "ACTIVE_CATALOG_CONFLICT")
+      ?.then.expectedPermission,
+    "DENY",
+  );
+  assert.equal(
+    scenarioFor(requirementModel, replace.id, "ACTIVE_CATALOG_NOT_UNIQUE")
+      ?.then.expectedPermission,
+    "DENY",
+  );
   const resolve = actionById(requirementModel, "DGV-ACT-RESOLVE-DATA-CATALOG");
   assert.deepEqual(resolve.outputFieldIds, DATA_CATALOG_AXIS_FIELD_IDS);
+  assert.deepEqual(resolve.inputFieldIds, [
+    "DGV-CATALOG-F-CONTROL-SUBJECT",
+    "DGV-CATALOG-F-CONTROL-SCOPE-REF",
+    "DGV-CATALOG-F-SOURCE-OBJECT-KIND",
+  ]);
   assert.equal(
     scenarioFor(requirementModel, resolve.id, "CATALOG_AXIS_INCOMPLETE")
       ?.then.expectedPermission,
     "DENY",
   );
+  assert.equal(
+    scenarioFor(requirementModel, resolve.id, "ACTIVE_CATALOG_NOT_UNIQUE")
+      ?.then.expectedPermission,
+    "DENY",
+  );
+});
+
+test("rejects incomplete coverage, duplicate-active semantics, and divergent governance closures", () => {
+  assertSemanticMutation("INVALID_D047_DATA_CATALOG", (model) => {
+    objectById(model, "DGV-OBJ-DATA-CATALOG-ENTRY")
+      .dataCatalogContract.governedObjectIds.pop();
+  });
+  assertSemanticMutation("INVALID_D047_DATA_CATALOG", (model) => {
+    objectById(model, "DGV-OBJ-DATA-CATALOG-ENTRY")
+      .dataCatalogContract.activeClassification.cardinality = "ONE_OR_MORE";
+  });
+  assertSemanticMutation("INVALID_D047_DATA_CATALOG", (model) => {
+    actionById(model, "DGV-ACT-SUPERSEDE-DATA-CATALOG")
+      .atomicCatalogReplacement.commitMode = "SEQUENTIAL";
+  });
+  assertSemanticMutation("INVALID_D047_DATA_CATALOG", (model) => {
+    model.optionSets.find(({ id }) => id === "OPT-BL2-003").values[0].code
+      = "ORIGINAL_LEARNING_FACT";
+  });
+  assertSemanticMutation("INVALID_D047_DATA_CATALOG", (model) => {
+    model.optionSets.find(({ id }) => id === "OPT-BL2-008").values[0].code
+      = "PUBLIC";
+  });
+  assertSemanticMutation("INVALID_D047_DATA_CATALOG", (model) => {
+    objectById(model, "GRD-OBJ-DECISION").dataNature = "AI_DERIVED_JUDGMENT";
+  });
 });
 
 test("implements correction, restriction, physical deletion, and irreversible deidentification as distinct actions", () => {
@@ -341,6 +465,16 @@ test("fails closed when student work is promoted to the platform public layer in
     sourceGraphRefFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
     rightsBundleRefFieldId: "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
     reviewRefFieldId: "CONTENT-SCOPE-F-PLATFORM-REVIEW-REF",
+    sourceKindEligibilityBinding: {
+      sourceGraphObjectId: "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
+      sourceGraphRefFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+      sourceGraphVersionFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+      sourceGraphSourceKindFieldId: "CONTENT-SOURCE-F-SOURCE-KIND",
+      managementScopeMirrorFieldId: "CONTENT-SCOPE-F-SOURCE-KIND",
+      comparison: "EXACT_CODE",
+      exactVersionRequired: true,
+      materialIdentityFallbackAllowed: false,
+    },
     prohibitedSourceKinds: ["STUDENT_WORK"],
     prohibitedPhaseIds: ["PHASE-1", "PHASE-2"],
     requiredReviewKinds: ["SOURCE_RIGHTS", "PRIVACY", "CONTENT_QUALITY", "PLATFORM_AUTHORIZATION"],
@@ -425,6 +559,15 @@ test("rejects metadata-only or incompletely reviewed platform-public promotion",
       ).relatedStateGuards.filter(({ targetObjectId }) => (
         targetObjectId !== "CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW"
       ));
+  });
+  assertSemanticMutation("INVALID_D069_NO_STUDENT_PUBLIC_PROMOTION", (model) => {
+    actionById(model, "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC")
+      .publicPromotionGuard.sourceKindEligibilityBinding.sourceGraphRefFieldId =
+      "CONTENT-SCOPE-F-MATERIAL-ID";
+  });
+  assertSemanticMutation("INVALID_D069_NO_STUDENT_PUBLIC_PROMOTION", (model) => {
+    objectById(model, "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE")
+      .sourceKindEligibilityBinding.exactVersionRequired = false;
   });
 });
 

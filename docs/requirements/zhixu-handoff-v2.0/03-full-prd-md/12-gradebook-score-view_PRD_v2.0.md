@@ -3,12 +3,14 @@
 | 属性 | 值 |
 | --- | --- |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 优先级 | P0 |
 | 目标 | Define authorized score views and follow-up records without owning a second official score, evidence, or plan fact |
 | 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
 | NFR | `NFR-008` |
 | 进入条件 | published result, evidence, and plan versions are available as independently owned sources |
 | 退出条件 | every displayed value resolves through its source Data ID, object reference, and pinned version |
+| 依赖模块 | — |
 
 ## 1. 范围与事实边界
 
@@ -21,9 +23,9 @@
 
 ### SCO-OBJ-VIEW Gradebook Query Column and Saved View Definition
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GRADEBOOK_VIEW_DEFINITION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | ACTIVE |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GRADEBOOK_VIEW_DEFINITION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | ASSIGNED_SUBJECT_COURSE;resolution=DIRECT_PERMISSION_SCOPE;subject=REQUIRED;course=REQUIRED | ACTIVE |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -45,16 +47,16 @@
 
 ### SCO-OBJ-FOLLOW-UP Gradebook Follow-up and Attention Record
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GRADEBOOK_COORDINATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | OPEN |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GRADEBOOK_COORDINATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | ASSIGNED_SUBJECT_COURSE;resolution=DIRECT_PERMISSION_SCOPE;subject=REQUIRED;course=REQUIRED | OPEN |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | SCO-FOLLOW-UP-F-ID | Gradebook Follow-up ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | SCO-FOLLOW-UP-F-VIEW-REF | Gradebook View Reference | ID | 是 | OBJECT_REF: SCO-OBJ-VIEW | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | SCO-FOLLOW-UP-F-VIEW-VERSION | Gradebook View Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
-| SCO-FOLLOW-UP-F-ATTENTION-KIND | Attention Event Kind | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| SCO-FOLLOW-UP-F-ATTENTION-KIND | Attention Event Kind | STRING | 是 | OPTION_SET: OPT-V2-CLS-005 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | SCO-FOLLOW-UP-F-NOTE | Follow-up Note | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | SCO-FOLLOW-UP-F-VERSION | Follow-up Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
@@ -84,14 +86,14 @@
 
 | Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
 | --- | --- | --- | --- | --- | --- |
-| DF-014 | Student Management Profile Aggregation | 1 | SCO-001 / INS-001 / PLN-001 / APP-001 / STU-001 | SCO-ACT-READ-GRADEBOOK | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PROFILE_AND_TODO_VIEW_VERSIONS","description":"a failed aggregation preserves the prior view definitions and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_AND_TODO_PROJECTIONS","targets":["gradebook view definition","student profile view definition","student todo aggregation"]} |
+| DF-014 | Student Management Profile Aggregation | 3 | SCO-001 / INS-001 / PLN-001 / STU-001 | SCO-ACT-READ-GRADEBOOK | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_PRIOR_PROFILE_VIEW_VERSION","description":"a failed aggregation preserves the prior profile view definition and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_PROJECTIONS","targets":["gradebook view definition","student profile view definition"]} |
 
 ## 8. 页面任务合同
 
-| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| SCO-PAGE-GRADEBOOK | Authorized Gradebook Projection | WEB / APP | SCO-OBJ-VIEW | SCO-VIEW-F-ID<br>SCO-VIEW-F-STUDENT-REF<br>SCO-VIEW-F-RESULT-DATA-ID<br>SCO-VIEW-F-RESULT-REF<br>SCO-VIEW-F-RESULT-VERSION<br>SCO-VIEW-F-EVIDENCE-DATA-ID<br>SCO-VIEW-F-EVIDENCE-REF<br>SCO-VIEW-F-EVIDENCE-VERSION<br>SCO-VIEW-F-PLAN-DATA-ID<br>SCO-VIEW-F-PLAN-REF<br>SCO-VIEW-F-PLAN-VERSION<br>SCO-VIEW-F-QUERY-DEFINITION<br>SCO-VIEW-F-COLUMN-DEFINITION<br>SCO-VIEW-F-SAVED-VIEW-DEFINITION<br>SCO-VIEW-F-VIEW-VERSION | SCO-ACT-CREATE-VIEW<br>SCO-ACT-READ-GRADEBOOK | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| SCO-PAGE-FOLLOW-UP | Gradebook Follow-up Workspace | WEB / APP | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-ID<br>SCO-FOLLOW-UP-F-VIEW-REF<br>SCO-FOLLOW-UP-F-VIEW-VERSION<br>SCO-FOLLOW-UP-F-ATTENTION-KIND<br>SCO-FOLLOW-UP-F-NOTE<br>SCO-FOLLOW-UP-F-VERSION | SCO-ACT-CREATE-FOLLOW-UP<br>SCO-ACT-VIEW-FOLLOW-UP | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| Page ID | 页面 | 交付可用性 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCO-PAGE-GRADEBOOK | Authorized Gradebook Projection | BUILD_READY | WEB / APP | SCO-OBJ-VIEW | SCO-VIEW-F-ID<br>SCO-VIEW-F-STUDENT-REF<br>SCO-VIEW-F-RESULT-DATA-ID<br>SCO-VIEW-F-RESULT-REF<br>SCO-VIEW-F-RESULT-VERSION<br>SCO-VIEW-F-EVIDENCE-DATA-ID<br>SCO-VIEW-F-EVIDENCE-REF<br>SCO-VIEW-F-EVIDENCE-VERSION<br>SCO-VIEW-F-PLAN-DATA-ID<br>SCO-VIEW-F-PLAN-REF<br>SCO-VIEW-F-PLAN-VERSION<br>SCO-VIEW-F-QUERY-DEFINITION<br>SCO-VIEW-F-COLUMN-DEFINITION<br>SCO-VIEW-F-SAVED-VIEW-DEFINITION<br>SCO-VIEW-F-VIEW-VERSION | SCO-ACT-CREATE-VIEW<br>SCO-ACT-READ-GRADEBOOK | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| SCO-PAGE-FOLLOW-UP | Gradebook Follow-up Workspace | BUILD_READY | WEB / APP | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-ID<br>SCO-FOLLOW-UP-F-VIEW-REF<br>SCO-FOLLOW-UP-F-VIEW-VERSION<br>SCO-FOLLOW-UP-F-ATTENTION-KIND<br>SCO-FOLLOW-UP-F-NOTE<br>SCO-FOLLOW-UP-F-VERSION | SCO-ACT-CREATE-FOLLOW-UP<br>SCO-ACT-VIEW-FOLLOW-UP | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
 ## 9. 验收场景
 

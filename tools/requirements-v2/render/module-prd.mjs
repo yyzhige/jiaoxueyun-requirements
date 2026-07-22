@@ -8,6 +8,7 @@ import {
   professionalAuthorizationText,
   requiredText,
   stateText,
+  teacherWriteScopePolicyText,
   valueSourceText,
 } from "./markdown.mjs";
 import { renderReleaseBanner } from "./release.mjs";
@@ -28,6 +29,235 @@ function transitionText(action) {
   return action.operationKind === "CREATE"
     ? `CREATE（成功状态由 ${successStates.join(" / ")} 定义）`
     : "UNCHANGED";
+}
+
+function renderDataCatalogContract(object) {
+  const contract = object?.dataCatalogContract;
+  if (!contract) return "";
+  const active = contract.activeClassification ?? {};
+  const mappings = contract.authoritativeAxisMappings ?? {};
+  return normalizeDocument([
+    "#### 数据目录覆盖与唯一 ACTIVE 合同",
+    markdownTable(
+      ["约束", "合同值"],
+      [
+        ["覆盖来源", contract.governedObjectIdSource],
+        ["受治理对象", list(contract.governedObjectIds).join("<br>")],
+        ["Source Object Kind", contract.sourceObjectKindValidation],
+        ["分区模式", contract.classificationKey?.scope],
+        ["分区唯一键", list(contract.classificationKey?.fieldIds).join(" / ")],
+        ["ACTIVE 基数", active.cardinality],
+        ["状态", `${active.activeState} / ${active.supersededState}`],
+        ["初次激活", `${active.initialActivationActionId}; before=${active.initialActivationRequiresActiveCount}; after=${active.activeCountAfterCommit}`],
+        ["原子替代", `${active.atomicReplacementActionId}; before=${active.replacementRequiresActiveCount}; after=${active.activeCountAfterCommit}`],
+        ["唯一解析", active.resolveActionId],
+        ["数据性质映射", `${mappings.dataNature?.fieldId} -> ${mappings.dataNature?.optionSetId} -> object.${mappings.dataNature?.objectProperty}`],
+        ["敏感度映射", `${mappings.sensitivity?.fieldId} -> ${mappings.sensitivity?.optionSetId} -> ${mappings.sensitivity?.modelCollection}`],
+      ],
+    ),
+    "#### 数据目录控制主体分区",
+    markdownTable(
+      ["分区", "控制主体", "管理范围", "范围实例", "授权主体", "唯一键", "受治理对象"],
+      list(contract.coveragePartitions).map((partition) => [
+        partition.id,
+        partition.controlSubject,
+        partition.managementScopeCode,
+        partition.scopeRefKind,
+        partition.authorizedActorRef,
+        list(partition.uniqueKeyFieldIds).join(" / "),
+        list(partition.governedObjectIds).join("<br>"),
+      ]),
+    ),
+  ]);
+}
+
+function renderCatalogExecutionContract(object) {
+  const contract = object?.catalogExecutionContract;
+  if (!contract) return "";
+  return normalizeDocument([
+    "#### D047 治理动作目录执行合同",
+    markdownTable(
+      ["约束", "合同值"],
+      [
+        ["目录引用", `${contract.catalogRefFieldId} @ ${contract.catalogVersionFieldId}`],
+        ["目标对象", `${contract.targetObjectIdFieldId} / ${contract.targetObjectKindFieldId}`],
+        ["目标控制范围", contract.targetControlScopeFieldId],
+        ["控制主体来源", contract.targetControlSubjectSource],
+        ["目录状态与基数", `${contract.requiredCatalogState}; matches=${contract.requiredActiveMatchCount}`],
+        ["对象种类等值 sourceObjectKindMustEqualTargetObjectKind", contract.sourceObjectKindMustEqualTargetObjectKind],
+        ["控制主体等值 controlSubjectMustEqualTargetObjectControlSubject", contract.controlSubjectMustEqualTargetObjectControlSubject],
+        ["控制范围等值 controlScopeMustEqualTargetControlScope", contract.controlScopeMustEqualTargetControlScope],
+      ],
+    ),
+  ]);
+}
+
+function renderServicePlanContract(object) {
+  const contract = object?.currentEntitlementConstraint;
+  if (!contract) return "";
+  return normalizeDocument([
+    "#### 学校服务计划当前权益合同",
+    markdownTable(
+      ["约束", "合同值"],
+      [
+        ["学校 / 状态 / 版本字段", `${contract.schoolRefFieldId} / ${contract.stateFieldId} / ${contract.versionFieldId}`],
+        ["唯一当前状态", contract.currentState],
+        ["每校最大当前版本", contract.maximumCurrentVersionsPerSchool],
+        ["解析规则", contract.selectionRule],
+        ["非当前状态", list(contract.restrictedStates).join(" / ")],
+        ["恢复规则", contract.recoveryRule],
+      ],
+    ),
+  ]);
+}
+
+function renderContinuityWindowContract(object) {
+  const contract = object?.currentWindowUniquenessConstraint;
+  if (!contract) return "";
+  return normalizeDocument([
+    "#### 服务连续性窗口唯一性合同",
+    markdownTable(
+      ["约束", "合同值"],
+      [
+        ["学校 / 服务计划 / 版本", `${contract.schoolRefFieldId} / ${contract.servicePlanRefFieldId} / ${contract.servicePlanVersionFieldId}`],
+        ["状态字段 / 排除状态", `${contract.statusFieldId} / ${contract.excludedState}`],
+        ["最大未关闭窗口", contract.maximumCurrentWindowsPerSchoolAndServicePlanVersion],
+        ["选择规则", contract.selectionRule],
+        ["歧义处理", contract.ambiguityEffect],
+      ],
+    ),
+  ]);
+}
+
+function renderPhaseTwoEntitlementContract(module) {
+  const contract = module?.phaseTwoEntitlementContract;
+  if (!contract) return "";
+  return normalizeDocument([
+    "## 第二阶段学校核心权益合同",
+    markdownTable(
+      ["约束", "合同值"],
+      [
+        ["权益对象", contract.objectId],
+        ["学校字段", contract.schoolRefFieldId],
+        ["服务计划绑定", `${contract.servicePlanObjectId} @ ${contract.servicePlanRefFieldId} / ${contract.servicePlanVersionFieldId}`],
+        ["服务计划状态", contract.requiredServicePlanState],
+        ["核心权益", list(contract.coreEntitlements).join(" / ")],
+        ["全校保障", contract.schoolWideGuarantee],
+        ["学生/监护人付费", contract.studentOrGuardianPaymentAllowed],
+        ["核心学习闭环付费墙", contract.coreLearningLoopPaywallAllowed],
+        ["激活动作", contract.activationActionId],
+        ["消费者规则", contract.consumerRule],
+      ],
+    ),
+    "### 核心权益消费者",
+    markdownTable(
+      ["权益代码", "消费 Action"],
+      list(contract.consumerBindings).map((binding) => [
+        binding.entitlementCode,
+        list(binding.actionIds).join("<br>"),
+      ]),
+    ),
+  ]);
+}
+
+function renderActionExtensionContracts(actions) {
+  const sections = [];
+  for (const action of list(actions)) {
+    const entitlement = action.entitlementDecisionContract;
+    if (entitlement) {
+      sections.push(normalizeDocument([
+        `### ${action.id} 新活动权益决策闭集`,
+        markdownTable(
+          ["约束", "合同值"],
+          [
+            ["受保护 Action", list(entitlement.guardedActionIds).join("<br>")],
+            ["服务计划", `${entitlement.sourceObjectId} @ ${entitlement.sourceIdentityFieldId} / ${entitlement.sourceVersionFieldId}`],
+            ["必要状态", entitlement.requiredSourceState],
+            ["范围规则", entitlement.scopeRule],
+            ["连续性选择", entitlement.currentContinuitySelection?.selectionRule],
+            ["保护窗口授权新活动", entitlement.protectionWindowAuthorizesNewActivity],
+            ["未知决策", entitlement.unknownDecisionEffect],
+            ["失败结果", entitlement.failureResult],
+          ],
+        ),
+        markdownTable(
+          ["分支", "服务计划谓词", "连续性谓词", "范围谓词", "结果码", "效果"],
+          list(entitlement.decisionBranches).map((branch) => [
+            branch.branchId,
+            branch.sourcePredicate,
+            branch.continuityPredicate,
+            branch.scopePredicate,
+            branch.decisionCode,
+            branch.effect,
+          ]),
+        ),
+      ]));
+    }
+
+    const recovery = action.recoveryVersionGuard;
+    if (recovery) {
+      sections.push(normalizeDocument([
+        `### ${action.id} 服务恢复新版本合同`,
+        markdownTable(
+          ["约束", "合同值"],
+          [
+            ["必要恢复状态", recovery.requiredRecoveryState],
+            ["身份必须不同", recovery.identityMustDiffer],
+            ["学校必须一致", recovery.schoolMustMatch],
+            ["精确版本固定", recovery.exactPinnedRecoveryVersionRequired],
+            ["替代血缘", recovery.supersedesLineageRequired],
+            ["旧计划可重新激活 sourceReactivationAllowed", recovery.sourceReactivationAllowed],
+          ],
+        ),
+      ]));
+    }
+
+    const manifest = action.manifestReconciliationContract;
+    if (manifest) {
+      sections.push(normalizeDocument([
+        `### ${action.id} 保护活动清单封存合同`,
+        markdownTable(
+          ["约束", "合同值"],
+          [
+            ["条目对象", manifest.entryObjectId],
+            ["条目选择", manifest.entrySelectionRule],
+            ["数量规则", manifest.countRule],
+            ["摘要规则", manifest.digestRule],
+            ["零符合项", manifest.zeroEligibleRule],
+            ["不完整效果", manifest.incompleteEffect],
+            ["限制生效", manifest.sealAndRestrictionTimestampRule],
+            ["允许部分封存", manifest.partialSealAllowed],
+          ],
+        ),
+      ]));
+    }
+  }
+
+  const phaseTwoGuards = list(actions).filter(({ phaseTwoEntitlementGuard }) => (
+    Boolean(phaseTwoEntitlementGuard)
+  ));
+  if (phaseTwoGuards.length > 0) {
+    sections.push(normalizeDocument([
+      "### D090 第二阶段权益消费 Guard",
+      markdownTable(
+        ["Action ID", "权益", "权益对象", "引用 / 版本", "必要状态", "精确版本", "同校", "失败结果"],
+        phaseTwoGuards.map((action) => {
+          const guard = action.phaseTwoEntitlementGuard;
+          return [
+            action.id,
+            guard.entitlementCode,
+            guard.entitlementObjectId,
+            `${guard.entitlementRefFieldId} / ${guard.entitlementVersionFieldId}`,
+            guard.requiredEntitlementState,
+            guard.exactPinnedVersionRequired,
+            guard.schoolMustMatch,
+            guard.failureResult,
+          ];
+        }),
+      ),
+    ]));
+  }
+  return sections.join("\n\n");
 }
 
 function renderMetadataModule(module) {
@@ -77,7 +307,7 @@ function renderObjectSection(object) {
   return normalizeDocument([
     `### ${object.id} ${object.label}`,
     markdownTable(
-      ["数据主体", "控制主体", "产生者", "Owner", "确认者", "Steward", "生命周期", "敏感级别", "读模式", "状态"],
+      ["数据主体", "控制主体", "产生者", "Owner", "确认者", "Steward", "生命周期", "敏感级别", "读模式", "教师写入策略", "状态"],
       [[
         object.dataSubject,
         object.controlSubject,
@@ -88,6 +318,7 @@ function renderObjectSection(object) {
         object.lifecyclePolicyId,
         object.sensitivityId,
         object.readMode,
+        teacherWriteScopePolicyText(object.teacherWriteScopePolicy),
         list(object.states).map(stateId).join(" / "),
       ]],
     ),
@@ -106,6 +337,10 @@ function renderObjectSection(object) {
         field.historyPolicy,
       ]),
     ),
+    renderDataCatalogContract(object),
+    renderCatalogExecutionContract(object),
+    renderServicePlanContract(object),
+    renderContinuityWindowContract(object),
   ]);
 }
 
@@ -166,6 +401,7 @@ export function renderModulePrd(module, model) {
       "页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。",
       "AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。",
     ]),
+    renderPhaseTwoEntitlementContract(module),
     "## 2. 权威对象与字段合同",
     ...list(module.objects).map(renderObjectSection),
     "## 3. 对象关系",
@@ -206,6 +442,7 @@ export function renderModulePrd(module, model) {
         list(action.failureResults).join(" / "),
       ]),
     ),
+    renderActionExtensionContracts(module.actions),
     renderFailureSemantics(module.actions),
     "## 6. 状态可达性",
     markdownTable(

@@ -14,6 +14,25 @@ import {
   matchesRegisteredProfessionalWriteExceptionPermissions,
   resolveProfessionalWriteException,
 } from "../facts/professional-write-authorization.mjs";
+import {
+  DATA_NATURE,
+  DATA_NATURE_OPTION_SET_ID,
+  DATA_NATURE_VALUES,
+  DATA_SENSITIVITY_OPTION_SET_ID,
+} from "../facts/data-governance-taxonomy.mjs";
+import {
+  ANSWER_OPEN_POLICY_FIELD_IDS,
+  ANSWER_OPEN_TIME_FIELD_IDS,
+  answerOpenSurfaceExecutionRegistry,
+} from "../facts/answer-open-delivery.mjs";
+import {
+  TRACE_AXIS_KEYS,
+  TRACE_AXIS_METADATA,
+  TRACE_AXIS_STATUS,
+  buildBaselineTraceability,
+  buildDecisionTraceability,
+} from "../facts/baseline-traceability.mjs";
+import { migrationChanges as canonicalMigrationChanges } from "../facts/baseline-migration.mjs";
 
 const FORBIDDEN_ACTION_NAMES = new Set([
   "对象查询与范围筛选",
@@ -1076,6 +1095,42 @@ function ownerErrors(index) {
   return errors;
 }
 
+function responsibilityActorBoundaryErrors(index) {
+  const errors = [];
+  for (const objectEntry of index.objects) {
+    for (const property of ["ownerRef", "stewardRef"]) {
+      if (objectEntry.value?.[property] === "AI") {
+        errors.push(
+          `INVALID_AI_RESPONSIBILITY_ROLE ${formatValidationValue(objectEntry.value?.id)}.${property} AI may produce or confirm only through an explicit contract and cannot own or steward a business object`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+function authoritativeTermOptionSetErrors(index) {
+  if (index.modelProfile !== "ZHIXU_V2") return [];
+  const errors = [];
+  const authoritativeOptionSetId = "OPT-COM-004";
+  const termReferenceFields = index.fields.filter(({ value: field }) => (
+    typeof field?.id === "string" && /-F-TERM(?:-ID)?$/.test(field.id)
+  ));
+  for (const fieldEntry of termReferenceFields) {
+    const source = fieldEntry.value?.valueSource;
+    if (
+      source?.kind !== "OPTION_SET"
+      || source?.optionSetId !== authoritativeOptionSetId
+      || Object.keys(source).length !== 2
+    ) {
+      errors.push(
+        `INVALID_TERM_OPTION_SET ${formatValidationValue(fieldEntry.value?.id)} must bind the authoritative ${authoritativeOptionSetId} school-term Option Set`,
+      );
+    }
+  }
+  return errors;
+}
+
 function actionErrors(index) {
   const errors = [];
   const acceptedInputPartitions = new Map();
@@ -1142,6 +1197,9 @@ function actionErrors(index) {
         && binding?.targetObjectId === guard?.targetObjectId
       ));
       const guardPolicy = refField?.value?.stateGuardPolicy;
+      const requiredStates = Array.isArray(guard?.requiredStates)
+        ? guard.requiredStates
+        : [guard?.requiredState];
       const guardValid = refField?.objectId === action?.targetObjectId
         && versionField?.objectId === action?.targetObjectId
         && refField?.value?.valueSource?.kind === "OBJECT_REF"
@@ -1153,10 +1211,11 @@ function actionErrors(index) {
         && coveredFieldIds.has(guard?.refFieldId)
         && coveredFieldIds.has(guard?.versionFieldId)
         && policyRequiresGuard(guardPolicy, action?.operationKind)
-        && stateIds(guardTarget).has(guard?.requiredState);
+        && requiredStates.length > 0
+        && requiredStates.every((state) => stateIds(guardTarget).has(state));
       if (!guardValid) {
         errors.push(
-          `INVALID_ACTION_STATE_GUARD ${formatValidationValue(action?.id)} requires a covered version-pinned lineage to ${formatValidationValue(guard?.targetObjectId)}.${formatValidationValue(guard?.requiredState)}`,
+          `INVALID_ACTION_STATE_GUARD ${formatValidationValue(action?.id)} requires a covered version-pinned lineage to ${formatValidationValue(guard?.targetObjectId)}.${requiredStates.map(formatValidationValue).join("|")}`,
         );
       }
     }
@@ -1798,6 +1857,13 @@ function flowErrors(index) {
         );
       }
     }
+
+    // An event invalidation fanout has a one-of source binding: the source
+    // identity/version is selected by the committed event, not required as
+    // simultaneous fixed inputs. Its exact producer and snapshot idempotency
+    // contract is validated by the D084 domain validator below the generic
+    // flow layer, so the single-source producer heuristic must not reject it.
+    if (flow?.contractProfile === "EVENT_INVALIDATION_FANOUT") continue;
 
     const sourceRefs = records(flow?.sourceDataRefs);
     const sourceFieldIds = new Set(sourceRefs.map(({ fieldId }) => fieldId));
@@ -3438,15 +3504,69 @@ function phaseTwoProgressVideoErrors(index) {
   const requestObject = object("VIDEO-OBJ-REQUEST");
   const problemRequest = action("VIDEO-ACT-REQUEST-PROBLEM-DRIVEN");
   const progressRequest = action("VIDEO-ACT-REQUEST-PROGRESS-DRIVEN");
-  const requestInputPairs = [
-    ["VIDEO-REQUEST-F-ASSESSMENT-RESULT-REF", "VIDEO-REQUEST-F-ASSESSMENT-RESULT-VERSION"],
-    ["VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF", "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-VERSION"],
-    ["VIDEO-REQUEST-F-PUBLISHED-RESULT-REF", "VIDEO-REQUEST-F-PUBLISHED-RESULT-VERSION"],
-    ["VIDEO-REQUEST-F-MINIMUM-PROGRESS-REF", "VIDEO-REQUEST-F-MINIMUM-PROGRESS-VERSION"],
-    ["VIDEO-REQUEST-F-MATERIAL-RIGHTS-REF", "VIDEO-REQUEST-F-MATERIAL-RIGHTS-VERSION"],
-    ["VIDEO-REQUEST-F-MATERIAL-PERMISSION-REF", "VIDEO-REQUEST-F-MATERIAL-PERMISSION-VERSION"],
+  const requestSourceBindings = [
+    {
+      refFieldId: "VIDEO-REQUEST-F-ACTIVITY-REF",
+      versionFieldId: "VIDEO-REQUEST-F-ACTIVITY-VERSION",
+      targetObjectId: "HW-OBJ-ASSIGNMENT",
+      targetVersionFieldId: "HW-ASSIGNMENT-F-PUBLICATION-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-SUBMISSION-REF",
+      versionFieldId: "VIDEO-REQUEST-F-SUBMISSION-VERSION",
+      targetObjectId: "SUB-OBJ-ATTEMPT",
+      targetVersionFieldId: "SUB-ATTEMPT-F-SUBMISSION-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-ASSESSMENT-RESULT-REF",
+      versionFieldId: "VIDEO-REQUEST-F-ASSESSMENT-RESULT-VERSION",
+      targetObjectId: "GRD-OBJ-DECISION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF",
+      versionFieldId: "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-VERSION",
+      targetObjectId: "GRD-OBJ-ASSESSMENT-STANDARD-VERSION",
+      targetVersionFieldId: "GRD-STANDARD-F-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-PUBLISHED-RESULT-REF",
+      versionFieldId: "VIDEO-REQUEST-F-PUBLISHED-RESULT-VERSION",
+      targetObjectId: "PUB-OBJ-RESULT",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-MINIMUM-PROGRESS-REF",
+      versionFieldId: "VIDEO-REQUEST-F-MINIMUM-PROGRESS-VERSION",
+      targetObjectId: "PROG-OBJ-STUDENT-TARGET",
+      targetVersionFieldId: "PROG-TARGET-F-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-NEXT-TARGET-CHOICE-REF",
+      versionFieldId: "VIDEO-REQUEST-F-NEXT-TARGET-CHOICE-VERSION",
+      targetObjectId: "PROG-OBJ-NEXT-TARGET-CHOICE",
+      targetVersionFieldId: "PROG-CHOICE-F-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-MATERIAL-RIGHTS-REF",
+      versionFieldId: "VIDEO-REQUEST-F-MATERIAL-RIGHTS-VERSION",
+      targetObjectId: "CONTENT-OBJ-LICENSE",
+      targetVersionFieldId: "CONTENT-LICENSE-F-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-MATERIAL-PERMISSION-REF",
+      versionFieldId: "VIDEO-REQUEST-F-MATERIAL-PERMISSION-VERSION",
+      targetObjectId: "CONTENT-OBJ-PERMISSION",
+      targetVersionFieldId: "CONTENT-PERMISSION-F-VERSION",
+    },
   ];
-  const commonRequestFields = requestInputPairs.flat();
+  const commonRequestFields = requestSourceBindings
+    .filter(({ refFieldId }) => ![
+      "VIDEO-REQUEST-F-ACTIVITY-REF",
+      "VIDEO-REQUEST-F-SUBMISSION-REF",
+      "VIDEO-REQUEST-F-NEXT-TARGET-CHOICE-REF",
+    ].includes(refFieldId))
+    .flatMap(({ refFieldId, versionFieldId }) => [refFieldId, versionFieldId]);
   const requestGroups = new Map(records(requestObject?.exclusiveSourceGroups)
     .map((group) => [group.id, group]));
   const requestLineage = new Map(records(requestObject?.lineageBindings)
@@ -3526,9 +3646,9 @@ function phaseTwoProgressVideoErrors(index) {
     )
     && hasPermission(problemRequest, "DENY", "actorRef", "AI", /cannot create.*publish a class activity/i)
     && hasPermission(progressRequest, "DENY", "actorRef", "AI", /cannot choose.*publish a class activity/i);
-  for (const [refFieldId, versionFieldId] of requestInputPairs) {
+  for (const expectedBinding of requestSourceBindings) {
     sourceBindingValid = sourceBindingValid
-      && requestLineage.get(refFieldId)?.versionFieldId === versionFieldId;
+      && hasExactValues(requestLineage.get(expectedBinding.refFieldId), expectedBinding);
   }
   if (!sourceBindingValid) {
     errors.push(
@@ -6985,10 +7105,14 @@ function lateEnrolleeWindowErrors(index) {
 }
 
 function weakNetworkCredentialErrors(index) {
+  if (!finalizedTeachingBaselineEnabled(index)) return [];
   const errors = [];
   const credential = index.objectById.get("SUB-OBJ-INTENT-CREDENTIAL")?.value;
+  const incident = index.objectById.get("SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT")?.value;
   const module = index.moduleById.get("SUB-001")?.value;
-  if (!credential || !module) return errors;
+  if (!credential || !incident || !module) {
+    return ["INVALID_WEAK_NETWORK_CREDENTIAL D043 requires a versioned platform failure incident snapshot and protected credential"];
+  }
   const expectedFields = [
     "SUB-INTENT-F-ACTOR-REF",
     "SUB-INTENT-F-ACTIVITY-REF",
@@ -6996,18 +7120,26 @@ function weakNetworkCredentialErrors(index) {
     "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
     "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
     "SUB-INTENT-F-SUBMISSION-VERSION",
+    "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+    "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
     "SUB-INTENT-F-VERSION",
     "SUB-INTENT-F-ISSUED-AT",
     "SUB-INTENT-F-CONTENT-MANIFEST",
     "SUB-INTENT-F-MANIFEST-DIGEST",
     "SUB-INTENT-F-EXPIRES-AT",
     "SUB-INTENT-F-COMPLETION-WINDOW",
+    "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT",
+    "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE",
+    "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST",
+    "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT",
+    "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION",
     "SUB-INTENT-F-STATUS",
     "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
   ];
   const fields = new Set(records(credential.fields).map((field) => field.id));
   const expectedStates = new Set(["ISSUED", "COMPLETED", "REJECTED", "EXPIRED", "PLATFORM_FAILURE_PROTECTED"]);
   const actionsValid = [
+    "SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT",
     "SUB-ACT-ISSUE-INTENT-CREDENTIAL",
     "SUB-ACT-COMPLETE-MANIFEST-INTENT",
     "SUB-ACT-REJECT-MANIFEST-CHANGE",
@@ -7016,17 +7148,109 @@ function weakNetworkCredentialErrors(index) {
   ].every((actionId) => index.actionById.has(actionId));
   const issue = index.actionById.get("SUB-ACT-ISSUE-INTENT-CREDENTIAL")?.value;
   const complete = index.actionById.get("SUB-ACT-COMPLETE-MANIFEST-INTENT")?.value;
+  const registerIncident = index.actionById.get("SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT")?.value;
+  const protect = index.actionById.get("SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION")?.value;
+  const incidentEvent = index.eventById.get("EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED")?.value;
   const lineageByRef = new Map(records(credential.lineageBindings)
     .map((binding) => [binding.refFieldId, binding]));
+  const incidentFieldIds = new Set(records(incident.fields).map(({ id }) => id));
+  const incidentGuard = records(protect?.relatedStateGuards).find(({ refFieldId }) => (
+    refFieldId === "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF"
+  ));
+  const protectionContract = protect?.platformFailureProtectionContract;
   const valid = credential.intentCredential === true
     && setEquals(new Set(credential.states), expectedStates)
     && expectedFields.every((fieldId) => fields.has(fieldId))
     && actionsValid
     && index.fieldById.get("SUB-INTENT-F-ACTIVITY-REF")?.value?.referenceIntegrity === "VERSION_PINNED"
     && index.fieldById.get("SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF")?.value?.referenceIntegrity === "VERSION_PINNED"
+    && index.fieldById.get("SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF")?.value?.referenceIntegrity === "VERSION_PINNED"
     && index.fieldById.get("SUB-INTENT-F-VERSION")?.value?.idempotencyRole === "OBJECT_VERSION"
     && lineageByRef.get("SUB-INTENT-F-ACTIVITY-REF")?.versionFieldId === "SUB-INTENT-F-ACTIVITY-VERSION"
     && lineageByRef.get("SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF")?.versionFieldId === "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION"
+    && lineageByRef.get("SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF")?.versionFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION"
+    && setEquals(new Set(incident.states), new Set(["FROZEN"]))
+    && [
+      "SUB-PFINCIDENT-F-ID",
+      "SUB-PFINCIDENT-F-SCHOOL-ID",
+      "SUB-PFINCIDENT-F-SERVICE-CODE",
+      "SUB-PFINCIDENT-F-STARTED-AT",
+      "SUB-PFINCIDENT-F-AFFECTED-SCOPE",
+      "SUB-PFINCIDENT-F-SCOPE-DIGEST",
+      "SUB-PFINCIDENT-F-DETECTION-EVIDENCE",
+      "SUB-PFINCIDENT-F-STATUS",
+      "SUB-PFINCIDENT-F-VERSION",
+    ].every((fieldId) => incidentFieldIds.has(fieldId))
+    && incident.platformFailureIncidentSnapshot?.sourceActor === "SYSTEM"
+    && incident.platformFailureIncidentSnapshot?.clientDeclarationAllowed === false
+    && registerIncident?.executionMode === "SYSTEM_EVENT"
+    && registerIncident?.trigger?.eventId === "EVT-SUB-PLATFORM-CREDENTIAL-UNAVAILABLE"
+    && sameStringSet(registerIncident?.producedEventIds, [
+      "EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED",
+    ])
+    && sameStringSet(incidentEvent?.producerActionIds, [registerIncident?.id])
+    && sameStringSet(incidentEvent?.triggeredActionIds, [protect?.id])
+    && incidentEvent?.platformFailureIncidentContextContract?.clientDeclarationAllowed === false
+    && protect?.executionMode === "SYSTEM_EVENT"
+    && protect?.trigger?.eventId === incidentEvent?.id
+    && incidentGuard?.versionFieldId === "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION"
+    && incidentGuard?.targetObjectId === incident.id
+    && incidentGuard?.requiredState === "FROZEN"
+    && [
+      "SUB-INTENT-F-CONTENT-MANIFEST",
+      "SUB-INTENT-F-MANIFEST-DIGEST",
+      "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+      "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+    ].every((fieldId) => list(protect?.inputFieldIds).includes(fieldId))
+    && [
+      "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT",
+      "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION",
+    ].every((fieldId) => list(protect?.outputFieldIds).includes(fieldId))
+    && protectionContract?.incidentRefFieldId === "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF"
+    && protectionContract?.incidentVersionFieldId === "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION"
+    && protectionContract?.protectedAtFieldId === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT"
+    && protectionContract?.protectionScopeFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE"
+    && protectionContract?.protectionScopeDigestFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST"
+    && protectionContract?.protectionExpiresAtFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT"
+    && protectionContract?.sourceAttestationFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION"
+    && protectionContract?.fixedManifestFieldId === "SUB-INTENT-F-CONTENT-MANIFEST"
+    && protectionContract?.fixedManifestDigestFieldId === "SUB-INTENT-F-MANIFEST-DIGEST"
+    && protectionContract?.completedManifestDigestFieldId
+      === "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST"
+    && setEquals(
+      new Set(list(protectionContract?.exactScopeBindings)),
+      new Set([
+        "SUB-INTENT-F-ACTOR-REF",
+        "SUB-INTENT-F-ACTIVITY-REF",
+        "SUB-INTENT-F-ACTIVITY-VERSION",
+        "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
+        "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
+        "SUB-INTENT-F-SUBMISSION-VERSION",
+        "SUB-INTENT-F-MANIFEST-DIGEST",
+      ]),
+    )
+    && protectionContract?.protectedAtRule === "COPY_EXACT_PINNED_INCIDENT_STARTED_AT"
+    && protectionContract?.deadlineRule === "PINNED_INCIDENT_STARTED_AT_MUST_BE_ON_OR_BEFORE_ACTIVITY_DUE_AT"
+    && protectionContract?.actorSource === "SYSTEM_ONLY"
+    && protectionContract?.clientSelfDeclarationAllowed === false
+    && protectionContract?.missingAmbiguousOrMismatchedSourceEffect === "FAIL_CLOSED"
+    && [
+      "INCIDENT_VERSION_MISMATCH",
+      "INCIDENT_SCOPE_MISMATCH",
+      "INCIDENT_NOT_ACTIVE_AT_DEADLINE",
+      "PROTECTION_SCOPE_DIGEST_MISMATCH",
+      "PROTECTION_SOURCE_ATTESTATION_INVALID",
+      "MANIFEST_DIGEST_MISMATCH",
+    ].every((resultCode) => list(protect?.failureResults).includes(resultCode))
     && [
       "SUB-INTENT-F-ACTOR-REF",
       "SUB-INTENT-F-ACTIVITY-REF",
@@ -7040,8 +7264,8 @@ function weakNetworkCredentialErrors(index) {
     && complete?.transition?.from === "ISSUED"
     && complete?.transition?.to === "COMPLETED"
     && credential.platformFailureProtection
-      === "if the platform cannot issue a credential, apply a uniform system-failure extension or adjusted rule";
-  if (!valid) errors.push("INVALID_WEAK_NETWORK_CREDENTIAL SUB-OBJ-INTENT-CREDENTIAL must bind actor, activity, submission version, fixed manifest digest, expiry, bounded window, and status");
+      === "a PLATFORM_FAILURE_PROTECTED record must pin one immutable platform incident version, exact failed request manifest and scope, incident-start timeliness anchor, source attestation, and finite recovery deadline";
+  if (!valid) errors.push("INVALID_WEAK_NETWORK_CREDENTIAL SUB-OBJ-INTENT-CREDENTIAL must bind normal credentials and platform-failure protection to distinct versioned, finite, unforgeable evidence");
   return errors;
 }
 
@@ -7097,11 +7321,31 @@ function weakNetworkAcceptancePathErrors(index) {
   const pathById = new Map(records(flow.executionPaths).map((path) => [path.id, path]));
   const normalPath = pathById.get("NORMAL_SERVER_RECEIPT");
   const protectedPath = pathById.get("COMPLETED_INTENT_CREDENTIAL");
+  const platformFailurePath = pathById.get("PLATFORM_FAILURE_PROTECTION");
+  const matchBranchByState = new Map(records(matchGuard?.stateBranches).map((branch) => (
+    [branch.credentialState, branch]
+  )));
+  const completedMatchBranch = matchBranchByState.get("COMPLETED");
+  const failureMatchBranch = matchBranchByState.get("PLATFORM_FAILURE_PROTECTED");
+  const timelinessSourceByState = new Map(
+    records(protectedSubmit.timelinessContract?.stateSources).map((source) => (
+      [source.credentialState, source]
+    )),
+  );
+  const completedTimeliness = timelinessSourceByState.get("COMPLETED");
+  const failureTimeliness = timelinessSourceByState.get("PLATFORM_FAILURE_PROTECTED");
+  const flowBranchByState = new Map(records(flow.weakNetworkProtectionBranches).map((branch) => (
+    [branch.credentialState, branch]
+  )));
   const optionCodes = records(index.optionSetById.get("OPT-V2-TL-024")?.value?.values)
     .map(({ code }) => code);
   const valid = setEquals(
     new Set(optionCodes),
-    new Set(["SERVER_RECEIPT_ACCEPTED_AT", "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT"]),
+    new Set([
+      "SERVER_RECEIPT_ACCEPTED_AT",
+      "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT",
+      "PLATFORM_FAILURE_INCIDENT_STARTED_AT",
+    ]),
   )
     && snapshotRef.referenceIntegrity === "VERSION_PINNED"
     && credentialRef.referenceIntegrity === "VERSION_PINNED"
@@ -7115,20 +7359,58 @@ function weakNetworkAcceptancePathErrors(index) {
     && !list(normal.inputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF")
     && !list(normal.outputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF")
     && !list(normal.failureResults).some((code) => code.startsWith("INTENT_CREDENTIAL_"))
-    && protectedSubmit.timelinessContract?.source === "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT"
+    && protectedSubmit.timelinessContract?.source === "CREDENTIAL_STATE_DEPENDENT"
     && protectedSubmit.timelinessContract?.credentialRequired === true
+    && setEquals(
+      new Set(list(protectedSubmit.timelinessContract?.acceptedCredentialStates)),
+      new Set(["COMPLETED", "PLATFORM_FAILURE_PROTECTED"]),
+    )
+    && protectedSubmit.timelinessContract?.stateSourceMismatchResult
+      === "INTENT_CREDENTIAL_SOURCE_MISMATCH"
+    && completedTimeliness?.source === "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT"
+    && completedTimeliness?.sourceCredentialFieldId === "SUB-INTENT-F-ISSUED-AT"
+    && completedTimeliness?.deadlineComparison === "SOURCE_AT_ON_OR_BEFORE_ACTIVITY_DUE_AT"
+    && failureTimeliness?.source === "PLATFORM_FAILURE_INCIDENT_STARTED_AT"
+    && failureTimeliness?.sourceCredentialFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT"
+    && failureTimeliness?.deadlineComparison
+      === "PINNED_INCIDENT_STARTED_AT_ON_OR_BEFORE_ACTIVITY_DUE_AT"
     && list(protectedSubmit.inputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF")
     && list(protectedSubmit.inputFieldIds).includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION")
     && protectedGuard?.versionFieldId === "SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION"
     && protectedGuard?.targetObjectId === "SUB-OBJ-INTENT-CREDENTIAL"
-    && protectedGuard?.requiredState === "COMPLETED"
-    && matchGuard?.requiredState === "COMPLETED"
+    && setEquals(
+      new Set(list(protectedGuard?.requiredStates)),
+      new Set(["COMPLETED", "PLATFORM_FAILURE_PROTECTED"]),
+    )
+    && setEquals(
+      new Set(list(matchGuard?.requiredStates)),
+      new Set(["COMPLETED", "PLATFORM_FAILURE_PROTECTED"]),
+    )
     && matchGuard?.actorMatch?.credentialFieldId === "SUB-INTENT-F-ACTOR-REF"
     && matchGuard?.actorMatch?.attemptSource === "CURRENT_ACTOR"
     && JSON.stringify(matchGuard?.equalityBindings) === JSON.stringify(expectedEqualityBindings)
-    && matchGuard?.issuedAtFieldId === "SUB-INTENT-F-ISSUED-AT"
-    && matchGuard?.expiryFieldId === "SUB-INTENT-F-EXPIRES-AT"
-    && matchGuard?.completionWindowFieldId === "SUB-INTENT-F-COMPLETION-WINDOW"
+    && records(matchGuard?.stateBranches).length === 2
+    && completedMatchBranch?.timelinessSource === "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT"
+    && completedMatchBranch?.timelinessAnchorFieldId === "SUB-INTENT-F-ISSUED-AT"
+    && completedMatchBranch?.completionDeadlineFieldId === "SUB-INTENT-F-EXPIRES-AT"
+    && completedMatchBranch?.completionWindowFieldId === "SUB-INTENT-F-COMPLETION-WINDOW"
+    && completedMatchBranch?.incidentRefRequired === false
+    && failureMatchBranch?.timelinessSource === "PLATFORM_FAILURE_INCIDENT_STARTED_AT"
+    && failureMatchBranch?.timelinessAnchorFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT"
+    && failureMatchBranch?.completionDeadlineFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT"
+    && failureMatchBranch?.incidentRefFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF"
+    && failureMatchBranch?.incidentVersionFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION"
+    && failureMatchBranch?.protectionScopeDigestFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST"
+    && failureMatchBranch?.sourceAttestationFieldId
+      === "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION"
+    && failureMatchBranch?.incidentRefRequired === true
+    && matchGuard?.sourceStateMismatchEffect === "FAIL_CLOSED"
     && matchGuard?.failureResult === "INTENT_CREDENTIAL_MISMATCH"
     && completeIntent?.transition?.from === "ISSUED"
     && completeIntent?.transition?.to === "COMPLETED"
@@ -7149,16 +7431,38 @@ function weakNetworkAcceptancePathErrors(index) {
     && completionGuard?.failureResult === completionFailureCode
     && list(completeIntent?.failureResults).includes(completionFailureCode)
     && list(completeIntent?.scenarioIds).includes(completionFailureScenario?.id)
+    && [
+      "INTENT_CREDENTIAL_STATE_UNSUPPORTED",
+      "INTENT_CREDENTIAL_SOURCE_MISMATCH",
+      "PLATFORM_FAILURE_INCIDENT_MISMATCH",
+      "PLATFORM_FAILURE_SCOPE_MISMATCH",
+      "PLATFORM_FAILURE_PROTECTION_EXPIRED",
+      "PROTECTION_SOURCE_ATTESTATION_INVALID",
+    ].every((resultCode) => list(protectedSubmit.failureResults).includes(resultCode))
     && [normal, protectedSubmit, resubmit].every((action) => (
       commonReceiptOutputs.every((fieldId) => list(action?.outputFieldIds).includes(fieldId))
     ))
     && flow.routingPolicy === "ACTION_CHOICE_REQUIRED"
     && normalPath?.route?.consumerStepOrder === 5
     && protectedPath?.route?.consumerStepOrder === 6
+    && platformFailurePath?.route?.consumerStepOrder === 6
     && !list(normalPath?.stepOrders).includes(6)
-    && !list(protectedPath?.stepOrders).includes(5);
+    && !list(protectedPath?.stepOrders).includes(5)
+    && !list(platformFailurePath?.stepOrders).includes(5)
+    && flowBranchByState.get("COMPLETED")?.pathId === "COMPLETED_INTENT_CREDENTIAL"
+    && flowBranchByState.get("COMPLETED")?.timelinessSource
+      === "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT"
+    && flowBranchByState.get("PLATFORM_FAILURE_PROTECTED")?.pathId
+      === "PLATFORM_FAILURE_PROTECTION"
+    && flowBranchByState.get("PLATFORM_FAILURE_PROTECTED")?.timelinessSource
+      === "PLATFORM_FAILURE_INCIDENT_STARTED_AT"
+    && flowBranchByState.get("PLATFORM_FAILURE_PROTECTED")?.incidentVersionPinned === true
+    && flowBranchByState.get("PLATFORM_FAILURE_PROTECTED")?.exactProtectionScopeRequired === true
+    && flowBranchByState.get("PLATFORM_FAILURE_PROTECTED")?.sourceAttestationRequired === true
+    && flowBranchByState.get("PLATFORM_FAILURE_PROTECTED")?.finiteCompletionWindowRequired === true
+    && flowBranchByState.get("PLATFORM_FAILURE_PROTECTED")?.clientSelfDeclarationAllowed === false;
   return valid ? [] : [
-    "INVALID_WEAK_NETWORK_ACCEPTANCE_PATHS normal submission must use full server acceptance time while protected submission requires an exactly matching COMPLETED version-pinned credential and bounded fixed manifest",
+    "INVALID_WEAK_NETWORK_ACCEPTANCE_PATHS normal receipt, completed credential, and platform failure protection must use distinct state-bound sources with exact scope, version, manifest, and finite-window checks",
   ];
 }
 
@@ -7458,16 +7762,8 @@ const AI_FEEDBACK_LAYERS = [
   "TARGETED_TEACHING",
   "COMPLETE_ANSWER_AND_SOLUTION",
 ];
-const ANSWER_OPEN_SURFACES = [
-  "PAGE",
-  "SEARCH",
-  "EXPORT",
-  "NOTIFICATION",
-  "AI_CONVERSATION",
-  "VIDEO",
-  "CACHE",
-  "DIRECT_LINK",
-];
+const ANSWER_OPEN_SURFACES = answerOpenSurfaceExecutionRegistry
+  .map(({ surface }) => surface);
 const AIX_PERSISTED_FIELD_IDS = [
   "AIX-PREVIEW-F-ID",
   "AIX-PREVIEW-F-TASK-ID",
@@ -7671,6 +7967,8 @@ const EXTERNAL_AI_DERIVED_ACTION_CONTRACTS = [
       "GRD-DECISION-F-ACTIVITY-SNAPSHOT-REF",
       "GRD-DECISION-F-ACTIVITY-SNAPSHOT-VERSION",
       "GRD-DECISION-F-HELP-ENVIRONMENT",
+      "GRD-DECISION-F-CORE-ENTITLEMENT-REF",
+      "GRD-DECISION-F-CORE-ENTITLEMENT-VERSION",
       "GRD-TRACE-F-BUSINESS-TASK-ID",
     ],
     scoringRationaleContract: {
@@ -7776,15 +8074,6 @@ const STUDENT_ANSWER_ACTION_IDS = [
   "SUB-ACT-RETRY-UPLOAD",
   "SUB-ACT-SUBMIT",
 ];
-const ANSWER_OPEN_POLICY_FIELD_IDS = [
-  "PUB-RESULT-F-ANSWER-OPEN-POLICY-ID",
-  "PUB-RESULT-F-ANSWER-OPEN-POLICY-VERSION",
-];
-const ANSWER_OPEN_TIME_FIELD_IDS = [
-  "PUB-RESULT-F-ANSWER-OPEN-AT",
-  "PUB-RESULT-F-SOLUTION-OPEN-AT",
-  "PUB-RESULT-F-RUBRIC-OPEN-AT",
-];
 const FEEDBACK_LAYER_FIELD_IDS = [
   "PUB-RESULT-F-FEEDBACK-LAYER-1",
   "PUB-RESULT-F-FEEDBACK-LAYER-2",
@@ -7800,26 +8089,12 @@ const PUBLICATION_SNAPSHOT_INTERFACE = {
   requiredState: "SEALED",
   resolutionRequiredBeforeExecution: true,
 };
-const ANSWER_OPEN_ENFORCEMENT_REFS = new Map([
-  ["PAGE", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
-  ["SEARCH", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
-  ["EXPORT", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
-  ["NOTIFICATION", { kind: "ACTION", ids: [
-    "PUB-ACT-PUBLISH-RESULT",
-    "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
-  ] }],
-  ["AI_CONVERSATION", {
-    kind: "ACTION",
-    ids: [
-      "AIX-ACT-PREPARE-TASK-PREVIEW",
-      "AIX-ACT-CREATE-FEEDBACK-DRAFT-PREVIEW",
-      "AIX-ACT-CREATE-PLAN-DRAFT-PREVIEW",
-    ],
-  }],
-  ["VIDEO", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
-  ["CACHE", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
-  ["DIRECT_LINK", { kind: "ACTION", ids: ["PUB-ACT-VIEW-RESULT"] }],
-]);
+const ANSWER_OPEN_ENFORCEMENT_REFS = new Map(
+  answerOpenSurfaceExecutionRegistry.map(({ surface, stages }) => [
+    surface,
+    { kind: "ACTION", ids: stages.map(({ actionId }) => actionId) },
+  ]),
+);
 const PROHIBITED_AI_PERSISTENCE_FIELD = /(?:hidden[-_ ]*chain[-_ ]*of[-_ ]*thought|chain[-_ ]*of[-_ ]*thought|vendor[-_ ]*debug|full[-_ ]*upstream[-_ ]*request|隐藏.{0,6}思维链|供应商.{0,6}调试)/iu;
 
 function phaseTwoAiAssessmentErrors(index) {
@@ -8895,11 +9170,14 @@ function phaseTwoAiAssessmentErrors(index) {
     && sameStringSet(enforcementBindings.map(({ surface }) => surface), ANSWER_OPEN_SURFACES)
     && enforcementBindings.every((binding) => {
       const expected = ANSWER_OPEN_ENFORCEMENT_REFS.get(binding?.surface);
+      const expectedBeforeOpenBehavior = binding?.surface === "NOTIFICATION"
+        ? "STRIP_RESTRICTED_CONTENT_AND_DELIVER_SAFE_SUMMARY"
+        : "WITHHOLD_RESTRICTED_CONTENT";
       const common = binding?.policyId === answerOpen?.policyId
         && sameStringSet(binding?.policyFieldIds, ANSWER_OPEN_POLICY_FIELD_IDS)
         && sameStringSet(binding?.openTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
         && binding?.reauthorizeAtAccess === true
-        && binding?.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT"
+        && binding?.beforeOpenBehavior === expectedBeforeOpenBehavior
         && binding?.enforcementKind === expected?.kind;
       if (!common) return false;
       return sameStringSet(binding?.actionIds, expected.ids)
@@ -8910,7 +9188,7 @@ function phaseTwoAiAssessmentErrors(index) {
             && sameStringSet(enforcement?.openTimeFieldIds, ANSWER_OPEN_TIME_FIELD_IDS)
             && list(enforcement?.surfaces).includes(binding?.surface)
             && enforcement?.reauthorizeAtAccess === true
-            && enforcement?.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT";
+            && enforcement?.beforeOpenBehavior === expectedBeforeOpenBehavior;
         })
         && !Object.hasOwn(binding, "policyPointId");
     });
@@ -9036,7 +9314,7 @@ function phaseTwoAiAssessmentErrors(index) {
           && release?.visibleAtFieldId === visibleAtFieldId;
       })
     ))
-    && sameStringSet(studentResultPage?.actionIds, [resultViewAction?.id])
+    && sameStringSet(studentResultPage?.actionIds, answerOpen?.resultReadActionIds)
     && sameStringSet(studentResultPage?.fieldIds, resultViewAction?.outputFieldIds);
   closeDomain(
     "FEEDBACK_OPEN",
@@ -9152,7 +9430,7 @@ function phaseTwoAiAssessmentErrors(index) {
     && initialAttemptPriorLineage?.versionFieldId
       === "GRD-ATTEMPT-CLASS-F-PRIOR-CLASSIFICATION-VERSION"
     && initialAttemptPriorLineage?.targetVersionFieldId === "GRD-ATTEMPT-CLASS-F-VERSION"
-    && initialAttemptObject?.dataNature === "AI_DERIVED_JUDGMENT"
+    && initialAttemptObject?.dataNature === DATA_NATURE.AI_DERIVED
     && initialAttemptObject?.originalFactOverwritePolicy === "FORBIDDEN"
     && initialDerivedContract?.sourceRefFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-REF"
     && initialDerivedContract?.sourceVersionFieldId === "GRD-ATTEMPT-CLASS-F-SUBMISSION-VERSION"
@@ -9296,12 +9574,12 @@ function phaseTwoAiAssessmentErrors(index) {
       === validAttempt?.assessmentObjectId
     && index.fieldById.get(correction?.answerExposedEvidenceContract?.evidenceKindFieldId)?.objectId
       === validAttempt?.assessmentObjectId
-    && correctionAttempt?.dataNature === "ORIGINAL_LEARNING_FACT"
+    && correctionAttempt?.dataNature === DATA_NATURE.RAW_FACT
     && correctionAttempt?.originalFactOverwritePolicy === "FORBIDDEN"
     && correctionAttempt?.factVersionPolicy === "APPEND_NEW_ATTEMPT_VERSION_ONLY"
     && index.fieldById.get("CORR-ATTEMPT-F-CORRECTION-ANSWER")?.value?.mutability === "IMMUTABLE"
     && !records(correctionAttempt?.fields).some(({ id }) => id?.startsWith("CORR-ASSESSMENT-F-"))
-    && correctionAssessment?.dataNature === "AI_DERIVED_JUDGMENT"
+    && correctionAssessment?.dataNature === DATA_NATURE.AI_DERIVED
     && correctionAssessment?.originalFactOverwritePolicy === "FORBIDDEN"
     && correctionSourceLineage?.targetObjectId === correctionAttempt?.id
     && correctionSourceLineage?.versionFieldId === "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-VERSION"
@@ -9547,7 +9825,7 @@ function phaseTwoAiAssessmentErrors(index) {
           );
       })
     );
-    return object?.dataNature === "AI_DERIVED_JUDGMENT"
+    return object?.dataNature === DATA_NATURE.AI_DERIVED
       && object?.originalFactOverwritePolicy === "FORBIDDEN"
       && hasExactKeys(contract, contractKeys)
       && contractKeys.slice(0, 8).every((key) => contract?.[key] === requirement[key])
@@ -9636,12 +9914,12 @@ function phaseTwoAiAssessmentErrors(index) {
     && externalAiDerivedActionsValid
     && derivedJudgmentRequirements.every(derivedJudgmentContractValid)
     && index.objectById.get("GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION")?.value?.dataNature
-      === "AI_DERIVED_JUDGMENT"
-    && index.objectById.get("GRD-OBJ-DECISION")?.value?.dataNature === "AI_DERIVED_JUDGMENT"
-    && index.objectById.get("PUB-OBJ-RESULT")?.value?.dataNature === "AI_DERIVED_JUDGMENT"
+      === DATA_NATURE.AI_DERIVED
+    && index.objectById.get("GRD-OBJ-DECISION")?.value?.dataNature === DATA_NATURE.AI_DERIVED
+    && index.objectById.get("PUB-OBJ-RESULT")?.value?.dataNature === DATA_NATURE.AI_DERIVED
     && index.objectById.get("CORR-OBJ-ATTEMPT-ASSESSMENT")?.value?.dataNature
-      === "AI_DERIVED_JUDGMENT"
-    && index.objectById.get("CORR-OBJ-ATTEMPT")?.value?.dataNature === "ORIGINAL_LEARNING_FACT"
+      === DATA_NATURE.AI_DERIVED
+    && index.objectById.get("CORR-OBJ-ATTEMPT")?.value?.dataNature === DATA_NATURE.RAW_FACT
     && index.actionById.get("CORR-ACT-NORMALIZE-SUBMISSION")?.value?.targetObjectId
       === "CORR-OBJ-ATTEMPT-ASSESSMENT";
   const trace = grading?.aiTraceContract;
@@ -9975,19 +10253,160 @@ function finalizedGovernanceBaselineErrors(index) {
     "DGV-CATALOG-F-PORTABILITY",
     "DGV-CATALOG-F-LIFECYCLE",
   ];
+  const catalogPartitionKeyFieldIds = [
+    "DGV-CATALOG-F-CONTROL-SUBJECT",
+    "DGV-CATALOG-F-CONTROL-SCOPE-REF",
+    "DGV-CATALOG-F-SOURCE-OBJECT-KIND",
+  ];
   const catalogObject = object("DGV-OBJ-DATA-CATALOG-ENTRY");
+  const catalogContract = catalogObject?.dataCatalogContract;
+  const activeClassification = catalogContract?.activeClassification;
+  const axisMappings = catalogContract?.authoritativeAxisMappings;
+  const dataNatureMapping = axisMappings?.dataNature;
+  const sensitivityMapping = axisMappings?.sensitivity;
+  const catalogActivate = action("DGV-ACT-ACTIVATE-DATA-CATALOG");
+  const catalogReplace = action("DGV-ACT-SUPERSEDE-DATA-CATALOG");
   const catalogResolve = action("DGV-ACT-RESOLVE-DATA-CATALOG");
-  const d047Valid = exactOrder(catalogObject?.dataCatalogContract?.axisFieldIds, catalogAxisFieldIds)
+  const governedObjectIds = index.objects.map(({ value }) => value?.id).filter(isValidId);
+  const registeredGovernedObjectIds = list(catalogContract?.governedObjectIds);
+  const canonicalDataNatureCodes = DATA_NATURE_VALUES.map(([code]) => code);
+  const dataNatureOptionSet = index.optionSetById.get(DATA_NATURE_OPTION_SET_ID)?.value;
+  const dataNatureCodes = records(dataNatureOptionSet?.values).map(({ code }) => code);
+  const sensitivityOptionSet = index.optionSetById.get(DATA_SENSITIVITY_OPTION_SET_ID)?.value;
+  const sensitivityCodes = records(sensitivityOptionSet?.values).map(({ code }) => code);
+  const modelSensitivityIds = index.sensitivities.map(({ value }) => value?.id).filter(isValidId);
+  const authoritativeClosuresValid = hasExactKeys(axisMappings, ["dataNature", "sensitivity"])
+    && hasExactValues(dataNatureMapping, {
+      fieldId: "DGV-CATALOG-F-NATURE",
+      optionSetId: DATA_NATURE_OPTION_SET_ID,
+      objectProperty: "dataNature",
+    })
+    && hasExactValues(sensitivityMapping, {
+      fieldId: "DGV-CATALOG-F-SENSITIVITY",
+      optionSetId: DATA_SENSITIVITY_OPTION_SET_ID,
+      objectProperty: "sensitivityId",
+      modelCollection: "sensitivities",
+    })
+    && dataNatureOptionSet?.mode === "STATIC"
+    && sameStringSet(dataNatureCodes, canonicalDataNatureCodes)
+    && dataNatureCodes.length === new Set(dataNatureCodes).size
+    && sensitivityOptionSet?.mode === "STATIC"
+    && sameStringSet(sensitivityCodes, modelSensitivityIds)
+    && sensitivityCodes.length === new Set(sensitivityCodes).size
+    && index.objects.every(({ value }) => (
+      (!Object.hasOwn(value ?? {}, "dataNature") || dataNatureCodes.includes(value.dataNature))
+      && sensitivityCodes.includes(value?.sensitivityId)
+    ));
+  const governedObjectCoverageValid = catalogContract?.governedObjectIdSource
+      === "ALL_MODEL_OBJECT_IDS"
+    && catalogContract?.sourceObjectKindValidation === "MUST_EQUAL_GOVERNED_OBJECT_ID"
+    && registeredGovernedObjectIds.length === governedObjectIds.length
+    && registeredGovernedObjectIds.length === new Set(registeredGovernedObjectIds).size
+    && sameStringSet(registeredGovernedObjectIds, governedObjectIds)
+    && hasExactKeys(catalogContract?.classificationKey, ["scope", "fieldIds"])
+    && catalogContract.classificationKey.scope === "CONTROL_SUBJECT_PARTITION"
+    && exactOrder(
+      catalogContract.classificationKey.fieldIds,
+      catalogPartitionKeyFieldIds,
+    )
+    && records(catalogContract?.coveragePartitions).length > 0;
+  const activeClassificationValid = hasExactValues(activeClassification, {
+    cardinality: "EXACTLY_ONE_PER_GOVERNED_OBJECT",
+    statusFieldId: "DGV-CATALOG-F-STATUS",
+    activeState: "ACTIVE",
+    supersededState: "SUPERSEDED",
+    initialActivationActionId: "DGV-ACT-ACTIVATE-DATA-CATALOG",
+    atomicReplacementActionId: "DGV-ACT-SUPERSEDE-DATA-CATALOG",
+    resolveActionId: "DGV-ACT-RESOLVE-DATA-CATALOG",
+    initialActivationRequiresActiveCount: 0,
+    replacementRequiresActiveCount: 1,
+    activeCountAfterCommit: 1,
+  })
+    && hasExactValues(catalogActivate?.activeClassificationEffect, {
+      mode: "INITIAL_ACTIVATION",
+      uniquenessKeyFieldIds: catalogActivate?.activeClassificationEffect?.uniquenessKeyFieldIds,
+      requiredActiveCountBefore: 0,
+      activeCountAfterCommit: 1,
+    })
+    && exactOrder(
+      catalogActivate?.activeClassificationEffect?.uniquenessKeyFieldIds,
+      catalogPartitionKeyFieldIds,
+    )
+    && catalogActivate?.transition?.from === "DRAFT"
+    && catalogActivate?.transition?.to === "ACTIVE"
+    && boundaryScenario("DGV-ACT-ACTIVATE-DATA-CATALOG", "ACTIVE_CATALOG_CONFLICT")
+      ?.then?.expectedPermission === "DENY"
+    && hasExactKeys(catalogReplace?.atomicCatalogReplacement, [
+      "uniquenessKeyFieldIds",
+      "replacementRefFieldId",
+      "replacementVersionFieldId",
+      "replacedStateTransition",
+      "replacementStateTransition",
+      "requiredActiveCountBefore",
+      "activeCountAfterCommit",
+      "axesMustBeComplete",
+      "commitMode",
+    ])
+    && exactOrder(
+      catalogReplace.atomicCatalogReplacement.uniquenessKeyFieldIds,
+      catalogPartitionKeyFieldIds,
+    )
+    && catalogReplace.atomicCatalogReplacement.replacementRefFieldId
+      === "DGV-CATALOG-F-REPLACEMENT-DRAFT-REF"
+    && catalogReplace.atomicCatalogReplacement.replacementVersionFieldId
+      === "DGV-CATALOG-F-REPLACEMENT-DRAFT-VERSION"
+    && hasExactValues(catalogReplace.atomicCatalogReplacement.replacedStateTransition, {
+      from: "ACTIVE",
+      to: "SUPERSEDED",
+    })
+    && hasExactValues(catalogReplace.atomicCatalogReplacement.replacementStateTransition, {
+      from: "DRAFT",
+      to: "ACTIVE",
+    })
+    && catalogReplace.atomicCatalogReplacement.requiredActiveCountBefore === 1
+    && catalogReplace.atomicCatalogReplacement.activeCountAfterCommit === 1
+    && catalogReplace.atomicCatalogReplacement.axesMustBeComplete === true
+    && catalogReplace.atomicCatalogReplacement.commitMode === "ATOMIC"
+    && boundaryScenario("DGV-ACT-SUPERSEDE-DATA-CATALOG", "ACTIVE_CATALOG_NOT_UNIQUE")
+      ?.then?.expectedPermission === "DENY"
+    && boundaryScenario("DGV-ACT-SUPERSEDE-DATA-CATALOG", "REPLACEMENT_CATALOG_INVALID")
+      ?.then?.expectedPermission === "DENY"
+    && hasExactValues(catalogResolve?.activeClassificationLookup, {
+      uniquenessKeyFieldIds: catalogResolve?.activeClassificationLookup?.uniquenessKeyFieldIds,
+      requiredState: "ACTIVE",
+      requiredMatchCount: 1,
+    })
+    && exactOrder(
+      catalogResolve?.activeClassificationLookup?.uniquenessKeyFieldIds,
+      catalogPartitionKeyFieldIds,
+    )
+    && exactOrder(catalogResolve?.inputFieldIds, catalogPartitionKeyFieldIds)
+    && boundaryScenario("DGV-ACT-RESOLVE-DATA-CATALOG", "ACTIVE_CATALOG_NOT_UNIQUE")
+      ?.then?.expectedPermission === "DENY";
+  const d047Valid = hasExactKeys(catalogContract, [
+    "axisFieldIds",
+    "governedObjectIds",
+    "governedObjectIdSource",
+    "sourceObjectKindValidation",
+    "classificationKey",
+    "coveragePartitions",
+    "activeClassification",
+    "authoritativeAxisMappings",
+  ])
+    && exactOrder(catalogContract.axisFieldIds, catalogAxisFieldIds)
     && catalogAxisFieldIds.every((fieldId) => {
       const field = index.fieldById.get(fieldId)?.value;
       return field?.required === true && field?.valueSource?.kind === "OPTION_SET";
     })
+    && governedObjectCoverageValid
+    && activeClassificationValid
+    && authoritativeClosuresValid
     && exactOrder(catalogResolve?.outputFieldIds, catalogAxisFieldIds)
     && exactOrder(catalogResolve?.requiredAxisFieldIds, catalogAxisFieldIds)
     && boundaryScenario("DGV-ACT-RESOLVE-DATA-CATALOG", "CATALOG_AXIS_INCOMPLETE")
       ?.then?.expectedPermission === "DENY";
   if (!d047Valid) {
-    errors.push("INVALID_D047_DATA_CATALOG every governed data kind requires all eight independently explicit catalog axes");
+    errors.push("INVALID_D047_DATA_CATALOG every governed object requires one unique ACTIVE eight-axis classification with atomic replacement and authoritative data-nature and sensitivity closures");
   }
 
   const governanceActionContracts = [
@@ -10499,6 +10918,7 @@ function finalizedGovernanceBaselineErrors(index) {
   }
 
   const publicPromotion = action("CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC");
+  const publicManagementScope = object("CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE");
   const publicReview = object("CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW");
   const requestPublicReview = action("CONTENT-ACT-REQUEST-PLATFORM-PUBLIC-REVIEW");
   const approvePublicReview = action("CONTENT-ACT-APPROVE-PLATFORM-PUBLIC-REVIEW");
@@ -10512,6 +10932,7 @@ function finalizedGovernanceBaselineErrors(index) {
     "sourceGraphRefFieldId",
     "rightsBundleRefFieldId",
     "reviewRefFieldId",
+    "sourceKindEligibilityBinding",
     "prohibitedSourceKinds",
     "prohibitedPhaseIds",
     "requiredReviewKinds",
@@ -10520,6 +10941,18 @@ function finalizedGovernanceBaselineErrors(index) {
     && publicGuard.sourceGraphRefFieldId === "CONTENT-SCOPE-F-SOURCE-GRAPH-REF"
     && publicGuard.rightsBundleRefFieldId === "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF"
     && publicGuard.reviewRefFieldId === "CONTENT-SCOPE-F-PLATFORM-REVIEW-REF"
+    && JSON.stringify(publicGuard.sourceKindEligibilityBinding) === JSON.stringify({
+      sourceGraphObjectId: "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
+      sourceGraphRefFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+      sourceGraphVersionFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+      sourceGraphSourceKindFieldId: "CONTENT-SOURCE-F-SOURCE-KIND",
+      managementScopeMirrorFieldId: "CONTENT-SCOPE-F-SOURCE-KIND",
+      comparison: "EXACT_CODE",
+      exactVersionRequired: true,
+      materialIdentityFallbackAllowed: false,
+    })
+    && JSON.stringify(publicManagementScope?.sourceKindEligibilityBinding)
+      === JSON.stringify(publicGuard.sourceKindEligibilityBinding)
     && exactOrder(publicGuard.prohibitedSourceKinds, ["STUDENT_WORK"])
     && exactOrder(publicGuard.prohibitedPhaseIds, ["PHASE-1", "PHASE-2"])
     && exactOrder(publicGuard.requiredReviewKinds, ["SOURCE_RIGHTS", "PRIVACY", "CONTENT_QUALITY", "PLATFORM_AUTHORIZATION"])
@@ -10657,6 +11090,9 @@ function commercialContinuityErrors(index) {
   const errors = [];
   const module = index.moduleById.get("PLAT-001")?.value;
   const phaseTwoModule = index.moduleById.get("PLAT-002")?.value;
+  const gradingModule = index.moduleById.get("GRD-001")?.value;
+  const progressModule = index.moduleById.get("PROG-001")?.value;
+  const videoModule = index.moduleById.get("VIDEO-001")?.value;
   const servicePlan = index.objectById.get("PLAT-OBJ-SERVICE-PLAN")?.value;
   const commercial = index.objectById.get("PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY")?.value;
   const continuity = index.objectById.get("PLAT-OBJ-SERVICE-CONTINUITY-WINDOW")?.value;
@@ -10723,8 +11159,29 @@ function commercialContinuityErrors(index) {
   const createServicePlan = action("PLAT-ACT-CREATE-SERVICE-PLAN");
   const confirmServicePlan = action("PLAT-ACT-CONFIRM-SERVICE-PLAN");
   const activateServicePlan = action("PLAT-ACT-ACTIVATE-SERVICE-PLAN");
+  const restrictServicePlan = action("PLAT-ACT-RESTRICT-SERVICE-PLAN");
+  const terminateServicePlan = action("PLAT-ACT-TERMINATE-SERVICE-PLAN");
+  const expireServicePlan = action("PLAT-ACT-EXPIRE-SERVICE-PLAN");
+  const supersedeServicePlan = action("PLAT-ACT-SUPERSEDE-SERVICE-PLAN");
   const currentEntitlementConstraint = servicePlan?.currentEntitlementConstraint;
   const activationGuard = activateServicePlan?.currentEntitlementActivationGuard;
+  const restrictionGuard = restrictServicePlan?.servicePlanRestrictionGuard;
+  const recoveryGuard = supersedeServicePlan?.recoveryVersionGuard;
+  const recoveryRelation = records(module?.relationships).find(({ id }) => (
+    id === "PLAT-REL-SERVICE-PLAN-RECOVERY"
+  ));
+  const servicePlanActiveEntryActionIds = index.actions
+    .map(({ value }) => value)
+    .filter((actionValue) => (
+      actionValue?.targetObjectId === servicePlan?.id
+      && (
+        actionValue?.transition?.to === "ACTIVE"
+        || list(actionValue?.transition?.to).includes("ACTIVE")
+        || actionValue?.successState === "ACTIVE"
+        || list(actionValue?.successStates).includes("ACTIVE")
+      )
+    ))
+    .map(({ id }) => id);
   const servicePlanValid = hasExactKeys(servicePlanContract, [
     "objectId",
     "schoolRefFieldId",
@@ -10737,6 +11194,20 @@ function commercialContinuityErrors(index) {
     "createActionId",
     "confirmActionId",
     "activateActionId",
+    "restrictActionId",
+    "terminateActionId",
+    "expireActionId",
+    "supersedeActionId",
+    "continuityRefFieldId",
+    "continuityVersionFieldId",
+    "restrictionReasonFieldId",
+    "restrictionEffectiveAtFieldId",
+    "recoveryPlanRefFieldId",
+    "recoveryPlanVersionFieldId",
+    "restrictedStates",
+    "reactivationAllowed",
+    "recoveryRequiresNewActiveVersion",
+    "closedContinuityRestoresEntitlement",
   ])
     && hasExactKeys(currentEntitlementConstraint, [
       "schoolRefFieldId",
@@ -10745,6 +11216,8 @@ function commercialContinuityErrors(index) {
       "currentState",
       "maximumCurrentVersionsPerSchool",
       "selectionRule",
+      "restrictedStates",
+      "recoveryRule",
     ])
     && hasExactKeys(activationGuard, [
       "schoolRefFieldId",
@@ -10765,6 +11238,28 @@ function commercialContinuityErrors(index) {
     && servicePlanContract?.createActionId === createServicePlan?.id
     && servicePlanContract?.confirmActionId === confirmServicePlan?.id
     && servicePlanContract?.activateActionId === activateServicePlan?.id
+    && servicePlanContract?.restrictActionId === restrictServicePlan?.id
+    && servicePlanContract?.terminateActionId === terminateServicePlan?.id
+    && servicePlanContract?.expireActionId === expireServicePlan?.id
+    && servicePlanContract?.supersedeActionId === supersedeServicePlan?.id
+    && servicePlanContract?.continuityRefFieldId === "PLAT-PLAN-F-CONTINUITY-REF"
+    && servicePlanContract?.continuityVersionFieldId === "PLAT-PLAN-F-CONTINUITY-VERSION"
+    && servicePlanContract?.restrictionReasonFieldId === "PLAT-PLAN-F-RESTRICTION-REASON"
+    && servicePlanContract?.restrictionEffectiveAtFieldId
+      === "PLAT-PLAN-F-RESTRICTION-EFFECTIVE-AT"
+    && servicePlanContract?.recoveryPlanRefFieldId === "PLAT-PLAN-F-RECOVERY-PLAN-REF"
+    && servicePlanContract?.recoveryPlanVersionFieldId
+      === "PLAT-PLAN-F-RECOVERY-PLAN-VERSION"
+    && sameStringSet(servicePlanContract?.restrictedStates, [
+      "RESTRICTED",
+      "TERMINATED",
+      "EXPIRED",
+      "SUPERSEDED",
+    ])
+    && servicePlanContract?.reactivationAllowed === false
+    && servicePlanContract?.recoveryRequiresNewActiveVersion === true
+    && servicePlanContract?.closedContinuityRestoresEntitlement === false
+    && continuityContract?.closedWindowRestoresEntitlement === false
     && objectRefMatches(
       "PLAT-PLAN-F-SCHOOL-REF",
       "ACC-OBJ-SCHOOL",
@@ -10778,13 +11273,38 @@ function commercialContinuityErrors(index) {
       "ACC-OBJ-SCHOOL",
       "ACC-SCHOOL-F-SCHOOL-VERSION",
     )
-    && sameStringSet(servicePlan?.states, ["DRAFT", "CONFIRMED", "ACTIVE"])
+    && sameStringSet(optionCodes("OPT-EXT-026"), [
+      "DRAFT",
+      "CONFIRMED",
+      "ACTIVE",
+      "RESTRICTED",
+      "TERMINATED",
+      "EXPIRED",
+      "SUPERSEDED",
+    ])
+    && sameStringSet(servicePlan?.states, [
+      "DRAFT",
+      "CONFIRMED",
+      "ACTIVE",
+      "RESTRICTED",
+      "TERMINATED",
+      "EXPIRED",
+      "SUPERSEDED",
+    ])
     && currentEntitlementConstraint?.schoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
     && currentEntitlementConstraint?.stateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
     && currentEntitlementConstraint?.versionFieldId === "PLAT-PLAN-F-VERSION"
     && currentEntitlementConstraint?.currentState === "ACTIVE"
     && currentEntitlementConstraint?.maximumCurrentVersionsPerSchool === 1
     && currentEntitlementConstraint?.selectionRule === "EXACT_PINNED_ACTIVE_VERSION"
+    && sameStringSet(currentEntitlementConstraint?.restrictedStates, [
+      "RESTRICTED",
+      "TERMINATED",
+      "EXPIRED",
+      "SUPERSEDED",
+    ])
+    && currentEntitlementConstraint?.recoveryRule
+      === "A_RESTRICTED_TERMINATED_OR_EXPIRED_PLAN_REQUIRES_A_NEW_ACTIVE_VERSION_AND_MAY_NOT_RETURN_TO_ACTIVE"
     && createServicePlan?.operationKind === "CREATE"
     && [
       "PLAT-PLAN-F-SCHOOL-REF",
@@ -10811,7 +11331,96 @@ function commercialContinuityErrors(index) {
     && activationGuard?.targetState === "ACTIVE"
     && activationGuard?.maximumCurrentVersionsPerSchool === 1
     && activationGuard?.failureResult === "ACTIVE_SERVICE_PLAN_ALREADY_EXISTS"
-    && list(activateServicePlan?.failureResults).includes("ACTIVE_SERVICE_PLAN_ALREADY_EXISTS");
+    && list(activateServicePlan?.failureResults).includes("ACTIVE_SERVICE_PLAN_ALREADY_EXISTS")
+    && restrictServicePlan?.transition?.from === "ACTIVE"
+    && restrictServicePlan?.transition?.to === "RESTRICTED"
+    && restrictServicePlan?.executionMode === "SYSTEM_EVENT"
+    && restrictServicePlan?.trigger?.eventId === "EVT-PLAT-SERVICE-EXIT-WINDOW-OPENED"
+    && hasStateGuard(
+      restrictServicePlan,
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+      "EXIT_WINDOW_OPEN",
+    )
+    && restrictionGuard?.continuityServicePlanRefFieldId
+      === "PLAT-CONT-F-SERVICE-PLAN-REF"
+    && restrictionGuard?.continuityServicePlanVersionFieldId
+      === "PLAT-CONT-F-SERVICE-PLAN-VERSION"
+    && restrictionGuard?.targetPlanIdentityFieldId === "PLAT-PLAN-F-ID"
+    && restrictionGuard?.targetPlanVersionFieldId === "PLAT-PLAN-F-VERSION"
+    && restrictionGuard?.exactPinnedPlanVersionRequired === true
+    && restrictionGuard?.exactReasonRequired === true
+    && restrictionGuard?.exactEffectiveTimeRequired === true
+    && restrictionGuard?.failureResult === "SERVICE_PLAN_VERSION_MISMATCH"
+    && terminateServicePlan?.transition?.from === "RESTRICTED"
+    && terminateServicePlan?.transition?.to === "TERMINATED"
+    && hasStateGuard(
+      terminateServicePlan,
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+      "CLOSED",
+    )
+    && terminateServicePlan?.terminalStateGuard?.requiredReasonCode === "CONTRACT_TERMINATED"
+    && terminateServicePlan?.terminalStateGuard?.requiredContinuityState === "CLOSED"
+    && terminateServicePlan?.terminalStateGuard?.reactivationAllowed === false
+    && expireServicePlan?.transition?.from === "RESTRICTED"
+    && expireServicePlan?.transition?.to === "EXPIRED"
+    && hasStateGuard(
+      expireServicePlan,
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+      "CLOSED",
+    )
+    && expireServicePlan?.terminalStateGuard?.requiredReasonCode === "CONTRACT_EXPIRED"
+    && expireServicePlan?.terminalStateGuard?.requiredContinuityState === "CLOSED"
+    && expireServicePlan?.terminalStateGuard?.reactivationAllowed === false
+    && sameStringSet(supersedeServicePlan?.transition?.from, [
+      "RESTRICTED",
+      "TERMINATED",
+      "EXPIRED",
+    ])
+    && supersedeServicePlan?.transition?.to === "SUPERSEDED"
+    && hasStateGuard(
+      supersedeServicePlan,
+      "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "ACTIVE",
+    )
+    && recoveryGuard?.sourceSchoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && recoveryGuard?.recoverySchoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && recoveryGuard?.sourceIdentityFieldId === "PLAT-PLAN-F-ID"
+    && recoveryGuard?.recoveryIdentityFieldId === "PLAT-PLAN-F-ID"
+    && recoveryGuard?.recoveryVersionFieldId === "PLAT-PLAN-F-VERSION"
+    && recoveryGuard?.requiredRecoveryState === "ACTIVE"
+    && recoveryGuard?.identityMustDiffer === true
+    && recoveryGuard?.schoolMustMatch === true
+    && recoveryGuard?.exactPinnedRecoveryVersionRequired === true
+    && recoveryGuard?.supersedesLineageRequired === true
+    && recoveryGuard?.sourceReactivationAllowed === false
+    && objectRefMatches(
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+      "PLAT-PLAN-F-CONTINUITY-VERSION",
+      "PLAT-CONT-F-VERSION",
+    )
+    && objectRefMatches(
+      "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+      "PLAT-PLAN-F-VERSION",
+    )
+    && hasLineage(
+      servicePlan,
+      "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+      "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "PLAT-PLAN-F-VERSION",
+    )
+    && recoveryRelation?.fromObjectId === servicePlan?.id
+    && recoveryRelation?.toObjectId === servicePlan?.id
+    && recoveryRelation?.type === "REFERENCES"
+    && recoveryRelation?.ownershipScope === "SAME_SCHOOL"
+    && sameStringSet(servicePlanActiveEntryActionIds, [activateServicePlan?.id]);
   if (!servicePlanValid) {
     errors.push(
       "INVALID_SERVICE_PLAN_ENTITLEMENT PLAT-001 must bind each current entitlement to one exact ACTIVE service-plan version for one ACTIVE school",
@@ -10915,6 +11524,9 @@ function commercialContinuityErrors(index) {
   const createPhaseTwo = action("PLAT-ACT-CREATE-PHASE-TWO-ENTITLEMENT");
   const confirmPhaseTwo = action("PLAT-ACT-CONFIRM-PHASE-TWO-ENTITLEMENT");
   const activatePhaseTwo = action("PLAT-ACT-ACTIVATE-PHASE-TWO-ENTITLEMENT");
+  const resolvePhaseTwo = action("PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT");
+  const phaseTwoActivationGuard = activatePhaseTwo?.phaseTwoEntitlementActivationGuard;
+  const phaseTwoSelectionGuard = resolvePhaseTwo?.activeEntitlementSelectionGuard;
   const phaseTwoValid = phaseTwoModule?.phase === PHASE.SECOND
     && phaseTwoModule?.releaseStatus === RELEASE_STATUS.PLANNED
     && !index.currentReleaseModuleIds.includes("PLAT-002")
@@ -10928,11 +11540,18 @@ function commercialContinuityErrors(index) {
     && phaseTwoContract?.studentOrGuardianPaymentAllowed === false
     && phaseTwoContract?.coreLearningLoopPaywallAllowed === false
     && phaseTwoContract?.activationActionId === activatePhaseTwo?.id
+    && phaseTwoContract?.resolveActiveActionId === resolvePhaseTwo?.id
     && objectRefMatches(
       "PLAT-P2ENT-F-SCHOOL-REF",
       "ACC-OBJ-SCHOOL",
       "PLAT-P2ENT-F-SCHOOL-VERSION",
       "ACC-SCHOOL-F-SCHOOL-VERSION",
+    )
+    && objectRefMatches(
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+      "PLAT-PLAN-F-VERSION",
     )
     && objectRefMatches(
       "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF",
@@ -10945,6 +11564,12 @@ function commercialContinuityErrors(index) {
     && hasStateGuard(createPhaseTwo, "PLAT-P2ENT-F-SCHOOL-REF", "ACC-OBJ-SCHOOL", "ACTIVE")
     && hasStateGuard(
       createPhaseTwo,
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "ACTIVE",
+    )
+    && hasStateGuard(
+      createPhaseTwo,
       "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF",
       "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
       "ACTIVE",
@@ -10952,10 +11577,521 @@ function commercialContinuityErrors(index) {
     && confirmPhaseTwo?.transition?.from === "DRAFT"
     && confirmPhaseTwo?.transition?.to === "CONFIRMED"
     && activatePhaseTwo?.transition?.from === "CONFIRMED"
-    && activatePhaseTwo?.transition?.to === "ACTIVE";
+    && activatePhaseTwo?.transition?.to === "ACTIVE"
+    && hasStateGuard(
+      activatePhaseTwo,
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "ACTIVE",
+    )
+    && phaseTwoActivationGuard?.entitledSchoolRefFieldId === "PLAT-P2ENT-F-SCHOOL-REF"
+    && phaseTwoActivationGuard?.servicePlanSchoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && phaseTwoActivationGuard?.commercialBoundarySchoolRefFieldId === "PLAT-COMM-F-SCHOOL-REF"
+    && phaseTwoActivationGuard?.exactPinnedServicePlanVersionRequired === true
+    && phaseTwoActivationGuard?.allSchoolIdentitiesMustMatch === true
+    && sameStringSet(phaseTwoActivationGuard?.requiredCoreEntitlementCodes, coreEntitlements)
+    && phaseTwoActivationGuard?.failureResult === "SCHOOL_SCOPE_MISMATCH"
+    && resolvePhaseTwo?.targetObjectId === phaseTwoEntitlement?.id
+    && resolvePhaseTwo?.operationKind === "READ"
+    && resolvePhaseTwo?.executionMode === "FLOW_INTERNAL"
+    && sameStringSet(resolvePhaseTwo?.trigger?.flowIds, ["DF-006"])
+    && [
+      "PLAT-P2ENT-F-ID",
+      "PLAT-P2ENT-F-SCHOOL-REF",
+      "PLAT-P2ENT-F-SCHOOL-VERSION",
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+      "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS",
+      "PLAT-P2ENT-F-STATUS",
+      "PLAT-P2ENT-F-VERSION",
+    ].every((fieldId) => list(resolvePhaseTwo?.outputFieldIds).includes(fieldId))
+    && hasStateGuard(
+      resolvePhaseTwo,
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-OBJ-SERVICE-PLAN",
+      "ACTIVE",
+    )
+    && phaseTwoSelectionGuard?.schoolRefFieldId === "PLAT-P2ENT-F-SCHOOL-REF"
+    && phaseTwoSelectionGuard?.schoolVersionFieldId === "PLAT-P2ENT-F-SCHOOL-VERSION"
+    && phaseTwoSelectionGuard?.statusFieldId === "PLAT-P2ENT-F-STATUS"
+    && phaseTwoSelectionGuard?.requiredState === "ACTIVE"
+    && phaseTwoSelectionGuard?.versionFieldId === "PLAT-P2ENT-F-VERSION"
+    && phaseTwoSelectionGuard?.maximumMatches === 1
+    && phaseTwoSelectionGuard?.selectionRule
+      === "EXACT_SCHOOL_AND_ACTIVE_PHASE_TWO_ENTITLEMENT_VERSION"
+    && phaseTwoSelectionGuard?.requestSchoolResolution === "PINNED_SERVICE_OBJECT_SCHOOL"
+    && phaseTwoSelectionGuard?.zeroMatchResult === "PHASE_TWO_ENTITLEMENT_INACTIVE"
+    && phaseTwoSelectionGuard?.ambiguousMatchResult === "ENTITLEMENT_DECISION_UNAVAILABLE"
+    && phaseTwoSelectionGuard?.missingOrAmbiguousBehavior === "FAIL_CLOSED"
+    && [
+      "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      "ENTITLEMENT_DECISION_UNAVAILABLE",
+      "SCHOOL_SCOPE_MISMATCH",
+    ].every((resultCode) => list(resolvePhaseTwo?.failureResults).includes(resultCode));
   if (!phaseTwoValid) {
     errors.push(
       "INVALID_PHASE_TWO_COMMERCIAL_ENTITLEMENT D090 must remain a PLANNED phase-two school-wide entitlement and stay outside the first-stage release manifest",
+    );
+  }
+
+  const phaseTwoConsumerModules = [gradingModule, progressModule, videoModule];
+  const expectedPhaseTwoConsumers = new Map([
+    ["GRD-ACT-PROCESS", {
+      moduleId: "GRD-001",
+      entitlementCode: "CORE_AI_ASSESSMENT",
+      consumerObjectId: "GRD-OBJ-DECISION",
+      entitlementRefFieldId: "GRD-DECISION-F-CORE-ENTITLEMENT-REF",
+      entitlementVersionFieldId: "GRD-DECISION-F-CORE-ENTITLEMENT-VERSION",
+      serviceObjectRefFieldId: "GRD-DECISION-F-SUBMISSION-REF",
+      serviceObjectSchoolResolution: "PINNED_SUBMISSION_ACTIVITY_SCHOOL",
+      persistsEntitlementEvidence: true,
+    }],
+    ["PROG-ACT-SYNC-STUDENT-TARGET", {
+      moduleId: "PROG-001",
+      entitlementCode: "CORE_AI_ASSESSMENT",
+      consumerObjectId: "PROG-OBJ-STUDENT-TARGET",
+      entitlementRefFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-REF",
+      entitlementVersionFieldId: "PROG-TARGET-F-CORE-ENTITLEMENT-VERSION",
+      serviceObjectRefFieldId: "PROG-TARGET-F-STUDENT-REF",
+      serviceObjectSchoolResolution: "CURRENT_ACTIVE_STUDENT_SCHOOL_RELATIONSHIP",
+      persistsEntitlementEvidence: false,
+    }],
+    ["VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT", {
+      moduleId: "VIDEO-001",
+      entitlementCode: "MINIMUM_VIDEO_HELP",
+      consumerObjectId: "VIDEO-OBJ-STUDENT-ENTITLEMENT",
+      entitlementRefFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-REF",
+      entitlementVersionFieldId: "VIDEO-ENTITLEMENT-F-CORE-ENTITLEMENT-VERSION",
+      serviceObjectRefFieldId: "VIDEO-ENTITLEMENT-F-STUDENT-REF",
+      serviceObjectSchoolResolution: "CURRENT_ACTIVE_STUDENT_SCHOOL_RELATIONSHIP",
+      persistsEntitlementEvidence: false,
+    }],
+    ["VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL", {
+      moduleId: "VIDEO-001",
+      entitlementCode: "MINIMUM_VIDEO_HELP",
+      consumerObjectId: "VIDEO-OBJ-SCHOOL-OVERFLOW-POOL",
+      entitlementRefFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-REF",
+      entitlementVersionFieldId: "VIDEO-OVERFLOW-F-CORE-ENTITLEMENT-VERSION",
+      serviceObjectRefFieldId: "VIDEO-OVERFLOW-F-SCHOOL-REF",
+      serviceObjectSchoolResolution: "DIRECT_SCHOOL_REFERENCE",
+      persistsEntitlementEvidence: false,
+    }],
+  ]);
+  const expectedPhaseTwoConsumerPairs = [...expectedPhaseTwoConsumers]
+    .map(([actionId, { entitlementCode }]) => `${entitlementCode}:${actionId}`);
+  const platformConsumerBindings = records(phaseTwoContract?.consumerBindings);
+  const platformConsumerPairs = platformConsumerBindings.flatMap((binding) => (
+    list(binding?.actionIds).map((actionId) => `${binding?.entitlementCode}:${actionId}`)
+  ));
+  const moduleConsumerBindings = phaseTwoConsumerModules.flatMap((moduleValue) => (
+    records(moduleValue?.phaseTwoCoreEntitlementBindings).map((binding) => ({
+      moduleId: moduleValue?.id,
+      binding,
+    }))
+  ));
+  const moduleConsumerPairs = moduleConsumerBindings.flatMap(({ binding }) => (
+    list(binding?.consumerActionIds)
+      .map((actionId) => `${binding?.entitlementCode}:${actionId}`)
+  ));
+  const assessmentFlow = index.flows.find(({ value }) => value?.id === "DF-006")?.value;
+  const resolverStep = records(assessmentFlow?.steps).find(({ actionId }) => (
+    actionId === resolvePhaseTwo?.id
+  ));
+  const processStep = records(assessmentFlow?.steps).find(({ actionId }) => (
+    actionId === "GRD-ACT-PROCESS"
+  ));
+  const processSourceBindings = records(processStep?.sourceBindings);
+  const phaseTwoConsumersValid = platformConsumerBindings.every((binding) => (
+    hasExactKeys(binding, ["entitlementCode", "actionIds"])
+  ))
+    && phaseTwoContract?.consumerRule
+      === "EVERY_CORE_CONSUMER_PINS_ONE_EXACT_ACTIVE_SAME_SCHOOL_ENTITLEMENT_VERSION"
+    && phaseTwoContract?.resolveActiveActionId === resolvePhaseTwo?.id
+    && resolvePhaseTwo?.operationKind === "READ"
+    && resolvePhaseTwo?.executionMode === "FLOW_INTERNAL"
+    && phaseTwoSelectionGuard?.requiredState === "ACTIVE"
+    && phaseTwoSelectionGuard?.maximumMatches === 1
+    && phaseTwoSelectionGuard?.selectionRule
+      === "EXACT_SCHOOL_AND_ACTIVE_PHASE_TWO_ENTITLEMENT_VERSION"
+    && phaseTwoSelectionGuard?.zeroMatchResult === "PHASE_TWO_ENTITLEMENT_INACTIVE"
+    && phaseTwoSelectionGuard?.ambiguousMatchResult === "ENTITLEMENT_DECISION_UNAVAILABLE"
+    && phaseTwoSelectionGuard?.missingOrAmbiguousBehavior === "FAIL_CLOSED"
+    && list(resolvePhaseTwo?.failureResults).includes("PHASE_TWO_ENTITLEMENT_INACTIVE")
+    && list(resolvePhaseTwo?.failureResults).includes("ENTITLEMENT_DECISION_UNAVAILABLE")
+    && platformConsumerPairs.length === new Set(platformConsumerPairs).size
+    && sameStringSet(platformConsumerPairs, expectedPhaseTwoConsumerPairs)
+    && moduleConsumerBindings.every(({ binding }) => hasExactKeys(binding, [
+      "entitlementCode",
+      "entitlementObjectId",
+      "consumerObjectId",
+      "consumerActionIds",
+      "entitlementRefFieldId",
+      "entitlementVersionFieldId",
+    ]))
+    && moduleConsumerPairs.length === new Set(moduleConsumerPairs).size
+    && sameStringSet(moduleConsumerPairs, expectedPhaseTwoConsumerPairs)
+    && [...expectedPhaseTwoConsumers].every(([actionId, expected]) => {
+      const moduleValue = index.moduleById.get(expected.moduleId)?.value;
+      const actionValue = action(actionId);
+      const consumerObject = index.objectById.get(expected.consumerObjectId)?.value;
+      const entitlementRefField = field(expected.entitlementRefFieldId);
+      const entitlementVersionField = field(expected.entitlementVersionFieldId);
+      const guard = actionValue?.phaseTwoEntitlementGuard;
+      const binding = records(moduleValue?.phaseTwoCoreEntitlementBindings).find((value) => (
+        list(value?.consumerActionIds).includes(actionId)
+      ));
+      return list(moduleValue?.dependencyModuleIds).includes("PLAT-002")
+        && binding?.entitlementCode === expected.entitlementCode
+        && binding?.entitlementObjectId === phaseTwoEntitlement?.id
+        && binding?.consumerObjectId === expected.consumerObjectId
+        && binding?.entitlementRefFieldId === expected.entitlementRefFieldId
+        && binding?.entitlementVersionFieldId === expected.entitlementVersionFieldId
+        && actionValue?.targetObjectId === expected.consumerObjectId
+        && list(actionValue?.inputFieldIds).includes(expected.entitlementRefFieldId)
+        && list(actionValue?.inputFieldIds).includes(expected.entitlementVersionFieldId)
+        && (!expected.persistsEntitlementEvidence || (
+          list(actionValue?.outputFieldIds).includes(expected.entitlementRefFieldId)
+          && list(actionValue?.outputFieldIds).includes(expected.entitlementVersionFieldId)
+        ))
+        && objectRefMatches(
+          expected.entitlementRefFieldId,
+          phaseTwoEntitlement?.id,
+          expected.entitlementVersionFieldId,
+          "PLAT-P2ENT-F-VERSION",
+        )
+        && hasLineage(
+          consumerObject,
+          expected.entitlementRefFieldId,
+          expected.entitlementVersionFieldId,
+          phaseTwoEntitlement?.id,
+          "PLAT-P2ENT-F-VERSION",
+        )
+        && records(actionValue?.relatedStateGuards).some((stateGuard) => (
+          stateGuard?.refFieldId === expected.entitlementRefFieldId
+          && stateGuard?.versionFieldId === expected.entitlementVersionFieldId
+          && stateGuard?.targetObjectId === phaseTwoEntitlement?.id
+          && stateGuard?.requiredState === "ACTIVE"
+        ))
+        && entitlementRefField?.stateGuardPolicy
+          === (actionId === "GRD-ACT-PROCESS" ? "ALWAYS_REQUIRED" : "CREATE_REQUIRED")
+        && sameStringSet(
+          entitlementRefField?.actionApplicability?.requiredActionIds,
+          [actionId],
+        )
+        && (actionId === "GRD-ACT-PROCESS"
+          ? (
+            sameStringSet(entitlementRefField?.required?.whenStates, ["PROCESSING"])
+            && sameStringSet(entitlementRefField?.required?.whenActionIds, [actionId])
+            && sameStringSet(entitlementVersionField?.required?.whenStates, ["PROCESSING"])
+            && sameStringSet(entitlementVersionField?.required?.whenActionIds, [actionId])
+          )
+          : entitlementRefField?.required === true && entitlementVersionField?.required === true)
+        && hasExactKeys(guard, [
+          "entitlementCode",
+          "entitlementObjectId",
+          "entitlementRefFieldId",
+          "entitlementVersionFieldId",
+          "entitlementSchoolRefFieldId",
+          "entitlementCodesFieldId",
+          "serviceObjectRefFieldId",
+          "serviceObjectSchoolResolution",
+          "requiredEntitlementState",
+          "exactPinnedVersionRequired",
+          "schoolMustMatch",
+          "matchCardinality",
+          "missingOrAmbiguousBehavior",
+          "failureResult",
+          "sourceServicePlanRevalidation",
+        ])
+        && guard?.entitlementCode === expected.entitlementCode
+        && guard?.entitlementObjectId === phaseTwoEntitlement?.id
+        && guard?.entitlementRefFieldId === expected.entitlementRefFieldId
+        && guard?.entitlementVersionFieldId === expected.entitlementVersionFieldId
+        && guard?.entitlementSchoolRefFieldId === "PLAT-P2ENT-F-SCHOOL-REF"
+        && guard?.entitlementCodesFieldId === "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS"
+        && guard?.serviceObjectRefFieldId === expected.serviceObjectRefFieldId
+        && guard?.serviceObjectSchoolResolution === expected.serviceObjectSchoolResolution
+        && guard?.requiredEntitlementState === "ACTIVE"
+        && guard?.exactPinnedVersionRequired === true
+        && guard?.schoolMustMatch === true
+        && guard?.matchCardinality === "EXACTLY_ONE"
+        && guard?.missingOrAmbiguousBehavior === "FAIL_CLOSED"
+        && guard?.failureResult === "PHASE_TWO_ENTITLEMENT_INACTIVE"
+        && list(actionValue?.failureResults).includes("PHASE_TWO_ENTITLEMENT_INACTIVE")
+        && list(actionValue?.failureResults).includes("SCHOOL_SCOPE_MISMATCH");
+    })
+    && list(assessmentFlow?.moduleIds).includes("PLAT-002")
+    && resolverStep?.order < processStep?.order
+    && list(processStep?.providedInputs).some(({ fieldId }) => (
+      fieldId === "GRD-DECISION-F-CORE-ENTITLEMENT-REF"
+    ))
+    && list(processStep?.providedInputs).some(({ fieldId }) => (
+      fieldId === "GRD-DECISION-F-CORE-ENTITLEMENT-VERSION"
+    ))
+    && processSourceBindings.some((binding) => (
+      binding?.sourceObjectId === phaseTwoEntitlement?.id
+      && binding?.sourceFieldId === "PLAT-P2ENT-F-ID"
+      && binding?.targetFieldId === "GRD-DECISION-F-CORE-ENTITLEMENT-REF"
+    ))
+    && processSourceBindings.some((binding) => (
+      binding?.sourceObjectId === phaseTwoEntitlement?.id
+      && binding?.sourceFieldId === "PLAT-P2ENT-F-VERSION"
+      && binding?.targetFieldId === "GRD-DECISION-F-CORE-ENTITLEMENT-VERSION"
+    ))
+    && list(assessmentFlow?.idempotencyKeyParts?.identityFieldIds)
+      .includes("PLAT-P2ENT-F-ID")
+    && list(assessmentFlow?.idempotencyKeyParts?.versionFieldIds)
+      .includes("PLAT-P2ENT-F-VERSION");
+  if (!phaseTwoConsumersValid) {
+    errors.push(
+      "INVALID_PHASE_TWO_CORE_CONSUMER_ENTITLEMENT D090 must bind PLAT, GRD, PROG, and VIDEO bidirectionally to one exact same-school ACTIVE entitlement version and fail closed on missing or ambiguous selection",
+    );
+  }
+
+  const sourceServicePlanRevalidationKeys = [
+    "resolverActionId",
+    "servicePlanObjectId",
+    "entitlementServicePlanRefFieldId",
+    "entitlementServicePlanVersionFieldId",
+    "servicePlanStateFieldId",
+    "servicePlanVersionFieldId",
+    "requiredCurrentState",
+    "currentVersionMustEqualPinnedVersion",
+    "checkedAtExecution",
+    "staleMissingOrAmbiguousBehavior",
+    "failureResult",
+    "allowedAuthorizationBranches",
+    "continuityFallback",
+  ];
+  const protectedFallbackKeys = [
+    "mode",
+    "protectedEntryObjectId",
+    "protectedEntryActivityRefFieldId",
+    "protectedEntryActivityVersionFieldId",
+    "protectedEntryPublicationSnapshotRefFieldId",
+    "protectedEntryPublicationSnapshotVersionFieldId",
+    "protectedUntilFieldId",
+    "serviceObjectResolution",
+    "requiredProtectedOperation",
+    "timeRule",
+    "exactVersionMatchRequired",
+    "finiteWindowRequired",
+    "failureResult",
+  ];
+  const sourceServicePlanBaseValid = (guard) => hasExactKeys(
+    guard,
+    sourceServicePlanRevalidationKeys,
+  )
+    && guard?.resolverActionId === resolvePhaseTwo?.id
+    && guard?.servicePlanObjectId === servicePlan?.id
+    && guard?.entitlementServicePlanRefFieldId === "PLAT-P2ENT-F-SERVICE-PLAN-REF"
+    && guard?.entitlementServicePlanVersionFieldId
+      === "PLAT-P2ENT-F-SERVICE-PLAN-VERSION"
+    && guard?.servicePlanStateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && guard?.servicePlanVersionFieldId === "PLAT-PLAN-F-VERSION"
+    && guard?.requiredCurrentState === "ACTIVE"
+    && guard?.currentVersionMustEqualPinnedVersion === true
+    && guard?.checkedAtExecution === true
+    && guard?.staleMissingOrAmbiguousBehavior === "FAIL_CLOSED"
+    && guard?.failureResult === "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE";
+  const protectedSourceServicePlanValid = (guard) => {
+    const fallback = guard?.continuityFallback;
+    return sourceServicePlanBaseValid(guard)
+      && sameStringSet(guard?.allowedAuthorizationBranches, [
+        "CURRENT_ACTIVE_SERVICE_PLAN",
+        "EXACT_FINITE_D091_PROTECTED_ACTIVITY",
+      ])
+      && hasExactKeys(fallback, protectedFallbackKeys)
+      && fallback?.mode === "EXACT_FINITE_D091_PROTECTED_ACTIVITY"
+      && fallback?.protectedEntryObjectId === protectedEntry?.id
+      && fallback?.protectedEntryActivityRefFieldId === "PLAT-PROTECT-F-ACTIVITY-REF"
+      && fallback?.protectedEntryActivityVersionFieldId === "PLAT-PROTECT-F-ACTIVITY-VERSION"
+      && fallback?.protectedEntryPublicationSnapshotRefFieldId
+        === "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-REF"
+      && fallback?.protectedEntryPublicationSnapshotVersionFieldId
+        === "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-VERSION"
+      && fallback?.protectedUntilFieldId === "PLAT-PROTECT-F-PROTECTED-UNTIL"
+      && fallback?.serviceObjectResolution
+        === "PINNED_SUBMISSION_ACTIVITY_AND_PUBLICATION_SNAPSHOT"
+      && fallback?.requiredProtectedOperation === "COMPLETE_PUBLISHED_ACTIVITY"
+      && fallback?.timeRule === "CURRENT_TIME_LE_PROTECTED_UNTIL"
+      && fallback?.exactVersionMatchRequired === true
+      && fallback?.finiteWindowRequired === true
+      && fallback?.failureResult === "SERVICE_CONTINUITY_NOT_PROTECTED";
+  };
+  const strictSourceServicePlanValid = (guard) => sourceServicePlanBaseValid(guard)
+    && sameStringSet(guard?.allowedAuthorizationBranches, ["CURRENT_ACTIVE_SERVICE_PLAN"])
+    && hasExactKeys(guard?.continuityFallback, ["mode"])
+    && guard.continuityFallback.mode === "NONE";
+  const protectedContinuityConsumerActionIds = ["GRD-ACT-PROCESS"];
+  const strictActivePlanConsumerActionIds = [
+    "PROG-ACT-SYNC-STUDENT-TARGET",
+    "VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT",
+    "VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL",
+  ];
+  const resolverSourceServicePlanGuard = phaseTwoSelectionGuard
+    ?.sourceServicePlanRevalidation;
+  const consumerServicePlanRevalidationValid = phaseTwoContract
+    ?.sourceServicePlanRevalidationRule
+      === "EVERY_RESOLVER_AND_CORE_CONSUMER_REVALIDATES_THE_ENTITLEMENT_PINNED_CURRENT_SERVICE_PLAN_VERSION_AT_EXECUTION_WITH_ONLY_EXACT_FINITE_D091_PUBLISHED_ACTIVITY_FALLBACK"
+    && sameStringSet(
+      phaseTwoContract?.protectedContinuityConsumerActionIds,
+      protectedContinuityConsumerActionIds,
+    )
+    && sameStringSet(
+      phaseTwoContract?.strictActivePlanConsumerActionIds,
+      strictActivePlanConsumerActionIds,
+    )
+    && protectedSourceServicePlanValid(resolverSourceServicePlanGuard)
+    && list(resolvePhaseTwo?.failureResults).includes("PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE")
+    && list(resolvePhaseTwo?.failureResults).includes("SERVICE_CONTINUITY_NOT_PROTECTED")
+    && protectedContinuityConsumerActionIds.every((actionId) => {
+      const actionValue = action(actionId);
+      return protectedSourceServicePlanValid(
+        actionValue?.phaseTwoEntitlementGuard?.sourceServicePlanRevalidation,
+      )
+        && list(actionValue?.failureResults).includes("PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE")
+        && list(actionValue?.failureResults).includes("SERVICE_CONTINUITY_NOT_PROTECTED");
+    })
+    && strictActivePlanConsumerActionIds.every((actionId) => {
+      const actionValue = action(actionId);
+      return strictSourceServicePlanValid(
+        actionValue?.phaseTwoEntitlementGuard?.sourceServicePlanRevalidation,
+      )
+        && list(actionValue?.failureResults).includes("PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE")
+        && !list(actionValue?.failureResults).includes("SERVICE_CONTINUITY_NOT_PROTECTED");
+    });
+  if (!consumerServicePlanRevalidationValid) {
+    errors.push(
+      "INVALID_PHASE_TWO_CORE_CONSUMER_SERVICE_PLAN_REVALIDATION D090 must revalidate the entitlement-pinned current ACTIVE service-plan version at every resolver and consumer; only exact finite D091 protected published-activity assessment may use continuity",
+    );
+  }
+
+  const restrictPhaseTwo = action("PLAT-ACT-RESTRICT-PHASE-TWO-ENTITLEMENT");
+  const restrictionEvent = index.eventById.get("EVT-PLAT-SERVICE-PLAN-RESTRICTED")?.value;
+  const restrictionFlow = index.flows.find(({ value }) => value?.id === "DF-018")?.value;
+  const restrictionContract = phaseTwoContract?.restrictionPropagation;
+  const restrictionOutbox = restrictServicePlan?.entitlementRestrictionOutboxContract;
+  const producedRestrictionBinding = records(restrictServicePlan?.producedEventContextBindings)
+    .find(({ eventId }) => eventId === restrictionEvent?.id);
+  const eventProducerBinding = records(
+    restrictionEvent?.servicePlanRestrictionPropagationContract?.producerBindings,
+  )[0];
+  const eventConsumerBinding = records(
+    restrictionEvent?.servicePlanRestrictionPropagationContract?.consumerBindings,
+  )[0];
+  const propagationGuard = restrictPhaseTwo?.entitlementRestrictionPropagationGuard;
+  const restrictionFlowContract = restrictionFlow?.phaseTwoEntitlementRestrictionFlowContract;
+  const restrictionFlowSteps = records(restrictionFlow?.steps);
+  const restrictionPropagationValid = sameStringSet(
+    phaseTwoEntitlement?.states,
+    ["DRAFT", "CONFIRMED", "ACTIVE", "RESTRICTED"],
+  )
+    && field("PLAT-P2ENT-F-STATUS")?.valueSource?.optionSetId === "OPT-EXT-026"
+    && sameStringSet(optionCodes("OPT-EXT-026"), [
+      "DRAFT",
+      "CONFIRMED",
+      "ACTIVE",
+      "RESTRICTED",
+      "TERMINATED",
+      "EXPIRED",
+      "SUPERSEDED",
+    ])
+    && restrictionContract?.sourceActionId === restrictServicePlan?.id
+    && restrictionContract?.eventId === restrictionEvent?.id
+    && restrictionContract?.targetActionId === restrictPhaseTwo?.id
+    && restrictionContract?.flowId === restrictionFlow?.id
+    && restrictionContract?.sourceState === "RESTRICTED"
+    && restrictionContract?.targetState === "RESTRICTED"
+    && restrictionContract?.eventOutboxAtomicWithSourceTransition === true
+    && restrictionContract?.entitlementReactivationAllowed === false
+    && restrictionContract?.recoveryRequiresNewEntitlementForNewActivePlan === true
+    && restrictServicePlan?.transition?.from === "ACTIVE"
+    && restrictServicePlan?.transition?.to === "RESTRICTED"
+    && restrictServicePlan?.trigger?.eventId === "EVT-PLAT-SERVICE-EXIT-WINDOW-OPENED"
+    && list(restrictServicePlan?.producedEventIds).includes(restrictionEvent?.id)
+    && list(restrictServicePlan?.failureResults)
+      .includes("ENTITLEMENT_RESTRICTION_EVENT_OUTBOX_FAILED")
+    && restrictionOutbox?.eventId === restrictionEvent?.id
+    && restrictionOutbox?.atomicWithServicePlanTransition === true
+    && restrictionOutbox?.failureResult === "ENTITLEMENT_RESTRICTION_EVENT_OUTBOX_FAILED"
+    && restrictionOutbox?.failedOutboxCommitsRestriction === false
+    && producedRestrictionBinding?.servicePlanIdentityFieldId === "PLAT-PLAN-F-ID"
+    && producedRestrictionBinding?.priorServicePlanVersionSource
+      === "TRANSITION_EXPECTED_VERSION"
+    && producedRestrictionBinding?.resultingServicePlanVersionFieldId === "PLAT-PLAN-F-VERSION"
+    && producedRestrictionBinding?.schoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && producedRestrictionBinding?.resultingStateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && sameStringSet(restrictionEvent?.producerActionIds, [restrictServicePlan?.id])
+    && sameStringSet(restrictionEvent?.triggeredActionIds, [restrictPhaseTwo?.id])
+    && eventProducerBinding?.actionId === restrictServicePlan?.id
+    && eventProducerBinding?.servicePlanIdentityFieldId === "PLAT-PLAN-F-ID"
+    && eventProducerBinding?.priorServicePlanVersionSource === "TRANSITION_EXPECTED_VERSION"
+    && eventProducerBinding?.resultingServicePlanVersionFieldId === "PLAT-PLAN-F-VERSION"
+    && eventProducerBinding?.schoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && eventProducerBinding?.resultingStateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && eventConsumerBinding?.actionId === restrictPhaseTwo?.id
+    && eventConsumerBinding?.entitlementServicePlanRefFieldId
+      === "PLAT-P2ENT-F-SERVICE-PLAN-REF"
+    && eventConsumerBinding?.entitlementServicePlanVersionFieldId
+      === "PLAT-P2ENT-F-SERVICE-PLAN-VERSION"
+    && eventConsumerBinding?.entitlementSchoolRefFieldId === "PLAT-P2ENT-F-SCHOOL-REF"
+    && restrictionEvent?.servicePlanRestrictionPropagationContract
+      ?.entitlementPinnedVersionMustEqualPriorServicePlanVersion === true
+    && restrictionEvent?.servicePlanRestrictionPropagationContract
+      ?.eventOutboxAtomicWithSourceTransition === true
+    && restrictionEvent?.servicePlanRestrictionPropagationContract
+      ?.staleOrAmbiguousEffect === "FAIL_CLOSED"
+    && restrictionEvent?.servicePlanRestrictionPropagationContract
+      ?.zeroActiveEntitlementEffect === "IDEMPOTENT_NO_OP"
+    && restrictPhaseTwo?.targetObjectId === phaseTwoEntitlement?.id
+    && restrictPhaseTwo?.operationKind === "UPDATE"
+    && restrictPhaseTwo?.executionMode === "SYSTEM_EVENT"
+    && restrictPhaseTwo?.trigger?.eventId === restrictionEvent?.id
+    && restrictPhaseTwo?.transition?.from === "ACTIVE"
+    && restrictPhaseTwo?.transition?.to === "RESTRICTED"
+    && propagationGuard?.eventId === restrictionEvent?.id
+    && propagationGuard?.entitlementServicePlanRefFieldId
+      === "PLAT-P2ENT-F-SERVICE-PLAN-REF"
+    && propagationGuard?.entitlementServicePlanVersionFieldId
+      === "PLAT-P2ENT-F-SERVICE-PLAN-VERSION"
+    && propagationGuard?.entitlementSchoolRefFieldId === "PLAT-P2ENT-F-SCHOOL-REF"
+    && propagationGuard?.sourceServicePlanIdentityFieldId === "PLAT-PLAN-F-ID"
+    && propagationGuard?.sourceServicePlanVersionFieldId === "PLAT-PLAN-F-VERSION"
+    && propagationGuard?.sourceServicePlanStateFieldId === "PLAT-PLAN-F-SERVICE-STATE"
+    && propagationGuard?.sourceServicePlanSchoolRefFieldId === "PLAT-PLAN-F-SCHOOL-REF"
+    && propagationGuard?.requiredSourceState === "RESTRICTED"
+    && propagationGuard?.entitlementPinnedVersionMustEqualEventPriorVersion === true
+    && propagationGuard?.eventResultingVersionMustBeNewer === true
+    && propagationGuard?.schoolMustMatch === true
+    && propagationGuard?.maximumActiveMatches === 1
+    && propagationGuard?.zeroMatchEffect === "IDEMPOTENT_NO_OP"
+    && propagationGuard?.duplicateEffect === "RETURN_EXISTING_RESTRICTED_ENTITLEMENT"
+    && propagationGuard?.ambiguityEffect === "FAIL_CLOSED"
+    && propagationGuard?.sourceVersionMismatchResult === "SERVICE_PLAN_SOURCE_VERSION_MISMATCH"
+    && propagationGuard?.ambiguityResult === "PHASE_TWO_ENTITLEMENT_SOURCE_AMBIGUOUS"
+    && [
+      "SERVICE_PLAN_RESTRICTION_EVENT_INVALID",
+      "SERVICE_PLAN_SOURCE_VERSION_MISMATCH",
+      "PHASE_TWO_ENTITLEMENT_SOURCE_AMBIGUOUS",
+    ].every((resultCode) => list(restrictPhaseTwo?.failureResults).includes(resultCode))
+    && restrictionFlow?.phase === PHASE.SECOND
+    && sameStringSet(restrictionFlow?.moduleIds, ["PLAT-001", "PLAT-002"])
+    && restrictionFlowSteps.length === 2
+    && restrictionFlowSteps[0]?.order === 1
+    && restrictionFlowSteps[0]?.actionId === restrictServicePlan?.id
+    && restrictionFlowSteps[1]?.order === 2
+    && restrictionFlowSteps[1]?.actionId === restrictPhaseTwo?.id
+    && restrictionFlowContract?.producerActionId === restrictServicePlan?.id
+    && restrictionFlowContract?.eventId === restrictionEvent?.id
+    && restrictionFlowContract?.consumerActionId === restrictPhaseTwo?.id
+    && restrictionFlowContract?.entitlementReactivationAllowed === false
+    && restrictionFlowContract?.consumerFailureRestoresServicePlan === false
+    && restrictionFlowContract?.exactDuplicateCreatesAdditionalTransition === false
+    && restrictionFlowContract?.conflictingDuplicateEffect === "FAIL_CLOSED";
+  if (!restrictionPropagationValid) {
+    errors.push(
+      "INVALID_PHASE_TWO_ENTITLEMENT_RESTRICTION_PROPAGATION D090 must atomically publish the exact service-plan restriction event, irreversibly restrict the pinned ACTIVE entitlement, and bind producer, event, consumer, and DF-018 bidirectionally after the finite D091 protection window",
     );
   }
 
@@ -11691,7 +12827,14 @@ function commercialContinuityErrors(index) {
     );
   }
 
-  const guardedCreationActionIds = ["HW-ACT-CREATE-DRAFT", "HW-ACT-CREATE-REPLACEMENT-DRAFT"];
+  const guardedCreationActionIds = [
+    "HW-ACT-CREATE-DRAFT",
+    "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+    "HW-ACT-PUBLISH-NOW",
+    "HW-ACT-SCHEDULE-PUBLISH",
+    "HW-ACT-PUBLISH-SCHEDULED",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+  ];
   const decisionContract = activityCreationGuard?.entitlementDecisionContract;
   const expectedDecisionBranches = new Map([
     ["ACTIVE_PLAN_NO_CONTINUITY", {
@@ -11702,21 +12845,13 @@ function commercialContinuityErrors(index) {
       decisionCode: "ACTIVE_ALLOW",
       effect: "ALLOW",
     }],
-    ["ACTIVE_PLAN_CONTINUITY_NOT_SEALED", {
+    ["ACTIVE_PLAN_NON_CLOSED_CONTINUITY", {
       sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
-      continuityPredicate: "MANIFEST_NOT_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NULL",
+      continuityPredicate: "CURRENT_CONTINUITY_WINDOW_STATUS_NOT_CLOSED",
       scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
       predicateJoin: "AND",
-      decisionCode: "ACTIVE_ALLOW",
-      effect: "ALLOW",
-    }],
-    ["ACTIVE_PLAN_SEALED_RESTRICTION", {
-      sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
-      continuityPredicate: "MANIFEST_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NOT_NULL",
-      scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
-      predicateJoin: "AND",
-      decisionCode: "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT",
-      effect: "ALLOW",
+      decisionCode: "CONTINUITY_WINDOW_BLOCK",
+      effect: "BLOCK",
     }],
     ["NO_CURRENT_ENTITLEMENT", {
       sourcePredicate: "SERVICE_PLAN_MISSING_OR_NOT_ACTIVE_OR_VERSION_MISMATCH",
@@ -11743,11 +12878,11 @@ function commercialContinuityErrors(index) {
         && Object.entries(expected).every(([property, value]) => branch[property] === value);
     });
   const decisionEnvelopeValid = (value) => decisionBranchesValid(value?.decisionBranches)
-    && sameStringSet(value?.allowedDecisionCodes, [
-      "ACTIVE_ALLOW",
-      "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT",
+    && sameStringSet(value?.allowedDecisionCodes, ["ACTIVE_ALLOW"])
+    && sameStringSet(value?.blockedDecisionCodes, [
+      "CONTINUITY_WINDOW_BLOCK",
+      "NO_ENTITLEMENT_BLOCK",
     ])
-    && sameStringSet(value?.blockedDecisionCodes, ["NO_ENTITLEMENT_BLOCK"])
     && value?.branchesMutuallyExclusive === true
     && value?.branchesExhaustive === true
     && value?.unknownDecisionEffect === "BLOCK";
@@ -11762,7 +12897,7 @@ function commercialContinuityErrors(index) {
     "continuityVersionProperty",
     "decisionCodeProperty",
   ])
-    && value?.persistence === "AUDIT_WITH_GUARDED_ACTIVITY_CREATE_DECISION"
+    && value?.persistence === "AUDIT_WITH_GUARDED_ACTIVITY_CREATE_OR_PUBLISH_DECISION"
     && value?.sourceObjectProperty === "entitlementSourceObjectId"
     && value?.sourceIdentityProperty === "entitlementSourceId"
     && value?.sourceVersionProperty === "entitlementSourceVersion"
@@ -11903,7 +13038,7 @@ function commercialContinuityErrors(index) {
     });
   if (!newActivityGuardValid) {
     errors.push(
-      "INVALID_NEW_ACTIVITY_ENTITLEMENT_GUARD real HW creation must persist one exhaustive decision from the exact current ACTIVE service-plan version and fail closed outside its scope",
+      "INVALID_NEW_ACTIVITY_ENTITLEMENT_GUARD real HW creation and publication must persist one exhaustive decision from the exact current ACTIVE service-plan version and fail closed whenever a continuity window is not CLOSED",
     );
   }
 
@@ -11974,6 +13109,216 @@ function commercialContinuityErrors(index) {
   return errors;
 }
 
+function traceAxisApplicabilityIsValid(trace) {
+  const applicability = trace?.axisApplicability;
+  if (!applicability || typeof applicability !== "object" || Array.isArray(applicability)) {
+    return false;
+  }
+  return TRACE_AXIS_KEYS.every((axisKey) => {
+    const refs = list(trace?.[axisKey]);
+    const contract = applicability[axisKey];
+    const metadata = TRACE_AXIS_METADATA[axisKey];
+    if (!contract || typeof contract !== "object" || Array.isArray(contract)) return false;
+    if (refs.length > 0) {
+      return contract.status === TRACE_AXIS_STATUS.APPLICABLE
+        && contract.reasonCode === metadata.applicableReasonCode
+        && typeof contract.reason === "string"
+        && contract.reason.trim().length >= 12
+        && contract.reason !== "—";
+    }
+    return contract.status === TRACE_AXIS_STATUS.NOT_APPLICABLE
+      && contract.reasonCode === metadata.notApplicableReasonCode
+      && typeof contract.reason === "string"
+      && contract.reason.trim().length >= 12
+      && contract.reason !== "—";
+  });
+}
+
+function baselineTraceabilityErrors(index) {
+  if (index.modelProfile !== "ZHIXU_V2") return [];
+  const traces = index.baselineTraceability.map(({ value }) => value);
+  const decisionTraces = index.decisionTraceability.map(({ value }) => value);
+  const chapters = index.baselineChapters.map(({ value }) => value);
+  const decisions = index.productDecisions.map(({ value }) => value);
+  const migrations = index.migrationChanges.map(({ value }) => value);
+  const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
+  const decisionTraceByDecisionId = new Map();
+  const traceByChapter = new Map();
+  const allMetricIds = index.metrics.map(({ value }) => value.id);
+  const allLaunchGateIds = index.launchGates.map(({ value }) => value.id);
+  const expectedChapterMetricIds = new Map([
+    ["BASE-CH-LAUNCH", allMetricIds],
+    ["BASE-CH-METRICS", allMetricIds],
+  ]);
+  const expectedChapterGateIds = new Map([
+    ["BASE-CH-LAUNCH", allLaunchGateIds],
+    ["BASE-CH-LAUNCH-GATES", allLaunchGateIds],
+  ]);
+  let chapterHierarchyValid = true;
+  const descendantChapterIds = (chapterId, visiting = new Set()) => {
+    if (visiting.has(chapterId)) {
+      chapterHierarchyValid = false;
+      return [];
+    }
+    const nextVisiting = new Set(visiting);
+    nextVisiting.add(chapterId);
+    const result = [chapterId];
+    for (const child of chapters.filter(({ parentId }) => parentId === chapterId)) {
+      result.push(...descendantChapterIds(child.id, nextVisiting));
+    }
+    return result;
+  };
+  const migrationSources = (decisionId) => migrations
+    .filter(({ decisionIds }) => list(decisionIds).includes(decisionId))
+    .map((migration) => migration?.decisionAffected?.[decisionId])
+    .filter(Boolean);
+  const migrationImpact = (decisionId, property) => migrationSources(decisionId)
+    .flatMap(({ affected }) => list(affected?.[property]));
+  const expectedAxisStatus = (decisionId, axisKey) => (
+    migrationSources(decisionId).some((source) => (
+      source?.axisApplicability?.[axisKey]?.status === TRACE_AXIS_STATUS.APPLICABLE
+    )) ? TRACE_AXIS_STATUS.APPLICABLE : TRACE_AXIS_STATUS.NOT_APPLICABLE
+  );
+  const permissionRefKeys = (permissionActionIds) => permissionActionIds.flatMap((actionId) => {
+    const action = index.actionById.get(actionId)?.value;
+    return [...new Set(list(action?.permissions).map(({ effect }) => effect))]
+      .map((effect) => `${actionId}:${effect}`);
+  });
+  const canonicalMigrationById = new Map(canonicalMigrationChanges.map((change) => [change.id, change]));
+  const canonicalSourcesValid = migrations.length === canonicalMigrationChanges.length
+    && migrations.every((migration) => {
+      const canonical = canonicalMigrationById.get(migration?.id);
+      return Boolean(canonical)
+        && JSON.stringify(migration?.decisionIds) === JSON.stringify(canonical.decisionIds)
+        && JSON.stringify(migration?.decisionAffected) === JSON.stringify(canonical.decisionAffected)
+        && JSON.stringify(migration?.affected) === JSON.stringify(canonical.affected);
+    });
+  const sourceModules = index.modules.map(({ value }) => value);
+  const canonicalDecisionTraces = buildDecisionTraceability(sourceModules);
+  const canonicalChapterTraces = buildBaselineTraceability(sourceModules, canonicalDecisionTraces);
+  const canonicalChapterTraceById = new Map(canonicalChapterTraces.map((trace) => (
+    [trace.chapterId, trace]
+  )));
+  let valid = traces.length === chapters.length
+    && decisionTraces.length === decisions.length
+    && canonicalSourcesValid;
+
+  for (const trace of decisionTraces) {
+    const records = decisionTraceByDecisionId.get(trace?.decisionId) ?? [];
+    records.push(trace);
+    decisionTraceByDecisionId.set(trace?.decisionId, records);
+    const decision = index.productDecisionById.get(trace?.decisionId)?.value;
+    const expectedMigrations = migrations
+      .filter(({ decisionIds }) => list(decisionIds).includes(trace?.decisionId))
+      .map(({ id }) => id);
+    const expectedReleaseStatuses = list(decision?.phaseIds).map((phaseId) => (
+      phaseId === "PHASE-1" ? RELEASE_STATUS.BUILD_READY : RELEASE_STATUS.PLANNED
+    ));
+    valid = valid
+      && Boolean(decision)
+      && traceAxisApplicabilityIsValid(trace)
+      && sameStringSet(trace?.migrationIds, expectedMigrations)
+      && sameStringSet(trace?.chapterIds, decision?.chapterIds)
+      && sameStringSet(trace?.phaseIds, decision?.phaseIds)
+      && sameStringSet(trace?.releaseStatuses, expectedReleaseStatuses);
+    for (const property of [
+      "moduleIds",
+      "pageIds",
+      "flowIds",
+      "objectIds",
+      "actionIds",
+      "stateRefs",
+      "metricIds",
+      "scenarioIds",
+      "testIds",
+    ]) {
+      valid = valid && sameStringSet(
+        trace?.[property],
+        migrationImpact(trace?.decisionId, property),
+      );
+    }
+    valid = valid && sameStringSet(
+      list(trace?.permissionRefs).map(({ actionId, effect }) => `${actionId}:${effect}`),
+      permissionRefKeys(migrationImpact(trace?.decisionId, "permissionActionIds")),
+    );
+    for (const actionId of list(trace?.actionIds)) {
+      const actionEntry = index.actionById.get(actionId);
+      valid = valid
+        && Boolean(actionEntry)
+        && list(trace?.moduleIds).includes(actionEntry?.moduleId)
+        && list(trace?.objectIds).includes(actionEntry?.value?.targetObjectId);
+    }
+    for (const axisKey of TRACE_AXIS_KEYS) {
+      valid = valid
+        && trace?.axisApplicability?.[axisKey]?.status
+          === expectedAxisStatus(trace?.decisionId, axisKey);
+    }
+  }
+
+  for (const trace of traces) {
+    const records = traceByChapter.get(trace?.chapterId) ?? [];
+    records.push(trace);
+    traceByChapter.set(trace?.chapterId, records);
+    const chapter = chapterById.get(trace?.chapterId);
+    const expectedReleaseStatuses = list(chapter?.phaseIds).map((phaseId) => (
+      phaseId === "PHASE-1" ? RELEASE_STATUS.BUILD_READY : RELEASE_STATUS.PLANNED
+    ));
+    const expectedDecisionIds = decisions
+      .filter((decision) => list(decision?.chapterIds).some((chapterId) => (
+        descendantChapterIds(trace?.chapterId).includes(chapterId)
+      )))
+      .map(({ id }) => id);
+    const tracedDecisionRecords = list(trace?.decisionIds)
+      .map((decisionId) => decisionTraceByDecisionId.get(decisionId)?.[0])
+      .filter(Boolean);
+    const expectedMetrics = [
+      ...tracedDecisionRecords.flatMap(({ metricIds }) => list(metricIds)),
+      ...(expectedChapterMetricIds.get(trace?.chapterId) ?? []),
+    ];
+    const expectedGates = [
+      ...tracedDecisionRecords.flatMap(({ launchGateIds }) => list(launchGateIds)),
+      ...(expectedChapterGateIds.get(trace?.chapterId) ?? []),
+    ];
+    const canonicalTrace = canonicalChapterTraceById.get(trace?.chapterId);
+    valid = valid
+      && Boolean(chapter)
+      && Boolean(canonicalTrace)
+      && traceAxisApplicabilityIsValid(trace)
+      && sameStringSet(trace?.decisionIds, expectedDecisionIds)
+      && sameStringSet(trace?.phaseIds, chapter?.phaseIds)
+      && sameStringSet(trace?.releaseStatuses, expectedReleaseStatuses)
+      && sameStringSet(trace?.metricIds, expectedMetrics)
+      && sameStringSet(trace?.launchGateIds, expectedGates)
+      && TRACE_AXIS_KEYS.every((axisKey) => {
+        if (axisKey === "permissionRefs") {
+          return sameStringSet(
+            list(trace?.permissionRefs).map(({ actionId, effect }) => `${actionId}:${effect}`),
+            list(canonicalTrace?.permissionRefs).map(({ actionId, effect }) => `${actionId}:${effect}`),
+          );
+        }
+        return sameStringSet(trace?.[axisKey], canonicalTrace?.[axisKey]);
+      })
+      && JSON.stringify(trace?.axisApplicability)
+        === JSON.stringify(canonicalTrace?.axisApplicability);
+  }
+  valid = valid
+    && chapterHierarchyValid
+    && chapters.every((chapter) => traceByChapter.get(chapter.id)?.length === 1);
+  valid = valid && decisions.every((decision) => (
+    decisionTraceByDecisionId.get(decision.id)?.length === 1
+    && list(decision?.chapterIds).every((chapterId) => (
+      traceByChapter.get(chapterId)?.some((trace) => list(trace?.decisionIds).includes(decision.id))
+    ))
+  ));
+  const migratedDecisionIds = new Set(index.migrationChanges.flatMap(({ value }) => (
+    list(value?.decisionIds)
+  )));
+  valid = valid && decisions.every(({ id }) => migratedDecisionIds.has(id));
+  return valid ? [] : [
+    "INVALID_BASELINE_TRACEABILITY every README chapter and D003-D096 decision must close every trace axis with direct references or a structured NOT_APPLICABLE rationale",
+  ];
+}
+
 export function validateModelSemantics(model) {
   const index = buildModelIndex(model);
   return [
@@ -11999,6 +13344,8 @@ export function validateModelSemantics(model) {
     ...stateReachabilityErrors(index),
     ...externalSourceProvenanceErrors(index),
     ...ownerErrors(index),
+    ...responsibilityActorBoundaryErrors(index),
+    ...authoritativeTermOptionSetErrors(index),
     ...aiTaskErrors(index),
     ...reportErrors(index),
     ...reportScopeErrors(index),
@@ -12027,5 +13374,6 @@ export function validateModelSemantics(model) {
     ...phaseTwoAiAssessmentErrors(index),
     ...finalizedGovernanceBaselineErrors(index),
     ...commercialContinuityErrors(index),
+    ...baselineTraceabilityErrors(index),
   ];
 }

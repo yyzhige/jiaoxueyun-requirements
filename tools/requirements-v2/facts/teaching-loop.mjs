@@ -169,6 +169,9 @@ function action({
   commercialEntitlementGuard,
   serviceContinuityGuard,
   serviceContinuityOperationCode,
+  producedEventIds,
+  platformFailureIncidentContract,
+  platformFailureProtectionContract,
 }) {
   const effectiveOperationKind = operationKind
     ?? (writes === false ? "READ" : transition ? "UPDATE" : undefined);
@@ -260,6 +263,9 @@ function action({
       ...(commercialEntitlementGuard ? { commercialEntitlementGuard } : {}),
       ...(serviceContinuityGuard ? { serviceContinuityGuard } : {}),
       ...(serviceContinuityOperationCode ? { serviceContinuityOperationCode } : {}),
+      ...(producedEventIds ? { producedEventIds } : {}),
+      ...(platformFailureIncidentContract ? { platformFailureIncidentContract } : {}),
+      ...(platformFailureProtectionContract ? { platformFailureProtectionContract } : {}),
       scenarioIds: [
         ...successScenarios.map(({ id: scenarioId }) => scenarioId),
         ...failureScenarios.map(({ id: scenarioId }) => scenarioId),
@@ -1177,21 +1183,13 @@ const commercialEntitlementGuard = {
       decisionCode: "ACTIVE_ALLOW",
       effect: "ALLOW",
     }, {
-      branchId: "ACTIVE_PLAN_CONTINUITY_NOT_SEALED",
+      branchId: "ACTIVE_PLAN_NON_CLOSED_CONTINUITY",
       sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
-      continuityPredicate: "MANIFEST_NOT_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NULL",
+      continuityPredicate: "CURRENT_CONTINUITY_WINDOW_STATUS_NOT_CLOSED",
       scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
       predicateJoin: "AND",
-      decisionCode: "ACTIVE_ALLOW",
-      effect: "ALLOW",
-    }, {
-      branchId: "ACTIVE_PLAN_SEALED_RESTRICTION",
-      sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
-      continuityPredicate: "MANIFEST_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NOT_NULL",
-      scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
-      predicateJoin: "AND",
-      decisionCode: "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT",
-      effect: "ALLOW",
+      decisionCode: "CONTINUITY_WINDOW_BLOCK",
+      effect: "BLOCK",
     }, {
       branchId: "NO_CURRENT_ENTITLEMENT",
       sourcePredicate: "SERVICE_PLAN_MISSING_OR_NOT_ACTIVE_OR_VERSION_MISMATCH",
@@ -1201,14 +1199,14 @@ const commercialEntitlementGuard = {
       decisionCode: "NO_ENTITLEMENT_BLOCK",
       effect: "BLOCK",
     }],
-    allowedDecisionCodes: ["ACTIVE_ALLOW", "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT"],
-    blockedDecisionCodes: ["NO_ENTITLEMENT_BLOCK"],
+    allowedDecisionCodes: ["ACTIVE_ALLOW"],
+    blockedDecisionCodes: ["CONTINUITY_WINDOW_BLOCK", "NO_ENTITLEMENT_BLOCK"],
     branchesMutuallyExclusive: true,
     branchesExhaustive: true,
     unknownDecisionEffect: "BLOCK",
   },
   decisionEvidenceContract: {
-    persistence: "AUDIT_WITH_GUARDED_ACTIVITY_CREATE_DECISION",
+    persistence: "AUDIT_WITH_GUARDED_ACTIVITY_CREATE_OR_PUBLISH_DECISION",
     sourceObjectProperty: "entitlementSourceObjectId",
     sourceIdentityProperty: "entitlementSourceId",
     sourceVersionProperty: "entitlementSourceVersion",
@@ -1845,12 +1843,14 @@ const hwActions = [
       "SNAPSHOT_MISMATCH",
       "PURPOSE_POLICY_CONFLICT",
       "DIAGNOSTIC_HIGH_IMPACT_USE_FORBIDDEN",
+      "ACTIVITY_ENTITLEMENT_BLOCKED",
       "VERSION_CONFLICT",
     ],
     capability: "CONTROLLED",
     lateEnrolleeWindowGuard,
     purposePolicyGuard: activityPurposePolicyContract,
     diagnosticUseGuard: diagnosticInternalUseGuard,
+    commercialEntitlementGuard: structuredClone(commercialEntitlementGuard),
   }),
   action({
     id: "HW-ACT-SCHEDULE-PUBLISH",
@@ -1877,11 +1877,13 @@ const hwActions = [
       "SNAPSHOT_MISMATCH",
       "PURPOSE_POLICY_CONFLICT",
       "DIAGNOSTIC_HIGH_IMPACT_USE_FORBIDDEN",
+      "ACTIVITY_ENTITLEMENT_BLOCKED",
       "VERSION_CONFLICT",
     ],
     lateEnrolleeWindowGuard,
     purposePolicyGuard: activityPurposePolicyContract,
     diagnosticUseGuard: diagnosticInternalUseGuard,
+    commercialEntitlementGuard: structuredClone(commercialEntitlementGuard),
   }),
   action({
     id: "HW-ACT-PUBLISH-SCHEDULED",
@@ -1913,11 +1915,13 @@ const hwActions = [
       "SNAPSHOT_MISMATCH",
       "PURPOSE_POLICY_CONFLICT",
       "DIAGNOSTIC_HIGH_IMPACT_USE_FORBIDDEN",
+      "ACTIVITY_ENTITLEMENT_BLOCKED",
       "VERSION_CONFLICT",
     ],
     lateEnrolleeWindowGuard,
     purposePolicyGuard: activityPurposePolicyContract,
     diagnosticUseGuard: diagnosticInternalUseGuard,
+    commercialEntitlementGuard: structuredClone(commercialEntitlementGuard),
   }),
   action({
     id: "HW-ACT-CLOSE",
@@ -2152,11 +2156,13 @@ const hwActions = [
       "SNAPSHOT_MISMATCH",
       "PURPOSE_POLICY_CONFLICT",
       "DIAGNOSTIC_HIGH_IMPACT_USE_FORBIDDEN",
+      "ACTIVITY_ENTITLEMENT_BLOCKED",
       "VERSION_CONFLICT",
     ],
     lateEnrolleeWindowGuard,
     purposePolicyGuard: activityPurposePolicyContract,
     diagnosticUseGuard: diagnosticInternalUseGuard,
+    commercialEntitlementGuard: structuredClone(commercialEntitlementGuard),
     successData: "publishes the already-created new replacement activity identity only after validation and sealed-snapshot binding",
   }),
   action({
@@ -2263,7 +2269,7 @@ const hwModule = moduleFact({
   releaseStatus: RELEASE_STATUS.BUILD_READY,
   priority: "P0",
   title: "Assignment Authoring and Publication",
-  objective: "Create, validate, publish, close, replace, and apply only permitted same-identity corrections to all-subject activities",
+  objective: "Create, validate, publish, close, replace, and apply only permitted same-identity corrections to current supported-subject activities",
   entryConditions: ["the corresponding subject teacher has an active school, term, course, and class context"],
   exitConditions: ["a validated assignment is published or scheduled with an immutable publication version"],
   baselineDecisionIds: ["BASE-003", "BASE-004", "BASE-005", "BASE-007"],
@@ -2582,6 +2588,15 @@ const studentWorkResponsibility = {
   ownerRef: "ROLE-STUDENT",
   confirmerRef: "SYSTEM",
   stewardRef: "DUTY-SUBJECT-TEACHER",
+};
+
+const platformFailureIncidentResponsibility = {
+  dataSubject: "PLATFORM_SUBMISSION_FAILURE_INCIDENT",
+  controlSubject: "PLATFORM",
+  producerRef: "SYSTEM",
+  ownerRef: "ROLE-PLATFORM-GOVERNANCE",
+  confirmerRef: "ROLE-PLATFORM-GOVERNANCE",
+  stewardRef: "ROLE-PLATFORM-GOVERNANCE",
 };
 
 const studentSubmissionPermissions = [
@@ -2910,6 +2925,63 @@ const submissionHelpEvidenceFieldIds = [
   "SUB-ATTEMPT-F-UNKNOWN-HELP-CONDITIONS",
 ];
 
+const platformFailureIncidentFields = [
+  field("SUB-PFINCIDENT-F-ID", "Platform Failure Incident Snapshot ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_ID",
+  }),
+  field("SUB-PFINCIDENT-F-SCHOOL-ID", "Affected School ID", {
+    dataType: "ID",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SUB-PFINCIDENT-F-SERVICE-CODE", "Failed Platform Service Code", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must identify the platform intent-credential signing service",
+  }),
+  field("SUB-PFINCIDENT-F-STARTED-AT", "Incident Started At", {
+    dataType: "DATETIME",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SUB-PFINCIDENT-F-ENDED-AT", "Incident Ended At", {
+    dataType: "DATETIME",
+    required: false,
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SUB-PFINCIDENT-F-AFFECTED-SCOPE", "Versioned Affected School and Service Scope", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must enumerate the exact school, service, deployment, and time scope covered by the incident",
+  }),
+  field("SUB-PFINCIDENT-F-SCOPE-DIGEST", "Canonical Incident Scope Digest", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must be computed from the exact affected scope and incident time interval",
+  }),
+  field("SUB-PFINCIDENT-F-DETECTION-EVIDENCE", "Independent Platform Detection Evidence", {
+    dataType: "JSON",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must come from platform monitoring and failed signing-request evidence rather than a client declaration",
+  }),
+  field("SUB-PFINCIDENT-F-STATUS", "Platform Failure Incident Snapshot Status", {
+    valueSource: { kind: "SYSTEM" },
+    mutability: "SYSTEM_MANAGED",
+  }),
+  field("SUB-PFINCIDENT-F-VERSION", "Platform Failure Incident Snapshot Version", {
+    dataType: "INTEGER",
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_VERSION",
+  }),
+];
+
 const submissionIntentCredentialFields = [
   field("SUB-INTENT-F-ID", "Intent Credential ID", {
     dataType: "ID",
@@ -2972,6 +3044,38 @@ const submissionIntentCredentialFields = [
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
+  field("SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF", "Pinned Platform Failure Incident Snapshot", {
+    dataType: "ID",
+    required: requiredWhen(
+      "required only for a platform-failure-protected credential",
+      ["PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
+    valueSource: {
+      kind: "OBJECT_REF",
+      targetObjectId: "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+    },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "CREATE_REQUIRED",
+    actionApplicability: {
+      requiredActionIds: ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    },
+    versionBinding: {
+      versionFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+      targetVersionFieldId: "SUB-PFINCIDENT-F-VERSION",
+    },
+  }),
+  field("SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION", "Pinned Platform Failure Incident Version", {
+    dataType: "INTEGER",
+    required: requiredWhen(
+      "required only for a platform-failure-protected credential",
+      ["PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
   field("SUB-INTENT-F-VERSION", "Intent Credential Version", {
     dataType: "INTEGER",
     valueSource: { kind: "SYSTEM" },
@@ -2991,9 +3095,9 @@ const submissionIntentCredentialFields = [
   field("SUB-INTENT-F-CONTENT-MANIFEST", "Fixed Content Manifest", {
     dataType: "JSON",
     required: requiredWhen(
-      "required for an issued protected-timeliness credential",
-      ["ISSUED"],
-      ["SUB-ACT-ISSUE-INTENT-CREDENTIAL"],
+      "required for a normal intent credential or platform-failure protection",
+      ["ISSUED", "PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-ISSUE-INTENT-CREDENTIAL", "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
     ),
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
@@ -3001,9 +3105,9 @@ const submissionIntentCredentialFields = [
   }),
   field("SUB-INTENT-F-MANIFEST-DIGEST", "Fixed Content Manifest Digest", {
     required: requiredWhen(
-      "required for an issued protected-timeliness credential",
-      ["ISSUED"],
-      ["SUB-ACT-ISSUE-INTENT-CREDENTIAL"],
+      "required for a normal intent credential or platform-failure protection",
+      ["ISSUED", "PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-ISSUE-INTENT-CREDENTIAL", "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
     ),
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
@@ -3030,12 +3134,69 @@ const submissionIntentCredentialFields = [
     mutability: "IMMUTABLE",
     validation: "window is bounded and cannot be extended by the student",
   }),
+  field("SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT", "Platform Failure Timeliness Anchor", {
+    dataType: "DATETIME",
+    required: requiredWhen(
+      "required only for a platform-failure-protected credential",
+      ["PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must equal the pinned incident snapshot started-at value and must not be supplied by the client",
+  }),
+  field("SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE", "Exact Platform Failure Protection Scope", {
+    dataType: "JSON",
+    required: requiredWhen(
+      "required only for a platform-failure-protected credential",
+      ["PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must bind one actor, school, activity version, publication snapshot version, submission version, and fixed manifest digest",
+  }),
+  field("SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST", "Canonical Platform Failure Protection Scope Digest", {
+    required: requiredWhen(
+      "required only for a platform-failure-protected credential",
+      ["PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+  }),
+  field("SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT", "Platform Failure Protection Completion Deadline", {
+    dataType: "DATETIME",
+    required: requiredWhen(
+      "required only for a platform-failure-protected credential",
+      ["PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must be finite, policy-bounded, and never extendable by the student",
+  }),
+  field("SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION", "Platform Failure Source Attestation", {
+    dataType: "JSON",
+    required: requiredWhen(
+      "required only for a platform-failure-protected credential",
+      ["PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
+    valueSource: { kind: "SYSTEM" },
+    mutability: "IMMUTABLE",
+    validation: "must bind the incident snapshot version, failed signing-request evidence, and protection scope digest",
+  }),
   field("SUB-INTENT-F-STATUS", "Intent Credential Status", {
     valueSource: { kind: "OPTION_SET", optionSetId: "OPT-V2-TL-008" },
     mutability: "SYSTEM_MANAGED",
   }),
   field("SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST", "Completed Manifest Digest", {
-    required: false,
+    required: requiredWhen(
+      "required after normal manifest completion or when platform failure protection freezes the failed request manifest",
+      ["COMPLETED", "PLATFORM_FAILURE_PROTECTED"],
+      ["SUB-ACT-COMPLETE-MANIFEST-INTENT", "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    ),
     valueSource: { kind: "SYSTEM" },
     mutability: "IMMUTABLE",
   }),
@@ -3088,6 +3249,53 @@ const submissionInputQualityFields = [
   }),
 ];
 
+const platformFailureIncidentActions = [
+  action({
+    id: "SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT",
+    label: "Register an Immutable Platform Credential-signing Failure Incident Snapshot",
+    operationKind: "CREATE",
+    targetObjectId: "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+    inputFieldIds: [
+      "SUB-PFINCIDENT-F-SCHOOL-ID",
+      "SUB-PFINCIDENT-F-SERVICE-CODE",
+      "SUB-PFINCIDENT-F-STARTED-AT",
+      "SUB-PFINCIDENT-F-ENDED-AT",
+      "SUB-PFINCIDENT-F-AFFECTED-SCOPE",
+      "SUB-PFINCIDENT-F-SCOPE-DIGEST",
+      "SUB-PFINCIDENT-F-DETECTION-EVIDENCE",
+    ],
+    outputFieldIds: platformFailureIncidentFields.map(({ id }) => id),
+    executionMode: SYSTEM_EVENT,
+    trigger: { kind: "EVENT", eventId: "EVT-SUB-PLATFORM-CREDENTIAL-UNAVAILABLE" },
+    permissions: [
+      permission("ALLOW", "SYSTEM", "platform monitoring and failed signing-request evidence create one immutable incident snapshot"),
+      permission("DENY", "CURRENT_ACTOR", "a student, teacher, administrator, or client cannot self-declare a platform incident"),
+    ],
+    successState: "FROZEN",
+    risk: RISK.HIGH,
+    producedEventIds: ["EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED"],
+    platformFailureIncidentContract: {
+      sourceEventId: "EVT-SUB-PLATFORM-CREDENTIAL-UNAVAILABLE",
+      producedEventId: "EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED",
+      serviceCode: "INTENT_CREDENTIAL_SIGNING",
+      sourceActor: "SYSTEM",
+      clientDeclarationAllowed: false,
+      exactSchoolServiceTimeScopeRequired: true,
+      canonicalScopeDigestRequired: true,
+      immutableAfterRegistration: true,
+      duplicateScopeVersionEffect: "RETURN_EXISTING_SNAPSHOT",
+      conflictingEvidenceEffect: "FAIL_CLOSED",
+    },
+    successData: "freezes one platform-observed incident scope and version before any student-specific failure protection can be created",
+    failureResults: [
+      "INCIDENT_SOURCE_UNVERIFIED",
+      "INCIDENT_SCOPE_INVALID",
+      "INCIDENT_SCOPE_DIGEST_MISMATCH",
+      "VERSION_CONFLICT",
+    ],
+  }),
+];
+
 const intentCredentialActions = [
   action({
     id: "SUB-ACT-ISSUE-INTENT-CREDENTIAL",
@@ -3105,7 +3313,16 @@ const intentCredentialActions = [
       "SUB-INTENT-F-MANIFEST-DIGEST",
     ],
     outputFieldIds: submissionIntentCredentialFields.map(({ id }) => id)
-      .filter((id) => id !== "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST"),
+      .filter((id) => ![
+        "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
+        "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+        "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+        "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT",
+        "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE",
+        "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST",
+        "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT",
+        "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION",
+      ].includes(id)),
     risk: RISK.HIGH,
     permissions: studentSubmissionPermissions,
     relatedStateGuards: [{
@@ -3178,7 +3395,7 @@ const intentCredentialActions = [
   }),
   action({
     id: "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION",
-    label: "Record Platform Failure Protection",
+    label: "Record Version-pinned Platform Failure Submission Protection",
     operationKind: "CREATE",
     targetObjectId: "SUB-OBJ-INTENT-CREDENTIAL",
     inputFieldIds: [
@@ -3188,10 +3405,34 @@ const intentCredentialActions = [
       "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
       "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
       "SUB-INTENT-F-SUBMISSION-VERSION",
+      "SUB-INTENT-F-CONTENT-MANIFEST",
+      "SUB-INTENT-F-MANIFEST-DIGEST",
+      "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+      "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
     ],
-    outputFieldIds: ["SUB-INTENT-F-ID", "SUB-INTENT-F-STATUS", "SUB-INTENT-F-VERSION"],
+    outputFieldIds: [
+      "SUB-INTENT-F-ID",
+      "SUB-INTENT-F-ACTOR-REF",
+      "SUB-INTENT-F-ACTIVITY-REF",
+      "SUB-INTENT-F-ACTIVITY-VERSION",
+      "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
+      "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
+      "SUB-INTENT-F-SUBMISSION-VERSION",
+      "SUB-INTENT-F-CONTENT-MANIFEST",
+      "SUB-INTENT-F-MANIFEST-DIGEST",
+      "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
+      "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+      "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST",
+      "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT",
+      "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION",
+      "SUB-INTENT-F-STATUS",
+      "SUB-INTENT-F-VERSION",
+    ],
     executionMode: SYSTEM_EVENT,
-    trigger: { kind: "EVENT", eventId: "EVT-SUB-PLATFORM-CREDENTIAL-UNAVAILABLE" },
+    trigger: { kind: "EVENT", eventId: "EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED" },
     permissions: [
       permission("ALLOW", "SYSTEM", "the platform cannot issue a credential and records a school-wide failure protection outcome"),
       permission("DENY", "CURRENT_ACTOR", "a user cannot self-declare platform failure protection"),
@@ -3206,15 +3447,59 @@ const intentCredentialActions = [
       versionFieldId: "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
       targetObjectId: "HW-OBJ-PUBLICATION-SNAPSHOT",
       requiredState: "SEALED",
+    }, {
+      refFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+      versionFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+      targetObjectId: "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+      requiredState: "FROZEN",
     }],
     successState: "PLATFORM_FAILURE_PROTECTED",
     risk: RISK.HIGH,
-    successData: "records the protected failure outcome so the student is not required to obtain an unavailable credential; platform applies a uniform extension or rule adjustment",
-    failureResults: ["SYSTEM_FAILURE", "VERSION_CONFLICT"],
+    platformFailureProtectionContract: {
+      sourceEventId: "EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED",
+      incidentRefFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+      incidentVersionFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+      incidentStartedAtFieldId: "SUB-PFINCIDENT-F-STARTED-AT",
+      protectedAtFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT",
+      protectionScopeFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE",
+      protectionScopeDigestFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST",
+      protectionExpiresAtFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT",
+      sourceAttestationFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION",
+      fixedManifestFieldId: "SUB-INTENT-F-CONTENT-MANIFEST",
+      fixedManifestDigestFieldId: "SUB-INTENT-F-MANIFEST-DIGEST",
+      completedManifestDigestFieldId: "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
+      exactScopeBindings: [
+        "SUB-INTENT-F-ACTOR-REF",
+        "SUB-INTENT-F-ACTIVITY-REF",
+        "SUB-INTENT-F-ACTIVITY-VERSION",
+        "SUB-INTENT-F-PUBLICATION-SNAPSHOT-REF",
+        "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
+        "SUB-INTENT-F-SUBMISSION-VERSION",
+        "SUB-INTENT-F-MANIFEST-DIGEST",
+      ],
+      protectedAtRule: "COPY_EXACT_PINNED_INCIDENT_STARTED_AT",
+      deadlineRule: "PINNED_INCIDENT_STARTED_AT_MUST_BE_ON_OR_BEFORE_ACTIVITY_DUE_AT",
+      completionRule: "EXACT_FIXED_MANIFEST_WITHIN_FINITE_POLICY_BOUNDED_PROTECTION_WINDOW",
+      actorSource: "SYSTEM_ONLY",
+      clientSelfDeclarationAllowed: false,
+      missingAmbiguousOrMismatchedSourceEffect: "FAIL_CLOSED",
+    },
+    successData: "binds one failed credential request manifest to one exact platform incident version and a finite recovery deadline without claiming that a normal credential was issued",
+    failureResults: [
+      "SYSTEM_FAILURE",
+      "INCIDENT_VERSION_MISMATCH",
+      "INCIDENT_SCOPE_MISMATCH",
+      "INCIDENT_NOT_ACTIVE_AT_DEADLINE",
+      "PROTECTION_SCOPE_DIGEST_MISMATCH",
+      "PROTECTION_SOURCE_ATTESTATION_INVALID",
+      "MANIFEST_DIGEST_MISMATCH",
+      "VERSION_CONFLICT",
+    ],
   }),
 ];
 
 const submissionActions = [
+  ...platformFailureIncidentActions,
   ...intentCredentialActions,
   action({
     id: "SUB-ACT-RECORD-INPUT-QUALITY",
@@ -3486,7 +3771,7 @@ const submissionActions = [
       refFieldId: "SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF",
       versionFieldId: "SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION",
       targetObjectId: "SUB-OBJ-INTENT-CREDENTIAL",
-      requiredState: "COMPLETED",
+      requiredStates: ["COMPLETED", "PLATFORM_FAILURE_PROTECTED"],
     }],
     activityPurposeGuard: {
       refFieldId: "SUB-ATTEMPT-F-ASSIGNMENT-REF",
@@ -3499,7 +3784,7 @@ const submissionActions = [
     intentCredentialMatchGuard: {
       credentialRefFieldId: "SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF",
       credentialVersionFieldId: "SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION",
-      requiredState: "COMPLETED",
+      requiredStates: ["COMPLETED", "PLATFORM_FAILURE_PROTECTED"],
       actorMatch: {
         credentialFieldId: "SUB-INTENT-F-ACTOR-REF",
         attemptSource: "CURRENT_ACTOR",
@@ -3523,29 +3808,66 @@ const submissionActions = [
         credentialFieldId: "SUB-INTENT-F-COMPLETED-MANIFEST-DIGEST",
         attemptFieldId: "SUB-ATTEMPT-F-CONTENT-DIGEST",
       }],
-      issuedAtFieldId: "SUB-INTENT-F-ISSUED-AT",
-      expiryFieldId: "SUB-INTENT-F-EXPIRES-AT",
-      completionWindowFieldId: "SUB-INTENT-F-COMPLETION-WINDOW",
+      stateBranches: [{
+        credentialState: "COMPLETED",
+        timelinessSource: "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT",
+        timelinessAnchorFieldId: "SUB-INTENT-F-ISSUED-AT",
+        completionDeadlineFieldId: "SUB-INTENT-F-EXPIRES-AT",
+        completionWindowFieldId: "SUB-INTENT-F-COMPLETION-WINDOW",
+        incidentRefRequired: false,
+        sourceRule: "SERVER_ISSUED_CREDENTIAL_BEFORE_ACTIVITY_DUE_AT",
+      }, {
+        credentialState: "PLATFORM_FAILURE_PROTECTED",
+        timelinessSource: "PLATFORM_FAILURE_INCIDENT_STARTED_AT",
+        timelinessAnchorFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT",
+        completionDeadlineFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT",
+        incidentRefFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+        incidentVersionFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+        protectionScopeFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE",
+        protectionScopeDigestFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-SCOPE-DIGEST",
+        sourceAttestationFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-SOURCE-ATTESTATION",
+        incidentRefRequired: true,
+        sourceRule: "PINNED_PLATFORM_INCIDENT_STARTED_BEFORE_OR_AT_ACTIVITY_DUE_AT",
+      }],
+      sourceStateMismatchEffect: "FAIL_CLOSED",
       failureResult: "INTENT_CREDENTIAL_MISMATCH",
     },
     serviceContinuityGuard: structuredClone(serviceContinuitySubmissionGuard),
     serviceContinuityOperationCode: "COMPLETE_PUBLISHED_ACTIVITY",
     successState: "SUBMITTED",
     timelinessContract: {
-      source: "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT",
+      source: "CREDENTIAL_STATE_DEPENDENT",
       evaluatedAtFieldId: "SUB-ATTEMPT-F-TIMELINESS-EVALUATED-AT",
-      sourceCredentialFieldId: "SUB-INTENT-F-ISSUED-AT",
       credentialRequired: true,
+      acceptedCredentialStates: ["COMPLETED", "PLATFORM_FAILURE_PROTECTED"],
+      stateSources: [{
+        credentialState: "COMPLETED",
+        source: "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT",
+        sourceCredentialFieldId: "SUB-INTENT-F-ISSUED-AT",
+        deadlineComparison: "SOURCE_AT_ON_OR_BEFORE_ACTIVITY_DUE_AT",
+      }, {
+        credentialState: "PLATFORM_FAILURE_PROTECTED",
+        source: "PLATFORM_FAILURE_INCIDENT_STARTED_AT",
+        sourceCredentialFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-PROTECTED-AT",
+        deadlineComparison: "PINNED_INCIDENT_STARTED_AT_ON_OR_BEFORE_ACTIVITY_DUE_AT",
+      }],
+      stateSourceMismatchResult: "INTENT_CREDENTIAL_SOURCE_MISMATCH",
     },
-    successData: "accepts the exact fixed manifest only from a matching COMPLETED credential inside its bounded window, evaluates timeliness from credential issue time, and issues the normal immutable receipt",
+    successData: "accepts the exact fixed manifest from either a matching COMPLETED credential or a matching PLATFORM_FAILURE_PROTECTED record; it uses the state-specific server anchor and finite window and issues the normal immutable receipt",
     failureResults: [
       "PERMISSION_DENIED",
       "VALIDATION_FAILED",
       "INTENT_CREDENTIAL_REQUIRED",
       "INTENT_CREDENTIAL_NOT_COMPLETED",
       "INTENT_CREDENTIAL_MISMATCH",
+      "INTENT_CREDENTIAL_STATE_UNSUPPORTED",
+      "INTENT_CREDENTIAL_SOURCE_MISMATCH",
       "INTENT_CREDENTIAL_EXPIRED",
       "COMPLETION_WINDOW_EXPIRED",
+      "PLATFORM_FAILURE_INCIDENT_MISMATCH",
+      "PLATFORM_FAILURE_SCOPE_MISMATCH",
+      "PLATFORM_FAILURE_PROTECTION_EXPIRED",
+      "PROTECTION_SOURCE_ATTESTATION_INVALID",
       "SUBMISSION_NOT_ALLOWED_FOR_PURPOSE",
       "SERVICE_CONTINUITY_NOT_PROTECTED",
       "SERVER_RECEIPT_NOT_ISSUED",
@@ -3839,6 +4161,26 @@ const submissionModule = moduleFact({
         },
       }),
     object(
+      "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+      "Immutable Platform Credential-signing Failure Incident Snapshot",
+      platformFailureIncidentResponsibility,
+      ["FROZEN"],
+      platformFailureIncidentFields,
+      "SUB-PFINCIDENT-F-ID",
+      { mode: "ACTION_GRAPH", initialStateIds: [] },
+      {
+        lifecyclePolicyId: "LIFE-009",
+        sensitivityId: "S4",
+        platformFailureIncidentSnapshot: {
+          sourceEventId: "EVT-SUB-PLATFORM-CREDENTIAL-UNAVAILABLE",
+          producerActionId: "SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT",
+          producedEventId: "EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED",
+          sourceActor: "SYSTEM",
+          clientDeclarationAllowed: false,
+          immutableScopeAndTime: true,
+        },
+      }),
+    object(
       "SUB-OBJ-INTENT-CREDENTIAL",
       "Weak-network Submission Intent Credential",
       studentWorkResponsibility,
@@ -3850,7 +4192,7 @@ const submissionModule = moduleFact({
         sensitivityId: "S3",
         intentCredential: true,
         timelinessRule: "credential-issued-at applies only when the fixed manifest digest completes within the bounded window",
-        platformFailureProtection: "if the platform cannot issue a credential, apply a uniform system-failure extension or adjusted rule",
+        platformFailureProtection: "a PLATFORM_FAILURE_PROTECTED record must pin one immutable platform incident version, exact failed request manifest and scope, incident-start timeliness anchor, source attestation, and finite recovery deadline",
         lineageBindings: [{
           refFieldId: "SUB-INTENT-F-ACTIVITY-REF",
           versionFieldId: "SUB-INTENT-F-ACTIVITY-VERSION",
@@ -3861,6 +4203,11 @@ const submissionModule = moduleFact({
           versionFieldId: "SUB-INTENT-F-PUBLICATION-SNAPSHOT-VERSION",
           targetObjectId: "HW-OBJ-PUBLICATION-SNAPSHOT",
           targetVersionFieldId: "HW-SNAPSHOT-F-VERSION",
+        }, {
+          refFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-REF",
+          versionFieldId: "SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION",
+          targetObjectId: "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+          targetVersionFieldId: "SUB-PFINCIDENT-F-VERSION",
         }],
       }),
     object(
@@ -3899,6 +4246,14 @@ const submissionModule = moduleFact({
     cardinality: "ONE_TO_MANY",
     ownershipScope: "SAME_STUDENT",
     onSourceInvalidation: "retain credential and attempt facts; reject changed manifests without rewriting the normal receipt",
+  }, {
+    id: "SUB-REL-FAILURE-PROTECTION-INCIDENT",
+    fromObjectId: "SUB-OBJ-INTENT-CREDENTIAL",
+    toObjectId: "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+    type: "AUTHORIZED_BY",
+    cardinality: "MANY_TO_ONE",
+    ownershipScope: "SAME_SCHOOL",
+    onSourceInvalidation: "retain accepted history but block any new protected submission when the pinned incident version cannot be verified",
   }, {
     id: "SUB-REL-QUALITY-ATTEMPT",
     fromObjectId: "SUB-OBJ-INPUT-QUALITY",
@@ -4140,7 +4495,13 @@ const gradingDecisionFields = [
   }),
 ];
 
-const gradingCapabilityMatrix = [
+const CURRENT_SUBJECT_FAMILIES = Object.freeze([
+  "CHINESE",
+  "MATHEMATICS",
+  "ENGLISH",
+]);
+
+const gradingCapabilityCatalog = [
   {
     id: "GRD-CAP-CHINESE-CHOICE-ONLINE",
     subjectFamily: "CHINESE",
@@ -4323,6 +4684,10 @@ const gradingCapabilityMatrix = [
   },
 ];
 
+const gradingCapabilityMatrix = gradingCapabilityCatalog.filter(({ subjectFamily }) => (
+  CURRENT_SUBJECT_FAMILIES.includes(subjectFamily)
+));
+
 const gradingCapabilityApplicability = {
   exactRulePriority: 100,
   capabilityObjectId: "GRD-OBJ-CAPABILITY-RULE",
@@ -4338,20 +4703,7 @@ const gradingCapabilityApplicability = {
     unavailableFallback: { fieldId: "GRD-CAP-F-UNAVAILABLE-FALLBACK", optionSetId: "OPT-TL-008" },
   },
   dimensions: {
-    subjectFamilies: [
-      "CHINESE",
-      "MATHEMATICS",
-      "ENGLISH",
-      "MORALITY-AND-LAW",
-      "HISTORY",
-      "GEOGRAPHY",
-      "BIOLOGY",
-      "PHYSICS",
-      "CHEMISTRY",
-      "PHYSICAL-EDUCATION",
-      "ARTS",
-      "INFORMATION-TECHNOLOGY",
-    ],
+    subjectFamilies: [...CURRENT_SUBJECT_FAMILIES],
     questionTypes: [
       "SINGLE-CHOICE",
       "MULTIPLE-CHOICE",
@@ -8221,15 +8573,6 @@ export const teachingLoopOptionSets = deepFreeze([
     ["CHINESE", "语文"],
     ["MATHEMATICS", "数学"],
     ["ENGLISH", "英语"],
-    ["MORALITY-AND-LAW", "道德与法治"],
-    ["HISTORY", "历史"],
-    ["GEOGRAPHY", "地理"],
-    ["BIOLOGY", "生物"],
-    ["PHYSICS", "物理"],
-    ["CHEMISTRY", "化学"],
-    ["PHYSICAL-EDUCATION", "体育"],
-    ["ARTS", "艺术"],
-    ["INFORMATION-TECHNOLOGY", "信息技术"],
   ]),
   optionSet("OPT-TL-004", "recognitionLevel", "识别级别", [
     ["NONE", "不识别"],
@@ -8287,6 +8630,23 @@ export const teachingLoopEvents = deepFreeze([{
   label: "Correction Task Due",
   definition: "the open correction task reaches its due time without a submitted answer",
   triggeredActionIds: ["CORR-ACT-MARK-OVERDUE"],
+}, {
+  id: "EVT-SUB-PLATFORM-FAILURE-INCIDENT-REGISTERED",
+  label: "Platform credential-signing failure incident snapshot registered",
+  definition: "one immutable platform-observed incident scope and version is available to evaluate exact failed credential requests; it is not itself a student protection grant",
+  producerActionIds: ["SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT"],
+  triggeredActionIds: ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+  platformFailureIncidentContextContract: {
+    producerActionId: "SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT",
+    consumerActionId: "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION",
+    incidentObjectId: "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+    incidentIdentityFieldId: "SUB-PFINCIDENT-F-ID",
+    incidentVersionFieldId: "SUB-PFINCIDENT-F-VERSION",
+    incidentStartedAtFieldId: "SUB-PFINCIDENT-F-STARTED-AT",
+    incidentScopeDigestFieldId: "SUB-PFINCIDENT-F-SCOPE-DIGEST",
+    failedRequestManifestRequired: true,
+    clientDeclarationAllowed: false,
+  },
 }]);
 
 export const teachingLoopModules = deepFreeze([
@@ -8504,7 +8864,7 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       {
         order: 6,
         actionId: "SUB-ACT-SUBMIT-PROTECTED",
-        condition: "the student presents a matching COMPLETED intent credential for the fixed manifest inside its bounded window",
+        condition: "the student presents either a matching COMPLETED intent credential or a matching PLATFORM_FAILURE_PROTECTED record for the same fixed manifest inside the state-specific bounded window",
         providedInputs: provideInputs(
           "ROLE-STUDENT",
           "SUB-ATTEMPT-F-ASSIGNMENT-REF",
@@ -8545,6 +8905,11 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       providedInputs: [],
     }, {
       id: "COMPLETED_INTENT_CREDENTIAL",
+      route: { kind: "ACTION_CHOICE", consumerStepOrder: 6 },
+      stepOrders: [1, 2, 3, 4, 6, 7, 8],
+      providedInputs: [],
+    }, {
+      id: "PLATFORM_FAILURE_PROTECTION",
       route: { kind: "ACTION_CHOICE", consumerStepOrder: 6 },
       stepOrders: [1, 2, 3, 4, 6, 7, 8],
       providedInputs: [],
@@ -8643,6 +9008,25 @@ export const teachingLoopFlows = deepFreeze(declareSourceCardinalities([
       strategy: "PRESERVE_DRAFT_AND_ACCEPTED_CHUNKS",
       description: "never roll back accepted chunks and never create a final submission without a server receipt",
     },
+    weakNetworkProtectionBranches: [{
+      pathId: "COMPLETED_INTENT_CREDENTIAL",
+      credentialState: "COMPLETED",
+      timelinessSource: "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT",
+      versionPinned: true,
+      fixedManifestRequired: true,
+      finiteCompletionWindowRequired: true,
+    }, {
+      pathId: "PLATFORM_FAILURE_PROTECTION",
+      credentialState: "PLATFORM_FAILURE_PROTECTED",
+      timelinessSource: "PLATFORM_FAILURE_INCIDENT_STARTED_AT",
+      incidentSnapshotObjectId: "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+      incidentVersionPinned: true,
+      exactProtectionScopeRequired: true,
+      fixedManifestRequired: true,
+      sourceAttestationRequired: true,
+      finiteCompletionWindowRequired: true,
+      clientSelfDeclarationAllowed: false,
+    }],
     presentationGuard: {
       activityPurpose: "TEACHING_PRESENTATION",
       behavior: "REJECT_SUBMISSION_PATH",

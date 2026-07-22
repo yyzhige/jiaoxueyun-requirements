@@ -513,8 +513,43 @@ export const events = [
   {
     id: "EVT-TEACHER-IDENTITY-DELETION-COMPLETED",
     label: "教师平台身份彻底注销完成",
-    definition: "教师登录凭据和可删除个人资料完成注销后，为必要教学事实生成不可回查作者替身。",
+    definition: "仅当教师平台身份注销、可回查映射删除和版本化教学事实清单在同一提交中成功后发出；消费者按事件版本幂等生成不可回查作者替身并原子改写固定事实集的作者指针。",
+    producerActionIds: ["ACC-ACT-COMPLETE-IDENTITY-DELETION"],
     triggeredActionIds: ["DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE"],
+    teacherDeletionContextContract: {
+      contextKeys: [
+        "subjectKind",
+        "deletionEventId",
+        "deletionEventVersion",
+        "deletionResultVersion",
+        "teachingFactScope",
+        "teachingFactScopeDigest",
+      ],
+      producerActionId: "ACC-ACT-COMPLETE-IDENTITY-DELETION",
+      consumerActionId: "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE",
+      producerBindings: [{
+        actionId: "ACC-ACT-COMPLETE-IDENTITY-DELETION",
+        subjectKindFieldId: "ACC-PIDENT-F-SUBJECT-KIND",
+        eventIdentityFieldId: "ACC-PIDENT-F-DELETION-EVENT-ID",
+        eventVersionFieldId: "ACC-PIDENT-F-DELETION-EVENT-VERSION",
+        deletionResultVersionFieldId: "ACC-PIDENT-F-VERSION",
+        teachingFactScopeFieldId: "ACC-PIDENT-F-TEACHING-FACT-SNAPSHOT",
+        teachingFactScopeDigestFieldId: "ACC-PIDENT-F-TEACHING-FACT-SNAPSHOT-DIGEST",
+      }],
+      consumerBindings: [{
+        actionId: "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE",
+        eventIdentityFieldId: "DGV-SURROGATE-F-DELETION-EVENT-ID",
+        eventVersionFieldId: "DGV-SURROGATE-F-DELETION-EVENT-VERSION",
+        teachingFactScopeFieldId: "DGV-SURROGATE-F-TEACHING-FACT-SCOPE",
+        teachingFactScopeDigestFieldId: "DGV-SURROGATE-F-TEACHING-FACT-SCOPE-DIGEST",
+      }],
+      requiredSubjectKindCode: "TEACHER",
+      exactEventVersionRequired: true,
+      exactTeachingFactScopeDigestRequired: true,
+      recoverableIdentityPayloadAllowed: false,
+      duplicateDeliveryEffect: "RETURN_EXISTING_SURROGATE_AND_MAPPING",
+      conflictingDeliveryEffect: "FAIL_CLOSED",
+    },
   },
   {
     id: "EVT-SHARED-DEVICE-CLEANUP-REQUESTED",
@@ -531,8 +566,8 @@ export const events = [
   {
     id: "EVT-SUB-PLATFORM-CREDENTIAL-UNAVAILABLE",
     label: "提交意图凭证无法签发",
-    definition: "平台在截止前无法签发提交意图凭证时，系统记录统一故障保护结果。",
-    triggeredActionIds: ["SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION"],
+    definition: "平台监测系统确认提交意图凭证服务不可用时，先冻结一个带范围、版本、起止时间和检测证据的平台事故快照；学生或客户端不能自行触发。",
+    triggeredActionIds: ["SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT"],
   },
   {
     id: "EVT-HW-STUDENT-ADDED-AFTER-PUBLICATION",
@@ -933,14 +968,6 @@ export const optionSets = [
     ["OVERSIGHT", "疏漏"],
     ["NO-ANSWER", "未作答"],
     ["OTHER", "其他"],
-  ]),
-  optionSet("OPT-ENUM-011", "masteryState", "掌握状态", [
-    ["INSUFFICIENT-DATA", "数据不足"],
-    ["INITIAL", "初步掌握"],
-    ["BASIC", "基本掌握"],
-    ["PROFICIENT", "熟练掌握"],
-    ["NEEDS-CONSOLIDATION", "需要巩固"],
-    ["WEAK", "明显薄弱"],
   ]),
   optionSet("OPT-ENUM-012", "improvementPriority", "提升优先级", [
     ["HIGH", "高"],
@@ -1359,6 +1386,7 @@ export const optionSets = [
   optionSet("OPT-V2-TL-024", "submissionTimelinessSource", "提交按时判定来源", [
     ["SERVER_RECEIPT_ACCEPTED_AT", "完整内容服务端接收时间"],
     ["COMPLETED_INTENT_CREDENTIAL_ISSUED_AT", "已完成提交意图凭证签发时间"],
+    ["PLATFORM_FAILURE_INCIDENT_STARTED_AT", "平台故障事故开始时间"],
   ]),
 ];
 

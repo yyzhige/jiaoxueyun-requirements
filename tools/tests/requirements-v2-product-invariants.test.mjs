@@ -186,11 +186,55 @@ function foundationGovernanceInvariantErrors(model) {
     "CUSTOM_DUTY_HARD_BOUNDARY",
   );
 
+  const highImpactAuthorization = objectById(model, "IAM-OBJ-HIGH-IMPACT-AUTHORIZATION");
+  const highImpactMatrix = highImpactAuthorization?.highImpactAuthorizationMatrixContract;
+  const reserveHighImpact = actionById(model, "IAM-ACT-RESERVE-HIGH-IMPACT-AUTHORIZATION");
+  const reservationContract = reserveHighImpact?.highImpactAuthorizationReservationContract;
+  const reservationCompareAndSet = reservationContract?.compareAndSet;
   const executeHighImpact = actionById(model, "IAM-ACT-EXECUTE-HIGH-IMPACT-ACTION");
+  const highImpactDomainActions = [
+    "ACC-ACT-COMPLETE-IDENTITY-DELETION",
+    "DGV-ACT-EXECUTE-STUDENT-TRANSFER",
+    "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC",
+  ].map((id) => actionById(model, id));
   requireInvariant(
-    hasPermission(executeHighImpact, "ALLOW", "roleRef", "ROLE-PLATFORM-GOVERNANCE", /AUTHORIZED.*unexpired.*NONE or RESOLVED/i)
-    && hasPermission(executeHighImpact, "DENY", "roleRef", "ROLE-PLATFORM-GOVERNANCE", /OPEN or FROZEN/i)
-    && sameMembers(optionCodes(model, "OPT-GOV-004"), ["NONE", "OPEN", "FROZEN", "RESOLVED", "REJECTED"]),
+    highImpactAuthorization?.states.includes("RESERVED")
+    && highImpactMatrix?.reservedState === "RESERVED"
+    && sameMembers(highImpactMatrix?.blockedDisputeStates, ["OPEN", "FROZEN"])
+    && sameMembers(optionCodes(model, "OPT-GOV-004"), ["NONE", "OPEN", "FROZEN", "RESOLVED", "REJECTED"])
+    && reserveHighImpact?.targetObjectId === highImpactAuthorization?.id
+    && reserveHighImpact?.executionMode === "SYSTEM_EVENT"
+    && sameMembers(reserveHighImpact?.transition?.from, ["AUTHORIZED", "RESERVED"])
+    && reserveHighImpact?.transition?.to === "RESERVED"
+    && hasPermission(reserveHighImpact, "ALLOW", "actorRef", "SYSTEM", /atomically compare-and-sets one AUTHORIZED version to RESERVED/i)
+    && reserveHighImpact?.failureResults.includes("AUTHORIZATION_DISPUTED")
+    && reservationContract?.authorizationVersionCompareAndSetRequired === true
+    && reservationContract?.domainWriteBeforeReservationCommitAllowed === false
+    && reservationContract?.reservationCommitAcknowledgementRequiredBeforeDomainWrite === true
+    && reservationCompareAndSet?.objectId === highImpactAuthorization?.id
+    && reservationCompareAndSet?.versionFieldId === "IAM-HIAUTH-F-VERSION"
+    && reservationCompareAndSet?.statusFieldId === "IAM-HIAUTH-F-STATUS"
+    && reservationCompareAndSet?.firstReservationExpectedState === "AUTHORIZED"
+    && reservationCompareAndSet?.firstReservationNextState === "RESERVED"
+    && reservationCompareAndSet?.atomicWithReservationFields === true
+    && reservationCompareAndSet?.exactDuplicateEffect === "RETURN_EXISTING_RESERVATION"
+    && reservationCompareAndSet?.conflictingTargetEffect === "FAIL_CLOSED"
+    && highImpactDomainActions.every((action) => (
+      sameMembers(
+        action?.highImpactAuthorizationGuard?.disputeGuard?.forbiddenAuthorizationDisputeStates,
+        ["OPEN", "FROZEN"],
+      )
+      && sameMembers(
+        action?.highImpactAuthorizationGuard?.disputeGuard?.forbiddenLinkedDisputeStates,
+        ["OPEN", "FROZEN"],
+      )
+    ))
+    && executeHighImpact?.targetObjectId === highImpactAuthorization?.id
+    && executeHighImpact?.executionMode === "SYSTEM_EVENT"
+    && executeHighImpact?.trigger?.eventId === "EVT-HIGH-IMPACT-DOMAIN-ACTION-SUCCEEDED"
+    && executeHighImpact?.transition?.from === "RESERVED"
+    && executeHighImpact?.transition?.to === "EXECUTED"
+    && hasPermission(executeHighImpact, "ALLOW", "actorRef", "SYSTEM", /same RESERVED authorization version/i),
     "HIGH_IMPACT_DISPUTE_FREEZE",
   );
 
@@ -207,18 +251,21 @@ function foundationGovernanceInvariantErrors(model) {
     "ROLE_SEPARATED_EXPORT",
   );
 
-  const transfer = actionById(model, "DGV-ACT-EXECUTE-STUDENT-TRANSFER");
+  const transferContract = moduleById(model, "DGV-001")?.transferLifecycleContract;
   const oldSchoolRead = actionById(model, "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY");
   const surrogate = objectById(model, "DGV-OBJ-TEACHER-AUTHOR-SURROGATE");
+  const surrogateContract = surrogate?.teacherAuthorSurrogateContract;
+  const createSurrogate = actionById(model, "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE");
   requireInvariant(
-    /changes authorization rather than copying the complete database.*old school remains restricted.*permitted subset/i.test(
-      moduleById(model, "DGV-001").scenarios.find((scenario) => (
-        scenario.actionId === transfer?.id && scenario.kind === "SUCCESS"
-      ))?.then.expectedData,
-    )
+    transferContract?.oldSchoolCurrentAccessAfterCutoverStart === "TERMINATE_AND_NEVER_RESTORE"
+    && transferContract?.newSchoolAccessRule === "EXACT_PINNED_AUTHORIZED_SUBSET_ONLY"
     && hasPermission(oldSchoolRead, "DENY", "roleRef", "ROLE-SCHOOL-ADMIN", /no default access/i)
     && hasPermission(oldSchoolRead, "DENY", "roleRef", "ROLE-PLATFORM-OPS", /approved audited access session/i)
-    && !surrogate?.fields.some(({ id }) => /ORIGINAL.*IDENTITY|TEACHER.*IDENTITY/i.test(id)),
+    && surrogateContract?.recoverableOriginalIdentityFieldAllowed === false
+    && surrogateContract?.reverseLookupIndexAllowed === false
+    && createSurrogate?.authorshipRewriteContract?.originalIdentityPersistenceAllowed === false
+    && hasPermission(createSurrogate, "DENY", "actorRef", "CURRENT_ACTOR", /resolve back to the deleted teacher identity/i)
+    && !surrogate?.fields.some(({ id }) => id === "DGV-SURROGATE-F-PLATFORM-IDENTITY-ID"),
     "TRANSFER_OLD_SCHOOL_AND_AUTHOR_SURROGATE",
   );
 
@@ -281,13 +328,36 @@ test("authorization boundaries cover substitute expiry, privileged default deny 
   assert.deepEqual(foundationGovernanceInvariantErrors(requirementModel), []);
 });
 
-test("authorization destructive variant rejects high-impact execution during dispute freeze", () => {
-  const model = structuredClone(requirementModel);
-  const action = actionById(model, "IAM-ACT-EXECUTE-HIGH-IMPACT-ACTION");
-  action.permissions = action.permissions.filter(({ effect, roleRef }) => !(
-    effect === "DENY" && roleRef === "ROLE-PLATFORM-GOVERNANCE"
-  ));
-  assertInvariant(model, "HIGH_IMPACT_DISPUTE_FREEZE");
+test("authorization destructive variants reject weakened reservation, dispute, and terminal execution boundaries", () => {
+  const mutations = [
+    (model) => {
+      objectById(model, "IAM-OBJ-HIGH-IMPACT-AUTHORIZATION").states = [
+        "REQUESTED",
+        "AUTHORIZED",
+        "EXECUTED",
+      ];
+    },
+    (model) => {
+      actionById(model, "IAM-ACT-RESERVE-HIGH-IMPACT-AUTHORIZATION")
+        .highImpactAuthorizationReservationContract.compareAndSet
+        .atomicWithReservationFields = false;
+    },
+    (model) => {
+      objectById(model, "IAM-OBJ-HIGH-IMPACT-AUTHORIZATION")
+        .highImpactAuthorizationMatrixContract.blockedDisputeStates = ["OPEN"];
+    },
+    (model) => {
+      const action = actionById(model, "IAM-ACT-EXECUTE-HIGH-IMPACT-ACTION");
+      action.executionMode = "USER_TASK";
+      action.transition = { from: "AUTHORIZED", to: "EXECUTED" };
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertInvariant(model, "HIGH_IMPACT_DISPUTE_FREEZE");
+  }
 });
 
 test("authorization destructive variant rejects custom duty widening a platform hard boundary", () => {
@@ -320,6 +390,35 @@ test("export destructive variant rejects generation without independent reauthor
     effect === "ALLOW" && actorRef === "SYSTEM"
   )).condition = "the system trusts the earlier approval without reauthorization";
   assertInvariant(model, "ROLE_SEPARATED_EXPORT");
+});
+
+test("transfer destructive variants reject restored old access, widened new access, or recoverable teacher identity", () => {
+  const mutations = [
+    (model) => {
+      moduleById(model, "DGV-001").transferLifecycleContract
+        .oldSchoolCurrentAccessAfterCutoverStart = "RESTORE_ON_FAILURE";
+    },
+    (model) => {
+      moduleById(model, "DGV-001").transferLifecycleContract
+        .newSchoolAccessRule = "COPY_COMPLETE_DATABASE";
+    },
+    (model) => {
+      const action = actionById(model, "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY");
+      action.permissions = action.permissions.filter(({ effect, roleRef }) => !(
+        effect === "DENY" && roleRef === "ROLE-SCHOOL-ADMIN"
+      ));
+    },
+    (model) => {
+      objectById(model, "DGV-OBJ-TEACHER-AUTHOR-SURROGATE")
+        .teacherAuthorSurrogateContract.reverseLookupIndexAllowed = true;
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const model = structuredClone(requirementModel);
+    mutate(model);
+    assertInvariant(model, "TRANSFER_OLD_SCHOOL_AND_AUTHOR_SURROGATE");
+  }
 });
 
 test("shared device cleanup is limited to product-controlled state", () => {

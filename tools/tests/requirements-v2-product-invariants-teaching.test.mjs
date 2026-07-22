@@ -226,7 +226,11 @@ test("weak-network intent credential binds actor, activity, fixed manifest, dige
   assert.equal(credential.intentCredential, true);
   assert.equal(successData(module, "SUB-ACT-COMPLETE-MANIFEST-INTENT").includes("fixed manifest"), true);
   assert.equal(successData(module, "SUB-ACT-REJECT-MANIFEST-CHANGE").includes("late protection"), true);
-  assert.equal(successData(module, "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION").includes("not required"), true);
+  assert.equal(
+    successData(module, "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION")
+      .includes("without claiming that a normal credential was issued"),
+    true,
+  );
 });
 
 test("teacher workspace keeps problem, judgment, and linked action separate", () => {
@@ -433,19 +437,25 @@ test("D014 cancellation actions return exact unsubmitted, evidence, scope, and d
   assertInvalid(incomplete, "INVALID_ACTIVITY_CANCELLATION_EFFECTS");
 });
 
-test("D043 exposes fail-closed normal and protected receipt paths with version-pinned completed credentials", () => {
+test("D043 exposes fail-closed normal, completed-credential, and platform-failure receipt paths", () => {
   const module = moduleById("SUB-001");
   const attempt = objectById(module, "SUB-OBJ-ATTEMPT");
+  const incident = objectById(module, "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT");
   const credentialRef = fieldById(attempt, "SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF");
   const normal = actionById(module, "SUB-ACT-SUBMIT");
   const protectedSubmit = actionById(module, "SUB-ACT-SUBMIT-PROTECTED");
   const completeIntent = actionById(module, "SUB-ACT-COMPLETE-MANIFEST-INTENT");
+  const registerIncident = actionById(module, "SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT");
+  const protectFailure = actionById(module, "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION");
   assert.equal(normal.timelinessContract.source, "SERVER_RECEIPT_ACCEPTED_AT");
   assert.equal(normal.inputFieldIds.includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-REF"), false);
   assert.equal(normal.inputFieldIds.includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION"), false);
   assert.equal(credentialRef.referenceIntegrity, "VERSION_PINNED");
   assert.deepEqual(credentialRef.actionApplicability.requiredActionIds, ["SUB-ACT-SUBMIT-PROTECTED"]);
-  assert.equal(protectedSubmit.intentCredentialMatchGuard.requiredState, "COMPLETED");
+  assert.deepEqual(protectedSubmit.intentCredentialMatchGuard.requiredStates, [
+    "COMPLETED",
+    "PLATFORM_FAILURE_PROTECTED",
+  ]);
   assert.deepEqual(protectedSubmit.intentCredentialMatchGuard.equalityBindings, [{
     credentialFieldId: "SUB-INTENT-F-ACTIVITY-REF",
     attemptFieldId: "SUB-ATTEMPT-F-ASSIGNMENT-REF",
@@ -469,7 +479,27 @@ test("D043 exposes fail-closed normal and protected receipt paths with version-p
     protectedSubmit.inputFieldIds.includes("SUB-ATTEMPT-F-INTENT-CREDENTIAL-VERSION"),
     true,
   );
-  assert.equal(protectedSubmit.timelinessContract.source, "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT");
+  assert.equal(protectedSubmit.timelinessContract.source, "CREDENTIAL_STATE_DEPENDENT");
+  assert.deepEqual(
+    protectedSubmit.timelinessContract.stateSources.map(({ credentialState, source }) => ({
+      credentialState,
+      source,
+    })),
+    [{
+      credentialState: "COMPLETED",
+      source: "COMPLETED_INTENT_CREDENTIAL_ISSUED_AT",
+    }, {
+      credentialState: "PLATFORM_FAILURE_PROTECTED",
+      source: "PLATFORM_FAILURE_INCIDENT_STARTED_AT",
+    }],
+  );
+  assert.deepEqual(incident.states, ["FROZEN"]);
+  assert.equal(registerIncident.executionMode, "SYSTEM_EVENT");
+  assert.equal(registerIncident.platformFailureIncidentContract.clientDeclarationAllowed, false);
+  assert.equal(protectFailure.platformFailureProtectionContract.actorSource, "SYSTEM_ONLY");
+  assert.equal(protectFailure.platformFailureProtectionContract.clientSelfDeclarationAllowed, false);
+  assert.ok(protectFailure.inputFieldIds.includes("SUB-INTENT-F-PLATFORM-FAILURE-INCIDENT-VERSION"));
+  assert.ok(protectFailure.outputFieldIds.includes("SUB-INTENT-F-PLATFORM-FAILURE-PROTECTION-EXPIRES-AT"));
   assert.equal(
     completeIntent.intentCredentialMatchGuard.failureResult,
     "INTENT_CREDENTIAL_COMPLETION_REJECTED",
@@ -484,7 +514,7 @@ test("D043 exposes fail-closed normal and protected receipt paths with version-p
   )));
   const failOpen = structuredClone(requirementModel);
   actionById(failOpen.modules.find(({ id }) => id === "SUB-001"), "SUB-ACT-SUBMIT-PROTECTED")
-    .intentCredentialMatchGuard.requiredState = "ISSUED";
+    .intentCredentialMatchGuard.requiredStates = ["COMPLETED"];
   assertInvalid(failOpen, "INVALID_WEAK_NETWORK_ACCEPTANCE_PATHS");
 
   const hiddenCompletionFailure = structuredClone(requirementModel);

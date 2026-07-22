@@ -1,18 +1,20 @@
-# AUD-001 Audit and sensitive access PRD v2.0
+# AUD-001 Audit, sensitive access, and shared-device protection PRD v2.0
 
 | 属性 | 值 |
 | --- | --- |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 优先级 | P0 |
-| 目标 | Append immutable audit facts and gate sensitive access by school authorization, scope, and time. |
+| 目标 | Append immutable audit facts, gate sensitive access by authorization, scope and time, and clear shared-device state only within product-controlled boundaries. |
 | 基线决策 | `BASE-001`、`BASE-007`、`BASE-008` |
 | NFR | `NFR-008`、`NFR-009` |
 | 进入条件 | audit storage accepts append-only events；sensitive access starts with no default platform-operations student detail |
-| 退出条件 | all sensitive sessions are bounded by approved scope and expiry；review outcomes retain immutable source event references |
+| 退出条件 | all sensitive sessions are bounded by approved scope and expiry；shared-device identity switch, logout, or timeout clears product-controlled state without claiming operating-system control；review outcomes retain immutable source event references |
+| 依赖模块 | — |
 
 ## 1. 范围与事实边界
 
-- 本模块权威拥有 4 个对象、15 个动作。
+- 本模块权威拥有 5 个对象、17 个动作。
 - 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
 - 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
 - AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
@@ -21,9 +23,9 @@
 
 ### AUD-OBJ-EVENT Audit Event
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUDITED_SCHOOL_ACTIVITY | SCHOOL | SYSTEM | SYSTEM | SYSTEM | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | AUTHORIZED | ACCEPTED / ARCHIVED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUDITED_SCHOOL_ACTIVITY | SCHOOL | SYSTEM | SYSTEM | SYSTEM | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | AUTHORIZED | — | ACCEPTED / ARCHIVED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -37,16 +39,16 @@
 
 ### AUD-OBJ-ACCESS-REQUEST Sensitive Access Request
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ACCESS_REQUESTER_AND_SCOPED_DATA | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | REQUESTED / APPROVED / DENIED / EXPIRED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ACCESS_REQUESTER_AND_SCOPED_DATA | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | — | REQUESTED / APPROVED / DENIED / EXPIRED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | AUD-REQUEST-F-ID | Sensitive Access Request ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | AUD-REQUEST-F-REQUESTER | Access Requester ID | STRING | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | AUD-REQUEST-F-SCOPE | Requested Sensitive Scope | JSON | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
-| AUD-REQUEST-F-PURPOSE | Sensitive Access Purpose | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-REQUEST-F-PURPOSE | Sensitive Access Purpose | STRING | 是 | OPTION_SET: OPT-V2-CLS-004 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | AUD-REQUEST-F-EXPIRY | Requested Access Expiry | DATETIME | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | AUD-REQUEST-F-APPROVER | School Approver ID | STRING | required before APPROVED；状态=APPROVED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | AUD-REQUEST-F-DECISION-REASON | Sensitive Access Decision Reason | TEXT | required for APPROVED or DENIED；状态=APPROVED/DENIED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
@@ -55,9 +57,9 @@
 
 ### AUD-OBJ-ACCESS-SESSION Sensitive Access Session
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APPROVED_SENSITIVE_ACCESS | SCHOOL | SYSTEM | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | ACTIVE / EXPIRED / REVOKED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| APPROVED_SENSITIVE_ACCESS | SCHOOL | SYSTEM | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | — | ACTIVE / EXPIRED / REVOKED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -73,9 +75,9 @@
 
 ### AUD-OBJ-REVIEW Audit Review Case
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUDIT_REVIEW_CASE | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | OPEN / INVESTIGATING / RESOLVED / CLOSED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUDIT_REVIEW_CASE | SCHOOL | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-004 | S4 | NO_DIRECT_READ | — | OPEN / INVESTIGATING / RESOLVED / CLOSED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -84,6 +86,24 @@
 | AUD-REVIEW-F-REASON | Review Reason | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | AUD-REVIEW-F-RESOLUTION | Review Resolution | STRING | required before RESOLVED；状态=RESOLVED | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | AUD-REVIEW-F-STATUS | Review Case Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
+### AUD-OBJ-SHARED-DEVICE-SESSION Shared-device Product Session
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SHARED_DEVICE_SESSION | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | SYSTEM | ROLE-SCHOOL-ADMIN | LIFE-010 | S4 | NO_DIRECT_READ | — | ACTIVE / CLEANED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-SHARED-F-ID | Shared-device Session ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SHARED-F-ACTOR-ID | Shared-device Session Actor ID | ID | 是 | USER_INPUT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SHARED-F-CLEANUP-SCOPES | Product-controlled Cleanup Scopes | STRING_ARRAY | 是 | OPTION_SET: OPT-GOV-007 | IMMUTABLE | AUTHORIZED_SCOPE | — | must contain only product page state, product cache, product temporary files, sensitive notification previews and product download permission | retain accepted values with source and version metadata |
+| AUD-SHARED-F-START | Shared-device Session Start | DATETIME | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SHARED-F-END | Shared-device Session End | DATETIME | required after product-controlled cleanup；状态=CLEANED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SHARED-F-CLEANUP-TRIGGER | Cleanup Trigger | STRING | required after product-controlled cleanup；状态=CLEANED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must be identity switch, logout or session timeout | retain accepted values with source and version metadata |
+| AUD-SHARED-F-CLEANUP-RESULT | Product-controlled Cleanup Result | JSON | required after product-controlled cleanup；状态=CLEANED | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must not claim removal of operating-system, browser or other-application downloads, screenshots or autofill | retain accepted values with source and version metadata |
+| AUD-SHARED-F-STATUS | Shared-device Session Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| AUD-SHARED-F-VERSION | Shared-device Session Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
 ## 3. 对象关系
 
@@ -111,6 +131,8 @@
 | AUD-ACT-RESOLVE-REVIEW | Resolve an Audit Review Case | AUD-OBJ-REVIEW | UPDATE | — | — | AUD-REVIEW-F-ID<br>AUD-REVIEW-F-RESOLUTION | AUD-REVIEW-F-STATUS | INVESTIGATING → RESOLVED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-RESOLVE-REVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
 | AUD-ACT-CLOSE-REVIEW | Close a Resolved Audit Review Case | AUD-OBJ-REVIEW | UPDATE | — | — | AUD-REVIEW-F-ID | AUD-REVIEW-F-STATUS | RESOLVED → CLOSED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-CLOSE-REVIEW:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
 | AUD-ACT-EXPORT-SUMMARY | Export an Authorized Audit Summary | AUD-OBJ-REVIEW | UPDATE | — | — | AUD-REVIEW-F-ID<br>AUD-REVIEW-F-EVENT-IDS | AUD-REVIEW-F-RESOLUTION | RESOLVED → RESOLVED | ALLOW:ROLE-SCHOOL-ADMIN — school administrator acts inside school audit scope<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail access and requires school authorization, limited scope and time | WEB | HIGH | REQUIRED | AUD-ACT-EXPORT-SUMMARY:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-START-SHARED-DEVICE-SESSION | Start a Shared-device Product Session | AUD-OBJ-SHARED-DEVICE-SESSION | CREATE | — | — | AUD-SHARED-F-ACTOR-ID<br>AUD-SHARED-F-CLEANUP-SCOPES | AUD-SHARED-F-ID<br>AUD-SHARED-F-START<br>AUD-SHARED-F-STATUS<br>AUD-SHARED-F-VERSION | CREATE（成功状态由 AUD-ACT-START-SHARED-DEVICE-SESSION-SCN-SUCCESS 定义） | ALLOW:CURRENT_ACTOR — the actor explicitly starts shared-device protection for the current product session<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot inspect or reuse another actor's shared-device session | WEB / APP | HIGH | REQUIRED | AUD-ACT-START-SHARED-DEVICE-SESSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| AUD-ACT-CLEAN-SHARED-DEVICE-SESSION | Clean Product-controlled Shared-device State | AUD-OBJ-SHARED-DEVICE-SESSION | UPDATE | — | — | AUD-SHARED-F-CLEANUP-SCOPES | AUD-SHARED-F-END<br>AUD-SHARED-F-CLEANUP-TRIGGER<br>AUD-SHARED-F-CLEANUP-RESULT<br>AUD-SHARED-F-STATUS<br>AUD-SHARED-F-VERSION | ACTIVE → CLEANED | ALLOW:SYSTEM — identity switch, logout or timeout clears only product-controlled state and disables ordinary product downloads for sensitive content<br>DENY:CURRENT_ACTOR — a user cannot mark operating-system or other-application artifacts as cleaned | SYSTEM_EVENT | HIGH | REQUIRED | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
 
 ## 6. 状态可达性
 
@@ -129,6 +151,8 @@
 | AUD-OBJ-REVIEW | INVESTIGATING | AUD-ACT-INVESTIGATE-REVIEW | AUD-ACT-RESOLVE-REVIEW |
 | AUD-OBJ-REVIEW | RESOLVED | AUD-ACT-RESOLVE-REVIEW<br>AUD-ACT-EXPORT-SUMMARY | AUD-ACT-CLOSE-REVIEW<br>AUD-ACT-EXPORT-SUMMARY |
 | AUD-OBJ-REVIEW | CLOSED | AUD-ACT-CLOSE-REVIEW |  |
+| AUD-OBJ-SHARED-DEVICE-SESSION | ACTIVE | AUD-ACT-START-SHARED-DEVICE-SESSION | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION |
+| AUD-OBJ-SHARED-DEVICE-SESSION | CLEANED | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION |  |
 
 ## 7. 参与数据流
 
@@ -138,13 +162,14 @@
 
 ## 8. 页面任务合同
 
-| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| AUD-PAGE-SEARCH | Authorized Audit Event Search | WEB | AUD-OBJ-EVENT | AUD-EVENT-F-TIME<br>AUD-EVENT-F-ACTOR<br>AUD-EVENT-F-ACTION<br>AUD-EVENT-F-SCOPE<br>AUD-EVENT-F-RESULT | AUD-ACT-QUERY-AUDIT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| AUD-PAGE-ACCESS-REQUEST | Time-limited Sensitive Access Request | WEB / APP | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-REQUESTER<br>AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-PURPOSE<br>AUD-REQUEST-F-EXPIRY<br>AUD-REQUEST-F-RESULT | AUD-ACT-REQUEST-SENSITIVE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| AUD-PAGE-ACCESS-APPROVAL | School Sensitive Access Approval | WEB | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-PURPOSE<br>AUD-REQUEST-F-EXPIRY<br>AUD-REQUEST-F-APPROVER<br>AUD-REQUEST-F-DECISION-REASON<br>AUD-REQUEST-F-RESULT | AUD-ACT-APPROVE-SENSITIVE<br>AUD-ACT-DENY-SENSITIVE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| AUD-PAGE-ACTIVE-SESSION | Active Sensitive Access Session | WEB | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-SCOPE<br>AUD-SESSION-F-START<br>AUD-SESSION-F-EXPIRY<br>AUD-SESSION-F-AUTHORIZED-OPERATOR-ID<br>AUD-SESSION-F-STATUS | AUD-ACT-REVOKE-SESSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| AUD-PAGE-REVIEW | Audit Review Case Investigation | WEB | AUD-OBJ-REVIEW | AUD-REVIEW-F-EVENT-IDS<br>AUD-REVIEW-F-REASON<br>AUD-REVIEW-F-RESOLUTION<br>AUD-REVIEW-F-STATUS | AUD-ACT-CREATE-REVIEW<br>AUD-ACT-INVESTIGATE-REVIEW<br>AUD-ACT-RESOLVE-REVIEW<br>AUD-ACT-CLOSE-REVIEW<br>AUD-ACT-EXPORT-SUMMARY | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| Page ID | 页面 | 交付可用性 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AUD-PAGE-SEARCH | Authorized Audit Event Search | BUILD_READY | WEB | AUD-OBJ-EVENT | AUD-EVENT-F-TIME<br>AUD-EVENT-F-ACTOR<br>AUD-EVENT-F-ACTION<br>AUD-EVENT-F-SCOPE<br>AUD-EVENT-F-RESULT | AUD-ACT-QUERY-AUDIT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-ACCESS-REQUEST | Time-limited Sensitive Access Request | BUILD_READY | WEB / APP | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-REQUESTER<br>AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-PURPOSE<br>AUD-REQUEST-F-EXPIRY<br>AUD-REQUEST-F-RESULT | AUD-ACT-REQUEST-SENSITIVE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-ACCESS-APPROVAL | School Sensitive Access Approval | BUILD_READY | WEB | AUD-OBJ-ACCESS-REQUEST | AUD-REQUEST-F-SCOPE<br>AUD-REQUEST-F-PURPOSE<br>AUD-REQUEST-F-EXPIRY<br>AUD-REQUEST-F-APPROVER<br>AUD-REQUEST-F-DECISION-REASON<br>AUD-REQUEST-F-RESULT | AUD-ACT-APPROVE-SENSITIVE<br>AUD-ACT-DENY-SENSITIVE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-ACTIVE-SESSION | Active Sensitive Access Session | BUILD_READY | WEB | AUD-OBJ-ACCESS-SESSION | AUD-SESSION-F-SCOPE<br>AUD-SESSION-F-START<br>AUD-SESSION-F-EXPIRY<br>AUD-SESSION-F-AUTHORIZED-OPERATOR-ID<br>AUD-SESSION-F-STATUS | AUD-ACT-REVOKE-SESSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-REVIEW | Audit Review Case Investigation | BUILD_READY | WEB | AUD-OBJ-REVIEW | AUD-REVIEW-F-EVENT-IDS<br>AUD-REVIEW-F-REASON<br>AUD-REVIEW-F-RESOLUTION<br>AUD-REVIEW-F-STATUS | AUD-ACT-CREATE-REVIEW<br>AUD-ACT-INVESTIGATE-REVIEW<br>AUD-ACT-RESOLVE-REVIEW<br>AUD-ACT-CLOSE-REVIEW<br>AUD-ACT-EXPORT-SUMMARY | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| AUD-PAGE-SHARED-DEVICE | Shared-device Product Protection | BUILD_READY | WEB / APP | AUD-OBJ-SHARED-DEVICE-SESSION | AUD-SHARED-F-ACTOR-ID<br>AUD-SHARED-F-CLEANUP-SCOPES<br>AUD-SHARED-F-START<br>AUD-SHARED-F-END<br>AUD-SHARED-F-CLEANUP-TRIGGER<br>AUD-SHARED-F-CLEANUP-RESULT<br>AUD-SHARED-F-STATUS | AUD-ACT-START-SHARED-DEVICE-SESSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
 ## 9. 验收场景
 
@@ -223,6 +248,16 @@
 | AUD-ACT-EXPORT-SUMMARY-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-EXPORT-SUMMARY | VALIDATION_FAILED applies to Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | Export an Authorized Audit Summary returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
 | AUD-ACT-EXPORT-SUMMARY-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-EXPORT-SUMMARY | VERSION_CONFLICT applies to Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | Export an Authorized Audit Summary returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 | AUD-ACT-EXPORT-SUMMARY-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-EXPORT-SUMMARY | AUDIT_FAILED applies to Export an Authorized Audit Summary | the actor requests Export an Authorized Audit Summary | Export an Authorized Audit Summary returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-START-SHARED-DEVICE-SESSION-SCN-SUCCESS | SUCCESS | AUD-ACT-START-SHARED-DEVICE-SESSION | the actor meets the entry conditions for Start a Shared-device Product Session | the actor requests Start a Shared-device Product Session | Start a Shared-device Product Session returns the accepted task-specific result | ACTIVE | ALLOW |  |
+| AUD-ACT-START-SHARED-DEVICE-SESSION-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-START-SHARED-DEVICE-SESSION | PERMISSION_DENIED applies to Start a Shared-device Product Session | the actor requests Start a Shared-device Product Session | Start a Shared-device Product Session returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-START-SHARED-DEVICE-SESSION-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-START-SHARED-DEVICE-SESSION | VALIDATION_FAILED applies to Start a Shared-device Product Session | the actor requests Start a Shared-device Product Session | Start a Shared-device Product Session returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-START-SHARED-DEVICE-SESSION-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-START-SHARED-DEVICE-SESSION | VERSION_CONFLICT applies to Start a Shared-device Product Session | the actor requests Start a Shared-device Product Session | Start a Shared-device Product Session returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-START-SHARED-DEVICE-SESSION-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-START-SHARED-DEVICE-SESSION | AUDIT_FAILED applies to Start a Shared-device Product Session | the actor requests Start a Shared-device Product Session | Start a Shared-device Product Session returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| AUD-ACT-CLEAN-SHARED-DEVICE-SESSION-SCN-SUCCESS | SUCCESS | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION | the actor meets the entry conditions for Clean Product-controlled Shared-device State | the actor requests Clean Product-controlled Shared-device State | page state, product cache, product temporary files and sensitive previews are cleared without claiming control of screenshots, browser downloads or autofill | CLEANED | ALLOW |  |
+| AUD-ACT-CLEAN-SHARED-DEVICE-SESSION-SCN-PERMISSION_DENIED | FAILURE | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION | PERMISSION_DENIED applies to Clean Product-controlled Shared-device State | the actor requests Clean Product-controlled Shared-device State | Clean Product-controlled Shared-device State returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| AUD-ACT-CLEAN-SHARED-DEVICE-SESSION-SCN-VALIDATION_FAILED | FAILURE | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION | VALIDATION_FAILED applies to Clean Product-controlled Shared-device State | the actor requests Clean Product-controlled Shared-device State | Clean Product-controlled Shared-device State returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| AUD-ACT-CLEAN-SHARED-DEVICE-SESSION-SCN-VERSION_CONFLICT | FAILURE | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION | VERSION_CONFLICT applies to Clean Product-controlled Shared-device State | the actor requests Clean Product-controlled Shared-device State | Clean Product-controlled Shared-device State returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| AUD-ACT-CLEAN-SHARED-DEVICE-SESSION-SCN-AUDIT_FAILED | FAILURE | AUD-ACT-CLEAN-SHARED-DEVICE-SESSION | AUDIT_FAILED applies to Clean Product-controlled Shared-device State | the actor requests Clean Product-controlled Shared-device State | Clean Product-controlled Shared-device State returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
 
 ## 10. AI 任务映射
 

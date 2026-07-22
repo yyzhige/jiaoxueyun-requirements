@@ -3,18 +3,28 @@ import path from "node:path";
 
 import {
   renderAiTaskRegistry,
+  renderActivityStatusAxisCatalog,
+  renderAiResultStatusAxisCatalog,
+  renderAnswerOpenSurfaceMatrix,
   renderAuthoritativeObjectCatalog,
+  renderBaselineMigrationLog,
   renderCrossRoleMatrix,
   renderDataFlowCatalog,
+  renderDecisionMatrix,
   renderFieldOptionCatalog,
+  renderHighImpactAuthorizationMatrix,
   renderLifecycleAiUsage,
   renderMetricCatalog,
+  renderMetricGroupsLaunchGates,
   renderOwnershipMatrix,
   renderPackageReviewChecklist,
   renderPermissionsMatrix,
   renderSemanticScan,
   renderStateModel,
   renderTraceability,
+  renderProductBaselineTraceability,
+  renderVideoGateQuotaContract,
+  renderWeakNetworkIntentCredential,
 } from "./contracts.mjs";
 import { renderModulePrd } from "./module-prd.mjs";
 import { markdownList, markdownTable, normalizeDocument } from "./markdown.mjs";
@@ -138,7 +148,55 @@ function renderReadme(model) {
       "产品端只有 Web 与 App，角色不与端绑定；App 不要求一比一复制 Web。",
       "AI 一句话能力位于产品内，继承当前学校、身份、学期、职责和数据权限。",
       "正式成绩、学习解释和学科计划的专业确认归对应任课教师；班主任可查看本班全学科并协调，但不能替代他科写入。",
-      "第三方通知、AI 讲题视频和 AI 教学视频为第二阶段扩展。",
+      "第一阶段只交付教学事实底座；AI 评定与个性化教学视频属于第二阶段 PLANNED，长期认知画像与双轨进度属于第三阶段 PLANNED。",
+      "第三方通知渠道暂不进入当前阶段产品合同。",
+    ]),
+  ]);
+}
+
+function renderProductBaselineDocument(model) {
+  return normalizeDocument([
+    "# 知序教学云产品 PRD v2.0",
+    markdownTable(
+      ["属性", "值"],
+      [
+        ["产品基线", model.productBaseline?.version],
+        ["决策状态", model.productBaseline?.decisionState],
+        ["基线日期", model.productBaseline?.baselineDate],
+        ["权威来源", `${path.basename(model.productBaseline?.sourcePath ?? "")}（外部冻结产品基线）`],
+        ["交付状态", model.deliveryState?.statement],
+        ["产品决策", `${list(model.productDecisions).length}（D003-D096）`],
+        ["README 章节追踪", `${list(model.baselineTraceability).length}`],
+      ],
+    ),
+    "## 三阶段产品边界",
+    markdownTable(
+      ["阶段", "名称", "交付状态", "目标", "完成标准", "里程碑边界"],
+      list(model.phases).map((phase) => [
+        phase.id,
+        phase.title,
+        phase.releaseStatus,
+        phase.objective,
+        phase.completionStandard,
+        phase.milestoneBoundary,
+      ]),
+    ),
+    "## 产品硬不变量",
+    markdownList(list(model.productInvariants).map(({ id, statement }) => `${id}: ${statement}`)),
+    "## 六组指标与三类上线门",
+    markdownTable(
+      ["指标组", "定义", "指标"],
+      list(model.metricGroups).map((group) => [group.id, group.definition, list(group.metricIds).join(" / ")]),
+    ),
+    markdownTable(
+      ["上线门", "类型", "Owner", "阻断条件"],
+      list(model.launchGates).map((gate) => [gate.id, gate.gateType, gate.ownerRef, list(gate.blockingConditions).join("<br>")]),
+    ),
+    "## 追踪与迁移",
+    markdownList([
+      "完整章节追踪见 zhixu-handoff-v2.0/02-indexes/product-baseline-v2-traceability.md。",
+      "D003-D096 逐项裁决见 zhixu-handoff-v2.0/02-indexes/D003-D096-decision-matrix.md。",
+      "旧规则到新规则及影响范围见 zhixu-handoff-v2.0/02-indexes/product-baseline-v2-migration-log.md。",
     ]),
   ]);
 }
@@ -189,7 +247,7 @@ function renderReviewStatus(model) {
         ["状态码", model.reviewStatus.code],
         ["状态", model.reviewStatus.label],
         ["评审日期", model.reviewStatus.reviewedAt],
-        ["晋级条件", "全量生成、确定性检查、主闭环人工走查、五项指标可计算、四类权限负向场景通过"],
+        ["晋级条件", "全量生成与确定性检查通过、六组指标均可计算、三类上线门证据闭合、关键权限与异常路径负向场景通过"],
       ],
     ),
   ]);
@@ -261,9 +319,10 @@ function renderOpenDecisions(model) {
     ]))
   ));
   return normalizeDocument([
-    "# 开放产品决策",
+    "# 后续阶段开放产品决策（不影响 v2.0 定版）",
+    "D003-D096 与当前产品基线决策已全部关闭；下表只登记明确推迟到后续阶段产品评审的扩展问题，不进入第一阶段发布清单，也不把 PLANNED 能力表述为已上线。",
     rows.length === 0
-      ? "当前事实源没有未决产品问题。"
+      ? "当前事实源没有后续阶段未决产品问题。"
       : markdownTable(["模块", "对象", "未决问题", "关闭门禁"], rows),
   ]);
 }
@@ -340,7 +399,16 @@ function renderGovernance(model) {
       "每个下拉和选择必须有稳定 Option Set 或授权运行时查询；不允许页面写死未经登记的值。",
       "数据流必须显式描述源对象、源版本、步骤、目标对象、幂等键、对象级失败、重试和下游失效。",
       "AI 能力按查询、分析、草稿、临时报告、定期任务和受控动作分级；写入必须预览、确认和审计。",
+      "追踪轴的适用性必须由权威源独立声明；引用为空不能自动推导为 N/A，N/A 必须有闭集原因码和可审查理由。",
+      "同一迁移记录包含多个决策时，必须逐决策登记直接影响；禁止把迁移组并集复制成每个决策的影响范围。",
+      "追踪中的模块、页面、Flow、对象、动作、权限、状态、指标、场景和测试 ID 必须解析到真实注册项；状态码与测试文件也必须精确存在。",
+      "动作进入某项决策追踪时，必须同时追踪动作所属模块和目标对象；单个 ID 可解析不代表跨轴关系已经闭合。",
+      "涉及授权、开放时间、弱网按时、删除、转学、商业保护和 AI 发布的边界必须默认拒绝；每条正向合同都要有破坏性负向测试证明不能绕过。",
+      "相互独立的业务维度必须分轴建模；不得为了页面方便把治理、开放、参与、时间、处理、发布、纠正或有效性压成单一状态。",
+      "当前基线已关闭的决策与后续阶段待评审扩展必须分层表达；不得把未来扩展问题呈现成当前基线尚未完成。",
+      "生成产物只能暴露仓库相对链接或稳定来源标识；不得渲染本机绝对路径、临时目录、访问密钥或其他环境私有值。",
       "生成文档不是事实源；所有缺陷回到 facts、validators 或 renderers 修复后重生成。",
+      "完成定义同时要求模型校验、语义与权限测试、生成确定性、链接与占位符扫描、旧规则扫描和独立复审通过；任一门禁失败都不得宣称需求包完成。",
       `当前事实模型包含 ${list(model.modules).length} 个模块和 ${list(model.flows).length} 条 Flow。`,
     ]),
   ]);
@@ -391,6 +459,9 @@ export function buildRequirementArtifacts(model) {
   add(`${REQUIREMENT_PACKAGE_ROOT}/02-indexes/open-product-decisions.md`, renderOpenDecisions(model));
   add(`${REQUIREMENT_PACKAGE_ROOT}/02-indexes/page-prototype-map.md`, renderPageMap(model));
   add(`${REQUIREMENT_PACKAGE_ROOT}/02-indexes/requirement-traceability.md`, renderTraceability(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/02-indexes/product-baseline-v2-traceability.md`, renderProductBaselineTraceability(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/02-indexes/D003-D096-decision-matrix.md`, renderDecisionMatrix(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/02-indexes/product-baseline-v2-migration-log.md`, renderBaselineMigrationLog(model));
 
   for (const module of model.modules) {
     add(prdPath(module), renderModulePrd(module, model));
@@ -405,6 +476,13 @@ export function buildRequirementArtifacts(model) {
   add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/field-option-catalog.md`, renderFieldOptionCatalog(model));
   add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/permissions-matrix.md`, renderPermissionsMatrix(model));
   add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/success-metric-catalog.md`, renderMetricCatalog(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/activity-status-axis-catalog.md`, renderActivityStatusAxisCatalog(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/ai-result-status-axis-catalog.md`, renderAiResultStatusAxisCatalog(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/high-impact-authorization-matrix.md`, renderHighImpactAuthorizationMatrix(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/weak-network-intent-credential.md`, renderWeakNetworkIntentCredential(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/answer-open-surface-matrix.md`, renderAnswerOpenSurfaceMatrix(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/video-gate-quota-contract.md`, renderVideoGateQuotaContract(model));
+  add(`${REQUIREMENT_PACKAGE_ROOT}/04-data-contracts/metric-groups-launch-gates.md`, renderMetricGroupsLaunchGates(model));
   add(`${REQUIREMENT_PACKAGE_ROOT}/06-ai-contracts/ai-conversation-task-execution.md`, renderAiTaskRegistry(model));
   add(`${REQUIREMENT_PACKAGE_ROOT}/06-ai-contracts/reports-learning-path-contract.md`, renderAiReportPathContract(model));
   add(`${REQUIREMENT_PACKAGE_ROOT}/07-review-checklists/completeness-scan-report.md`, renderSemanticScan(model));
@@ -415,6 +493,7 @@ export function buildRequirementArtifacts(model) {
   add(`${REQUIREMENT_PACKAGE_ROOT}/12-message-to-backend-rd.zh-CN.md`, renderHandoff("给后端研发的交接", "后端与数据实现团队", model, "以对象责任、状态转换、动作输入输出、权限、幂等、审计和 Flow 版本合同为服务端边界。"));
   add(`${REQUIREMENT_PACKAGE_ROOT}/13-message-to-pm.zh-CN.md`, renderHandoff("给产品经理的交接", "产品经理与教研评审", model, "以基线决策、模块目标、开放决策、业务失败因果语义和验收场景完成产品评审。"));
   add(`${REQUIREMENT_PACKAGE_ROOT}/14-message-to-qa.zh-CN.md`, renderHandoff("给测试团队的交接", "测试与质量团队", model, "把每个 Scenario、失败码、权限 DENY、版本冲突和 Flow 补偿转为正向与负向自动化用例。"));
+  add("docs/product/zhixu-teaching-cloud-prd-v2.0.md", renderProductBaselineDocument(model));
 
   artifacts.sort((left, right) => left.path.localeCompare(right.path));
   const paths = artifacts.map((artifact) => artifact.path);

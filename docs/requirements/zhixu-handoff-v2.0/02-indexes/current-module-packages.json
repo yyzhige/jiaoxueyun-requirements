@@ -1,14 +1,37 @@
 {
   "reviewStatus": {
-    "code": "PRODUCT_FACT_SOURCE_SEMANTIC_REVIEW_PASSED",
-    "label": "v2.0 product fact source; semantic review passed",
-    "reviewedAt": "2026-07-16"
+    "code": "PRODUCT_BASELINE_V2_FINALIZED_PRD_REVIEW_PASSED",
+    "label": "v2.0 finalized product baseline; production PRD semantic review passed",
+    "reviewedAt": "2026-07-20"
   },
+  "currentReleaseModuleIds": [
+    "ACC-001",
+    "ORG-001",
+    "IAM-001",
+    "DGV-001",
+    "AUD-001",
+    "CURR-001",
+    "TEA-001",
+    "HW-001",
+    "SUB-001",
+    "SCO-001",
+    "APP-001",
+    "STU-001",
+    "RPT-001",
+    "NOTI-001",
+    "PREP-001",
+    "CONTENT-001",
+    "EXM-001",
+    "SCH-001",
+    "PLAT-001"
+  ],
   "modules": [
     {
       "id": "ACC-001",
-      "title": "School entry, login, and active context",
+      "title": "School activation, identity, login, and active context",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/01-school-entry-access_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/01-school-entry-access-wireframe.zh-CN.md",
@@ -16,7 +39,21 @@
         "ACC-OBJ-SCHOOL",
         "ACC-OBJ-MEMBERSHIP",
         "ACC-OBJ-IDENTITY",
-        "ACC-OBJ-CONTEXT"
+        "ACC-OBJ-SCHOOL-ACTIVATION",
+        "ACC-OBJ-PLATFORM-IDENTITY",
+        "ACC-OBJ-LOGIN-ACCOUNT",
+        "ACC-OBJ-SCHOOL-PROFILE",
+        "ACC-OBJ-STUDENT-PRIMARY-ACCOUNT",
+        "ACC-OBJ-ADMIN-RECOVERY",
+        "ACC-OBJ-CONTEXT",
+        "ACC-OBJ-CAMPUS",
+        "ACC-OBJ-EDUCATION-GROUP",
+        "ACC-OBJ-SCHOOL-NAME-VERSION",
+        "ACC-OBJ-SCHOOL-REORGANIZATION",
+        "ACC-OBJ-SCHOOL-APPLICATION-REVIEW",
+        "ACC-OBJ-SCHOOL-INITIALIZATION",
+        "ACC-OBJ-SCHOOL-SUBSCRIPTION",
+        "ACC-OBJ-CLASS-COURSE-READINESS"
       ],
       "actionIds": [
         "ACC-ACT-SYNC-SCHOOL",
@@ -31,20 +68,86 @@
         "ACC-ACT-SELECT-TERM",
         "ACC-ACT-SWITCH-CONTEXT",
         "ACC-ACT-EXPIRE-CONTEXT",
-        "ACC-ACT-INVALIDATE-CONTEXT"
+        "ACC-ACT-INVALIDATE-CONTEXT",
+        "ACC-ACT-SUBMIT-SCHOOL-APPLICATION",
+        "ACC-ACT-PLATFORM-REVIEW-SCHOOL-SUBJECT",
+        "ACC-ACT-REJECT-SCHOOL-SUBJECT",
+        "ACC-ACT-FIRST-ADMIN-ACCEPT-AUTHORIZATION",
+        "ACC-ACT-VALIDATE-SCHOOL-INITIALIZATION",
+        "ACC-ACT-ACTIVATE-SCHOOL-TEACHING",
+        "ACC-ACT-REGISTER-PLATFORM-IDENTITY",
+        "ACC-ACT-REQUEST-IDENTITY-DELETION",
+        "ACC-ACT-FREEZE-IDENTITY-DELETION",
+        "ACC-ACT-RESUME-IDENTITY-DELETION",
+        "ACC-ACT-COMPLETE-IDENTITY-DELETION",
+        "ACC-ACT-CREATE-LOGIN-ACCOUNT",
+        "ACC-ACT-UPDATE-LOGIN-IDENTIFIERS",
+        "ACC-ACT-LOCK-LOGIN-ACCOUNT",
+        "ACC-ACT-UNLOCK-LOGIN-ACCOUNT",
+        "ACC-ACT-DELETE-LOGIN-ACCOUNT",
+        "ACC-ACT-CREATE-SCHOOL-PROFILE",
+        "ACC-ACT-ACTIVATE-SCHOOL-PROFILE",
+        "ACC-ACT-END-SCHOOL-PROFILE",
+        "ACC-ACT-CREATE-STUDENT-PRIMARY-ACCOUNT-RELATION",
+        "ACC-ACT-ACTIVATE-STUDENT-PRIMARY-ACCOUNT",
+        "ACC-ACT-END-STUDENT-PRIMARY-ACCOUNT",
+        "ACC-ACT-REQUEST-ADMIN-RECOVERY",
+        "ACC-ACT-SECOND-AUTHORIZE-SINGLE-ADMIN-RECOVERY",
+        "ACC-ACT-CONFIRM-DUAL-ADMIN-RECOVERY",
+        "ACC-ACT-DENY-ADMIN-RECOVERY",
+        "ACC-ACT-EXECUTE-ADMIN-RECOVERY",
+        "ACC-ACT-REGISTER-CAMPUS",
+        "ACC-ACT-REGISTER-EDUCATION-GROUP",
+        "ACC-ACT-RECORD-SCHOOL-NAME-VERSION",
+        "ACC-ACT-REQUEST-SCHOOL-REORGANIZATION",
+        "ACC-ACT-AUTHORIZE-SCHOOL-REORGANIZATION",
+        "ACC-ACT-EXECUTE-SCHOOL-REORGANIZATION",
+        "ACC-ACT-END-CAMPUS",
+        "ACC-ACT-END-EDUCATION-GROUP",
+        "ACC-ACT-SUPERSEDE-SCHOOL-NAME",
+        "ACC-ACT-DENY-SCHOOL-REORGANIZATION",
+        "ACC-ACT-RESOLVE-SCHOOL-DATA-BOUNDARY",
+        "ACC-ACT-CREATE-SCHOOL-APPLICATION-REVIEW",
+        "ACC-ACT-APPROVE-SCHOOL-APPLICATION-REVIEW",
+        "ACC-ACT-REJECT-SCHOOL-APPLICATION-REVIEW",
+        "ACC-ACT-CREATE-SCHOOL-INITIALIZATION",
+        "ACC-ACT-VALIDATE-INDEPENDENT-INITIALIZATION",
+        "ACC-ACT-MARK-INDEPENDENT-INITIALIZATION-READY",
+        "ACC-ACT-CREATE-SCHOOL-SUBSCRIPTION",
+        "ACC-ACT-ACTIVATE-SCHOOL-SUBSCRIPTION",
+        "ACC-ACT-CREATE-CLASS-COURSE-READINESS",
+        "ACC-ACT-MARK-CLASS-COURSE-READY",
+        "ACC-ACT-BLOCK-SCHOOL-INITIALIZATION",
+        "ACC-ACT-RESTRICT-SCHOOL-SUBSCRIPTION",
+        "ACC-ACT-END-SCHOOL-SUBSCRIPTION",
+        "ACC-ACT-BLOCK-CLASS-COURSE-READINESS",
+        "ACC-ACT-CREATE-INVITED-MEMBERSHIP-FROM-DIRECTORY",
+        "ACC-ACT-TERMINATE-OLD-SCHOOL-MEMBERSHIP",
+        "ACC-ACT-CREATE-PENDING-NEW-SCHOOL-MEMBERSHIP",
+        "ACC-ACT-ACTIVATE-NEW-SCHOOL-MEMBERSHIP"
       ],
       "pageIds": [
         "ACC-PAGE-SCHOOL-ENTRY",
         "ACC-PAGE-LOGIN-ACTIVATION",
         "ACC-PAGE-IDENTITY-TERM",
         "ACC-PAGE-CONTEXT-SWITCH",
-        "ACC-PAGE-CONTEXT-RECOVERY"
+        "ACC-PAGE-CONTEXT-RECOVERY",
+        "ACC-PAGE-SCHOOL-ACTIVATION",
+        "ACC-PAGE-PLATFORM-IDENTITY",
+        "ACC-PAGE-LOGIN-ACCOUNT",
+        "ACC-PAGE-SCHOOL-PROFILE",
+        "ACC-PAGE-ADMIN-RECOVERY",
+        "ACC-PAGE-SCHOOL-GOVERNANCE-ENTITY",
+        "ACC-PAGE-SCHOOL-READINESS-AXES",
+        "ACC-PAGE-STUDENT-TRANSFER-MEMBERSHIP"
       ]
     },
     {
       "id": "ORG-001",
-      "title": "Organization, members, and import",
+      "title": "Organization, members, teaching relations, and import",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/02-organization-members-import_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/02-organization-members-import-wireframe.zh-CN.md",
@@ -58,6 +161,7 @@
         "ORG-OBJ-STUDENT",
         "ORG-OBJ-TEACHING-ASSIGNMENT",
         "ORG-OBJ-HOMEROOM-ASSIGNMENT",
+        "ORG-OBJ-SUBSTITUTE-TEACHING-RELATION",
         "ORG-OBJ-IMPORT-BATCH",
         "ORG-OBJ-IMPORT-ROW"
       ],
@@ -95,6 +199,10 @@
         "ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT",
         "ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT",
         "ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT",
+        "ORG-ACT-CREATE-SUBSTITUTE-RELATION",
+        "ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION",
+        "ORG-ACT-EXPIRE-SUBSTITUTE-RELATION",
+        "ORG-ACT-REVOKE-SUBSTITUTE-RELATION",
         "ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE",
         "ORG-ACT-UPLOAD-IMPORT",
         "ORG-ACT-MAP-IMPORT-FIELDS",
@@ -119,14 +227,17 @@
         "ORG-PAGE-IMPORT-MAPPING",
         "ORG-PAGE-IMPORT-RESULT",
         "ORG-PAGE-TEACHING-ASSIGNMENT",
+        "ORG-PAGE-SUBSTITUTE-RELATION",
         "ORG-PAGE-APP-MY-TEACHING-SCOPE",
         "ORG-PAGE-APP-IMPORT-RESULT"
       ]
     },
     {
       "id": "IAM-001",
-      "title": "Identity, duty, and data scope",
+      "title": "Relationship authorization, guardian assistance, and high-impact control",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/03-identity-permission-scope_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/03-identity-permission-scope-wireframe.zh-CN.md",
@@ -135,7 +246,13 @@
         "IAM-OBJ-DUTY-GRANT",
         "IAM-OBJ-SCOPE-GRANT",
         "IAM-OBJ-PERMISSION-DECISION",
-        "IAM-OBJ-TEMP-GRANT"
+        "IAM-OBJ-TEMP-GRANT",
+        "IAM-OBJ-GUARDIAN-RELATION",
+        "IAM-OBJ-SCHOOL-DATA-AUTHORIZATION",
+        "IAM-OBJ-TASK-ASSISTANCE-SESSION",
+        "IAM-OBJ-HIGH-IMPACT-AUTHORIZATION",
+        "IAM-OBJ-GUARDIAN-DISPUTE",
+        "IAM-OBJ-STUDENT-SCHOOL-DATA-AUTHORIZATION"
       ],
       "actionIds": [
         "IAM-ACT-SYNC-ROLE-POLICY",
@@ -155,20 +272,55 @@
         "IAM-ACT-EVALUATE-PERMISSION",
         "IAM-ACT-MARK-PERMISSION-STALE",
         "IAM-ACT-REPLAY-DECISION",
-        "IAM-ACT-RECALCULATE-PERMISSIONS"
+        "IAM-ACT-RECALCULATE-PERMISSIONS",
+        "IAM-ACT-REQUEST-GUARDIAN-RELATION",
+        "IAM-ACT-CONFIRM-GUARDIAN-RELATION",
+        "IAM-ACT-DISPUTE-GUARDIAN-RELATION",
+        "IAM-ACT-END-GUARDIAN-RELATION",
+        "IAM-ACT-CREATE-SCHOOL-DATA-AUTHORIZATION",
+        "IAM-ACT-ACTIVATE-SCHOOL-DATA-AUTHORIZATION",
+        "IAM-ACT-REVOKE-SCHOOL-DATA-AUTHORIZATION",
+        "IAM-ACT-OPEN-TASK-ASSISTANCE-SESSION",
+        "IAM-ACT-RECORD-TASK-ASSISTANCE",
+        "IAM-ACT-EXPIRE-TASK-ASSISTANCE-SESSION",
+        "IAM-ACT-REVOKE-TASK-ASSISTANCE-SESSION",
+        "IAM-ACT-REQUEST-HIGH-IMPACT-AUTHORIZATION",
+        "IAM-ACT-AUTHORIZE-HIGH-IMPACT-ACTION",
+        "IAM-ACT-FREEZE-HIGH-IMPACT-ACTION",
+        "IAM-ACT-RESUME-HIGH-IMPACT-ACTION",
+        "IAM-ACT-EXECUTE-HIGH-IMPACT-ACTION",
+        "IAM-ACT-REJECT-HIGH-IMPACT-ACTION",
+        "IAM-ACT-RAISE-GUARDIAN-DISPUTE",
+        "IAM-ACT-FREEZE-GUARDIAN-DISPUTE",
+        "IAM-ACT-RESOLVE-GUARDIAN-DISPUTE",
+        "IAM-ACT-REJECT-GUARDIAN-DISPUTE",
+        "IAM-ACT-TERMINATE-OLD-SCHOOL-STUDENT-DATA-AUTHORIZATION",
+        "IAM-ACT-REVOKE-OLD-SCHOOL-GUARDIAN-DELEGATIONS",
+        "IAM-ACT-CREATE-PENDING-NEW-SCHOOL-STUDENT-DATA-AUTHORIZATION",
+        "IAM-ACT-ACTIVATE-NEW-SCHOOL-STUDENT-DATA-AUTHORIZATION",
+        "IAM-ACT-INVALIDATE-TRANSFERRED-STUDENT-PERMISSIONS",
+        "IAM-ACT-RESERVE-HIGH-IMPACT-AUTHORIZATION"
       ],
       "pageIds": [
         "IAM-PAGE-POLICY",
         "IAM-PAGE-DUTY-GRANT",
         "IAM-PAGE-SCOPE-GRANT",
         "IAM-PAGE-TEMP-GRANT",
-        "IAM-PAGE-REPLAY"
+        "IAM-PAGE-REPLAY",
+        "IAM-PAGE-GUARDIAN-RELATION",
+        "IAM-PAGE-SCHOOL-DATA-AUTHORIZATION",
+        "IAM-PAGE-TASK-ASSISTANCE",
+        "IAM-PAGE-HIGH-IMPACT-AUTHORIZATION",
+        "IAM-PAGE-GUARDIAN-DISPUTE",
+        "IAM-PAGE-STUDENT-SCHOOL-DATA-AUTHORIZATION"
       ]
     },
     {
       "id": "DGV-001",
-      "title": "Governance, lifecycle, and AI data use",
+      "title": "Governance, lifecycle, transfer, export, and data rights",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/04-data-governance-ai-usage_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/04-data-governance-ai-usage-wireframe.zh-CN.md",
@@ -176,7 +328,16 @@
         "DGV-OBJ-POLICY",
         "DGV-OBJ-RETENTION",
         "DGV-OBJ-AI-RULE",
-        "DGV-OBJ-EXPORT"
+        "DGV-OBJ-EXPORT",
+        "DGV-OBJ-TRANSFER-AUTHORIZATION",
+        "DGV-OBJ-OLD-SCHOOL-RESTRICTED-HISTORY",
+        "DGV-OBJ-TEACHER-AUTHOR-SURROGATE",
+        "DGV-OBJ-DATA-CATALOG-ENTRY",
+        "DGV-OBJ-DATA-GOVERNANCE-CASE",
+        "DGV-OBJ-STUDENT-DELETION-CASE",
+        "DGV-OBJ-STUDENT-DELETION-INVENTORY-SNAPSHOT",
+        "DGV-OBJ-STUDENT-DELETION-DECISION",
+        "DGV-OBJ-STUDENT-DELETION-MATRIX-SNAPSHOT"
       ],
       "actionIds": [
         "DGV-ACT-SYNC-POLICY",
@@ -192,7 +353,44 @@
         "DGV-ACT-GENERATE-EXPORT",
         "DGV-ACT-COMPLETE-EXPORT",
         "DGV-ACT-FAIL-EXPORT",
-        "DGV-ACT-EXPIRE-EXPORT"
+        "DGV-ACT-EXPIRE-EXPORT",
+        "DGV-ACT-DOWNLOAD-ROLE-BOUND-FILE",
+        "DGV-ACT-REQUEST-STUDENT-TRANSFER",
+        "DGV-ACT-AUTHORIZE-STUDENT-TRANSFER",
+        "DGV-ACT-FREEZE-STUDENT-TRANSFER",
+        "DGV-ACT-EXECUTE-STUDENT-TRANSFER",
+        "DGV-ACT-DENY-STUDENT-TRANSFER",
+        "DGV-ACT-CREATE-OLD-SCHOOL-HISTORY-RESTRICTION",
+        "DGV-ACT-VIEW-OLD-SCHOOL-RESTRICTED-HISTORY",
+        "DGV-ACT-DEIDENTIFY-OLD-SCHOOL-HISTORY",
+        "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE",
+        "DGV-ACT-REGISTER-DATA-CATALOG",
+        "DGV-ACT-ACTIVATE-DATA-CATALOG",
+        "DGV-ACT-SUPERSEDE-DATA-CATALOG",
+        "DGV-ACT-RESOLVE-DATA-CATALOG",
+        "DGV-ACT-CORRECT-DATA",
+        "DGV-ACT-RESTRICT-DATA-ACCESS",
+        "DGV-ACT-PHYSICALLY-DELETE-DATA",
+        "DGV-ACT-IRREVERSIBLY-DEIDENTIFY-DATA",
+        "DGV-ACT-CAPTURE-STUDENT-DELETION-INVENTORY",
+        "DGV-ACT-EVALUATE-STUDENT-DELETION-MATRIX",
+        "DGV-ACT-START-STUDENT-DELETION-MATRIX-SNAPSHOT",
+        "DGV-ACT-COMPLETE-STUDENT-DELETION-MATRIX-SNAPSHOT",
+        "DGV-ACT-BLOCK-STUDENT-DELETION-MATRIX-SNAPSHOT",
+        "DGV-ACT-REQUEST-STUDENT-DELETION",
+        "DGV-ACT-FREEZE-STUDENT-DELETION",
+        "DGV-ACT-RESUME-STUDENT-DELETION",
+        "DGV-ACT-FINALIZE-STUDENT-DELETION-MATRIX",
+        "DGV-ACT-EXECUTE-STUDENT-DELETION-MATRIX",
+        "DGV-ACT-COMPLETE-STUDENT-DELETION-MATRIX",
+        "DGV-ACT-FAIL-STUDENT-DELETION-MATRIX",
+        "DGV-ACT-REGISTER-STUDENT-DELETION-DECISION",
+        "DGV-ACT-AUTHORIZE-STUDENT-DELETION-DECISION",
+        "DGV-ACT-FREEZE-STUDENT-DELETION-DECISION",
+        "DGV-ACT-EXECUTE-STUDENT-DELETION-DECISION",
+        "DGV-ACT-COMPLETE-STUDENT-DELETION-DECISION",
+        "DGV-ACT-FAIL-STUDENT-DELETION-DECISION",
+        "DGV-ACT-COMPLETE-STUDENT-TRANSFER"
       ],
       "pageIds": [
         "DGV-PAGE-POLICY",
@@ -201,13 +399,20 @@
         "DGV-PAGE-EXPORT-REQUEST",
         "DGV-PAGE-EXPORT-DECISION",
         "DGV-PAGE-EXPORT-RESULT",
-        "DGV-PAGE-EXPORT-NOTIFICATION"
+        "DGV-PAGE-EXPORT-NOTIFICATION",
+        "DGV-PAGE-STUDENT-TRANSFER",
+        "DGV-PAGE-OLD-SCHOOL-HISTORY",
+        "DGV-PAGE-DATA-CATALOG",
+        "DGV-PAGE-GOVERNANCE-ACTIONS",
+        "DGV-PAGE-STUDENT-DELETION-MATRIX"
       ]
     },
     {
       "id": "AUD-001",
-      "title": "Audit and sensitive access",
+      "title": "Audit, sensitive access, and shared-device protection",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/05-audit-sensitive-access_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/05-audit-sensitive-access-wireframe.zh-CN.md",
@@ -215,7 +420,8 @@
         "AUD-OBJ-EVENT",
         "AUD-OBJ-ACCESS-REQUEST",
         "AUD-OBJ-ACCESS-SESSION",
-        "AUD-OBJ-REVIEW"
+        "AUD-OBJ-REVIEW",
+        "AUD-OBJ-SHARED-DEVICE-SESSION"
       ],
       "actionIds": [
         "AUD-ACT-APPEND-EVENT",
@@ -232,20 +438,25 @@
         "AUD-ACT-INVESTIGATE-REVIEW",
         "AUD-ACT-RESOLVE-REVIEW",
         "AUD-ACT-CLOSE-REVIEW",
-        "AUD-ACT-EXPORT-SUMMARY"
+        "AUD-ACT-EXPORT-SUMMARY",
+        "AUD-ACT-START-SHARED-DEVICE-SESSION",
+        "AUD-ACT-CLEAN-SHARED-DEVICE-SESSION"
       ],
       "pageIds": [
         "AUD-PAGE-SEARCH",
         "AUD-PAGE-ACCESS-REQUEST",
         "AUD-PAGE-ACCESS-APPROVAL",
         "AUD-PAGE-ACTIVE-SESSION",
-        "AUD-PAGE-REVIEW"
+        "AUD-PAGE-REVIEW",
+        "AUD-PAGE-SHARED-DEVICE"
       ]
     },
     {
       "id": "CURR-001",
       "title": "Curriculum, textbook, and knowledge map",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/06-curriculum-knowledge-map_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/06-curriculum-knowledge-map-wireframe.zh-CN.md",
@@ -291,13 +502,19 @@
       "id": "TEA-001",
       "title": "Teacher and homeroom workbench",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/07-teacher-homeroom-workbench_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/07-teacher-homeroom-workbench-wireframe.zh-CN.md",
       "objectIds": [
         "TEA-OBJ-TODO-VIEW",
         "TEA-OBJ-COORDINATION",
-        "TEA-OBJ-PREFERENCE"
+        "TEA-OBJ-PREFERENCE",
+        "TEA-OBJ-TEACHING-PROBLEM",
+        "TEA-OBJ-TEACHER-JUDGMENT",
+        "TEA-OBJ-LINKED-TEACHING-ACTION",
+        "TEA-OBJ-EXPERIENCE-RESOLUTION"
       ],
       "actionIds": [
         "TEA-ACT-SYNC-TODO-VIEW",
@@ -309,36 +526,78 @@
         "TEA-ACT-CANCEL-COORDINATION",
         "TEA-ACT-CREATE-PREFERENCE",
         "TEA-ACT-UPDATE-PREFERENCE",
-        "TEA-ACT-SUPERSEDE-PREFERENCE"
+        "TEA-ACT-SUPERSEDE-PREFERENCE",
+        "TEA-ACT-CREATE-TEACHING-PROBLEM",
+        "TEA-ACT-CONFIRM-PROBLEM",
+        "TEA-ACT-DEFER-PROBLEM",
+        "TEA-ACT-OBSERVE-PROBLEM",
+        "TEA-ACT-RECORD-TEACHER-JUDGMENT",
+        "TEA-ACT-CREATE-LINKED-ACTION",
+        "TEA-ACT-PLAN-LINKED-ACTION",
+        "TEA-ACT-START-LINKED-ACTION",
+        "TEA-ACT-COMPLETE-LINKED-ACTION",
+        "TEA-ACT-OBSERVE-LINKED-ACTION",
+        "TEA-ACT-CANCEL-LINKED-ACTION",
+        "TEA-ACT-RESOLVE-PROBLEM-AFTER-OBSERVATION",
+        "TEA-ACT-REOPEN-PROBLEM",
+        "TEA-ACT-QUERY-ACTION-QUEUE",
+        "TEA-ACT-QUERY-CLASS-INSIGHT",
+        "TEA-ACT-QUERY-STUDENT-DETAIL",
+        "TEA-ACT-RESOLVE-TEACHER-EXPERIENCE",
+        "TEA-ACT-RESOLVE-SCHOOL-ADMIN-EXPERIENCE",
+        "TEA-ACT-RESOLVE-ACCESSIBLE-PRESENTATION",
+        "TEA-ACT-INVALIDATE-EXPERIENCE-RESOLUTION"
       ],
       "pageIds": [
         "TEA-PAGE-TODAY",
         "TEA-PAGE-QUEUE",
+        "TEA-PAGE-CLASS-INSIGHT",
+        "TEA-PAGE-STUDENT-DETAIL",
         "TEA-PAGE-HOMEROOM",
         "TEA-PAGE-COORDINATION",
-        "TEA-PAGE-PREFERENCE"
+        "TEA-PAGE-PREFERENCE",
+        "TEA-PAGE-ROLE-EXPERIENCE"
       ]
     },
     {
       "id": "HW-001",
       "title": "Assignment Authoring and Publication",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/08-assignment-create-release_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/08-assignment-create-release-wireframe.zh-CN.md",
       "objectIds": [
+        "HW-OBJ-SCHOOL-TIME-POLICY",
+        "HW-OBJ-HELP-RULE",
+        "HW-OBJ-PUBLICATION-SNAPSHOT",
         "HW-OBJ-ASSIGNMENT",
         "HW-OBJ-ITEM",
-        "HW-OBJ-RUBRIC"
+        "HW-OBJ-RUBRIC",
+        "HW-OBJ-STUDENT-ACTIVITY-WINDOW"
       ],
       "actionIds": [
+        "HW-ACT-CREATE-SCHOOL-TIME-POLICY",
+        "HW-ACT-SUPERSEDE-SCHOOL-TIME-POLICY",
+        "HW-ACT-INVALIDATE-SCHOOL-TIME-POLICY",
+        "HW-ACT-REVOKE-SCHOOL-TIME-POLICY",
+        "HW-ACT-CREATE-HELP-RULE",
+        "HW-ACT-PUBLISH-HELP-RULE",
+        "HW-ACT-CREATE-PUBLICATION-SNAPSHOT",
+        "HW-ACT-CREATE-PUBLISHED-STUDENT-WINDOW",
+        "HW-ACT-CREATE-LATE-ENROLLEE-WINDOW",
+        "HW-ACT-MARK-STUDENT-WINDOW-IN-PROGRESS",
+        "HW-ACT-MARK-STUDENT-WINDOW-SUBMITTED",
+        "HW-ACT-ADVANCE-STUDENT-WINDOW-TIME",
+        "HW-ACT-VIEW-STUDENT-ACTIVITY-WINDOW",
         "HW-ACT-SYNC-RUBRIC",
         "HW-ACT-CREATE-DRAFT",
         "HW-ACT-CREATE-ITEM",
+        "HW-ACT-CONFIGURE-DIAGNOSTIC-LATE-ENROLLEE-WINDOW",
         "HW-ACT-EDIT-ITEM",
         "HW-ACT-VALIDATE-ITEM",
         "HW-ACT-VALIDATE",
-        "HW-ACT-REVALIDATE-ITEM",
         "HW-ACT-REVALIDATE-REVISION",
         "HW-ACT-PREVIEW",
         "HW-ACT-PUBLISH-ITEM",
@@ -346,33 +605,56 @@
         "HW-ACT-SCHEDULE-PUBLISH",
         "HW-ACT-PUBLISH-SCHEDULED",
         "HW-ACT-CLOSE",
-        "HW-ACT-REVISE",
-        "HW-ACT-REVISE-ITEM",
+        "HW-ACT-ARCHIVE",
+        "HW-ACT-UNARCHIVE",
+        "HW-ACT-CANCEL-ADMINISTRATIVE",
+        "HW-ACT-CANCEL-CONTENT-RIGHT-ERROR",
+        "HW-ACT-CANCEL-FOR-REPLACEMENT",
+        "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+        "HW-ACT-PUBLISH-REPLACEMENT",
+        "HW-ACT-VERSION-NON-SEMANTIC-CORRECTION",
+        "HW-ACT-VERSION-ASSESSMENT-STANDARD-CORRECTION",
         "HW-ACT-OPEN-PUBLISHED",
         "HW-ACT-RESOLVE-GRADING-SNAPSHOT"
       ],
       "pageIds": [
         "HW-PAGE-AUTHORING",
-        "HW-PAGE-STUDENT"
+        "HW-PAGE-STUDENT",
+        "HW-PAGE-SCHOOL-TIME-POLICY",
+        "HW-PAGE-HELP-RULE",
+        "HW-PAGE-STUDENT-ACTIVITY-WINDOW"
       ]
     },
     {
       "id": "SUB-001",
       "title": "Student Answering and Submission",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/09-student-answer-submit_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/09-student-answer-submit-wireframe.zh-CN.md",
       "objectIds": [
         "SUB-OBJ-DRAFT",
-        "SUB-OBJ-ATTEMPT"
+        "SUB-OBJ-ATTEMPT",
+        "SUB-OBJ-PLATFORM-FAILURE-INCIDENT-SNAPSHOT",
+        "SUB-OBJ-INTENT-CREDENTIAL",
+        "SUB-OBJ-INPUT-QUALITY"
       ],
       "actionIds": [
+        "SUB-ACT-REGISTER-PLATFORM-FAILURE-INCIDENT",
+        "SUB-ACT-ISSUE-INTENT-CREDENTIAL",
+        "SUB-ACT-COMPLETE-MANIFEST-INTENT",
+        "SUB-ACT-REJECT-MANIFEST-CHANGE",
+        "SUB-ACT-EXPIRE-INTENT-CREDENTIAL",
+        "SUB-ACT-RECORD-PLATFORM-FAILURE-PROTECTION",
+        "SUB-ACT-RECORD-INPUT-QUALITY",
         "SUB-ACT-SAVE-DRAFT",
         "SUB-ACT-UPLOAD-CHUNK",
         "SUB-ACT-RETRY-UPLOAD",
         "SUB-ACT-MARK-DRAFT-READY",
         "SUB-ACT-SUBMIT",
+        "SUB-ACT-SUBMIT-PROTECTED",
         "SUB-ACT-RESUBMIT",
         "SUB-ACT-VIEW-RECEIPT",
         "SUB-ACT-HANDOFF-ACCEPTED"
@@ -384,14 +666,18 @@
     },
     {
       "id": "GRD-001",
-      "title": "Grading Routing and Teacher Decision",
-      "phase": 1,
+      "title": "AI Assessment and Completion Determination",
+      "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/10-ai-grading-review_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/10-ai-grading-review-wireframe.zh-CN.md",
       "objectIds": [
         "GRD-OBJ-CAPABILITY-RULE",
-        "GRD-OBJ-DECISION"
+        "GRD-OBJ-DECISION",
+        "GRD-OBJ-ASSESSMENT-STANDARD-VERSION",
+        "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION"
       ],
       "actionIds": [
         "GRD-ACT-SYNC-CAPABILITY-RULE",
@@ -407,7 +693,10 @@
         "GRD-ACT-BATCH-CONFIRM",
         "GRD-ACT-OPEN-CONFIRMED-REVISION",
         "GRD-ACT-CONFIRM-REVISION",
-        "GRD-ACT-RESOLVE-VERSION-CONFLICT"
+        "GRD-ACT-RESOLVE-VERSION-CONFLICT",
+        "GRD-ACT-GENERATE-FROZEN-ASSESSMENT-STANDARD",
+        "GRD-ACT-CHECK-PHASE-TWO-ASSESSMENT-READINESS",
+        "GRD-ACT-CLASSIFY-INITIAL-ATTEMPT"
       ],
       "pageIds": [
         "GRD-PAGE-DECISION"
@@ -415,8 +704,10 @@
     },
     {
       "id": "PUB-001",
-      "title": "Result Publication and Correction",
-      "phase": 1,
+      "title": "AI Assessment Publication, Feedback, and Result Correction",
+      "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/11-result-publish-correction_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/11-result-publish-correction-wireframe.zh-CN.md",
@@ -424,7 +715,8 @@
         "PUB-OBJ-BATCH",
         "PUB-OBJ-PREVIEW",
         "PUB-OBJ-RESULT",
-        "PUB-OBJ-DEPENDENCY-SNAPSHOT"
+        "PUB-OBJ-DEPENDENCY-SNAPSHOT",
+        "PUB-OBJ-RESULT-CHALLENGE"
       ],
       "actionIds": [
         "PUB-ACT-PREVIEW",
@@ -438,18 +730,33 @@
         "PUB-ACT-VIEW-RESULT",
         "PUB-ACT-RESOLVE-DEPENDENCY-SNAPSHOT",
         "PUB-ACT-CORRECT-RESULT",
-        "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION"
+        "PUB-ACT-RECONFIRM-INVALIDATED-EXPLANATION",
+        "PUB-ACT-OPEN-RESULT-CHALLENGE",
+        "PUB-ACT-SUBMIT-PROFESSIONAL-EVIDENCE",
+        "PUB-ACT-MARK-RESULT-CHALLENGED",
+        "PUB-ACT-MARK-RESULT-CORRECTION-PENDING",
+        "PUB-ACT-CLOSE-RESULT-CHALLENGE",
+        "PUB-ACT-CORRECT-CHALLENGED-RESULT",
+        "PUB-ACT-REPLACE-RESULT",
+        "PUB-ACT-INVALIDATE-RESULT",
+        "PUB-ACT-UPHOLD-RESULT",
+        "PUB-ACT-SEARCH-PUBLISHED-RESULTS",
+        "PUB-ACT-OPEN-CACHED-RESULT",
+        "PUB-ACT-OPEN-DIRECT-RESULT-LINK"
       ],
       "pageIds": [
         "PUB-PAGE-RELEASE",
         "PUB-PAGE-CORRECTION",
-        "PUB-PAGE-STUDENT-RESULT"
+        "PUB-PAGE-STUDENT-RESULT",
+        "PUB-PAGE-RESULT-CHALLENGE"
       ]
     },
     {
       "id": "SCO-001",
       "title": "Source-pinned Gradebook Views",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/12-gradebook-score-view_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/12-gradebook-score-view-wireframe.zh-CN.md",
@@ -472,6 +779,8 @@
       "id": "STU-001",
       "title": "Source-pinned Student Management Profile",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/13-teacher-student-management_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/13-teacher-student-management-wireframe.zh-CN.md",
@@ -494,12 +803,16 @@
     {
       "id": "INS-001",
       "title": "Evidence and Mastery Interpretation",
-      "phase": 1,
+      "phase": 3,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/14-mastery-evidence-insight_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/14-mastery-evidence-insight-wireframe.zh-CN.md",
       "objectIds": [
-        "INS-OBJ-EVIDENCE"
+        "INS-OBJ-EVIDENCE",
+        "INS-OBJ-MASTERY-NODE",
+        "INS-OBJ-MASTERY-CHALLENGE"
       ],
       "actionIds": [
         "INS-ACT-CREATE-CANDIDATE",
@@ -507,24 +820,38 @@
         "INS-ACT-CONFIRM-MASTERY",
         "INS-ACT-PUBLISH-INTERPRETATION",
         "INS-ACT-READ-CONFIRMED-EVIDENCE",
-        "INS-ACT-VIEW-MASTERY"
+        "INS-ACT-VIEW-MASTERY",
+        "INS-ACT-INITIALIZE-PERSONAL-NODE",
+        "INS-ACT-START-PERSONAL-NODE",
+        "INS-ACT-CONTROL-PERSONAL-PACE",
+        "INS-ACT-REQUEST-MASTERY-VALIDATION",
+        "INS-ACT-CONFIRM-MASTERY-NODE",
+        "INS-ACT-MARK-MASTERY-REVIEW-REQUIRED",
+        "INS-ACT-VIEW-PERSONAL-PROGRESS",
+        "INS-ACT-OPEN-MASTERY-CHALLENGE",
+        "INS-ACT-RESOLVE-MASTERY-CHALLENGE"
       ],
       "pageIds": [
         "INS-PAGE-EVIDENCE-REVIEW",
-        "INS-PAGE-STUDENT-MASTERY"
+        "INS-PAGE-STUDENT-MASTERY",
+        "INS-PAGE-PERSONAL-PROGRESS",
+        "INS-PAGE-MASTERY-CHALLENGES"
       ]
     },
     {
       "id": "PLN-001",
       "title": "Improvement Plans and Explicit Coordination Outputs",
-      "phase": 1,
+      "phase": 3,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/15-personalized-improvement-plan_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/15-personalized-improvement-plan-wireframe.zh-CN.md",
       "objectIds": [
         "PLN-OBJ-PLAN",
         "PLN-OBJ-SUBJECT-SYNC",
-        "PLN-OBJ-HOMEROOM-COORDINATION"
+        "PLN-OBJ-HOMEROOM-COORDINATION",
+        "PLN-OBJ-CLASS-PROGRESS"
       ],
       "actionIds": [
         "PLN-ACT-CREATE-CANDIDATE",
@@ -534,45 +861,60 @@
         "PLN-ACT-ADJUST-PLAN",
         "PLN-ACT-CLOSE-PLAN",
         "PLN-ACT-MARK-EVALUATION-PENDING-RECONFIRM",
-        "PLN-ACT-VIEW-HOMEROOM-COORDINATION"
+        "PLN-ACT-VIEW-HOMEROOM-COORDINATION",
+        "PLN-ACT-CREATE-CLASS-PROGRESS",
+        "PLN-ACT-ACTIVATE-CLASS-PROGRESS",
+        "PLN-ACT-ADVANCE-CLASS-PROGRESS",
+        "PLN-ACT-COMPLETE-CLASS-PROGRESS",
+        "PLN-ACT-REOPEN-CLASS-PROGRESS",
+        "PLN-ACT-VIEW-CLASS-PROGRESS"
       ],
       "pageIds": [
         "PLN-PAGE-PLAN",
-        "PLN-PAGE-HOMEROOM"
+        "PLN-PAGE-HOMEROOM",
+        "PLN-PAGE-CLASS-PROGRESS"
       ]
     },
     {
       "id": "APP-001",
-      "title": "Student Todo Aggregation and Local Execution",
+      "title": "Student Home and Source-pinned Task Execution",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/16-student-home-learning-execution_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/16-student-home-learning-execution-wireframe.zh-CN.md",
       "objectIds": [
-        "APP-OBJ-TODO"
+        "APP-OBJ-TODO",
+        "APP-OBJ-STUDENT-HOME"
       ],
       "actionIds": [
-        "APP-ACT-CREATE-PLAN-TODO",
+        "APP-ACT-BUILD-STUDENT-HOME",
         "APP-ACT-CREATE-HOMEWORK-TODO",
         "APP-ACT-REFRESH-TODOS",
         "APP-ACT-VIEW-TODOS",
+        "APP-ACT-VIEW-STUDENT-HOME",
         "APP-ACT-UPDATE-LOCAL-PROGRESS"
       ],
       "pageIds": [
+        "APP-PAGE-STUDENT-HOME",
         "APP-PAGE-TODOS"
       ]
     },
     {
       "id": "CORR-001",
-      "title": "Student Correction and Versioned Invalidation",
-      "phase": 1,
+      "title": "AI-driven Correction and Reassessment",
+      "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/17-feedback-correction_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/17-feedback-correction-wireframe.zh-CN.md",
       "objectIds": [
         "CORR-OBJ-TASK",
         "CORR-OBJ-ATTEMPT",
-        "CORR-OBJ-INVALIDATION"
+        "CORR-OBJ-INVALIDATION",
+        "CORR-OBJ-ATTEMPT-ASSESSMENT"
       ],
       "actionIds": [
         "CORR-ACT-CREATE-TASK",
@@ -594,8 +936,10 @@
     },
     {
       "id": "AIX-001",
-      "title": "AI Conversation and Controlled Task Preview",
-      "phase": 1,
+      "title": "Permission-bound AI Conversation and Confirmed Product Actions",
+      "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/18-ai-conversation-task-execution_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/18-ai-conversation-task-execution-wireframe.zh-CN.md",
@@ -615,6 +959,8 @@
       "id": "RPT-001",
       "title": "Ad-hoc Analysis and Scheduled Reports",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/19-reports-subscriptions_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/19-reports-subscriptions-wireframe.zh-CN.md",
@@ -654,7 +1000,9 @@
     {
       "id": "LPATH-001",
       "title": "Cross-term Learning Path",
-      "phase": 1,
+      "phase": 3,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/20-long-term-learning-path_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/20-long-term-learning-path-wireframe.zh-CN.md",
@@ -683,29 +1031,46 @@
       "id": "NOTI-001",
       "title": "In-product Notification Delivery",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/21-in-app-notification_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/21-in-app-notification-wireframe.zh-CN.md",
       "objectIds": [
-        "NOTI-OBJ-NOTIFICATION"
+        "NOTI-OBJ-BUSINESS-EVENT",
+        "NOTI-OBJ-ACTION-TODO",
+        "NOTI-OBJ-NOTIFICATION",
+        "NOTI-OBJ-CHANNEL-DELIVERY"
       ],
       "actionIds": [
+        "NOTI-ACT-RECORD-BUSINESS-EVENT",
+        "NOTI-ACT-CREATE-ACTION-TODO",
+        "NOTI-ACT-START-ACTION-TODO",
+        "NOTI-ACT-OBSERVE-ACTION-TODO",
+        "NOTI-ACT-RESOLVE-ACTION-TODO",
+        "NOTI-ACT-REOPEN-ACTION-TODO",
+        "NOTI-ACT-CANCEL-ACTION-TODO",
         "NOTI-ACT-CREATE-REMINDER",
         "NOTI-ACT-CREATE-REPORT-NOTIFICATION",
+        "NOTI-ACT-MARK-READ",
+        "NOTI-ACT-MARK-HANDLED",
+        "NOTI-ACT-QUEUE-DELIVERY",
         "NOTI-ACT-DELIVER",
         "NOTI-ACT-FAIL-DELIVERY",
-        "NOTI-ACT-RETRY-DELIVERY",
-        "NOTI-ACT-MARK-READ",
-        "NOTI-ACT-MARK-HANDLED"
+        "NOTI-ACT-RETRY-DELIVERY"
       ],
       "pageIds": [
-        "NOTI-PAGE-INBOX"
+        "NOTI-PAGE-INBOX",
+        "NOTI-PAGE-ACTION-TODO",
+        "NOTI-PAGE-DELIVERY-MONITOR"
       ]
     },
     {
       "id": "PREP-001",
       "title": "Lesson Preparation and Classroom Activity",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/22-lesson-prep-delivery_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/22-lesson-prep-delivery-wireframe.zh-CN.md",
@@ -735,13 +1100,21 @@
       "id": "CONTENT-001",
       "title": "Versioned Question and Content Governance",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/23-question-content-management_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/23-question-content-management-wireframe.zh-CN.md",
       "objectIds": [
         "CONTENT-OBJ-QUESTION-VERSION",
         "CONTENT-OBJ-LICENSE",
-        "CONTENT-OBJ-PERMISSION"
+        "CONTENT-OBJ-PERMISSION",
+        "CONTENT-OBJ-MATERIAL-SOURCE-GRAPH",
+        "CONTENT-OBJ-MATERIAL-RIGHTS-BUNDLE",
+        "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE",
+        "CONTENT-OBJ-PLATFORM-PUBLICATION-REVIEW",
+        "CONTENT-OBJ-STUDENT-WORK-SAMPLE-AUTHORIZATION",
+        "CONTENT-OBJ-STUDENT-WORK-SAMPLE-COPY"
       ],
       "actionIds": [
         "CONTENT-ACT-CREATE-QUESTION-VERSION",
@@ -751,16 +1124,42 @@
         "CONTENT-ACT-CREATE-SCHOOL-PERMISSION",
         "CONTENT-ACT-CREATE-SUBJECT-PERMISSION",
         "CONTENT-ACT-CREATE-COURSE-PERMISSION",
-        "CONTENT-ACT-ACTIVATE-PERMISSION"
+        "CONTENT-ACT-ACTIVATE-PERMISSION",
+        "CONTENT-ACT-REGISTER-MATERIAL-SOURCE-GRAPH",
+        "CONTENT-ACT-INVALIDATE-MATERIAL-SOURCE-GRAPH",
+        "CONTENT-ACT-CREATE-MATERIAL-RIGHTS-BUNDLE",
+        "CONTENT-ACT-ACTIVATE-MATERIAL-RIGHTS-BUNDLE",
+        "CONTENT-ACT-REVOKE-MATERIAL-RIGHTS-BUNDLE",
+        "CONTENT-ACT-CREATE-MATERIAL-MANAGEMENT-SCOPE",
+        "CONTENT-ACT-ACTIVATE-SCHOOL-PRIVATE-MATERIAL",
+        "CONTENT-ACT-REQUEST-PLATFORM-PUBLIC-REVIEW",
+        "CONTENT-ACT-APPROVE-PLATFORM-PUBLIC-REVIEW",
+        "CONTENT-ACT-REJECT-PLATFORM-PUBLIC-REVIEW",
+        "CONTENT-ACT-EXPIRE-PLATFORM-PUBLIC-REVIEW",
+        "CONTENT-ACT-PROMOTE-TO-PLATFORM-PUBLIC",
+        "CONTENT-ACT-REVOKE-MATERIAL-MANAGEMENT-SCOPE",
+        "CONTENT-ACT-RESOLVE-MATERIAL-RIGHTS",
+        "CONTENT-ACT-REQUEST-STUDENT-SAMPLE-AUTHORIZATION",
+        "CONTENT-ACT-AUTHORIZE-STUDENT-SAMPLE",
+        "CONTENT-ACT-DENY-STUDENT-SAMPLE-AUTHORIZATION",
+        "CONTENT-ACT-WITHDRAW-STUDENT-SAMPLE-AUTHORIZATION",
+        "CONTENT-ACT-EXPIRE-STUDENT-SAMPLE-AUTHORIZATION",
+        "CONTENT-ACT-CREATE-STUDENT-SAMPLE-COPY",
+        "CONTENT-ACT-ACTIVATE-STUDENT-SAMPLE-COPY",
+        "CONTENT-ACT-REMOVE-STUDENT-SAMPLE-COPY"
       ],
       "pageIds": [
-        "CONTENT-PAGE-GOVERNANCE"
+        "CONTENT-PAGE-GOVERNANCE",
+        "CONTENT-PAGE-MATERIAL-RIGHTS",
+        "CONTENT-PAGE-STUDENT-SAMPLE"
       ]
     },
     {
       "id": "EXM-001",
       "title": "Exam Event Score Import and Publication",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/24-exam-score-management_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/24-exam-score-management-wireframe.zh-CN.md",
@@ -800,6 +1199,8 @@
       "id": "SCH-001",
       "title": "Calendar Constraint and Schedule Publication",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/25-academic-scheduling_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/25-academic-scheduling-wireframe.zh-CN.md",
@@ -835,9 +1236,11 @@
       "id": "REPORT-001",
       "title": "Future Extended Reporting Contract",
       "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
       "priority": "P1",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/26-guardian-report-sharing_PRD_v2.0.md",
-      "wireframe": null,
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/26-guardian-report-sharing-wireframe.zh-CN.md",
       "objectIds": [
         "REPORT-OBJ-FUTURE-CONTRACT"
       ],
@@ -846,8 +1249,10 @@
     },
     {
       "id": "PLAT-001",
-      "title": "School Onboarding Service and Support Access",
+      "title": "School Onboarding, Commercial Boundary, Service Continuity, and Support Access",
       "phase": 1,
+      "releaseStatus": "BUILD_READY",
+      "currentRelease": true,
       "priority": "P0",
       "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/27-platform-onboarding-governance_PRD_v2.0.md",
       "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/27-platform-onboarding-governance-wireframe.zh-CN.md",
@@ -855,7 +1260,10 @@
         "PLAT-OBJ-ONBOARDING-CASE",
         "PLAT-OBJ-SERVICE-PLAN",
         "PLAT-OBJ-POLICY-TEMPLATE",
-        "PLAT-OBJ-SUPPORT-CASE"
+        "PLAT-OBJ-SUPPORT-CASE",
+        "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
+        "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+        "PLAT-OBJ-PROTECTED-ACTIVITY-ENTRY"
       ],
       "actionIds": [
         "PLAT-ACT-CREATE-ONBOARDING-CASE",
@@ -863,6 +1271,22 @@
         "PLAT-ACT-CREATE-SERVICE-PLAN",
         "PLAT-ACT-CONFIRM-SERVICE-PLAN",
         "PLAT-ACT-ACTIVATE-SERVICE-PLAN",
+        "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+        "PLAT-ACT-TERMINATE-SERVICE-PLAN",
+        "PLAT-ACT-EXPIRE-SERVICE-PLAN",
+        "PLAT-ACT-SUPERSEDE-SERVICE-PLAN",
+        "PLAT-ACT-CREATE-COMMERCIAL-BOUNDARY",
+        "PLAT-ACT-CONFIRM-COMMERCIAL-BOUNDARY",
+        "PLAT-ACT-ACTIVATE-COMMERCIAL-BOUNDARY",
+        "PLAT-ACT-OPEN-SERVICE-CONTINUITY",
+        "PLAT-ACT-CAPTURE-PROTECTED-ACTIVITY-ENTRY",
+        "PLAT-ACT-RECONCILE-AND-SEAL-PROTECTED-ACTIVITY-MANIFEST",
+        "PLAT-ACT-MARK-PROTECTED-ACTIVITY-CAPTURE-FAILED",
+        "PLAT-ACT-RETRY-PROTECTED-ACTIVITY-CAPTURE",
+        "PLAT-ACT-EVALUATE-NEW-ACTIVITY-ENTITLEMENT",
+        "PLAT-ACT-ENTER-EXIT-WINDOW",
+        "PLAT-ACT-CLOSE-SERVICE-CONTINUITY",
+        "PLAT-ACT-VIEW-SERVICE-CONTINUITY",
         "PLAT-ACT-CREATE-POLICY-TEMPLATE",
         "PLAT-ACT-CONFIRM-POLICY-TEMPLATE",
         "PLAT-ACT-ACTIVATE-POLICY-TEMPLATE",
@@ -873,6 +1297,128 @@
       "pageIds": [
         "PLAT-PAGE-SCHOOL-SERVICE-OPERATIONS",
         "PLAT-PAGE-MOBILE-SUPPORT-CASE"
+      ]
+    },
+    {
+      "id": "PROG-001",
+      "title": "Phase-two Minimum Learning Progress",
+      "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/28-phase-two-minimum-learning-progress_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/28-phase-two-minimum-learning-progress-wireframe.zh-CN.md",
+      "objectIds": [
+        "PROG-OBJ-COURSE-TARGET-SNAPSHOT",
+        "PROG-OBJ-STUDENT-TARGET",
+        "PROG-OBJ-NEXT-TARGET-CHOICE"
+      ],
+      "actionIds": [
+        "PROG-ACT-SYNC-COURSE-TARGET-SNAPSHOT",
+        "PROG-ACT-SYNC-STUDENT-TARGET",
+        "PROG-ACT-VIEW-CURRENT-TARGET",
+        "PROG-ACT-PROPOSE-NEXT-TARGET",
+        "PROG-ACT-SELECT-NEXT-TARGET",
+        "PROG-ACT-DEFER-NEXT-TARGET",
+        "PROG-ACT-SUPERSEDE-COURSE-TARGET-SNAPSHOT",
+        "PROG-ACT-EXPIRE-NEXT-TARGET-CHOICE"
+      ],
+      "pageIds": [
+        "PROG-PAGE-STUDENT-CURRENT-TARGET"
+      ]
+    },
+    {
+      "id": "VIDEO-001",
+      "title": "Phase-two Source-bound Teaching Video and New-context Verification",
+      "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
+      "priority": "P0",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/29-phase-two-source-bound-teaching-video_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/29-phase-two-source-bound-teaching-video-wireframe.zh-CN.md",
+      "objectIds": [
+        "VIDEO-OBJ-REQUEST",
+        "VIDEO-OBJ-SCHOOL-REQUEST",
+        "VIDEO-OBJ-RECALL-IMPACT-SNAPSHOT",
+        "VIDEO-OBJ-ASSET",
+        "VIDEO-OBJ-STUDENT-ENTITLEMENT",
+        "VIDEO-OBJ-SCHOOL-OVERFLOW-POOL",
+        "VIDEO-OBJ-QUOTA-LEDGER",
+        "VIDEO-OBJ-SCHOOL-QUOTA-LEDGER",
+        "VIDEO-OBJ-VERIFICATION",
+        "VIDEO-OBJ-LEARNING-FACT"
+      ],
+      "actionIds": [
+        "VIDEO-ACT-LOCATE-RECALL-IMPACT",
+        "VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT",
+        "VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL",
+        "VIDEO-ACT-REQUEST-PROBLEM-DRIVEN",
+        "VIDEO-ACT-REQUEST-PROGRESS-DRIVEN",
+        "VIDEO-ACT-REQUEST-SCHOOL-GROUP",
+        "VIDEO-ACT-RESERVE-STUDENT-MINIMUM",
+        "VIDEO-ACT-RESERVE-SCHOOL-OVERFLOW",
+        "VIDEO-ACT-RESERVE-SCHOOL-GROUP-OVERFLOW",
+        "VIDEO-ACT-START-GENERATION",
+        "VIDEO-ACT-START-SCHOOL-GROUP-GENERATION",
+        "VIDEO-ACT-CHECK-SCRIPT",
+        "VIDEO-ACT-CHECK-RENDER",
+        "VIDEO-ACT-CHECK-SAFETY",
+        "VIDEO-ACT-CHECK-PRIVACY",
+        "VIDEO-ACT-CHECK-RIGHTS",
+        "VIDEO-ACT-CHECK-PEDAGOGY",
+        "VIDEO-ACT-CHECK-PLAYABILITY",
+        "VIDEO-ACT-DELIVER-USABLE",
+        "VIDEO-ACT-SETTLE-USABLE-DELIVERY",
+        "VIDEO-ACT-SETTLE-SCHOOL-GROUP-DELIVERY",
+        "VIDEO-ACT-VIEW-CONTROLLED",
+        "VIDEO-ACT-VIEW-SCHOOL-PRIVATE",
+        "VIDEO-ACT-BLOCK-DELIVERY",
+        "VIDEO-ACT-RECALL",
+        "VIDEO-ACT-RELEASE-QUOTA",
+        "VIDEO-ACT-RELEASE-SCHOOL-GROUP-QUOTA",
+        "VIDEO-ACT-START-NEW-CONTEXT-VERIFICATION",
+        "VIDEO-ACT-SUBMIT-FIRST-INDEPENDENT-EXPRESSION",
+        "VIDEO-ACT-PURSUE-ONE-SPECIFIC-GAP",
+        "VIDEO-ACT-RETURN-UNKNOWN-TO-TEACHING",
+        "VIDEO-ACT-RETRY-DIFFERENT-CONTEXT",
+        "VIDEO-ACT-SUBMIT-DIFFERENT-CONTEXT-EXPRESSION",
+        "VIDEO-ACT-COMPLETE-NEW-CONTEXT-VERIFICATION",
+        "VIDEO-ACT-RECORD-POST-VIDEO-LEARNING-FACT",
+        "VIDEO-ACT-VIEW-POST-VIDEO-LEARNING-FACT",
+        "VIDEO-ACT-CANCEL-REQUEST",
+        "VIDEO-ACT-CANCEL-SCHOOL-REQUEST",
+        "VIDEO-ACT-SUSPEND-STUDENT-ENTITLEMENT",
+        "VIDEO-ACT-SUSPEND-SCHOOL-OVERFLOW-POOL",
+        "VIDEO-ACT-INVALIDATE-LEARNING-FACT"
+      ],
+      "pageIds": [
+        "VIDEO-PAGE-STUDENT-REQUEST",
+        "VIDEO-PAGE-TEACHER-SCHOOL-REQUEST",
+        "VIDEO-PAGE-CONTROLLED-PLAYBACK",
+        "VIDEO-PAGE-POST-VIDEO-VERIFICATION"
+      ]
+    },
+    {
+      "id": "PLAT-002",
+      "title": "Planned School-wide AI Assessment and Minimum Video Entitlement",
+      "phase": 2,
+      "releaseStatus": "PLANNED",
+      "currentRelease": false,
+      "priority": "P1",
+      "prd": "docs/requirements/zhixu-handoff-v2.0/03-full-prd-md/30-phase-two-school-entitlement_PRD_v2.0.md",
+      "wireframe": "docs/requirements/zhixu-handoff-v2.0/05-wireframe-contracts/30-phase-two-school-entitlement-wireframe.zh-CN.md",
+      "objectIds": [
+        "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT"
+      ],
+      "actionIds": [
+        "PLAT-ACT-CREATE-PHASE-TWO-ENTITLEMENT",
+        "PLAT-ACT-CONFIRM-PHASE-TWO-ENTITLEMENT",
+        "PLAT-ACT-ACTIVATE-PHASE-TWO-ENTITLEMENT",
+        "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+        "PLAT-ACT-RESTRICT-PHASE-TWO-ENTITLEMENT"
+      ],
+      "pageIds": [
+        "PLAT-PAGE-PHASE-TWO-ENTITLEMENT"
       ]
     }
   ]

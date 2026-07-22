@@ -17,6 +17,56 @@ import {
 import { STUDENT_DETAIL_ACCESS_EXCEPTION_KIND } from "./student-detail-access-exceptions.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
+const PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID = "EVT-PLAT-SERVICE-PLAN-RESTRICTED";
+const PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID =
+  "PLAT-ACT-RESTRICT-PHASE-TWO-ENTITLEMENT";
+const PHASE_TWO_ENTITLEMENT_RESTRICTION_FLOW_ID = "DF-018";
+
+function phaseTwoServicePlanRevalidation({ allowProtectedPublishedActivity = false } = {}) {
+  const guard = {
+    resolverActionId: "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+    servicePlanObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    entitlementServicePlanRefFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+    entitlementServicePlanVersionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+    servicePlanStateFieldId: "PLAT-PLAN-F-SERVICE-STATE",
+    servicePlanVersionFieldId: "PLAT-PLAN-F-VERSION",
+    requiredCurrentState: "ACTIVE",
+    currentVersionMustEqualPinnedVersion: true,
+    checkedAtExecution: true,
+    staleMissingOrAmbiguousBehavior: "FAIL_CLOSED",
+    failureResult: "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+  };
+  if (!allowProtectedPublishedActivity) {
+    return {
+      ...guard,
+      allowedAuthorizationBranches: ["CURRENT_ACTIVE_SERVICE_PLAN"],
+      continuityFallback: { mode: "NONE" },
+    };
+  }
+  return {
+    ...guard,
+    allowedAuthorizationBranches: [
+      "CURRENT_ACTIVE_SERVICE_PLAN",
+      "EXACT_FINITE_D091_PROTECTED_ACTIVITY",
+    ],
+    continuityFallback: {
+      mode: "EXACT_FINITE_D091_PROTECTED_ACTIVITY",
+      protectedEntryObjectId: "PLAT-OBJ-PROTECTED-ACTIVITY-ENTRY",
+      protectedEntryActivityRefFieldId: "PLAT-PROTECT-F-ACTIVITY-REF",
+      protectedEntryActivityVersionFieldId: "PLAT-PROTECT-F-ACTIVITY-VERSION",
+      protectedEntryPublicationSnapshotRefFieldId: "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-REF",
+      protectedEntryPublicationSnapshotVersionFieldId:
+        "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-VERSION",
+      protectedUntilFieldId: "PLAT-PROTECT-F-PROTECTED-UNTIL",
+      serviceObjectResolution: "PINNED_SUBMISSION_ACTIVITY_AND_PUBLICATION_SNAPSHOT",
+      requiredProtectedOperation: "COMPLETE_PUBLISHED_ACTIVITY",
+      timeRule: "CURRENT_TIME_LE_PROTECTED_UNTIL",
+      exactVersionMatchRequired: true,
+      finiteWindowRequired: true,
+      failureResult: "SERVICE_CONTINUITY_NOT_PROTECTED",
+    },
+  };
+}
 
 function optionSet(id, key, label, values) {
   return {
@@ -63,6 +113,15 @@ export const extensionOptionSets = deepFreeze([
     ["DRAFT", "草稿"],
     ["CONFIRMED", "学校已确认"],
     ["ACTIVE", "服务中"],
+  ]),
+  optionSet("OPT-EXT-026", "servicePlanLifecycleState", "服务计划生命周期状态", [
+    ["DRAFT", "草稿"],
+    ["CONFIRMED", "学校已确认"],
+    ["ACTIVE", "服务中"],
+    ["RESTRICTED", "服务受限"],
+    ["TERMINATED", "合同终止"],
+    ["EXPIRED", "服务失效"],
+    ["SUPERSEDED", "已由新版本替代"],
   ]),
   optionSet("OPT-EXT-009", "supportCaseStatus", "支持工单状态", [
     ["OPEN", "处理中"],
@@ -128,6 +187,7 @@ export const extensionOptionSets = deepFreeze([
     ["ENTITLEMENT_REDUCED", "权益范围缩减"],
     ["CONTRACT_RESTRICTED", "合同约定受限"],
     ["CONTRACT_TERMINATED", "合同终止"],
+    ["CONTRACT_EXPIRED", "服务失效"],
   ]),
   optionSet("OPT-EXT-023", "serviceContinuityOperation", "服务连续性保留操作", [
     ["COMPLETE_PUBLISHED_ACTIVITY", "完成已发布活动"],
@@ -2530,6 +2590,7 @@ const servicePlanFields = [
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "ACC-OBJ-SCHOOL" },
     mutability: "IMMUTABLE",
+    idempotencyRole: "OBJECT_REF",
     referenceIntegrity: "VERSION_PINNED",
     stateGuardPolicy: "CREATE_REQUIRED",
     actionApplicability: { requiredActionIds: ["PLAT-ACT-CREATE-SERVICE-PLAN"] },
@@ -2542,8 +2603,72 @@ const servicePlanFields = [
     mutability: "IMMUTABLE",
   }),
   field("PLAT-PLAN-F-SCOPE", "School Service Plan Scope", { dataType: "JSON" }),
-  optionField("PLAT-PLAN-F-SERVICE-STATE", "School Service State", "OPT-EXT-008", {
+  optionField("PLAT-PLAN-F-SERVICE-STATE", "School Service State", "OPT-EXT-026", {
     mutability: "SYSTEM_MANAGED",
+  }),
+  field("PLAT-PLAN-F-CONTINUITY-REF", "Service Restriction Continuity Window", {
+    dataType: "ID",
+    required: false,
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "UPDATE_REQUIRED",
+    actionApplicability: {
+      requiredActionIds: [
+        "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+        "PLAT-ACT-TERMINATE-SERVICE-PLAN",
+        "PLAT-ACT-EXPIRE-SERVICE-PLAN",
+      ],
+    },
+    versionBinding: {
+      versionFieldId: "PLAT-PLAN-F-CONTINUITY-VERSION",
+      targetVersionFieldId: "PLAT-CONT-F-VERSION",
+    },
+  }),
+  systemField("PLAT-PLAN-F-CONTINUITY-VERSION", "Service Restriction Continuity Window Version", "INTEGER", {
+    required: false,
+    mutability: "IMMUTABLE",
+  }),
+  optionField("PLAT-PLAN-F-RESTRICTION-REASON", "Service Plan Restriction Reason", "OPT-EXT-022", {
+    required: conditionalRequired(
+      "required when a service plan becomes restricted, terminated, or expired",
+      ["RESTRICTED", "TERMINATED", "EXPIRED"],
+      [
+        "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+        "PLAT-ACT-TERMINATE-SERVICE-PLAN",
+        "PLAT-ACT-EXPIRE-SERVICE-PLAN",
+      ],
+    ),
+    mutability: "SYSTEM_MANAGED",
+  }),
+  systemField("PLAT-PLAN-F-RESTRICTION-EFFECTIVE-AT", "Service Plan Restriction Effective At", "DATETIME", {
+    required: conditionalRequired(
+      "required when a service plan becomes restricted, terminated, or expired",
+      ["RESTRICTED", "TERMINATED", "EXPIRED"],
+      ["PLAT-ACT-RESTRICT-SERVICE-PLAN"],
+    ),
+    mutability: "IMMUTABLE",
+  }),
+  field("PLAT-PLAN-F-RECOVERY-PLAN-REF", "Replacement Service Plan Version", {
+    dataType: "ID",
+    required: conditionalRequired(
+      "required when a restricted, terminated, or expired plan is superseded by a recovered version",
+      ["SUPERSEDED"],
+      ["PLAT-ACT-SUPERSEDE-SERVICE-PLAN"],
+    ),
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLAT-OBJ-SERVICE-PLAN" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "UPDATE_REQUIRED",
+    actionApplicability: { requiredActionIds: ["PLAT-ACT-SUPERSEDE-SERVICE-PLAN"] },
+    versionBinding: {
+      versionFieldId: "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+      targetVersionFieldId: "PLAT-PLAN-F-VERSION",
+    },
+  }),
+  systemField("PLAT-PLAN-F-RECOVERY-PLAN-VERSION", "Replacement Service Plan Version", "INTEGER", {
+    required: false,
+    mutability: "IMMUTABLE",
   }),
   systemField("PLAT-PLAN-F-SCHOOL-CONFIRMED-AT", "School Confirmation Time", "DATETIME", {
     required: conditionalRequired(
@@ -2722,6 +2847,8 @@ const serviceContinuityFields = [
       requiredActionIds: [
         "PLAT-ACT-OPEN-SERVICE-CONTINUITY",
         "PLAT-ACT-RETRY-PROTECTED-ACTIVITY-CAPTURE",
+        "PLAT-ACT-ENTER-EXIT-WINDOW",
+        "PLAT-ACT-CLOSE-SERVICE-CONTINUITY",
       ],
     },
     versionBinding: {
@@ -2928,6 +3055,28 @@ const phaseTwoEntitlementFields = [
   systemField("PLAT-P2ENT-F-SCHOOL-VERSION", "Phase-two Entitled School Version", "INTEGER", {
     mutability: "IMMUTABLE",
   }),
+  field("PLAT-P2ENT-F-SERVICE-PLAN-REF", "Pinned Active School Service Plan", {
+    dataType: "ID",
+    valueSource: { kind: "OBJECT_REF", targetObjectId: "PLAT-OBJ-SERVICE-PLAN" },
+    mutability: "IMMUTABLE",
+    referenceIntegrity: "VERSION_PINNED",
+    stateGuardPolicy: "ALWAYS_REQUIRED",
+    actionApplicability: {
+      requiredActionIds: [
+        "PLAT-ACT-CREATE-PHASE-TWO-ENTITLEMENT",
+        "PLAT-ACT-ACTIVATE-PHASE-TWO-ENTITLEMENT",
+        "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+        PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID,
+      ],
+    },
+    versionBinding: {
+      versionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+      targetVersionFieldId: "PLAT-PLAN-F-VERSION",
+    },
+  }),
+  systemField("PLAT-P2ENT-F-SERVICE-PLAN-VERSION", "Pinned Active Service Plan Version", "INTEGER", {
+    mutability: "IMMUTABLE",
+  }),
   field("PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF", "Pinned School Commercial Boundary", {
     dataType: "ID",
     valueSource: { kind: "OBJECT_REF", targetObjectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY" },
@@ -2953,7 +3102,7 @@ const phaseTwoEntitlementFields = [
     mutability: "SYSTEM_MANAGED",
     validation: "may expand only capacity, concurrency, analytics, and general support; safety, appeal, data rights, and the core learning loop are never paid add-ons",
   }),
-  optionField("PLAT-P2ENT-F-STATUS", "Phase-two Entitlement Status", "OPT-EXT-008", {
+  optionField("PLAT-P2ENT-F-STATUS", "Phase-two Entitlement Status", "OPT-EXT-026", {
     mutability: "SYSTEM_MANAGED",
   }),
   systemField("PLAT-P2ENT-F-VERSION", "Phase-two Entitlement Version", "INTEGER", {
@@ -2974,7 +3123,7 @@ const platformObjects = [
     label: "School Service Plan",
     identityFieldId: "PLAT-PLAN-F-ID",
     responsibility: platformOperations,
-    states: ["DRAFT", "CONFIRMED", "ACTIVE"],
+    states: ["DRAFT", "CONFIRMED", "ACTIVE", "RESTRICTED", "TERMINATED", "EXPIRED", "SUPERSEDED"],
     fields: servicePlanFields,
     overrides: {
       lineageBindings: [{
@@ -2982,6 +3131,16 @@ const platformObjects = [
         versionFieldId: "PLAT-PLAN-F-SCHOOL-VERSION",
         targetObjectId: "ACC-OBJ-SCHOOL",
         targetVersionFieldId: "ACC-SCHOOL-F-SCHOOL-VERSION",
+      }, {
+        refFieldId: "PLAT-PLAN-F-CONTINUITY-REF",
+        versionFieldId: "PLAT-PLAN-F-CONTINUITY-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+        targetVersionFieldId: "PLAT-CONT-F-VERSION",
+      }, {
+        refFieldId: "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+        versionFieldId: "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        targetVersionFieldId: "PLAT-PLAN-F-VERSION",
       }],
       currentEntitlementConstraint: {
         schoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
@@ -2990,6 +3149,8 @@ const platformObjects = [
         currentState: "ACTIVE",
         maximumCurrentVersionsPerSchool: 1,
         selectionRule: "EXACT_PINNED_ACTIVE_VERSION",
+        restrictedStates: ["RESTRICTED", "TERMINATED", "EXPIRED", "SUPERSEDED"],
+        recoveryRule: "A_RESTRICTED_TERMINATED_OR_EXPIRED_PLAN_REQUIRES_A_NEW_ACTIVE_VERSION_AND_MAY_NOT_RETURN_TO_ACTIVE",
       },
     },
   }),
@@ -3244,6 +3405,219 @@ const platformActions = [
         targetState: "ACTIVE",
         maximumCurrentVersionsPerSchool: 1,
         failureResult: "ACTIVE_SERVICE_PLAN_ALREADY_EXISTS",
+      },
+    },
+  }),
+  action({
+    id: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+    label: "Restrict the Exact Active Service Plan after the Exit Window Opens",
+    targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-PLAN-F-CONTINUITY-VERSION",
+      "PLAT-PLAN-F-RESTRICTION-REASON",
+    ],
+    outputFieldIds: [
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-PLAN-F-CONTINUITY-VERSION",
+      "PLAT-PLAN-F-RESTRICTION-REASON",
+      "PLAT-PLAN-F-RESTRICTION-EFFECTIVE-AT",
+      "PLAT-PLAN-F-SERVICE-STATE",
+      "PLAT-PLAN-F-VERSION",
+    ],
+    permissions: permissions(
+      "SYSTEM",
+      ["CURRENT_ACTOR", "ROLE-PLATFORM-OPS"],
+      "the system restricts only the exact ACTIVE service-plan version pinned by a continuity window that has entered EXIT_WINDOW_OPEN",
+    ),
+    transition: { from: "ACTIVE", to: "RESTRICTED" },
+    risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "CONTINUITY_EXIT_WINDOW_NOT_OPEN",
+      "SERVICE_PLAN_VERSION_MISMATCH",
+      "ENTITLEMENT_RESTRICTION_EVENT_OUTBOX_FAILED",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      executionMode: "SYSTEM_EVENT",
+      trigger: { kind: "EVENT", eventId: "EVT-PLAT-SERVICE-EXIT-WINDOW-OPENED" },
+      relatedStateGuards: [{
+        refFieldId: "PLAT-PLAN-F-CONTINUITY-REF",
+        versionFieldId: "PLAT-PLAN-F-CONTINUITY-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+        requiredState: "EXIT_WINDOW_OPEN",
+      }],
+      acceptedInputValues: [{
+        fieldId: "PLAT-PLAN-F-RESTRICTION-REASON",
+        optionSetId: "OPT-EXT-022",
+        partitionId: "PLAT-SERVICE-RESTRICTION-REASON",
+        codes: [
+          "ENTITLEMENT_REDUCED",
+          "CONTRACT_RESTRICTED",
+          "CONTRACT_TERMINATED",
+          "CONTRACT_EXPIRED",
+        ],
+      }],
+      servicePlanRestrictionGuard: {
+        continuityServicePlanRefFieldId: "PLAT-CONT-F-SERVICE-PLAN-REF",
+        continuityServicePlanVersionFieldId: "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+        targetPlanIdentityFieldId: "PLAT-PLAN-F-ID",
+        targetPlanVersionFieldId: "PLAT-PLAN-F-VERSION",
+        continuityRestrictionReasonFieldId: "PLAT-CONT-F-RESTRICTION-REASON",
+        targetRestrictionReasonFieldId: "PLAT-PLAN-F-RESTRICTION-REASON",
+        continuityRestrictionEffectiveAtFieldId: "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT",
+        targetRestrictionEffectiveAtFieldId: "PLAT-PLAN-F-RESTRICTION-EFFECTIVE-AT",
+        exactPinnedPlanVersionRequired: true,
+        exactReasonRequired: true,
+        exactEffectiveTimeRequired: true,
+        failureResult: "SERVICE_PLAN_VERSION_MISMATCH",
+      },
+      producedEventIds: [PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID],
+      producedEventContextBindings: [{
+        eventId: PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID,
+        servicePlanIdentityFieldId: "PLAT-PLAN-F-ID",
+        priorServicePlanVersionSource: "TRANSITION_EXPECTED_VERSION",
+        resultingServicePlanVersionFieldId: "PLAT-PLAN-F-VERSION",
+        schoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+        resultingStateFieldId: "PLAT-PLAN-F-SERVICE-STATE",
+      }],
+      entitlementRestrictionOutboxContract: {
+        eventId: PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID,
+        atomicWithServicePlanTransition: true,
+        failureResult: "ENTITLEMENT_RESTRICTION_EVENT_OUTBOX_FAILED",
+        failedOutboxCommitsRestriction: false,
+      },
+    },
+  }),
+  action({
+    id: "PLAT-ACT-TERMINATE-SERVICE-PLAN",
+    label: "Finalize a Restricted Service Plan as Contract Terminated",
+    targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-PLAN-F-CONTINUITY-VERSION",
+      "PLAT-PLAN-F-RESTRICTION-REASON",
+    ],
+    outputFieldIds: [
+      "PLAT-PLAN-F-RESTRICTION-REASON",
+      "PLAT-PLAN-F-SERVICE-STATE",
+      "PLAT-PLAN-F-VERSION",
+    ],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    transition: { from: "RESTRICTED", to: "TERMINATED" },
+    risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "CONTINUITY_WINDOW_NOT_CLOSED",
+      "RESTRICTION_REASON_MISMATCH",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      relatedStateGuards: [{
+        refFieldId: "PLAT-PLAN-F-CONTINUITY-REF",
+        versionFieldId: "PLAT-PLAN-F-CONTINUITY-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+        requiredState: "CLOSED",
+      }],
+      terminalStateGuard: {
+        requiredReasonCode: "CONTRACT_TERMINATED",
+        requiredContinuityState: "CLOSED",
+        reactivationAllowed: false,
+      },
+    },
+  }),
+  action({
+    id: "PLAT-ACT-EXPIRE-SERVICE-PLAN",
+    label: "Finalize a Restricted Service Plan as Expired",
+    targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-PLAN-F-CONTINUITY-VERSION",
+      "PLAT-PLAN-F-RESTRICTION-REASON",
+    ],
+    outputFieldIds: [
+      "PLAT-PLAN-F-RESTRICTION-REASON",
+      "PLAT-PLAN-F-SERVICE-STATE",
+      "PLAT-PLAN-F-VERSION",
+    ],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    transition: { from: "RESTRICTED", to: "EXPIRED" },
+    risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "CONTINUITY_WINDOW_NOT_CLOSED",
+      "RESTRICTION_REASON_MISMATCH",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      relatedStateGuards: [{
+        refFieldId: "PLAT-PLAN-F-CONTINUITY-REF",
+        versionFieldId: "PLAT-PLAN-F-CONTINUITY-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
+        requiredState: "CLOSED",
+      }],
+      terminalStateGuard: {
+        requiredReasonCode: "CONTRACT_EXPIRED",
+        requiredContinuityState: "CLOSED",
+        reactivationAllowed: false,
+      },
+    },
+  }),
+  action({
+    id: "PLAT-ACT-SUPERSEDE-SERVICE-PLAN",
+    label: "Link a Restricted or Ended Plan to a New Active Recovery Version",
+    targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+      "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+    ],
+    outputFieldIds: [
+      "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+      "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+      "PLAT-PLAN-F-SERVICE-STATE",
+      "PLAT-PLAN-F-VERSION",
+    ],
+    permissions: platformCommercialPermissions,
+    clients: [CLIENT.WEB],
+    transition: { from: ["RESTRICTED", "TERMINATED", "EXPIRED"], to: "SUPERSEDED" },
+    risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "RECOVERY_PLAN_NOT_ACTIVE",
+      "RECOVERY_PLAN_SCHOOL_MISMATCH",
+      "RECOVERY_PLAN_ID_REUSED",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      relatedStateGuards: [{
+        refFieldId: "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+        versionFieldId: "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        requiredState: "ACTIVE",
+      }],
+      recoveryVersionGuard: {
+        sourceSchoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+        recoverySchoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+        sourceIdentityFieldId: "PLAT-PLAN-F-ID",
+        recoveryIdentityFieldId: "PLAT-PLAN-F-ID",
+        recoveryVersionFieldId: "PLAT-PLAN-F-VERSION",
+        requiredRecoveryState: "ACTIVE",
+        identityMustDiffer: true,
+        schoolMustMatch: true,
+        exactPinnedRecoveryVersionRequired: true,
+        supersedesLineageRequired: true,
+        sourceReactivationAllowed: false,
       },
     },
   }),
@@ -3921,7 +4295,14 @@ const platformActions = [
     failureResults: ["PERMISSION_DENIED", "ENTITLEMENT_DECISION_UNAVAILABLE"],
     extras: {
       entitlementDecisionContract: {
-        guardedActionIds: ["HW-ACT-CREATE-DRAFT", "HW-ACT-CREATE-REPLACEMENT-DRAFT"],
+        guardedActionIds: [
+          "HW-ACT-CREATE-DRAFT",
+          "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+          "HW-ACT-PUBLISH-NOW",
+          "HW-ACT-SCHEDULE-PUBLISH",
+          "HW-ACT-PUBLISH-SCHEDULED",
+          "HW-ACT-PUBLISH-REPLACEMENT",
+        ],
         sourceObjectId: "PLAT-OBJ-SERVICE-PLAN",
         sourceIdentityFieldId: "PLAT-PLAN-F-ID",
         sourceVersionFieldId: "PLAT-PLAN-F-VERSION",
@@ -3959,21 +4340,13 @@ const platformActions = [
           decisionCode: "ACTIVE_ALLOW",
           effect: "ALLOW",
         }, {
-          branchId: "ACTIVE_PLAN_CONTINUITY_NOT_SEALED",
+          branchId: "ACTIVE_PLAN_NON_CLOSED_CONTINUITY",
           sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
-          continuityPredicate: "MANIFEST_NOT_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NULL",
+          continuityPredicate: "CURRENT_CONTINUITY_WINDOW_STATUS_NOT_CLOSED",
           scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
           predicateJoin: "AND",
-          decisionCode: "ACTIVE_ALLOW",
-          effect: "ALLOW",
-        }, {
-          branchId: "ACTIVE_PLAN_SEALED_RESTRICTION",
-          sourcePredicate: "EXACT_PINNED_SERVICE_PLAN_STATE_IS_ACTIVE",
-          continuityPredicate: "MANIFEST_SEALED_AND_RESTRICTION_EFFECTIVE_AT_IS_NOT_NULL",
-          scopePredicate: "REQUEST_WITHIN_PINNED_SERVICE_PLAN_SCOPE",
-          predicateJoin: "AND",
-          decisionCode: "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT",
-          effect: "ALLOW",
+          decisionCode: "CONTINUITY_WINDOW_BLOCK",
+          effect: "BLOCK",
         }, {
           branchId: "NO_CURRENT_ENTITLEMENT",
           sourcePredicate: "SERVICE_PLAN_MISSING_OR_NOT_ACTIVE_OR_VERSION_MISMATCH",
@@ -3983,8 +4356,8 @@ const platformActions = [
           decisionCode: "NO_ENTITLEMENT_BLOCK",
           effect: "BLOCK",
         }],
-        allowedDecisionCodes: ["ACTIVE_ALLOW", "RESTRICTED_ALLOW_WITHIN_ENTITLEMENT"],
-        blockedDecisionCodes: ["NO_ENTITLEMENT_BLOCK"],
+        allowedDecisionCodes: ["ACTIVE_ALLOW"],
+        blockedDecisionCodes: ["CONTINUITY_WINDOW_BLOCK", "NO_ENTITLEMENT_BLOCK"],
         branchesMutuallyExclusive: true,
         branchesExhaustive: true,
         unknownDecisionEffect: "BLOCK",
@@ -3997,22 +4370,64 @@ const platformActions = [
     label: "Enter the Explicit Service Exit Window",
     targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
     operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+    ],
     outputFieldIds: ["PLAT-CONT-F-STATUS", "PLAT-CONT-F-VERSION"],
     permissions: platformCommercialPermissions,
     clients: [CLIENT.WEB],
     transition: { from: "ACTIVITY_PROTECTION_OPEN", to: "EXIT_WINDOW_OPEN" },
     risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "INACTIVE_SERVICE_PLAN",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      relatedStateGuards: [{
+        refFieldId: "PLAT-CONT-F-SERVICE-PLAN-REF",
+        versionFieldId: "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        requiredState: "ACTIVE",
+      }],
+      producedEventIds: ["EVT-PLAT-SERVICE-EXIT-WINDOW-OPENED"],
+    },
   }),
   action({
     id: "PLAT-ACT-CLOSE-SERVICE-CONTINUITY",
     label: "Close the Finite Service Continuity Window",
     targetObjectId: "PLAT-OBJ-SERVICE-CONTINUITY-WINDOW",
     operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-CONT-F-SERVICE-PLAN-REF",
+      "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+    ],
     outputFieldIds: ["PLAT-CONT-F-STATUS", "PLAT-CONT-F-VERSION"],
     permissions: platformCommercialPermissions,
     clients: [CLIENT.WEB],
     transition: { from: "EXIT_WINDOW_OPEN", to: "CLOSED" },
     risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "SERVICE_PLAN_NOT_RESTRICTED",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      relatedStateGuards: [{
+        refFieldId: "PLAT-CONT-F-SERVICE-PLAN-REF",
+        versionFieldId: "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        requiredState: "RESTRICTED",
+      }],
+      closeGuard: {
+        requiredServicePlanState: "RESTRICTED",
+        closedWindowDoesNotRestoreEntitlement: true,
+        failureResult: "SERVICE_PLAN_NOT_RESTRICTED",
+      },
+    },
   }),
   action({
     id: "PLAT-ACT-VIEW-SERVICE-CONTINUITY",
@@ -4260,6 +4675,15 @@ const platformModule = moduleFact({
       ownershipScope: "SAME_SCHOOL",
       onSourceInvalidation: "retain the immutable captured entry for audit and deny any use after its finite protected-until time",
     },
+    {
+      id: "PLAT-REL-SERVICE-PLAN-RECOVERY",
+      fromObjectId: "PLAT-OBJ-SERVICE-PLAN",
+      toObjectId: "PLAT-OBJ-SERVICE-PLAN",
+      type: "REFERENCES",
+      cardinality: "MANY_TO_ONE",
+      ownershipScope: "SAME_SCHOOL",
+      onSourceInvalidation: "never reactivate the restricted or ended source version; require another independently confirmed ACTIVE plan version",
+    },
   ],
   actionFacts: platformActions,
   servicePlanEntitlementContract: {
@@ -4274,6 +4698,20 @@ const platformModule = moduleFact({
     createActionId: "PLAT-ACT-CREATE-SERVICE-PLAN",
     confirmActionId: "PLAT-ACT-CONFIRM-SERVICE-PLAN",
     activateActionId: "PLAT-ACT-ACTIVATE-SERVICE-PLAN",
+    restrictActionId: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+    terminateActionId: "PLAT-ACT-TERMINATE-SERVICE-PLAN",
+    expireActionId: "PLAT-ACT-EXPIRE-SERVICE-PLAN",
+    supersedeActionId: "PLAT-ACT-SUPERSEDE-SERVICE-PLAN",
+    continuityRefFieldId: "PLAT-PLAN-F-CONTINUITY-REF",
+    continuityVersionFieldId: "PLAT-PLAN-F-CONTINUITY-VERSION",
+    restrictionReasonFieldId: "PLAT-PLAN-F-RESTRICTION-REASON",
+    restrictionEffectiveAtFieldId: "PLAT-PLAN-F-RESTRICTION-EFFECTIVE-AT",
+    recoveryPlanRefFieldId: "PLAT-PLAN-F-RECOVERY-PLAN-REF",
+    recoveryPlanVersionFieldId: "PLAT-PLAN-F-RECOVERY-PLAN-VERSION",
+    restrictedStates: ["RESTRICTED", "TERMINATED", "EXPIRED", "SUPERSEDED"],
+    reactivationAllowed: false,
+    recoveryRequiresNewActiveVersion: true,
+    closedContinuityRestoresEntitlement: false,
   },
   commercialBoundaryContract: {
     objectId: "PLAT-OBJ-SCHOOL-COMMERCIAL-BOUNDARY",
@@ -4312,6 +4750,12 @@ const platformModule = moduleFact({
     reconcileRequestEventId: "EVT-PLAT-PROTECTED-ACTIVITY-MANIFEST-RECONCILE-REQUESTED",
     captureFailedEventId: "EVT-PLAT-PROTECTED-ACTIVITY-CAPTURE-FAILED",
     manifestSealedEventId: "EVT-PLAT-PROTECTED-ACTIVITY-MANIFEST-SEALED",
+    enterExitWindowActionId: "PLAT-ACT-ENTER-EXIT-WINDOW",
+    exitWindowOpenedEventId: "EVT-PLAT-SERVICE-EXIT-WINDOW-OPENED",
+    restrictServicePlanActionId: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+    closeActionId: "PLAT-ACT-CLOSE-SERVICE-CONTINUITY",
+    closeRequiredServicePlanState: "RESTRICTED",
+    closedWindowRestoresEntitlement: false,
     eligibleCountFieldId: "PLAT-CONT-F-ELIGIBLE-ENTRY-COUNT",
     eligibleDigestFieldId: "PLAT-CONT-F-ELIGIBLE-SET-DIGEST",
     eligibleMaximumDueAtFieldId: "PLAT-CONT-F-ELIGIBLE-MAX-DUE-AT",
@@ -4367,6 +4811,10 @@ const platformModule = moduleFact({
     guardedActivityCreationActionIds: [
       "HW-ACT-CREATE-DRAFT",
       "HW-ACT-CREATE-REPLACEMENT-DRAFT",
+      "HW-ACT-PUBLISH-NOW",
+      "HW-ACT-SCHEDULE-PUBLISH",
+      "HW-ACT-PUBLISH-SCHEDULED",
+      "HW-ACT-PUBLISH-REPLACEMENT",
     ],
     protectedActivityCompletionActionIds: [
       "SUB-ACT-SUBMIT",
@@ -4448,7 +4896,7 @@ const phaseTwoEntitlementObjects = [
     label: "Planned School-wide Phase-two Core Entitlement",
     identityFieldId: "PLAT-P2ENT-F-ID",
     responsibility: platformCommercialGovernance,
-    states: ["DRAFT", "CONFIRMED", "ACTIVE"],
+    states: ["DRAFT", "CONFIRMED", "ACTIVE", "RESTRICTED"],
     fields: phaseTwoEntitlementFields,
     sensitivityId: "S3",
     lifecyclePolicyId: "LIFE-001",
@@ -4458,6 +4906,11 @@ const phaseTwoEntitlementObjects = [
         versionFieldId: "PLAT-P2ENT-F-SCHOOL-VERSION",
         targetObjectId: "ACC-OBJ-SCHOOL",
         targetVersionFieldId: "ACC-SCHOOL-F-SCHOOL-VERSION",
+      }, {
+        refFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+        versionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        targetVersionFieldId: "PLAT-PLAN-F-VERSION",
       }, {
         refFieldId: "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF",
         versionFieldId: "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-VERSION",
@@ -4477,6 +4930,8 @@ const phaseTwoEntitlementActions = [
     inputFieldIds: [
       "PLAT-P2ENT-F-SCHOOL-REF",
       "PLAT-P2ENT-F-SCHOOL-VERSION",
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
       "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF",
       "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-VERSION",
     ],
@@ -4496,6 +4951,11 @@ const phaseTwoEntitlementActions = [
         refFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
         versionFieldId: "PLAT-P2ENT-F-SCHOOL-VERSION",
         targetObjectId: "ACC-OBJ-SCHOOL",
+        requiredState: "ACTIVE",
+      }, {
+        refFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+        versionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
         requiredState: "ACTIVE",
       }, {
         refFieldId: "PLAT-P2ENT-F-COMMERCIAL-BOUNDARY-REF",
@@ -4521,11 +4981,153 @@ const phaseTwoEntitlementActions = [
     label: "Activate a Confirmed School-wide Phase-two Core Entitlement",
     targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
     operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+    ],
     outputFieldIds: ["PLAT-P2ENT-F-STATUS", "PLAT-P2ENT-F-VERSION"],
     permissions: platformCommercialPermissions,
     clients: [CLIENT.WEB],
     transition: { from: "CONFIRMED", to: "ACTIVE" },
     risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "SERVICE_PLAN_NOT_ACTIVE",
+      "SCHOOL_SCOPE_MISMATCH",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      relatedStateGuards: [{
+        refFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+        versionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        requiredState: "ACTIVE",
+      }],
+      phaseTwoEntitlementActivationGuard: {
+        entitledSchoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+        servicePlanSchoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+        commercialBoundarySchoolRefFieldId: "PLAT-COMM-F-SCHOOL-REF",
+        exactPinnedServicePlanVersionRequired: true,
+        allSchoolIdentitiesMustMatch: true,
+        requiredCoreEntitlementCodes: ["CORE_AI_ASSESSMENT", "MINIMUM_VIDEO_HELP"],
+        failureResult: "SCHOOL_SCOPE_MISMATCH",
+      },
+    },
+  }),
+  action({
+    id: "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+    label: "Resolve the Exact Active School Phase-two Entitlement",
+    targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    operationKind: "READ",
+    inputFieldIds: [
+      "PLAT-P2ENT-F-SCHOOL-REF",
+      "PLAT-P2ENT-F-SCHOOL-VERSION",
+    ],
+    outputFieldIds: [
+      "PLAT-P2ENT-F-ID",
+      "PLAT-P2ENT-F-SCHOOL-REF",
+      "PLAT-P2ENT-F-SCHOOL-VERSION",
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+      "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS",
+      "PLAT-P2ENT-F-STATUS",
+      "PLAT-P2ENT-F-VERSION",
+    ],
+    permissions: permissions(
+      "SYSTEM",
+      ["CURRENT_ACTOR", "ROLE-PLATFORM-OPS"],
+      "the system resolves exactly one ACTIVE phase-two entitlement for the school derived from the pinned service object",
+    ),
+    failureResults: [
+      "PHASE_TWO_ENTITLEMENT_INACTIVE",
+      "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+      "SERVICE_CONTINUITY_NOT_PROTECTED",
+      "ENTITLEMENT_DECISION_UNAVAILABLE",
+      "SCHOOL_SCOPE_MISMATCH",
+    ],
+    extras: {
+      executionMode: "FLOW_INTERNAL",
+      trigger: { kind: "FLOW", flowIds: ["DF-006"] },
+      relatedStateGuards: [{
+        refFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+        versionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        requiredState: "ACTIVE",
+      }],
+      activeEntitlementSelectionGuard: {
+        schoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+        schoolVersionFieldId: "PLAT-P2ENT-F-SCHOOL-VERSION",
+        statusFieldId: "PLAT-P2ENT-F-STATUS",
+        requiredState: "ACTIVE",
+        versionFieldId: "PLAT-P2ENT-F-VERSION",
+        maximumMatches: 1,
+        selectionRule: "EXACT_SCHOOL_AND_ACTIVE_PHASE_TWO_ENTITLEMENT_VERSION",
+        requestSchoolResolution: "PINNED_SERVICE_OBJECT_SCHOOL",
+        zeroMatchResult: "PHASE_TWO_ENTITLEMENT_INACTIVE",
+        ambiguousMatchResult: "ENTITLEMENT_DECISION_UNAVAILABLE",
+        missingOrAmbiguousBehavior: "FAIL_CLOSED",
+        sourceServicePlanRevalidation: phaseTwoServicePlanRevalidation({
+          allowProtectedPublishedActivity: true,
+        }),
+      },
+    },
+  }),
+  action({
+    id: PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID,
+    label: "Restrict the Phase-two Entitlement Bound to a Restricted Service Plan",
+    targetObjectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    operationKind: "UPDATE",
+    inputFieldIds: [
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+    ],
+    outputFieldIds: ["PLAT-P2ENT-F-STATUS", "PLAT-P2ENT-F-VERSION"],
+    permissions: permissions(
+      "SYSTEM",
+      ["CURRENT_ACTOR", "ROLE-PLATFORM-OPS"],
+      "the exact ACTIVE entitlement pinned to the service-plan identity and pre-restriction version is restricted after the committed plan restriction event",
+    ),
+    transition: { from: "ACTIVE", to: "RESTRICTED" },
+    risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "SERVICE_PLAN_RESTRICTION_EVENT_INVALID",
+      "SERVICE_PLAN_SOURCE_VERSION_MISMATCH",
+      "PHASE_TWO_ENTITLEMENT_SOURCE_AMBIGUOUS",
+      "VERSION_CONFLICT",
+    ],
+    extras: {
+      executionMode: "SYSTEM_EVENT",
+      trigger: { kind: "EVENT", eventId: PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID },
+      relatedStateGuards: [{
+        refFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+        versionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+        targetObjectId: "PLAT-OBJ-SERVICE-PLAN",
+        requiredStates: ["ACTIVE", "RESTRICTED"],
+      }],
+      entitlementRestrictionPropagationGuard: {
+        eventId: PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID,
+        entitlementServicePlanRefFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+        entitlementServicePlanVersionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+        entitlementSchoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+        sourceServicePlanIdentityFieldId: "PLAT-PLAN-F-ID",
+        sourceServicePlanVersionFieldId: "PLAT-PLAN-F-VERSION",
+        sourceServicePlanStateFieldId: "PLAT-PLAN-F-SERVICE-STATE",
+        sourceServicePlanSchoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+        requiredSourceState: "RESTRICTED",
+        entitlementPinnedVersionMustEqualEventPriorVersion: true,
+        eventResultingVersionMustBeNewer: true,
+        schoolMustMatch: true,
+        maximumActiveMatches: 1,
+        zeroMatchEffect: "IDEMPOTENT_NO_OP",
+        duplicateEffect: "RETURN_EXISTING_RESTRICTED_ENTITLEMENT",
+        ambiguityEffect: "FAIL_CLOSED",
+        sourceVersionMismatchResult: "SERVICE_PLAN_SOURCE_VERSION_MISMATCH",
+        ambiguityResult: "PHASE_TWO_ENTITLEMENT_SOURCE_AMBIGUOUS",
+      },
+      nonFailureNoOpResults: ["NO_ACTIVE_PHASE_TWO_ENTITLEMENT"],
+    },
   }),
 ];
 
@@ -4553,12 +5155,48 @@ const phaseTwoEntitlementModule = moduleFact({
   actionFacts: phaseTwoEntitlementActions,
   phaseTwoEntitlementContract: {
     objectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    schoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+    servicePlanObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    servicePlanRefFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+    servicePlanVersionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+    requiredServicePlanState: "ACTIVE",
     coreEntitlements: ["CORE_AI_ASSESSMENT", "MINIMUM_VIDEO_HELP"],
     packageExpansionScope: ["CAPACITY", "CONCURRENCY", "ANALYTICS", "GENERAL_SUPPORT"],
     schoolWideGuarantee: true,
     studentOrGuardianPaymentAllowed: false,
     coreLearningLoopPaywallAllowed: false,
     activationActionId: "PLAT-ACT-ACTIVATE-PHASE-TWO-ENTITLEMENT",
+    resolveActiveActionId: "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+    sourceServicePlanRevalidationRule:
+      "EVERY_RESOLVER_AND_CORE_CONSUMER_REVALIDATES_THE_ENTITLEMENT_PINNED_CURRENT_SERVICE_PLAN_VERSION_AT_EXECUTION_WITH_ONLY_EXACT_FINITE_D091_PUBLISHED_ACTIVITY_FALLBACK",
+    protectedContinuityConsumerActionIds: ["GRD-ACT-PROCESS"],
+    strictActivePlanConsumerActionIds: [
+      "PROG-ACT-SYNC-STUDENT-TARGET",
+      "VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT",
+      "VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL",
+    ],
+    restrictionPropagation: {
+      sourceActionId: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+      eventId: PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID,
+      targetActionId: PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID,
+      flowId: PHASE_TWO_ENTITLEMENT_RESTRICTION_FLOW_ID,
+      sourceState: "RESTRICTED",
+      targetState: "RESTRICTED",
+      eventOutboxAtomicWithSourceTransition: true,
+      entitlementReactivationAllowed: false,
+      recoveryRequiresNewEntitlementForNewActivePlan: true,
+    },
+    consumerBindings: [{
+      entitlementCode: "CORE_AI_ASSESSMENT",
+      actionIds: ["GRD-ACT-PROCESS", "PROG-ACT-SYNC-STUDENT-TARGET"],
+    }, {
+      entitlementCode: "MINIMUM_VIDEO_HELP",
+      actionIds: [
+        "VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT",
+        "VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL",
+      ],
+    }],
+    consumerRule: "EVERY_CORE_CONSUMER_PINS_ONE_EXACT_ACTIVE_SAME_SCHOOL_ENTITLEMENT_VERSION",
   },
   pages: [{
     ...page(
@@ -4566,7 +5204,12 @@ const phaseTwoEntitlementModule = moduleFact({
       "Planned School-wide Phase-two Entitlement Workspace",
       phaseTwoEntitlementObjects.map(({ id }) => id),
       phaseTwoEntitlementObjects.flatMap(({ fields }) => fields.map(({ id }) => id)),
-      phaseTwoEntitlementActions.map(({ value }) => value.id),
+      phaseTwoEntitlementActions
+        .map(({ value }) => value.id)
+        .filter((actionId) => ![
+          "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+          PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID,
+        ].includes(actionId)),
       [CLIENT.WEB],
     ),
     availability: RELEASE_STATUS.PLANNED,
@@ -4738,6 +5381,77 @@ export const extensionEvents = deepFreeze([
     },
   },
   {
+    id: "EVT-PLAT-SERVICE-EXIT-WINDOW-OPENED",
+    label: "Service exit window opened for an exact active plan version",
+    definition: "The protected-activity window has ended, the explicit exit window is open, and the exact pinned ACTIVE service-plan version must become RESTRICTED before the continuity window may close.",
+    producerActionIds: ["PLAT-ACT-ENTER-EXIT-WINDOW"],
+    triggeredActionIds: ["PLAT-ACT-RESTRICT-SERVICE-PLAN"],
+    servicePlanTransitionContextContract: {
+      contextKeys: [
+        "servicePlanId",
+        "servicePlanVersion",
+        "continuityId",
+        "continuityVersion",
+        "restrictionReason",
+        "restrictionEffectiveAt",
+      ],
+      producerBindings: [{
+        actionId: "PLAT-ACT-ENTER-EXIT-WINDOW",
+        servicePlanRefFieldId: "PLAT-CONT-F-SERVICE-PLAN-REF",
+        servicePlanVersionFieldId: "PLAT-CONT-F-SERVICE-PLAN-VERSION",
+        continuityIdentityFieldId: "PLAT-CONT-F-ID",
+        continuityVersionFieldId: "PLAT-CONT-F-VERSION",
+        restrictionReasonFieldId: "PLAT-CONT-F-RESTRICTION-REASON",
+        restrictionEffectiveAtFieldId: "PLAT-CONT-F-RESTRICTION-EFFECTIVE-AT",
+      }],
+      consumerBindings: [{
+        actionId: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+        continuityRefFieldId: "PLAT-PLAN-F-CONTINUITY-REF",
+        continuityVersionFieldId: "PLAT-PLAN-F-CONTINUITY-VERSION",
+        restrictionReasonFieldId: "PLAT-PLAN-F-RESTRICTION-REASON",
+        restrictionEffectiveAtFieldId: "PLAT-PLAN-F-RESTRICTION-EFFECTIVE-AT",
+      }],
+      exactPinnedPlanVersionRequired: true,
+      staleVersionEffect: "FAIL_CLOSED",
+    },
+  },
+  {
+    id: PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID,
+    label: "Service plan restricted and dependent phase-two entitlement restriction requested",
+    definition: "The exact ACTIVE service-plan identity and pre-transition version has committed RESTRICTED with an atomic outbox event; any ACTIVE phase-two entitlement pinned to that prior version must become RESTRICTED and cannot be revived.",
+    producerActionIds: ["PLAT-ACT-RESTRICT-SERVICE-PLAN"],
+    triggeredActionIds: [PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID],
+    servicePlanRestrictionPropagationContract: {
+      contextKeys: [
+        "servicePlanId",
+        "priorServicePlanVersion",
+        "resultingServicePlanVersion",
+        "schoolRef",
+        "resultingServicePlanState",
+      ],
+      producerBindings: [{
+        actionId: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+        servicePlanIdentityFieldId: "PLAT-PLAN-F-ID",
+        priorServicePlanVersionSource: "TRANSITION_EXPECTED_VERSION",
+        resultingServicePlanVersionFieldId: "PLAT-PLAN-F-VERSION",
+        schoolRefFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+        resultingStateFieldId: "PLAT-PLAN-F-SERVICE-STATE",
+      }],
+      consumerBindings: [{
+        actionId: PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID,
+        entitlementServicePlanRefFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+        entitlementServicePlanVersionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+        entitlementSchoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+      }],
+      exactServicePlanIdentityRequired: true,
+      entitlementPinnedVersionMustEqualPriorServicePlanVersion: true,
+      resultingServicePlanState: "RESTRICTED",
+      eventOutboxAtomicWithSourceTransition: true,
+      staleOrAmbiguousEffect: "FAIL_CLOSED",
+      zeroActiveEntitlementEffect: "IDEMPOTENT_NO_OP",
+    },
+  },
+  {
     id: "EVT-EXM-SCORE-PUBLISHED",
     label: "Subject score published",
     definition: "A teacher-confirmed subject score version reaches PUBLISHED with its student visibility time.",
@@ -4755,5 +5469,92 @@ export const extensionEvents = deepFreeze([
     triggeredActionIds: ["SCH-ACT-MARK-CANDIDATE-STALE"],
   },
 ]);
-export const extensionFlows = deepFreeze([]);
+export const extensionFlows = deepFreeze([{
+  id: PHASE_TWO_ENTITLEMENT_RESTRICTION_FLOW_ID,
+  label: "Restricted Service Plan to Irreversibly Restricted Phase-two Entitlement",
+  phase: PHASE.SECOND,
+  contractProfile: "GENERIC",
+  routingPolicy: "NONE",
+  moduleIds: ["PLAT-001", "PLAT-002"],
+  steps: [{
+    order: 1,
+    actionId: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+    condition: "the D091 protected-activity window has ended, the exit window is open, and the exact ACTIVE service-plan version can commit its restriction event outbox atomically",
+    providedInputs: [
+      "PLAT-PLAN-F-CONTINUITY-REF",
+      "PLAT-PLAN-F-CONTINUITY-VERSION",
+      "PLAT-PLAN-F-RESTRICTION-REASON",
+    ].map((fieldId) => ({ fieldId, provider: { actorRef: "SYSTEM" } })),
+  }, {
+    order: 2,
+    actionId: PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID,
+    condition: "the committed event resolves at most one ACTIVE same-school entitlement pinned to the service plan's exact pre-restriction version",
+    providedInputs: [
+      "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+      "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+    ].map((fieldId) => ({ fieldId, provider: { actorRef: "SYSTEM" } })),
+  }],
+  sourceDataRefs: [
+    {
+      objectId: "PLAT-OBJ-SERVICE-PLAN",
+      fieldId: "PLAT-PLAN-F-ID",
+      version: "PLAT-PLAN-F-VERSION",
+      cardinality: "ONE",
+    },
+    {
+      objectId: "PLAT-OBJ-SERVICE-PLAN",
+      fieldId: "PLAT-PLAN-F-SCHOOL-REF",
+      version: "PLAT-PLAN-F-VERSION",
+      cardinality: "ONE",
+    },
+    {
+      objectId: "PLAT-OBJ-SERVICE-PLAN",
+      fieldId: "PLAT-PLAN-F-SERVICE-STATE",
+      version: "PLAT-PLAN-F-VERSION",
+      cardinality: "ONE",
+    },
+  ],
+  targetDataRefs: [{
+    objectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    fieldId: "PLAT-P2ENT-F-STATUS",
+    version: "PLAT-P2ENT-F-VERSION",
+  }, {
+    objectId: "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT",
+    fieldId: "PLAT-P2ENT-F-VERSION",
+    version: "PLAT-P2ENT-F-VERSION",
+  }],
+  idempotencyKeyParts: {
+    identityFieldIds: ["PLAT-PLAN-F-ID"],
+    versionFieldIds: ["PLAT-PLAN-F-VERSION"],
+    fanoutFieldId: "PLAT-PLAN-F-SCHOOL-REF",
+  },
+  failureGranularity: "ONE_SERVICE_PLAN_RESTRICTION_VERSION_AND_ITS_EXACT_ACTIVE_PHASE_TWO_ENTITLEMENT",
+  retryPolicy: {
+    strategy: "REDELIVER_THE_COMMITTED_RESTRICTION_EVENT_AND_REVALIDATE_THE_EXACT_SOURCE_VERSION",
+    maxAttempts: 8,
+    retryableFailureResults: ["VERSION_CONFLICT"],
+  },
+  compensation: {
+    strategy: "NEVER_REACTIVATE_THE_RESTRICTED_SERVICE_PLAN_OR_ENTITLEMENT",
+    description: "an outbox failure leaves the plan ACTIVE and uncommitted; a downstream failure keeps the plan RESTRICTED, blocks new or non-protected consumers through synchronous source-plan revalidation, preserves only exact finite D091 published-activity completion, and retries entitlement restriction idempotently",
+  },
+  downstreamInvalidation: {
+    strategy: "BLOCK_NEW_OR_NON_PROTECTED_PHASE_TWO_CONSUMPTION_AFTER_THE_FINITE_D091_BRANCH_CLOSES",
+    targets: [
+      "AI assessment processing outside an exact protected published-activity entry and finite window",
+      "student progress target creation",
+      "student minimum video entitlement creation",
+      "school video overflow pool creation",
+    ],
+  },
+  phaseTwoEntitlementRestrictionFlowContract: {
+    producerActionId: "PLAT-ACT-RESTRICT-SERVICE-PLAN",
+    eventId: PHASE_TWO_SERVICE_PLAN_RESTRICTED_EVENT_ID,
+    consumerActionId: PHASE_TWO_ENTITLEMENT_RESTRICTION_ACTION_ID,
+    entitlementReactivationAllowed: false,
+    consumerFailureRestoresServicePlan: false,
+    exactDuplicateCreatesAdditionalTransition: false,
+    conflictingDuplicateEffect: "FAIL_CLOSED",
+  },
+}]);
 export const extensionAiTasks = deepFreeze([]);

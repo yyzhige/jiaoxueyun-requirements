@@ -417,7 +417,11 @@ test("uses one answer-open policy across every delivery surface with access-time
   );
   assert.equal(publication.answerOpenContract.enforcementBindings.every((binding) => (
     binding.reauthorizeAtAccess === true
-    && binding.beforeOpenBehavior === "WITHHOLD_RESTRICTED_CONTENT"
+    && binding.beforeOpenBehavior === (
+      binding.surface === "NOTIFICATION"
+        ? "STRIP_RESTRICTED_CONTENT_AND_DELIVER_SAFE_SUMMARY"
+        : "WITHHOLD_RESTRICTED_CONTENT"
+    )
     && (binding.actionIds?.length > 0 || binding.policyPointId)
   )), true);
 
@@ -516,14 +520,14 @@ test("separates original learning facts from derived judgments and persists no h
   ]);
   assert.equal(
     objectById(requirementModel, "GRD-OBJ-DECISION").dataNature,
-    "AI_DERIVED_JUDGMENT",
+    "AI_DERIVED",
   );
 
   const initialClassification = objectById(
     requirementModel,
     "GRD-OBJ-INITIAL-ATTEMPT-CLASSIFICATION",
   );
-  assert.equal(initialClassification.dataNature, "AI_DERIVED_JUDGMENT");
+  assert.equal(initialClassification.dataNature, "AI_DERIVED");
   assert.equal(initialClassification.derivedJudgmentContract.sourceOverwriteAllowed, false);
   assert.equal(
     initialClassification.derivedJudgmentContract.priorVersionRequiredWhenRecomputed,
@@ -535,13 +539,13 @@ test("separates original learning facts from derived judgments and persists no h
     requirementModel,
     "CORR-OBJ-ATTEMPT-ASSESSMENT",
   );
-  assert.equal(rawCorrection.dataNature, "ORIGINAL_LEARNING_FACT");
+  assert.equal(rawCorrection.dataNature, "RAW_FACT");
   assert.equal(rawCorrection.originalFactOverwritePolicy, "FORBIDDEN");
   assert.equal(
     rawCorrection.fields.find(({ id }) => id === "CORR-ATTEMPT-F-CORRECTION-ANSWER").mutability,
     "IMMUTABLE",
   );
-  assert.equal(correctionAssessment.dataNature, "AI_DERIVED_JUDGMENT");
+  assert.equal(correctionAssessment.dataNature, "AI_DERIVED");
   assert.equal(correctionAssessment.derivedJudgmentContract.sourceOverwriteAllowed, false);
   assert.equal(
     actionById(requirementModel, "CORR-ACT-NORMALIZE-SUBMISSION").targetObjectId,
@@ -555,7 +559,7 @@ test("separates original learning facts from derived judgments and persists no h
   for (const objectId of grading.dataSeparationContract.derivedJudgmentObjectIds) {
     const object = objectById(requirementModel, objectId);
     const contract = object.derivedJudgmentContract;
-    assert.equal(object.dataNature, "AI_DERIVED_JUDGMENT", objectId);
+    assert.equal(object.dataNature, "AI_DERIVED", objectId);
     assert.equal(object.originalFactOverwritePolicy, "FORBIDDEN", objectId);
     assert.equal(contract.sourceOverwriteAllowed, false, objectId);
     assert.equal(contract.recomputationCreatesNewVersion, true, objectId);

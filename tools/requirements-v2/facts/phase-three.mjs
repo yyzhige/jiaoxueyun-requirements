@@ -356,7 +356,7 @@ const masteryResponsibility = {
   controlSubject: "SCHOOL",
   producerRef: "ROLE-STUDENT",
   ownerRef: "DUTY-SUBJECT-TEACHER",
-  confirmerRef: "AI",
+  confirmerRef: "SYSTEM",
   stewardRef: "DUTY-SUBJECT-TEACHER",
 };
 const classProgressResponsibility = {

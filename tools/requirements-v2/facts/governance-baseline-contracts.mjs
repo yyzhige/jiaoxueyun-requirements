@@ -3,6 +3,12 @@ import {
   RISK,
   deepFreeze,
 } from "../model.mjs";
+import { sensitivities } from "./catalogs.mjs";
+import {
+  DATA_NATURE_OPTION_SET_ID,
+  DATA_NATURE_VALUES,
+  DATA_SENSITIVITY_OPTION_SET_ID,
+} from "./data-governance-taxonomy.mjs";
 import { withStudentDataClassification } from "./student-data-classification.mjs";
 
 const WEB_APP = [CLIENT.WEB, CLIENT.APP];
@@ -51,6 +57,30 @@ const DATA_CATALOG_AXIS_FIELD_IDS = [
   "DGV-CATALOG-F-LIFECYCLE",
 ];
 
+const DATA_CATALOG_OBJECT_ID = "DGV-OBJ-DATA-CATALOG-ENTRY";
+const DATA_CATALOG_OBJECT_KEY_FIELD_ID = "DGV-CATALOG-F-SOURCE-OBJECT-KIND";
+const DATA_CATALOG_CONTROL_SUBJECT_FIELD_ID = "DGV-CATALOG-F-CONTROL-SUBJECT";
+const DATA_CATALOG_CONTROL_SCOPE_FIELD_ID = "DGV-CATALOG-F-CONTROL-SCOPE-REF";
+const DATA_CATALOG_STATUS_FIELD_ID = "DGV-CATALOG-F-STATUS";
+const DATA_CATALOG_REPLACEMENT_REF_FIELD_ID = "DGV-CATALOG-F-REPLACEMENT-DRAFT-REF";
+const DATA_CATALOG_REPLACEMENT_VERSION_FIELD_ID = "DGV-CATALOG-F-REPLACEMENT-DRAFT-VERSION";
+const DATA_CATALOG_UNIQUENESS_FIELD_IDS = [
+  DATA_CATALOG_CONTROL_SUBJECT_FIELD_ID,
+  DATA_CATALOG_CONTROL_SCOPE_FIELD_ID,
+  DATA_CATALOG_OBJECT_KEY_FIELD_ID,
+];
+const DATA_CATALOG_PARTITION_ACTOR_MAPPINGS = [
+  { controlSubject: "SCHOOL", actorRef: "ROLE-SCHOOL-ADMIN" },
+  { controlSubject: "PLATFORM", actorRef: "ROLE-PLATFORM-GOVERNANCE" },
+  { controlSubject: "STUDENT", actorRef: "ROLE-PLATFORM-GOVERNANCE" },
+];
+const GOVERNANCE_ACTION_IDS = [
+  "DGV-ACT-CORRECT-DATA",
+  "DGV-ACT-RESTRICT-DATA-ACCESS",
+  "DGV-ACT-PHYSICALLY-DELETE-DATA",
+  "DGV-ACT-IRREVERSIBLY-DEIDENTIFY-DATA",
+];
+
 const DELETION_OBJECT_CATEGORIES = [
   "RAW_TEXT",
   "IMAGE",
@@ -82,12 +112,7 @@ export const governanceBaselineOptionSets = deepFreeze([
     ["PRIMARY", "Primary school"],
     ["MIDDLE", "Middle school"],
   ]),
-  optionSet("OPT-BL2-003", "dataNature", "Data nature", [
-    ["RAW_FACT", "Raw fact"],
-    ["TEACHING_BASELINE", "Teaching baseline"],
-    ["AI_DERIVED", "AI-derived interpretation"],
-    ["SYSTEM_GOVERNANCE", "System governance"],
-  ]),
+  optionSet(DATA_NATURE_OPTION_SET_ID, "dataNature", "Data nature", DATA_NATURE_VALUES),
   optionSet("OPT-BL2-004", "dataSubjectKind", "Data subject kind", [
     ["STUDENT", "Student"],
     ["GUARDIAN", "Guardian"],
@@ -118,12 +143,12 @@ export const governanceBaselineOptionSets = deepFreeze([
     ["SAFETY", "Safety"],
     ["LEGAL_HOLD", "Legal or dispute hold"],
   ]),
-  optionSet("OPT-BL2-008", "dataSensitivityAxis", "Data sensitivity axis", [
-    ["PUBLIC", "Public"],
-    ["SCHOOL_INTERNAL", "School internal"],
-    ["MINOR_PERSONAL", "Minor personal data"],
-    ["HIGH_SECURITY", "High-security identity or audit data"],
-  ]),
+  optionSet(
+    DATA_SENSITIVITY_OPTION_SET_ID,
+    "dataSensitivityAxis",
+    "Data sensitivity axis",
+    sensitivities.map(({ id, label }) => [id, label]),
+  ),
   optionSet("OPT-BL2-009", "dataPortability", "Data portability", [
     ["NON_PORTABLE", "Non-portable"],
     ["AUTHORIZED_SUBSET", "Authorized subset"],
@@ -180,6 +205,11 @@ export const governanceBaselineOptionSets = deepFreeze([
   optionSet("OPT-BL2-016", "schoolReorganizationKind", "School reorganization kind", [
     ["MERGE", "Merge"],
     ["SEPARATE", "Separate"],
+  ]),
+  optionSet("OPT-BL2-017", "catalogControlSubject", "Catalog control subject", [
+    ["SCHOOL", "School-controlled object"],
+    ["PLATFORM", "Platform-controlled object"],
+    ["STUDENT", "Student-controlled object"],
   ]),
 ]);
 
@@ -637,7 +667,7 @@ function enhanceAccountModule(module) {
       fields: [
         identityField("ACC-READINESS-F-ID", "Class and Course Readiness ID"),
         field("ACC-READINESS-F-SCHOOL-ID", "School Entity ID", { dataType: "ID", mutability: "IMMUTABLE" }),
-        field("ACC-READINESS-F-TERM-ID", "Current Term ID", { dataType: "ID", mutability: "IMMUTABLE" }),
+        optionField("ACC-READINESS-F-TERM-ID", "Current Term ID", "OPT-COM-004", { dataType: "ID", mutability: "IMMUTABLE" }),
         field("ACC-READINESS-F-CLASS-COURSE-EVIDENCE", "Class and Course Validation Evidence", { dataType: "JSON" }),
         systemField("ACC-READINESS-F-STATUS", "Class and Course Readiness Status"),
         systemField("ACC-READINESS-F-VERSION", "Class and Course Readiness Version", "INTEGER", { idempotencyRole: "OBJECT_VERSION" }),
@@ -823,6 +853,58 @@ function enhanceAccountModule(module) {
 
   const identityDeleteActionId = "ACC-ACT-COMPLETE-IDENTITY-DELETION";
   const platformIdentity = requireExactlyOne(module.objects, "ACC-OBJ-PLATFORM-IDENTITY", "object");
+  const identitySubjectKind = optionField(
+    "ACC-PIDENT-F-SUBJECT-KIND",
+    "Platform Identity Subject Kind",
+    "OPT-BL2-004",
+    { mutability: "IMMUTABLE" },
+  );
+  const teacherTeachingFactSnapshot = systemField(
+    "ACC-PIDENT-F-TEACHING-FACT-SNAPSHOT",
+    "Versioned Teaching Facts Requiring Historical Authorship",
+    "JSON",
+    {
+      required: false,
+      mutability: "IMMUTABLE",
+      validation: "for a teacher deletion, must contain only the fixed teaching fact IDs and source versions that require historical authorship; it must not contain a recoverable identity claim",
+    },
+  );
+  const teacherTeachingFactSnapshotDigest = systemField(
+    "ACC-PIDENT-F-TEACHING-FACT-SNAPSHOT-DIGEST",
+    "Canonical Teaching Fact Snapshot Digest",
+    "STRING",
+    {
+      required: false,
+      mutability: "IMMUTABLE",
+      validation: "must be the canonical digest of the exact ordered teaching fact ID and version set emitted for teacher authorship rewriting",
+    },
+  );
+  const teacherDeletionEventId = systemField(
+    "ACC-PIDENT-F-DELETION-EVENT-ID",
+    "Teacher Identity Deletion Completion Event ID",
+    "ID",
+    { required: false, mutability: "IMMUTABLE" },
+  );
+  const teacherDeletionEventVersion = systemField(
+    "ACC-PIDENT-F-DELETION-EVENT-VERSION",
+    "Teacher Identity Deletion Completion Event Version",
+    "INTEGER",
+    { required: false, mutability: "IMMUTABLE" },
+  );
+  addFields(platformIdentity, [
+    identitySubjectKind,
+    teacherTeachingFactSnapshot,
+    teacherTeachingFactSnapshotDigest,
+    teacherDeletionEventId,
+    teacherDeletionEventVersion,
+  ]);
+  const registerPlatformIdentity = requireExactlyOne(
+    module.actions,
+    "ACC-ACT-REGISTER-PLATFORM-IDENTITY",
+    "action",
+  );
+  registerPlatformIdentity.inputFieldIds.push(identitySubjectKind.id);
+  registerPlatformIdentity.outputFieldIds.push(identitySubjectKind.id);
   const deletionCaseRef = versionPinnedReference({
     id: "ACC-PIDENT-F-DELETION-CASE-REF",
     label: "Completed Student Deletion Matrix Reference",
@@ -832,6 +914,7 @@ function enhanceAccountModule(module) {
     requiredActionIds: [identityDeleteActionId],
     stateGuardPolicy: "UPDATE_REQUIRED",
     overrides: {
+      idempotencyRole: "OBJECT_REF",
       required: { description: "required before final platform identity deletion", whenStates: ["DELETED"], whenActionIds: [identityDeleteActionId] },
     },
   });
@@ -855,16 +938,82 @@ function enhanceAccountModule(module) {
     ),
   ];
   const completeIdentityDeletion = requireExactlyOne(module.actions, identityDeleteActionId, "action");
-  completeIdentityDeletion.inputFieldIds.push(deletionCaseRef.id, deletionCaseVersion.id);
-  completeIdentityDeletion.outputFieldIds.push(deletionCaseRef.id, deletionCaseVersion.id);
+  completeIdentityDeletion.inputFieldIds.push(
+    identitySubjectKind.id,
+    deletionCaseRef.id,
+    deletionCaseVersion.id,
+  );
+  completeIdentityDeletion.outputFieldIds.push(
+    teacherTeachingFactSnapshot.id,
+    teacherTeachingFactSnapshotDigest.id,
+    teacherDeletionEventId.id,
+    teacherDeletionEventVersion.id,
+    deletionCaseRef.id,
+    deletionCaseVersion.id,
+  );
   completeIdentityDeletion.relatedStateGuards = [{
     refFieldId: deletionCaseRef.id,
     versionFieldId: deletionCaseVersion.id,
     targetObjectId: "DGV-OBJ-STUDENT-DELETION-CASE",
     requiredState: "COMPLETED",
   }];
+  completeIdentityDeletion.producedEventIds = [
+    "EVT-TEACHER-IDENTITY-DELETION-COMPLETED",
+  ];
+  completeIdentityDeletion.teacherDeletionEventEmission = {
+    eventId: "EVT-TEACHER-IDENTITY-DELETION-COMPLETED",
+    subjectKindFieldId: identitySubjectKind.id,
+    requiredSubjectKindCode: "TEACHER",
+    requiredSuccessState: "DELETED",
+    sourceVersionFieldId: "ACC-PIDENT-F-VERSION",
+    teachingFactSnapshotFieldId: teacherTeachingFactSnapshot.id,
+    teachingFactSnapshotDigestFieldId: teacherTeachingFactSnapshotDigest.id,
+    eventIdentityFieldId: teacherDeletionEventId.id,
+    eventVersionFieldId: teacherDeletionEventVersion.id,
+    eventCommitRule: "AFTER_ATOMIC_IDENTITY_DELETION_AND_LOOKUP_REMOVAL",
+    nonTeacherEffect: "NO_EVENT",
+    failedDeletionEffect: "NO_EVENT",
+    outboxFailureEffect: "KEEP_DELETION_UNCOMMITTED",
+    recoverableIdentityInPayloadAllowed: false,
+    teachingFactSnapshotResolution: "SYSTEM_ENUMERATES_AUTHORIZED_TEACHING_FACT_IDS_AND_SOURCE_VERSIONS_INSIDE_THE_DELETION_TRANSACTION",
+  };
+  for (const [resultCode, predicate, expectedData] of [
+    [
+      "TEACHING_FACT_SNAPSHOT_MISMATCH",
+      "a teacher deletion teaching-fact snapshot is missing, mutable, or its canonical digest does not match the exact ID and source-version set",
+      "identity deletion remains uncommitted and no teacher deletion event or authorship rewrite is emitted",
+    ],
+    [
+      "EVENT_OUTBOX_FAILED",
+      "the durable teacher deletion event cannot be committed atomically with lookup removal",
+      "identity deletion remains uncommitted so a deleted teacher can never exist without a retriable authorship rewrite event",
+    ],
+  ]) {
+    appendBoundaryScenario(
+      module,
+      completeIdentityDeletion,
+      resultCode,
+      predicate,
+      expectedData,
+      "FAILURE",
+    );
+  }
+  const deletionSuccessScenario = requireExactlyOne(
+    module.scenarios,
+    `${identityDeleteActionId}-SCN-SUCCESS`,
+    "scenario",
+  );
+  deletionSuccessScenario.then.expectedData = "teacher deletion atomically removes the recoverable identity lookup and emits one versioned event with a fixed teaching-fact scope; non-teacher deletion emits no teacher event";
   const identityPage = requireExactlyOne(module.pages, "ACC-PAGE-PLATFORM-IDENTITY", "page");
-  identityPage.fieldIds.push(deletionCaseRef.id, deletionCaseVersion.id);
+  identityPage.fieldIds.push(
+    identitySubjectKind.id,
+    teacherTeachingFactSnapshot.id,
+    teacherTeachingFactSnapshotDigest.id,
+    teacherDeletionEventId.id,
+    teacherDeletionEventVersion.id,
+    deletionCaseRef.id,
+    deletionCaseVersion.id,
+  );
 
   module.schoolReadinessContract = {
     axisObjectIds: [
@@ -1306,15 +1455,36 @@ function enhanceNotificationModule(module) {
 }
 
 function enhanceDataGovernanceModule(module) {
+  const replacementDraftRef = versionPinnedReference({
+    id: DATA_CATALOG_REPLACEMENT_REF_FIELD_ID,
+    label: "Replacement Draft Catalog Entry",
+    targetObjectId: DATA_CATALOG_OBJECT_ID,
+    versionFieldId: DATA_CATALOG_REPLACEMENT_VERSION_FIELD_ID,
+    targetVersionFieldId: "DGV-CATALOG-F-VERSION",
+    requiredActionIds: ["DGV-ACT-SUPERSEDE-DATA-CATALOG"],
+    overrides: { required: false },
+  });
   const catalog = domainObject({
-    id: "DGV-OBJ-DATA-CATALOG-ENTRY",
+    id: DATA_CATALOG_OBJECT_ID,
     label: "Eight-axis Data Catalog Entry",
     dataSubject: "DATA_CATALOG_ENTRY",
-    producerRef: "ROLE-SCHOOL-ADMIN",
-    ownerRef: "ROLE-SCHOOL-ADMIN",
+    producerRef: "ROLE-PLATFORM-GOVERNANCE",
+    ownerRef: "ROLE-PLATFORM-GOVERNANCE",
+    confirmerRef: "ROLE-PLATFORM-GOVERNANCE",
+    stewardRef: "ROLE-PLATFORM-GOVERNANCE",
     states: ["DRAFT", "ACTIVE", "SUPERSEDED"],
     fields: [
       identityField("DGV-CATALOG-F-ID", "Data Catalog Entry ID"),
+      optionField(
+        DATA_CATALOG_CONTROL_SUBJECT_FIELD_ID,
+        "Governed Object Control Subject",
+        "OPT-BL2-017",
+        { mutability: "IMMUTABLE" },
+      ),
+      field(DATA_CATALOG_CONTROL_SCOPE_FIELD_ID, "Governed Control Scope Instance", {
+        dataType: "ID",
+        mutability: "IMMUTABLE",
+      }),
       field("DGV-CATALOG-F-SOURCE-OBJECT-KIND", "Source Object Kind", { mutability: "IMMUTABLE" }),
       optionField("DGV-CATALOG-F-NATURE", "Data Nature", "OPT-BL2-003", { mutability: "IMMUTABLE" }),
       optionField("DGV-CATALOG-F-DATA-SUBJECT", "Data Subject", "OPT-BL2-004", { mutability: "IMMUTABLE" }),
@@ -1324,13 +1494,90 @@ function enhanceDataGovernanceModule(module) {
       optionField("DGV-CATALOG-F-SENSITIVITY", "Sensitivity", "OPT-BL2-008", { mutability: "IMMUTABLE" }),
       optionField("DGV-CATALOG-F-PORTABILITY", "Portability", "OPT-BL2-009", { mutability: "IMMUTABLE" }),
       optionField("DGV-CATALOG-F-LIFECYCLE", "Lifecycle", "OPT-BL2-010", { mutability: "IMMUTABLE" }),
+      replacementDraftRef,
+      systemField(DATA_CATALOG_REPLACEMENT_VERSION_FIELD_ID, "Replacement Draft Catalog Version", "INTEGER", {
+        required: false,
+        mutability: "IMMUTABLE",
+      }),
       systemField("DGV-CATALOG-F-STATUS", "Catalog Entry Status"),
       versionField("DGV-CATALOG-F-VERSION", "Catalog Entry Version"),
     ],
+    lineageBindings: [lineage(
+      DATA_CATALOG_REPLACEMENT_REF_FIELD_ID,
+      DATA_CATALOG_REPLACEMENT_VERSION_FIELD_ID,
+      DATA_CATALOG_OBJECT_ID,
+      "DGV-CATALOG-F-VERSION",
+    )],
     overrides: {
+      controlSubject: "PLATFORM",
       readMode: "AUTHORIZED",
-      dataCatalogContract: { axisFieldIds: DATA_CATALOG_AXIS_FIELD_IDS },
+      catalogPartitionAuthorization: {
+        controlSubjectFieldId: DATA_CATALOG_CONTROL_SUBJECT_FIELD_ID,
+        scopeRefFieldId: DATA_CATALOG_CONTROL_SCOPE_FIELD_ID,
+        crossPartitionEffect: "DENY",
+        actorMappings: DATA_CATALOG_PARTITION_ACTOR_MAPPINGS,
+      },
+      catalogEntryResponsibilityContract: {
+        responsibilitySource: "CONTROL_SUBJECT_PARTITION",
+        controlSubjectFieldId: DATA_CATALOG_CONTROL_SUBJECT_FIELD_ID,
+        scopeRefFieldId: DATA_CATALOG_CONTROL_SCOPE_FIELD_ID,
+        schemaControlSubject: "PLATFORM",
+        schemaOwnerRef: "ROLE-PLATFORM-GOVERNANCE",
+        crossPartitionEffect: "DENY",
+        responsibilityMappings: DATA_CATALOG_PARTITION_ACTOR_MAPPINGS.map((mapping) => ({
+          ...mapping,
+          producerRef: mapping.actorRef,
+          ownerRef: mapping.actorRef,
+          confirmerRef: mapping.actorRef,
+          stewardRef: mapping.actorRef,
+        })),
+      },
+      dataCatalogContract: {
+        axisFieldIds: DATA_CATALOG_AXIS_FIELD_IDS,
+        governedObjectIds: [],
+        governedObjectIdSource: "ALL_MODEL_OBJECT_IDS",
+        sourceObjectKindValidation: "MUST_EQUAL_GOVERNED_OBJECT_ID",
+        classificationKey: {
+          scope: "CONTROL_SUBJECT_PARTITION",
+          fieldIds: DATA_CATALOG_UNIQUENESS_FIELD_IDS,
+        },
+        coveragePartitions: [],
+        activeClassification: {
+          cardinality: "EXACTLY_ONE_PER_GOVERNED_OBJECT",
+          statusFieldId: DATA_CATALOG_STATUS_FIELD_ID,
+          activeState: "ACTIVE",
+          supersededState: "SUPERSEDED",
+          initialActivationActionId: "DGV-ACT-ACTIVATE-DATA-CATALOG",
+          atomicReplacementActionId: "DGV-ACT-SUPERSEDE-DATA-CATALOG",
+          resolveActionId: "DGV-ACT-RESOLVE-DATA-CATALOG",
+          initialActivationRequiresActiveCount: 0,
+          replacementRequiresActiveCount: 1,
+          activeCountAfterCommit: 1,
+        },
+        authoritativeAxisMappings: {
+          dataNature: {
+            fieldId: "DGV-CATALOG-F-NATURE",
+            optionSetId: DATA_NATURE_OPTION_SET_ID,
+            objectProperty: "dataNature",
+          },
+          sensitivity: {
+            fieldId: "DGV-CATALOG-F-SENSITIVITY",
+            optionSetId: DATA_SENSITIVITY_OPTION_SET_ID,
+            objectProperty: "sensitivityId",
+            modelCollection: "sensitivities",
+          },
+        },
+      },
     },
+  });
+  const governanceCatalogRef = versionPinnedReference({
+    id: "DGV-GOVCASE-F-CATALOG-ENTRY-REF",
+    label: "Pinned Active Eight-axis Catalog Entry",
+    targetObjectId: DATA_CATALOG_OBJECT_ID,
+    versionFieldId: "DGV-GOVCASE-F-CATALOG-ENTRY-VERSION",
+    targetVersionFieldId: "DGV-CATALOG-F-VERSION",
+    requiredActionIds: GOVERNANCE_ACTION_IDS,
+    stateGuardPolicy: "ALWAYS_REQUIRED",
   });
   const governanceCase = domainObject({
     id: "DGV-OBJ-DATA-GOVERNANCE-CASE",
@@ -1346,7 +1593,10 @@ function enhanceDataGovernanceModule(module) {
     fields: [
       identityField("DGV-GOVCASE-F-ID", "Data Governance Case ID"),
       field("DGV-GOVCASE-F-TARGET-OBJECT-ID", "Target Object ID", { dataType: "ID", mutability: "IMMUTABLE" }),
-      field("DGV-GOVCASE-F-CATALOG-ENTRY-ID", "Eight-axis Catalog Entry ID", { dataType: "ID", mutability: "IMMUTABLE" }),
+      field("DGV-GOVCASE-F-TARGET-OBJECT-KIND", "Target Object Kind", { mutability: "IMMUTABLE" }),
+      field("DGV-GOVCASE-F-TARGET-CONTROL-SCOPE-REF", "Target Control Scope Instance", { dataType: "ID", mutability: "IMMUTABLE" }),
+      governanceCatalogRef,
+      systemField("DGV-GOVCASE-F-CATALOG-ENTRY-VERSION", "Pinned Catalog Entry Version", "INTEGER", { mutability: "IMMUTABLE" }),
       optionField("DGV-GOVCASE-F-ACTION-KIND", "Governance Action Kind", "OPT-BL2-011", { mutability: "IMMUTABLE" }),
       field("DGV-GOVCASE-F-LEGAL-BASIS", "Verified Legal or Contractual Basis", { dataType: "JSON", mutability: "IMMUTABLE" }),
       field("DGV-GOVCASE-F-DISPUTE-BASIS", "Dispute or Hold Basis", { dataType: "JSON", mutability: "IMMUTABLE" }),
@@ -1354,10 +1604,32 @@ function enhanceDataGovernanceModule(module) {
       systemField("DGV-GOVCASE-F-STATUS", "Governance Case Status"),
       versionField("DGV-GOVCASE-F-VERSION", "Governance Case Version"),
     ],
+    lineageBindings: [lineage(
+      "DGV-GOVCASE-F-CATALOG-ENTRY-REF",
+      "DGV-GOVCASE-F-CATALOG-ENTRY-VERSION",
+      DATA_CATALOG_OBJECT_ID,
+      "DGV-CATALOG-F-VERSION",
+    )],
     overrides: {
       fourActionPolicy: {
         actionKinds: ["CORRECT", "RESTRICT_ACCESS", "PHYSICAL_DELETE", "IRREVERSIBLE_DEIDENTIFY"],
         singleDeleteStatusAllowed: false,
+      },
+      catalogExecutionContract: {
+        catalogRefFieldId: "DGV-GOVCASE-F-CATALOG-ENTRY-REF",
+        catalogVersionFieldId: "DGV-GOVCASE-F-CATALOG-ENTRY-VERSION",
+        targetObjectIdFieldId: "DGV-GOVCASE-F-TARGET-OBJECT-ID",
+        targetObjectKindFieldId: "DGV-GOVCASE-F-TARGET-OBJECT-KIND",
+        targetControlScopeFieldId: "DGV-GOVCASE-F-TARGET-CONTROL-SCOPE-REF",
+        targetControlSubjectSource: "MODEL_OBJECT_REGISTRY",
+        catalogSourceObjectKindFieldId: DATA_CATALOG_OBJECT_KEY_FIELD_ID,
+        catalogControlSubjectFieldId: DATA_CATALOG_CONTROL_SUBJECT_FIELD_ID,
+        catalogControlScopeFieldId: DATA_CATALOG_CONTROL_SCOPE_FIELD_ID,
+        requiredCatalogState: "ACTIVE",
+        requiredActiveMatchCount: 1,
+        sourceObjectKindMustEqualTargetObjectKind: true,
+        controlSubjectMustEqualTargetObjectControlSubject: true,
+        controlScopeMustEqualTargetControlScope: true,
       },
     },
   });
@@ -1677,11 +1949,119 @@ function enhanceDataGovernanceModule(module) {
   const catalogPageId = "DGV-PAGE-DATA-CATALOG";
   const governancePageId = "DGV-PAGE-GOVERNANCE-ACTIONS";
   const deletionPageId = "DGV-PAGE-STUDENT-DELETION-MATRIX";
+  const catalogPermissions = DATA_CATALOG_PARTITION_ACTOR_MAPPINGS.map((mapping) => ({
+    effect: "ALLOW",
+    roleRef: mapping.actorRef,
+    condition: `the actor governs only the exact ${mapping.controlSubject} control-subject partition and matching scope instance`,
+    scope: {
+      kind: "CATALOG_CONTROL_SUBJECT_PARTITION",
+      controlSubject: mapping.controlSubject,
+      controlSubjectFieldId: DATA_CATALOG_CONTROL_SUBJECT_FIELD_ID,
+      scopeRefFieldId: DATA_CATALOG_CONTROL_SCOPE_FIELD_ID,
+      subjectMatch: "REQUIRED",
+      scopeMatch: "REQUIRED",
+      crossPartitionEffect: "DENY",
+    },
+  })).concat([
+    { effect: "DENY", roleRef: "ROLE-PLATFORM-OPS", condition: "platform operations cannot author or resolve data classifications" },
+  ]);
+  const catalogActionExtras = (extras = {}) => ({
+    catalogPartitionAuthorization: structuredClone(catalog.catalogPartitionAuthorization),
+    catalogEntryResponsibilityContract: structuredClone(catalog.catalogEntryResponsibilityContract),
+    ...extras,
+  });
   const catalogActions = [
-    actionFact({ id: "DGV-ACT-REGISTER-DATA-CATALOG", label: "Register an Eight-axis Data Catalog Entry", targetObjectId: catalog.id, inputFieldIds: ["DGV-CATALOG-F-SOURCE-OBJECT-KIND", ...DATA_CATALOG_AXIS_FIELD_IDS], outputFieldIds: ["DGV-CATALOG-F-ID", "DGV-CATALOG-F-STATUS", "DGV-CATALOG-F-VERSION"], operationKind: "CREATE", successState: "DRAFT", permissions: allowDeny("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "the school registers all eight governance axes for an owned object kind", "platform operations cannot synthesize school data classification"), pageId: catalogPageId, risk: RISK.HIGH }),
-    actionFact({ id: "DGV-ACT-ACTIVATE-DATA-CATALOG", label: "Activate a Complete Eight-axis Data Catalog Entry", targetObjectId: catalog.id, inputFieldIds: ["DGV-CATALOG-F-ID", ...DATA_CATALOG_AXIS_FIELD_IDS], outputFieldIds: ["DGV-CATALOG-F-STATUS", "DGV-CATALOG-F-VERSION"], operationKind: "UPDATE", transition: { from: "DRAFT", to: "ACTIVE" }, permissions: allowDeny("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "all eight axes are explicit and internally consistent", "platform operations cannot activate an incomplete school catalog"), pageId: catalogPageId, risk: RISK.HIGH }),
-    actionFact({ id: "DGV-ACT-SUPERSEDE-DATA-CATALOG", label: "Supersede a Data Catalog Entry with a New Version", targetObjectId: catalog.id, inputFieldIds: ["DGV-CATALOG-F-ID"], outputFieldIds: ["DGV-CATALOG-F-STATUS", "DGV-CATALOG-F-VERSION"], operationKind: "UPDATE", transition: { from: "ACTIVE", to: "SUPERSEDED" }, permissions: allowDeny("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "a replacement eight-axis entry has been activated", "platform operations cannot silently change school catalog governance"), pageId: catalogPageId, risk: RISK.HIGH }),
-    actionFact({ id: "DGV-ACT-RESOLVE-DATA-CATALOG", label: "Resolve All Eight Data Governance Axes", targetObjectId: catalog.id, inputFieldIds: ["DGV-CATALOG-F-ID"], outputFieldIds: DATA_CATALOG_AXIS_FIELD_IDS, operationKind: "READ", permissions: allowDeny("ROLE-SCHOOL-ADMIN", "ROLE-PLATFORM-OPS", "the school resolves the active complete catalog entry", "platform operations cannot read school governance data by default"), pageId: catalogPageId, failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "CATALOG_AXIS_INCOMPLETE"], boundaryResultCodes: ["CATALOG_AXIS_INCOMPLETE"], extras: { requiredAxisFieldIds: DATA_CATALOG_AXIS_FIELD_IDS } }),
+    actionFact({ id: "DGV-ACT-REGISTER-DATA-CATALOG", label: "Register an Eight-axis Data Catalog Entry", targetObjectId: catalog.id, inputFieldIds: [...DATA_CATALOG_UNIQUENESS_FIELD_IDS, ...DATA_CATALOG_AXIS_FIELD_IDS], outputFieldIds: ["DGV-CATALOG-F-ID", "DGV-CATALOG-F-STATUS", "DGV-CATALOG-F-VERSION"], operationKind: "CREATE", successState: "DRAFT", permissions: catalogPermissions, pageId: catalogPageId, risk: RISK.HIGH, extras: catalogActionExtras() }),
+    actionFact({
+      id: "DGV-ACT-ACTIVATE-DATA-CATALOG",
+      label: "Activate the Initial Complete Eight-axis Data Catalog Entry",
+      targetObjectId: catalog.id,
+      inputFieldIds: ["DGV-CATALOG-F-ID", ...DATA_CATALOG_UNIQUENESS_FIELD_IDS, ...DATA_CATALOG_AXIS_FIELD_IDS],
+      outputFieldIds: ["DGV-CATALOG-F-STATUS", "DGV-CATALOG-F-VERSION"],
+      operationKind: "UPDATE",
+      transition: { from: "DRAFT", to: "ACTIVE" },
+      permissions: catalogPermissions,
+      pageId: catalogPageId,
+      risk: RISK.HIGH,
+      failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT", "ACTIVE_CATALOG_CONFLICT"],
+      boundaryResultCodes: ["ACTIVE_CATALOG_CONFLICT"],
+      failurePredicates: {
+        ACTIVE_CATALOG_CONFLICT: "an ACTIVE catalog entry already exists for the current school and governed object ID",
+      },
+      extras: catalogActionExtras({
+        activeClassificationEffect: {
+          mode: "INITIAL_ACTIVATION",
+          uniquenessKeyFieldIds: DATA_CATALOG_UNIQUENESS_FIELD_IDS,
+          requiredActiveCountBefore: 0,
+          activeCountAfterCommit: 1,
+        },
+      }),
+    }),
+    actionFact({
+      id: "DGV-ACT-SUPERSEDE-DATA-CATALOG",
+      label: "Atomically Supersede the Active Catalog Entry and Activate its Replacement Draft",
+      targetObjectId: catalog.id,
+      inputFieldIds: [
+        "DGV-CATALOG-F-ID",
+        DATA_CATALOG_REPLACEMENT_REF_FIELD_ID,
+        DATA_CATALOG_REPLACEMENT_VERSION_FIELD_ID,
+      ],
+      outputFieldIds: ["DGV-CATALOG-F-STATUS", "DGV-CATALOG-F-VERSION"],
+      operationKind: "UPDATE",
+      transition: { from: "ACTIVE", to: "SUPERSEDED" },
+      permissions: catalogPermissions,
+      pageId: catalogPageId,
+      risk: RISK.HIGH,
+      failureResults: ["PERMISSION_DENIED", "VALIDATION_FAILED", "VERSION_CONFLICT", "ACTIVE_CATALOG_NOT_UNIQUE", "REPLACEMENT_CATALOG_INVALID"],
+      boundaryResultCodes: ["ACTIVE_CATALOG_NOT_UNIQUE", "REPLACEMENT_CATALOG_INVALID"],
+      failurePredicates: {
+        ACTIVE_CATALOG_NOT_UNIQUE: "the current school and governed object ID do not resolve to exactly one ACTIVE entry before replacement",
+        REPLACEMENT_CATALOG_INVALID: "the pinned replacement is not a complete DRAFT for the same governed object ID and all eight authoritative axes",
+      },
+      relatedStateGuards: [{
+        refFieldId: DATA_CATALOG_REPLACEMENT_REF_FIELD_ID,
+        versionFieldId: DATA_CATALOG_REPLACEMENT_VERSION_FIELD_ID,
+        targetObjectId: DATA_CATALOG_OBJECT_ID,
+        requiredState: "DRAFT",
+      }],
+      extras: catalogActionExtras({
+        atomicCatalogReplacement: {
+          uniquenessKeyFieldIds: DATA_CATALOG_UNIQUENESS_FIELD_IDS,
+          replacementRefFieldId: DATA_CATALOG_REPLACEMENT_REF_FIELD_ID,
+          replacementVersionFieldId: DATA_CATALOG_REPLACEMENT_VERSION_FIELD_ID,
+          replacedStateTransition: { from: "ACTIVE", to: "SUPERSEDED" },
+          replacementStateTransition: { from: "DRAFT", to: "ACTIVE" },
+          requiredActiveCountBefore: 1,
+          activeCountAfterCommit: 1,
+          axesMustBeComplete: true,
+          commitMode: "ATOMIC",
+        },
+      }),
+    }),
+    actionFact({
+      id: "DGV-ACT-RESOLVE-DATA-CATALOG",
+      label: "Resolve the Unique Active Eight-axis Data Governance Classification",
+      targetObjectId: catalog.id,
+      inputFieldIds: DATA_CATALOG_UNIQUENESS_FIELD_IDS,
+      outputFieldIds: DATA_CATALOG_AXIS_FIELD_IDS,
+      operationKind: "READ",
+      permissions: catalogPermissions,
+      pageId: catalogPageId,
+      failureResults: ["PERMISSION_DENIED", "NOT_FOUND", "CATALOG_AXIS_INCOMPLETE", "ACTIVE_CATALOG_NOT_UNIQUE"],
+      boundaryResultCodes: ["CATALOG_AXIS_INCOMPLETE", "ACTIVE_CATALOG_NOT_UNIQUE"],
+      failurePredicates: {
+        CATALOG_AXIS_INCOMPLETE: "the unique ACTIVE entry lacks one or more authoritative governance axes",
+        ACTIVE_CATALOG_NOT_UNIQUE: "the current school and governed object ID resolve to zero or multiple ACTIVE catalog entries",
+      },
+      extras: catalogActionExtras({
+        requiredAxisFieldIds: DATA_CATALOG_AXIS_FIELD_IDS,
+        activeClassificationLookup: {
+          uniquenessKeyFieldIds: DATA_CATALOG_UNIQUENESS_FIELD_IDS,
+          requiredState: "ACTIVE",
+          requiredMatchCount: 1,
+        },
+      }),
+    }),
   ];
   const governanceActionDefinitions = [
     ["DGV-ACT-CORRECT-DATA", "Correct a Data Fact without Replacing History", "CORRECT", "CORRECTED"],
@@ -1693,16 +2073,56 @@ function enhanceDataGovernanceModule(module) {
     id,
     label,
     targetObjectId: governanceCase.id,
-    inputFieldIds: ["DGV-GOVCASE-F-TARGET-OBJECT-ID", "DGV-GOVCASE-F-CATALOG-ENTRY-ID", "DGV-GOVCASE-F-ACTION-KIND", "DGV-GOVCASE-F-LEGAL-BASIS", "DGV-GOVCASE-F-DISPUTE-BASIS"],
+    inputFieldIds: [
+      "DGV-GOVCASE-F-TARGET-OBJECT-ID",
+      "DGV-GOVCASE-F-TARGET-OBJECT-KIND",
+      "DGV-GOVCASE-F-TARGET-CONTROL-SCOPE-REF",
+      "DGV-GOVCASE-F-CATALOG-ENTRY-REF",
+      "DGV-GOVCASE-F-CATALOG-ENTRY-VERSION",
+      "DGV-GOVCASE-F-ACTION-KIND",
+      "DGV-GOVCASE-F-LEGAL-BASIS",
+      "DGV-GOVCASE-F-DISPUTE-BASIS",
+    ],
     outputFieldIds: ["DGV-GOVCASE-F-ID", "DGV-GOVCASE-F-EXECUTION-EVIDENCE", "DGV-GOVCASE-F-STATUS", "DGV-GOVCASE-F-VERSION"],
     operationKind: "CREATE",
     successState,
     permissions: allowDeny("ROLE-PLATFORM-GOVERNANCE", "ROLE-SCHOOL-ADMIN", "platform governance executes exactly the authorized object-specific action", "a school administrator cannot collapse or self-execute a high-impact data action"),
     pageId: governancePageId,
     risk: RISK.HIGH,
+    failureResults: [
+      "PERMISSION_DENIED",
+      "VALIDATION_FAILED",
+      "VERSION_CONFLICT",
+      "CATALOG_NOT_ACTIVE",
+      "CATALOG_VERSION_STALE",
+      "CATALOG_OBJECT_KIND_MISMATCH",
+      "CATALOG_SCOPE_MISMATCH",
+      "ACTIVE_CATALOG_NOT_UNIQUE",
+    ],
+    boundaryResultCodes: [
+      "CATALOG_NOT_ACTIVE",
+      "CATALOG_VERSION_STALE",
+      "CATALOG_OBJECT_KIND_MISMATCH",
+      "CATALOG_SCOPE_MISMATCH",
+      "ACTIVE_CATALOG_NOT_UNIQUE",
+    ],
+    failurePredicates: {
+      CATALOG_NOT_ACTIVE: "the pinned catalog entry is DRAFT or SUPERSEDED instead of ACTIVE",
+      CATALOG_VERSION_STALE: "the supplied catalog version differs from the pinned ACTIVE entry version",
+      CATALOG_OBJECT_KIND_MISMATCH: "the catalog source object kind differs from the governed target object kind",
+      CATALOG_SCOPE_MISMATCH: "the catalog control subject or scope instance differs from the governed target object scope",
+      ACTIVE_CATALOG_NOT_UNIQUE: "the target control-subject partition scope and object kind resolve to zero or multiple ACTIVE catalog entries",
+    },
+    relatedStateGuards: [{
+      refFieldId: "DGV-GOVCASE-F-CATALOG-ENTRY-REF",
+      versionFieldId: "DGV-GOVCASE-F-CATALOG-ENTRY-VERSION",
+      targetObjectId: DATA_CATALOG_OBJECT_ID,
+      requiredState: "ACTIVE",
+    }],
     extras: {
       governanceActionKind: actionKind,
       acceptedInputValues: [{ fieldId: "DGV-GOVCASE-F-ACTION-KIND", optionSetId: "OPT-BL2-011", partitionId: "DGV-GOVERNANCE-ACTION-KIND", codes: [actionKind] }],
+      catalogExecutionGuard: structuredClone(governanceCase.catalogExecutionContract),
     },
   }));
   const matrixPermissions = allowDeny(
@@ -1956,6 +2376,159 @@ function enhanceDataGovernanceModule(module) {
     { id: "DGV-REL-DELETION-MATRIX-CASE", fromObjectId: deletionMatrix.id, toObjectId: deletionCase.id, type: "PART_OF", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_STUDENT", onSourceInvalidation: "block matrix execution and identity deletion release" },
     { id: "DGV-REL-DELETION-MATRIX-INVENTORY", fromObjectId: deletionMatrix.id, toObjectId: deletionInventory.id, type: "DERIVED_FROM", cardinality: "MANY_TO_ONE", ownershipScope: "SAME_STUDENT", onSourceInvalidation: "block matrix execution when the pinned inventory cannot be verified" },
   );
+
+  const teacherAuthorSurrogate = requireExactlyOne(
+    module.objects,
+    "DGV-OBJ-TEACHER-AUTHOR-SURROGATE",
+    "object",
+  );
+  teacherAuthorSurrogate.label = "Non-recoverable Teacher Author Surrogate and Authorship Rewrite Mapping";
+  const deletionEventVersion = systemField(
+    "DGV-SURROGATE-F-DELETION-EVENT-VERSION",
+    "Pinned Teacher Identity Deletion Event Version",
+    "INTEGER",
+    { mutability: "IMMUTABLE" },
+  );
+  const teachingFactScopeDigest = systemField(
+    "DGV-SURROGATE-F-TEACHING-FACT-SCOPE-DIGEST",
+    "Canonical Teaching Fact Scope Digest",
+    "STRING",
+    {
+      mutability: "IMMUTABLE",
+      validation: "must equal the canonical digest carried by the exact teacher deletion event version",
+    },
+  );
+  const authorshipMappingDigest = systemField(
+    "DGV-SURROGATE-F-AUTHORSHIP-MAPPING-DIGEST",
+    "Applied Authorship Rewrite Mapping Digest",
+    "STRING",
+    {
+      mutability: "IMMUTABLE",
+      validation: "must cover every and only teaching fact ID and source version in the pinned event scope",
+    },
+  );
+  const rewriteEvidence = systemField(
+    "DGV-SURROGATE-F-REWRITE-EVIDENCE",
+    "Atomic Authorship Rewrite Evidence",
+    "JSON",
+    {
+      mutability: "IMMUTABLE",
+      validation: "must prove that only the author pointer was replaced and that no reverse identity lookup was retained",
+    },
+  );
+  addFields(teacherAuthorSurrogate, [
+    deletionEventVersion,
+    teachingFactScopeDigest,
+    authorshipMappingDigest,
+    rewriteEvidence,
+  ]);
+  const deletionEventIdField = requireExactlyOne(
+    teacherAuthorSurrogate.fields,
+    "DGV-SURROGATE-F-DELETION-EVENT-ID",
+    "field",
+  );
+  deletionEventIdField.validation = "must identify one committed teacher deletion event and must not encode or resolve to the deleted platform identity";
+  const teachingFactScopeField = requireExactlyOne(
+    teacherAuthorSurrogate.fields,
+    "DGV-SURROGATE-F-TEACHING-FACT-SCOPE",
+    "field",
+  );
+  teachingFactScopeField.validation = "must contain only the fixed teaching fact IDs and source versions from the pinned deletion event; it must not contain the deleted identity ID, claim digest, login, school-person number, or another reverse lookup key";
+  teacherAuthorSurrogate.teacherAuthorSurrogateContract = {
+    sourceEventId: "EVT-TEACHER-IDENTITY-DELETION-COMPLETED",
+    sourceEventIdentityFieldId: deletionEventIdField.id,
+    sourceEventVersionFieldId: deletionEventVersion.id,
+    teachingFactScopeFieldId: teachingFactScopeField.id,
+    teachingFactScopeDigestFieldId: teachingFactScopeDigest.id,
+    mappingDigestFieldId: authorshipMappingDigest.id,
+    rewriteEvidenceFieldId: rewriteEvidence.id,
+    mappingRule: "REPLACE_ONLY_AUTHOR_POINTER_FOR_EXACT_FACT_ID_AND_SOURCE_VERSION_SET",
+    mappingAtomicWithSurrogateCreation: true,
+    teachingFactContentMutationAllowed: false,
+    recoverableOriginalIdentityFieldAllowed: false,
+    reverseLookupIndexAllowed: false,
+  };
+
+  const createTeacherAuthorSurrogate = requireExactlyOne(
+    module.actions,
+    "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE",
+    "action",
+  );
+  createTeacherAuthorSurrogate.label = "Create a Non-recoverable Teacher Author Surrogate and Apply the Version-pinned Authorship Mapping";
+  createTeacherAuthorSurrogate.inputFieldIds.push(
+    deletionEventVersion.id,
+    teachingFactScopeDigest.id,
+  );
+  createTeacherAuthorSurrogate.outputFieldIds.push(
+    authorshipMappingDigest.id,
+    rewriteEvidence.id,
+  );
+  createTeacherAuthorSurrogate.idempotencyKey = "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE:deletion-event-id:deletion-event-version:teaching-fact-scope-digest";
+  createTeacherAuthorSurrogate.teacherDeletionEventConsumer = {
+    eventId: "EVT-TEACHER-IDENTITY-DELETION-COMPLETED",
+    producerActionId: "ACC-ACT-COMPLETE-IDENTITY-DELETION",
+    requiredSubjectKindCode: "TEACHER",
+    eventIdentityFieldId: deletionEventIdField.id,
+    eventVersionFieldId: deletionEventVersion.id,
+    teachingFactScopeFieldId: teachingFactScopeField.id,
+    teachingFactScopeDigestFieldId: teachingFactScopeDigest.id,
+    exactEventVersionRequired: true,
+    exactScopeDigestRequired: true,
+    missingOrAmbiguousEventEffect: "FAIL_CLOSED",
+  };
+  createTeacherAuthorSurrogate.duplicateDeliveryPolicy = {
+    keyFieldIds: [
+      deletionEventIdField.id,
+      deletionEventVersion.id,
+      teachingFactScopeDigest.id,
+    ],
+    exactDuplicateEffect: "RETURN_EXISTING_SURROGATE_AND_MAPPING",
+    conflictingDuplicateEffect: "FAIL_CLOSED",
+    conflictingDuplicateResult: "DUPLICATE_EVENT_CONFLICT",
+    additionalWriteAllowed: false,
+  };
+  createTeacherAuthorSurrogate.authorshipRewriteContract = {
+    mappingDigestFieldId: authorshipMappingDigest.id,
+    rewriteEvidenceFieldId: rewriteEvidence.id,
+    permittedMutation: "AUTHOR_POINTER_TO_NON_RECOVERABLE_SURROGATE_ONLY",
+    contentOrAssessmentMutationAllowed: false,
+    originalIdentityPersistenceAllowed: false,
+    atomicFailureEffect: "NO_SURROGATE_AND_NO_PARTIAL_MAPPING",
+  };
+  for (const [resultCode, predicate, expectedData] of [
+    ["NON_TEACHER_DELETION_EVENT", "the event subject kind is not TEACHER", "no surrogate or authorship mapping is created"],
+    ["EVENT_VERSION_MISMATCH", "the event ID or version is missing stale ambiguous or does not match the committed deletion event", "no stale or unpinned event is consumed"],
+    ["TEACHING_FACT_SCOPE_MISMATCH", "the fixed teaching fact set or canonical digest differs from the pinned event payload", "no teaching fact author pointer is changed"],
+    ["REVERSE_LOOKUP_RISK", "the requested surrogate mapping contains or can derive a recoverable original identity lookup", "the mapping is rejected before any write"],
+    ["AUTHORSHIP_REWRITE_FAILED", "the exact authorship mapping cannot be applied atomically to every fact in the fixed versioned set", "no partial surrogate mapping is retained and the event remains retriable"],
+    ["DUPLICATE_EVENT_CONFLICT", "the same event identity is redelivered with a different version or teaching fact scope digest", "the conflicting delivery is rejected and the original surrogate mapping remains unchanged"],
+  ]) {
+    appendBoundaryScenario(
+      module,
+      createTeacherAuthorSurrogate,
+      resultCode,
+      predicate,
+      expectedData,
+      "FAILURE",
+    );
+  }
+  const surrogateSuccessScenario = requireExactlyOne(
+    module.scenarios,
+    "DGV-ACT-CREATE-TEACHER-AUTHOR-SURROGATE-SCN-SUCCESS",
+    "scenario",
+  );
+  surrogateSuccessScenario.then.expectedData = "one exact teacher deletion event version creates or returns one non-recoverable surrogate and atomically rewrites every author pointer in the fixed teaching-fact version set without changing fact content";
+  module.teacherAuthorSurrogateContract = {
+    producerModuleId: "ACC-001",
+    consumerModuleId: "DGV-001",
+    eventId: "EVT-TEACHER-IDENTITY-DELETION-COMPLETED",
+    flowId: "DF-016",
+    producerActionId: "ACC-ACT-COMPLETE-IDENTITY-DELETION",
+    consumerActionId: createTeacherAuthorSurrogate.id,
+    surrogateObjectId: teacherAuthorSurrogate.id,
+    originalIdentityLookupAfterDeletion: "FORBIDDEN",
+  };
+
   module.pages.push(
     page(catalogPageId, "Eight-axis Data Catalog", [catalog.id], catalogActions.map(({ action }) => action.id), catalog.fields.map(({ id }) => id)),
     page(governancePageId, "Distinct Data Governance Actions", [governanceCase.id, catalog.id], governanceActions.map(({ action }) => action.id), governanceCase.fields.map(({ id }) => id)),
@@ -2053,6 +2626,16 @@ function enhanceContentRightsModule(module) {
     ],
     stateGuardPolicy: "ALWAYS_REQUIRED",
   });
+  const sourceKindEligibilityBinding = {
+    sourceGraphObjectId: sourceGraph.id,
+    sourceGraphRefFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
+    sourceGraphVersionFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION",
+    sourceGraphSourceKindFieldId: "CONTENT-SOURCE-F-SOURCE-KIND",
+    managementScopeMirrorFieldId: "CONTENT-SCOPE-F-SOURCE-KIND",
+    comparison: "EXACT_CODE",
+    exactVersionRequired: true,
+    materialIdentityFallbackAllowed: false,
+  };
   const managementScope = domainObject({
     id: "CONTENT-OBJ-MATERIAL-MANAGEMENT-SCOPE",
     label: "Material Product Management Scope",
@@ -2067,7 +2650,10 @@ function enhanceContentRightsModule(module) {
       systemField("CONTENT-SCOPE-F-SOURCE-GRAPH-VERSION", "Pinned Source Graph Version", "INTEGER", { mutability: "IMMUTABLE" }),
       scopeRightsBundleRef,
       systemField("CONTENT-SCOPE-F-RIGHTS-BUNDLE-VERSION", "Pinned Rights Bundle Version", "INTEGER", { mutability: "IMMUTABLE" }),
-      optionField("CONTENT-SCOPE-F-SOURCE-KIND", "Material Source Kind", "OPT-BL2-015", { mutability: "IMMUTABLE" }),
+      optionField("CONTENT-SCOPE-F-SOURCE-KIND", "Material Source Kind", "OPT-BL2-015", {
+        mutability: "IMMUTABLE",
+        validation: "must be system-resolved from the exact pinned source graph version and equal its root source kind; a material ID alone cannot establish eligibility",
+      }),
       optionField("CONTENT-SCOPE-F-MANAGEMENT-SCOPE", "Product Management Scope", "OPT-BL2-005", { mutability: "IMMUTABLE" }),
       field("CONTENT-SCOPE-F-MANAGER-REF", "Product Manager Reference", { dataType: "ID", mutability: "IMMUTABLE" }),
       field("CONTENT-SCOPE-F-SCHOOL-AUTHORIZATION", "School Authorization Evidence", { dataType: "JSON", required: false, mutability: "IMMUTABLE" }),
@@ -2091,6 +2677,7 @@ function enhanceContentRightsModule(module) {
     ],
     overrides: {
       ownershipInterpretation: "ownerRef identifies product stewardship only and never derives legal rights",
+      sourceKindEligibilityBinding,
     },
   });
   const publicReviewSourceGraphRef = versionPinnedReference({
@@ -2475,6 +3062,7 @@ function enhanceContentRightsModule(module) {
           sourceGraphRefFieldId: "CONTENT-SCOPE-F-SOURCE-GRAPH-REF",
           rightsBundleRefFieldId: "CONTENT-SCOPE-F-RIGHTS-BUNDLE-REF",
           reviewRefFieldId: "CONTENT-SCOPE-F-PLATFORM-REVIEW-REF",
+          sourceKindEligibilityBinding: structuredClone(sourceKindEligibilityBinding),
           prohibitedSourceKinds: ["STUDENT_WORK"],
           prohibitedPhaseIds: ["PHASE-1", "PHASE-2"],
           requiredReviewKinds: ["SOURCE_RIGHTS", "PRIVACY", "CONTENT_QUALITY", "PLATFORM_AUTHORIZATION"],
@@ -2736,5 +3324,75 @@ export function applyGovernanceBaselineContracts(sourceModules) {
       throw new Error(`governance decision ${decisionId} is missing owner module ${moduleId}`);
     }
   }
+  return transformed;
+}
+
+export function finalizeDataCatalogCoverage(sourceModules) {
+  if (!Array.isArray(sourceModules)) {
+    throw new Error("data catalog coverage finalization requires a module array");
+  }
+
+  const transformed = sourceModules.map((sourceModule) => structuredClone(sourceModule));
+  const governedObjects = transformed.flatMap(({ objects = [] }) => objects);
+  const governedObjectIds = governedObjects.map(({ id }) => id).toSorted();
+  if (new Set(governedObjectIds).size !== governedObjectIds.length) {
+    throw new Error("data catalog governed object registry requires globally unique object IDs");
+  }
+
+  const dataGovernanceModule = requireExactlyOne(
+    transformed,
+    "DGV-001",
+    "transformed owner module",
+  );
+  const dataCatalogObject = requireExactlyOne(
+    dataGovernanceModule.objects,
+    DATA_CATALOG_OBJECT_ID,
+    "data catalog object",
+  );
+  dataCatalogObject.dataCatalogContract.governedObjectIds = governedObjectIds;
+
+  const coveragePartitionDefinitions = [
+    {
+      id: "DGV-CATALOG-PARTITION-SCHOOL",
+      controlSubject: "SCHOOL",
+      managementScopeCode: "SCHOOL_PRIVATE",
+      scopeRefKind: "SCHOOL_ID",
+      authorizedActorRef: "ROLE-SCHOOL-ADMIN",
+    },
+    {
+      id: "DGV-CATALOG-PARTITION-PLATFORM",
+      controlSubject: "PLATFORM",
+      managementScopeCode: "PLATFORM_GOVERNANCE",
+      scopeRefKind: "PLATFORM_TENANT_ID",
+      authorizedActorRef: "ROLE-PLATFORM-GOVERNANCE",
+    },
+    {
+      id: "DGV-CATALOG-PARTITION-STUDENT",
+      controlSubject: "STUDENT",
+      managementScopeCode: "STUDENT_MEMORY",
+      scopeRefKind: "STUDENT_ID",
+      authorizedActorRef: "ROLE-PLATFORM-GOVERNANCE",
+    },
+  ];
+  const registeredControlSubjects = new Set(
+    coveragePartitionDefinitions.map(({ controlSubject }) => controlSubject),
+  );
+  const unsupportedControlSubjects = governedObjects
+    .filter(({ controlSubject }) => !registeredControlSubjects.has(controlSubject));
+  if (unsupportedControlSubjects.length > 0) {
+    throw new Error(
+      `data catalog coverage partition is missing control subjects for ${unsupportedControlSubjects.map(({ id }) => id).join(", ")}`,
+    );
+  }
+  dataCatalogObject.dataCatalogContract.coveragePartitions = coveragePartitionDefinitions
+    .map((partition) => ({
+      ...partition,
+      governedObjectIds: governedObjects
+        .filter(({ controlSubject }) => controlSubject === partition.controlSubject)
+        .map(({ id }) => id)
+        .toSorted(),
+      uniqueKeyFieldIds: [...DATA_CATALOG_UNIQUENESS_FIELD_IDS],
+    }));
+
   return transformed;
 }

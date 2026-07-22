@@ -196,6 +196,7 @@ export const baselineChapters = deepFreeze([
   chapter("BASE-CH-LAUNCH", "产品验收与上线门", 380, ALL_PHASES, "采用六组平衡指标和三类上线门。"),
   chapter("BASE-CH-METRICS", "六组平衡指标", 382, ALL_PHASES, "指标按学段、学科、任务和输入分层，不用于排名惩罚。", "BASE-CH-LAUNCH"),
   chapter("BASE-CH-LAUNCH-GATES", "三类上线门", 393, ALL_PHASES, "零容忍、质量阈值和证据完整门共同控制阶段上线。", "BASE-CH-LAUNCH"),
+  chapter("BASE-CH-DOCUMENT-REPOSITORY-BOUNDARY", "文档与仓库边界", 399, ALL_PHASES, "产品需求治理与前端、后端、运维和仓库治理分别维护，技术选型和实现状态不得混入产品基线。"),
 ]);
 
 export const productDecisions = deepFreeze([
@@ -277,8 +278,8 @@ export const productDecisions = deepFreeze([
   decision("D078", "答案开放后重开原活动只产生答案暴露条件下的补救证据；需要独立证据时创建新任务或新测评。", "ANSWER_EXPOSED_REMEDIAL_EVIDENCE", ["REOPENED_ATTEMPT_COUNTS_AS_INDEPENDENT_EVIDENCE"], ["PHASE-2", "PHASE-3"], ["BASE-CH-FEEDBACK-ANSWER", "BASE-CH-TIMELINESS-CORRECTION"]),
   decision("D079", "第二阶段最小视频只依赖当前问题或提交、固定评定、学习目标和已有最小学习状态，不依赖完整画像。", "MINIMUM_VIDEO_WITHOUT_FULL_PROFILE", ["FULL_PROFILE_REQUIRED_FOR_VIDEO"], ["PHASE-2"], ["BASE-CH-PHASE-2", "BASE-CH-VIDEO-TYPES"]),
   decision("D080", "审核通用概念或方法片段与个性化连接、例子、节奏和验证的组合属于长期架构，不阻塞第二阶段首个视频闭环。", "REVIEWED_FRAGMENTS_WITH_PERSONALIZED_COMPOSITION", ["REQUIRE_FRAGMENT_LIBRARY_BEFORE_PHASE_TWO", "ONLY_FULLY_GENERATED_VIDEO_FOREVER"], ["PHASE-3"], ["BASE-CH-PHASE-3", "BASE-CH-VIDEO-TYPES"]),
-  decision("D081", "视频请求固定来源版本，发布前重新检查评定、权限、活动和来源权利仍有效。", "SOURCE_PINNED_VIDEO_REQUEST_REVALIDATION", ["VIDEO_WITH_LATEST_UNPINNED_CONTEXT"], ["PHASE-2"], ["BASE-CH-VIDEO-ASSET-ACCESS"]),
-  decision("D082", "脚本、成片、安全、隐私、权利、教学正确性和可播放性全部通过后才通知学生。", "ALL_GATE_VIDEO_DELIVERY", ["NOTIFY_BEFORE_PLAYABLE", "BYPASS_FAILED_VIDEO_GATE"], ["PHASE-2"], ["BASE-CH-VIDEO-ASSET-ACCESS"]),
+  decision("D081", "视频请求固定来源版本，发布前重新检查评定、权限、活动和来源权利仍有效。", "SOURCE_PINNED_VIDEO_REQUEST_REVALIDATION", ["VIDEO_WITH_LATEST_UNPINNED_CONTEXT"], ["PHASE-2"], ["BASE-CH-VIDEO-TYPES", "BASE-CH-VIDEO-ASSET-ACCESS"]),
+  decision("D082", "脚本、成片、安全、隐私、权利、教学正确性和可播放性全部通过后才通知学生。", "ALL_GATE_VIDEO_DELIVERY", ["NOTIFY_BEFORE_PLAYABLE", "BYPASS_FAILED_VIDEO_GATE"], ["PHASE-2"], ["BASE-CH-VIDEO-TYPES", "BASE-CH-VIDEO-ASSET-ACCESS"]),
   decision("D083", "个性化视频提供受控播放、字幕、摘要和弱网替代，不提供普通文件下载，但不承诺阻止外部录制。", "CONTROLLED_VIDEO_PLAYBACK_WITH_ACCESSIBLE_ALTERNATIVES", ["ORDINARY_VIDEO_DOWNLOAD", "GUARANTEE_NO_EXTERNAL_RECORDING"], ["PHASE-2"], ["BASE-CH-VIDEO-ASSET-ACCESS", "BASE-CH-NOTIFICATION-ACCESSIBILITY"]),
   decision("D084", "个性化视频按学生注销、转学、来源撤回和内容召回分别执行删除、限制迁移或停止播放。", "VIDEO_LIFECYCLE_BY_TRIGGER", ["ONE_VIDEO_DELETE_RULE", "VIDEO_SURVIVES_SOURCE_WITHDRAWAL"], ["PHASE-2"], ["BASE-CH-VIDEO-ASSET-ACCESS", "BASE-CH-TRANSFER-HISTORY", "BASE-CH-DELETION"]),
   decision("D085", "平台与学校采用分层治理，平台角色与学校自定义角色保持隔离。", "LAYERED_PLATFORM_SCHOOL_GOVERNANCE", ["PLATFORM_ROLE_IN_SCHOOL_CUSTOM_ROLE_DOMAIN", "SCHOOL_CONTROLS_CROSS_SCHOOL_BOUNDARIES"], ALL_PHASES, ["BASE-CH-LAYERED-GOVERNANCE", "BASE-CH-SCHOOL-GOVERNANCE"]),

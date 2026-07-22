@@ -9,10 +9,67 @@ import {
   professionalAuthorizationText,
   requiredText,
   stateText,
+  teacherWriteScopePolicyText,
   valueSourceText,
 } from "./markdown.mjs";
+import {
+  TRACE_AXIS_KEYS,
+  TRACE_AXIS_METADATA,
+  TRACE_AXIS_STATUS,
+} from "../facts/baseline-traceability.mjs";
 
 const list = (value) => (Array.isArray(value) ? value : []);
+
+function traceAxisValue(trace, axisKey) {
+  const references = list(trace?.[axisKey]);
+  const applicability = trace?.axisApplicability?.[axisKey];
+  if (references.length > 0) {
+    if (axisKey === "permissionRefs") {
+      return references.map(({ actionId, effect }) => `${effect}:${inlineCode(actionId)}`).join("、");
+    }
+    return joinIds(references);
+  }
+  if (applicability?.status === TRACE_AXIS_STATUS.NOT_APPLICABLE) {
+    return `N/A [${inlineCode(applicability.reasonCode)}]：${applicability.reason}`;
+  }
+  return "INVALID_TRACE_AXIS";
+}
+
+function traceAxisLine(trace, axisKey) {
+  return `${TRACE_AXIS_METADATA[axisKey].label}：${traceAxisValue(trace, axisKey)}`;
+}
+
+function chapterDecisionText(trace) {
+  return list(trace?.decisionIds).length > 0
+    ? joinIds(trace.decisionIds)
+    : "N/A [`NO_DIRECT_ATOMIC_DECISION`]：本章节由章节级直接合同承载，不重复绑定 D003-D096 原子决策。";
+}
+
+function migrationDecisionAffectedText(change) {
+  return Object.entries(change?.decisionAffected ?? {}).map(([decisionId, source]) => {
+    const references = Object.entries(source?.affected ?? {})
+      .filter(([, values]) => list(values).length > 0)
+      .map(([key, values]) => `${key}: ${joinIds(values)}`)
+      .join("；");
+    const notApplicableAxes = TRACE_AXIS_KEYS.filter((axisKey) => (
+      source?.axisApplicability?.[axisKey]?.status === TRACE_AXIS_STATUS.NOT_APPLICABLE
+    ));
+    return `${inlineCode(decisionId)} — ${references || "无直接引用"}；显式 N/A：${notApplicableAxes.length > 0 ? joinIds(notApplicableAxes) : "无"}`;
+  }).join("<br>");
+}
+
+function traceAxesComplete(trace) {
+  return TRACE_AXIS_KEYS.every((axisKey) => {
+    const references = list(trace?.[axisKey]);
+    const applicability = trace?.axisApplicability?.[axisKey];
+    return references.length > 0
+      ? applicability?.status === TRACE_AXIS_STATUS.APPLICABLE
+      : applicability?.status === TRACE_AXIS_STATUS.NOT_APPLICABLE
+        && typeof applicability?.reason === "string"
+        && applicability.reason.trim().length >= 12
+        && applicability.reason !== "—";
+  });
+}
 
 function allObjects(model) {
   return list(model.modules).flatMap((module) => (
@@ -75,12 +132,13 @@ export function renderAuthoritativeObjectCatalog(model) {
     "所有对象、字段、Owner、确认者、生命周期和敏感级别均直接来自已校验事实模型；跨模块消费只能使用对象 ID、字段 ID 和版本绑定。",
     "## 对象目录",
     markdownTable(
-      ["模块", "Object ID", "对象", "数据主体", "产生者", "Owner", "确认者", "Steward", "生命周期", "敏感级别", "学生数据分类", "特权读取策略", "读取模式", "状态"],
+      ["模块", "Object ID", "对象", "数据主体", "数据性质", "产生者", "Owner", "确认者", "Steward", "生命周期", "敏感级别", "学生数据分类", "特权读取策略", "读取模式", "教师写入策略", "状态"],
       allObjects(model).map(({ module, object }) => [
         module.id,
         object.id,
         object.label,
         object.dataSubject,
+        object.dataNature ?? "—",
         object.producerRef,
         object.ownerRef,
         object.confirmerRef,
@@ -90,6 +148,7 @@ export function renderAuthoritativeObjectCatalog(model) {
         object.studentDataClassification?.kind ?? "—",
         object.studentDataClassification?.privilegedReadPolicy ?? "—",
         object.readMode,
+        teacherWriteScopePolicyText(object.teacherWriteScopePolicy),
         list(object.states).map((state) => typeof state === "string" ? state : state.id ?? state.code).join(" / "),
       ]),
     ),
@@ -462,6 +521,269 @@ export function renderTraceability(model) {
   ]);
 }
 
+export function renderProductBaselineTraceability(model) {
+  const chapterById = new Map(list(model.baselineChapters).map((chapter) => [chapter.id, chapter]));
+  return normalizeDocument([
+    "# 产品基线 v2.0 全追踪矩阵",
+    "每行从 README 章节和 D003-D096 决策追踪到阶段、交付状态、模块、页面、Flow、对象、动作、权限、状态、指标、上线门和验收场景。没有直接影响的轴必须给出结构化 N/A 原因，不允许用空白或无解释的破折号代替。",
+    markdownTable(
+      ["章节", "决策", "阶段 / 交付", "模块 / 页面", "Flow / 对象", "动作 / 权限", "状态", "指标 / 上线门", "场景 / 测试"],
+      list(model.baselineTraceability).map((trace) => [
+        `${trace.chapterId} ${chapterById.get(trace.chapterId)?.heading ?? ""}`,
+        chapterDecisionText(trace),
+        `${joinIds(trace.phaseIds)}<br>${joinIds(trace.releaseStatuses)}`,
+        `${traceAxisLine(trace, "moduleIds")}<br>${traceAxisLine(trace, "pageIds")}`,
+        `${traceAxisLine(trace, "flowIds")}<br>${traceAxisLine(trace, "objectIds")}`,
+        `${traceAxisLine(trace, "actionIds")}<br>${traceAxisLine(trace, "permissionRefs")}`,
+        traceAxisLine(trace, "stateRefs"),
+        `${traceAxisLine(trace, "metricIds")}<br>${traceAxisLine(trace, "launchGateIds")}`,
+        `${traceAxisLine(trace, "scenarioIds")}<br>${traceAxisLine(trace, "testIds")}`,
+      ]),
+    ),
+  ]);
+}
+
+export function renderDecisionMatrix(model) {
+  const traceByDecisionId = new Map(list(model.decisionTraceability).map((trace) => (
+    [trace.decisionId, trace]
+  )));
+  return normalizeDocument([
+    "# D003-D096 决策矩阵",
+    markdownTable(
+      ["决策", "最终结论", "选择路线", "拒绝路线", "阶段 / 交付", "README 章节", "迁移", "精确需求合同", "权限 / 状态", "指标 / 门 / 验收"],
+      list(model.productDecisions).map((decision) => {
+        const trace = traceByDecisionId.get(decision.id);
+        return [
+          decision.id,
+          decision.statement,
+          decision.selectedRoute,
+          joinIds(decision.rejectedRoutes),
+          `${joinIds(trace?.phaseIds)}<br>${joinIds(trace?.releaseStatuses)}`,
+          joinIds(trace?.chapterIds),
+          joinIds(trace?.migrationIds),
+          [
+            traceAxisLine(trace, "moduleIds"),
+            traceAxisLine(trace, "pageIds"),
+            traceAxisLine(trace, "flowIds"),
+            traceAxisLine(trace, "objectIds"),
+            traceAxisLine(trace, "actionIds"),
+          ].join("<br>"),
+          `${traceAxisLine(trace, "permissionRefs")}<br>${traceAxisLine(trace, "stateRefs")}`,
+          [
+            traceAxisLine(trace, "metricIds"),
+            traceAxisLine(trace, "launchGateIds"),
+            traceAxisLine(trace, "scenarioIds"),
+            traceAxisLine(trace, "testIds"),
+          ].join("<br>"),
+        ];
+      }),
+    ),
+  ]);
+}
+
+export function renderBaselineMigrationLog(model) {
+  return normalizeDocument([
+    "# 产品基线 v2.0 迁移日志",
+    markdownTable(
+      ["迁移", "决策", "旧规则", "新规则", "拒绝原因", "逐决策精确影响", "组级影响汇总"],
+      list(model.migrationChanges).map((change) => [
+        change.id,
+        joinIds(change.decisionIds),
+        change.oldRule,
+        change.newRule,
+        change.rejectedReason,
+        migrationDecisionAffectedText(change),
+        Object.entries(change.affected ?? {})
+          .filter(([, values]) => list(values).length > 0)
+          .map(([key, values]) => `${key}: ${joinIds(values)}`)
+          .join("<br>"),
+      ]),
+    ),
+  ]);
+}
+
+export function renderActivityStatusAxisCatalog(model) {
+  const module = list(model.modules).find(({ id }) => id === "HW-001");
+  const statusFields = list(module?.objects).flatMap((object) => list(object.fields)
+    .filter((field) => /STATUS$/.test(field.id) || /-STATUS-/.test(field.id))
+    .map((field) => ({ object, field })));
+  return normalizeDocument([
+    "# 学习活动多轴状态目录",
+    "治理、开放、归档、参与、时间和 AI 处理分别保存；界面标签只能由这些事实派生。",
+    markdownTable(
+      ["对象", "状态字段", "名称", "Option Set / 来源", "写入动作"],
+      statusFields.map(({ object, field }) => [
+        object.id,
+        field.id,
+        field.label,
+        valueSourceText(field.valueSource),
+        list(module?.actions).filter(({ outputFieldIds }) => list(outputFieldIds).includes(field.id)).map(({ id }) => id).join("<br>"),
+      ]),
+    ),
+  ]);
+}
+
+export function renderAiResultStatusAxisCatalog(model) {
+  const modules = list(model.modules).filter(({ id }) => ["GRD-001", "PUB-001"].includes(id));
+  const axisFields = modules.flatMap((module) => list(module.objects).flatMap((object) => (
+    list(object.fields).filter((field) => /(?:PROCESSING|PUBLICATION|DISPUTE-CORRECTION|VALIDITY)-STATUS/.test(field.id))
+      .map((field) => ({ module, object, field }))
+  )));
+  return normalizeDocument([
+    "# AI 结果多轴状态目录",
+    "处理、发布、争议纠正和有效性是独立状态轴，不得压成单一生命周期枚举。",
+    markdownTable(
+      ["模块", "对象", "状态字段", "名称", "写入动作"],
+      axisFields.map(({ module, object, field }) => [
+        module.id,
+        object.id,
+        field.id,
+        field.label,
+        list(module.actions).filter(({ outputFieldIds, statusWrites }) => (
+          list(outputFieldIds).includes(field.id)
+          || list(statusWrites).some(({ fieldId }) => fieldId === field.id)
+        )).map(({ id }) => id).join("<br>"),
+      ]),
+    ),
+  ]);
+}
+
+function renderFocusedObjectContract(model, title, moduleId, objectId) {
+  const module = list(model.modules).find(({ id }) => id === moduleId);
+  const object = list(module?.objects).find(({ id }) => id === objectId);
+  const actions = list(module?.actions).filter(({ targetObjectId }) => targetObjectId === objectId);
+  return normalizeDocument([
+    `# ${title}`,
+    markdownTable(
+      ["对象", "Owner", "数据主体", "状态"],
+      [[object?.id, object?.ownerRef, object?.dataSubject, joinIds(object?.states?.map((state) => typeof state === "string" ? state : state.id ?? state.code))]],
+    ),
+    "## 字段",
+    markdownTable(
+      ["Field ID", "名称", "类型", "必填", "来源", "可变性"],
+      list(object?.fields).map((field) => [
+        field.id,
+        field.label,
+        field.dataType,
+        requiredText(field.required),
+        valueSourceText(field.valueSource),
+        field.mutability,
+      ]),
+    ),
+    "## 动作与权限",
+    markdownTable(
+      ["Action ID", "操作", "状态效果", "ALLOW / DENY", "失败结果"],
+      actions.map((action) => [
+        action.id,
+        action.operationKind,
+        transitionText(action),
+        permissionText(action.permissions),
+        joinIds(action.failureResults),
+      ]),
+    ),
+  ]);
+}
+
+export function renderHighImpactAuthorizationMatrix(model) {
+  return renderFocusedObjectContract(
+    model,
+    "未成年人高影响授权矩阵",
+    "IAM-001",
+    "IAM-OBJ-HIGH-IMPACT-AUTHORIZATION",
+  );
+}
+
+export function renderWeakNetworkIntentCredential(model) {
+  return renderFocusedObjectContract(
+    model,
+    "弱网提交意图凭证合同",
+    "SUB-001",
+    "SUB-OBJ-INTENT-CREDENTIAL",
+  );
+}
+
+export function renderAnswerOpenSurfaceMatrix(model) {
+  const publication = list(model.modules).find(({ id }) => id === "PUB-001");
+  const contract = publication?.answerOpenContract;
+  return normalizeDocument([
+    "# 答案开放交付面矩阵",
+    `policyId: ${inlineCode(contract?.policyId)}`,
+    markdownTable(
+      ["交付面", "执行种类", "动作", "开放时间字段", "访问时重鉴权", "开放前行为"],
+      list(contract?.enforcementBindings).map((binding) => [
+        binding.surface,
+        binding.enforcementKind,
+        joinIds(binding.actionIds),
+        joinIds(binding.openTimeFieldIds),
+        binding.reauthorizeAtAccess ? "是" : "否",
+        binding.beforeOpenBehavior,
+      ]),
+    ),
+  ]);
+}
+
+export function renderVideoGateQuotaContract(model) {
+  const module = list(model.modules).find(({ id }) => id === "VIDEO-001");
+  const focusedObjects = list(module?.objects).filter(({ id }) => (
+    /(?:REQUEST|ASSET|ENTITLEMENT|OVERFLOW|QUOTA|VERIFICATION|LEARNING-FACT)/.test(id)
+  ));
+  const focusedActions = list(module?.actions).filter(({ id }) => (
+    /(?:REQUEST|RESERVE|CHECK|DELIVER|SETTLE|RELEASE|RECALL|VERIFY|VERIFICATION|ENTITLEMENT|OVERFLOW)/.test(id)
+  ));
+  return normalizeDocument([
+    "# AI 教学视频闸门与公平额度合同",
+    markdownTable(
+      ["对象", "Owner", "状态", "关键字段"],
+      focusedObjects.map((object) => [
+        object.id,
+        object.ownerRef,
+        joinIds(object.states?.map((state) => typeof state === "string" ? state : state.id ?? state.code)),
+        joinIds(object.fields.map(({ id }) => id)),
+      ]),
+    ),
+    "## 动作",
+    markdownTable(
+      ["Action ID", "目标对象", "状态效果", "失败结果"],
+      focusedActions.map((action) => [
+        action.id,
+        action.targetObjectId,
+        transitionText(action),
+        joinIds(action.failureResults),
+      ]),
+    ),
+  ]);
+}
+
+export function renderMetricGroupsLaunchGates(model) {
+  return normalizeDocument([
+    "# 六组指标与三类上线门",
+    "## 指标组",
+    markdownTable(
+      ["指标组", "定义", "阶段", "指标", "分析维度", "禁止用途"],
+      list(model.metricGroups).map((group) => [
+        `${group.id} ${group.label}`,
+        group.definition,
+        joinIds(group.phaseIds),
+        joinIds(group.metricIds),
+        joinIds(group.analysisDimensions),
+        group.prohibitedUse,
+      ]),
+    ),
+    "## 上线门",
+    markdownTable(
+      ["上线门", "类型", "Owner", "阶段", "阻断条件", "证据要求"],
+      list(model.launchGates).map((gate) => [
+        `${gate.id} ${gate.label}`,
+        gate.gateType,
+        gate.ownerRef,
+        joinIds(gate.phaseIds),
+        joinIds(gate.blockingConditions),
+        joinIds(gate.evidenceRequirements),
+      ]),
+    ),
+  ]);
+}
+
 export function renderCrossRoleMatrix(model) {
   const roleRows = [
     ...list(model.roles).map((role) => ["登录角色", role.id, role.label, "—"]),
@@ -504,8 +826,11 @@ export function renderSemanticScan(model) {
       ["检查项", "结果", "证据"],
       [
         ["结构化事实规模", "PASS", Object.entries(counts).map(([key, value]) => `${key}=${value}`).join("；")],
-        ["27 模块清单", counts.modules === 27 ? "PASS" : "FAIL", "事实模型 modules"],
-        ["第二阶段无可执行页面", list(model.modules).filter((module) => module.phase === 2).every((module) => list(module.pages).length === 0 && list(module.actions).length === 0) ? "PASS" : "FAIL", "phase=2 actions/pages"],
+        ["模块清单与元数据一致", counts.modules === list(model.modules).length ? "PASS" : "FAIL", "事实模型 modules"],
+        ["规划能力不进入当前发布", list(model.modules).filter((module) => module.phase > 1).every((module) => module.releaseStatus === "PLANNED" && !list(model.currentReleaseModuleIds).includes(module.id)) ? "PASS" : "FAIL", "phase/releaseStatus/currentReleaseModuleIds"],
+        ["README v2.0 全章节逐轴追踪", list(model.baselineTraceability).length === list(model.baselineChapters).length && list(model.baselineTraceability).every(traceAxesComplete) ? "PASS" : "FAIL", `chapters=${list(model.baselineChapters).length}; axis-closed traces=${list(model.baselineTraceability).filter(traceAxesComplete).length}`],
+        ["D003-D096 决策逐轴直接影响闭合", list(model.decisionTraceability).length === list(model.productDecisions).length && list(model.decisionTraceability).every((trace) => list(trace.migrationIds).length > 0 && traceAxesComplete(trace)) ? "PASS" : "FAIL", `axis-closed decision traces=${list(model.decisionTraceability).filter(traceAxesComplete).length}; decisions=${list(model.productDecisions).length}`],
+        ["D003-D096 迁移覆盖", new Set(list(model.migrationChanges).flatMap(({ decisionIds }) => list(decisionIds))).size === list(model.productDecisions).length ? "PASS" : "FAIL", `decisions=${list(model.productDecisions).length}`],
         ["对象责任字段", allObjects(model).every(({ object }) => [object.producerRef, object.ownerRef, object.confirmerRef, object.stewardRef].every(Boolean)) ? "PASS" : "FAIL", "producer/owner/confirmer/steward"],
         ["动作场景追踪", allActions(model).every(({ action }) => list(action.scenarioIds).length > 1) ? "PASS" : "FAIL", "scenarioIds"],
         ["生成源", "PASS", "validated facts → renderers → Markdown"],
@@ -525,7 +850,8 @@ export function renderPackageReviewChecklist(model) {
       "确认 Flow 的源对象、源版本、动作顺序、目标对象、幂等和补偿可追踪。",
       "确认班主任全学科只读协调不扩大为他科学科写权限。",
       "确认 Web/App 共享权限判断，但不要求 App 一比一复制 Web。",
-      "确认第三方渠道、AI 讲题视频和 AI 教学视频只作为第二阶段扩展。",
+      "确认第一阶段只交付教学事实底座，第二阶段 AI 评定与视频、第三阶段长期画像均标记为 PLANNED。",
+      "确认第三方渠道仍处于后续产品讨论边界，未被描述为当前能力。",
     ]),
   ]);
 }

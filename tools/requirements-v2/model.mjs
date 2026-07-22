@@ -30,6 +30,8 @@ export const MODEL_COLLECTIONS = deepFreeze([
   { key: "phases", label: "phase" },
   { key: "productDecisions", label: "product decision" },
   { key: "baselineChapters", label: "baseline chapter" },
+  { key: "baselineTraceability", label: "baseline trace" },
+  { key: "decisionTraceability", label: "decision trace" },
   { key: "migrationChanges", label: "migration change" },
   { key: "metricGroups", label: "metric group" },
   { key: "launchGates", label: "launch gate" },

@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,10 +46,19 @@ function renderableModel() {
   return model;
 }
 
+function repositoryFiles(root, directory) {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const absolutePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return repositoryFiles(root, absolutePath);
+    return [path.relative(root, absolutePath).split(path.sep).join("/")];
+  });
+}
+
 test("publishes the passed semantic review status as a source fact", () => {
   assert.deepEqual(requirementModel.reviewStatus, {
-    code: "PRODUCT_BASELINE_V2_FINALIZED_FACTS_ENCODED",
-    label: "README v2.0 finalized product baseline facts encoded; D003-D096 closed",
+    code: "PRODUCT_BASELINE_V2_FINALIZED_PRD_REVIEW_PASSED",
+    label: "v2.0 finalized product baseline; production PRD semantic review passed",
     reviewedAt: "2026-07-20",
   });
 });
@@ -150,6 +165,61 @@ test("renders AI task intent from authored examples instead of a missing label",
   assert.match(output, /STU-ACT-OPEN-PROFILE/);
 });
 
+test("renders every teacher write scope policy and independent domain boundary", () => {
+  const output = renderModulePrd(moduleById("AIX-001"), requirementModel);
+
+  assert.match(output, /DOMAIN_CONTRACT;contract=AIX_TASK_PREVIEW_AUTHORIZATION_GATE;enforcement=ACTION_DOMAIN_BOUNDARY/);
+  assert.match(output, /teacherWriteAuthorizationBoundary:kind=DOMAIN_CONTRACT;contract=AIX_TASK_PREVIEW_AUTHORIZATION_GATE/);
+});
+
+test("renders the complete D047 data catalog coverage and uniqueness contract", () => {
+  const output = renderModulePrd(moduleById("DGV-001"), requirementModel);
+
+  for (const expected of [
+    "ALL_MODEL_OBJECT_IDS",
+    "EXACTLY_ONE_PER_GOVERNED_OBJECT",
+    "DGV-ACT-ACTIVATE-DATA-CATALOG",
+    "DGV-ACT-SUPERSEDE-DATA-CATALOG",
+    "DGV-ACT-RESOLVE-DATA-CATALOG",
+    "OPT-BL2-003",
+    "OPT-BL2-008",
+    "CONTROL_SUBJECT_PARTITION",
+    "ROLE-SCHOOL-ADMIN",
+    "ROLE-PLATFORM-GOVERNANCE",
+    "STUDENT_MEMORY",
+    "VIDEO-OBJ-ASSET",
+    "DGV-GOVCASE-F-CATALOG-ENTRY-VERSION",
+    "sourceObjectKindMustEqualTargetObjectKind",
+  ]) assert.match(output, new RegExp(expected));
+});
+
+test("renders commercial continuity and D090 consumer contracts", () => {
+  const platform = renderModulePrd(moduleById("PLAT-001"), requirementModel);
+  for (const expected of [
+    "A_RESTRICTED_TERMINATED_OR_EXPIRED_PLAN_REQUIRES_A_NEW_ACTIVE_VERSION_AND_MAY_NOT_RETURN_TO_ACTIVE",
+    "ACTIVE_PLAN_NON_CLOSED_CONTINUITY",
+    "CONTINUITY_WINDOW_BLOCK",
+    "HW-ACT-PUBLISH-REPLACEMENT",
+    "sourceReactivationAllowed",
+    "SEAL_ONLY_WHEN_EXPECTED_COUNT_IS_ZERO",
+  ]) assert.match(platform, new RegExp(expected));
+
+  const entitlement = renderModulePrd(moduleById("PLAT-002"), requirementModel);
+  for (const expected of [
+    "EVERY_CORE_CONSUMER_PINS_ONE_EXACT_ACTIVE_SAME_SCHOOL_ENTITLEMENT_VERSION",
+    "GRD-ACT-PROCESS",
+    "PROG-ACT-SYNC-STUDENT-TARGET",
+    "VIDEO-ACT-ENSURE-STUDENT-MINIMUM-ENTITLEMENT",
+    "VIDEO-ACT-ENSURE-SCHOOL-OVERFLOW-POOL",
+  ]) assert.match(entitlement, new RegExp(expected));
+
+  for (const moduleId of ["GRD-001", "PROG-001", "VIDEO-001"]) {
+    const output = renderModulePrd(moduleById(moduleId), requirementModel);
+    assert.match(output, /D090 第二阶段权益消费 Guard/);
+    assert.match(output, /PHASE_TWO_ENTITLEMENT_INACTIVE/);
+  }
+});
+
 test("renders the authored lifecycle policy keys without empty legacy columns", () => {
   const output = renderLifecycleAiUsage(requirementModel);
 
@@ -158,6 +228,16 @@ test("renders the authored lifecycle policy keys without empty legacy columns", 
   assert.match(output, /每次生效保留前后版本/);
   assert.match(output, /ROLE-SCHOOL-ADMIN/);
   assert.match(output, /学校停用后按激活时配置的期限归档/);
+});
+
+test("renders authoritative data nature and teacher write policy columns", () => {
+  const output = renderAuthoritativeObjectCatalog(requirementModel);
+
+  assert.match(output, /数据性质/);
+  assert.match(output, /AI_DERIVED/);
+  assert.match(output, /教师写入策略/);
+  assert.match(output, /ASSIGNED_SUBJECT_COURSE/);
+  assert.match(output, /AIX_TASK_PREVIEW_AUTHORIZATION_GATE/);
 });
 
 test("renders assigned subject-course permission scope as a machine-readable contract", () => {
@@ -259,7 +339,9 @@ test("renders Flow failure granularity providers compensation and invalidation",
   assert.match(output, /INVALIDATE_PREVIOUS_CONTEXT_DERIVATIONS/);
   assert.match(output, /DF-009 Batch AI Assessment Impact Location, Correction, Notification, and Recalculation/);
   assert.match(output, /KEEP_ORIGINAL_FACTS_AND_PRIOR_RESULT_VERSIONS/);
-  assert.doesNotMatch(output, /## DF-011\b|PUBLISHED_RESULT_SOURCE|LPATH-ENTRY-F-PUBLISHED-RESULT-REF/);
+  assert.match(output, /## DF-011\b/);
+  assert.match(output, /PUBLISHED_RESULT_SOURCE/);
+  assert.match(output, /LPATH-ENTRY-F-PUBLISHED-RESULT-REF/);
 });
 
 test("renders metric statistic target and event calculation facts", () => {
@@ -304,9 +386,94 @@ test("builds one deterministic artifact set with planned contracts and release m
   assert.equal(reportManifest.releaseStatus, "PLANNED");
   assert.equal(reportManifest.currentRelease, false);
   assert.match(reportManifest.wireframe, /05-wireframe-contracts/);
+  for (const moduleEntry of manifest.modules) {
+    assert.equal(paths.includes(moduleEntry.prd), true, `${moduleEntry.id}:prd`);
+    assert.equal(paths.includes(moduleEntry.wireframe), true, `${moduleEntry.id}:wireframe`);
+  }
   assert.equal(paths.includes("docs/requirements/zhixu-handoff-v2.0/02-indexes/requirement-traceability.md"), true);
   assert.equal(first.every(({ content }) => content.endsWith("\n")), true);
-  assert.equal(first.some(({ content }) => content.includes("[object Object]")), false);
+  const generatedContent = first.map(({ content }) => content).join("\n");
+  assert.doesNotMatch(generatedContent, /\[object Object\]/);
+  assert.doesNotMatch(
+    generatedContent,
+    /(?<![-A-Z0-9_])(TODO|TBD|FIXME)(?![-A-Z0-9_])|待补充|待定|占位符(?!扫描)|[Ll]orem [Ii]psum/,
+  );
+  assert.doesNotMatch(generatedContent, /(?:file:\/\/|\/Users\/|\/private\/|\/var\/folders\/)/);
+  assert.doesNotMatch(generatedContent, /\[[^\]]*\]\((?:\s*|#)\)/);
+  assert.doesNotMatch(
+    generatedContent,
+    /TPSf[0-9A-Za-z]+|api_key\s*=|Authorization:\s*Bearer|sk-[A-Za-z0-9_-]{20,}/,
+  );
+});
+
+test("resolves every generated relative Markdown link", () => {
+  const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const artifacts = buildRequirementArtifacts(requirementModel);
+  const artifactPaths = new Set(artifacts.map(({ path: artifactPath }) => artifactPath));
+
+  for (const artifact of artifacts) {
+    for (const match of artifact.content.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
+      const target = match[1].split("#")[0];
+      if (!target || /^(?:https?:|mailto:)/.test(target)) continue;
+      const resolved = path.posix.normalize(path.posix.join(
+        path.posix.dirname(artifact.path),
+        target,
+      ));
+      assert.equal(
+        artifactPaths.has(resolved) || existsSync(path.join(repositoryRoot, resolved)),
+        true,
+        `${artifact.path}: unresolved Markdown link ${target}`,
+      );
+    }
+  }
+});
+
+test("publishes defect-derived first-principles completion rules", () => {
+  const governance = buildRequirementArtifacts(requirementModel).find(({ path: artifactPath }) => (
+    artifactPath.endsWith("/07-review-checklists/first-principles-governance.md")
+  ));
+  assert.ok(governance);
+  for (const expected of [
+    "引用为空不能自动推导为 N/A",
+    "禁止把迁移组并集复制成每个决策的影响范围",
+    "状态码与测试文件也必须精确存在",
+    "必须同时追踪动作所属模块和目标对象",
+    "每条正向合同都要有破坏性负向测试证明不能绕过",
+    "不得为了页面方便把治理、开放、参与、时间、处理、发布、纠正或有效性压成单一状态",
+    "不得把未来扩展问题呈现成当前基线尚未完成",
+    "不得渲染本机绝对路径、临时目录、访问密钥或其他环境私有值",
+    "任一门禁失败都不得宣称需求包完成",
+  ]) assert.match(governance.content, new RegExp(expected));
+});
+
+test("keeps repository requirement snapshots byte-identical to the generator", () => {
+  const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const artifacts = buildRequirementArtifacts(requirementModel);
+  const packagePrefix = "docs/requirements/zhixu-handoff-v2.0/";
+  const expectedPackagePaths = artifacts
+    .map(({ path: artifactPath }) => artifactPath)
+    .filter((artifactPath) => artifactPath.startsWith(packagePrefix))
+    .sort();
+  const actualPackagePaths = repositoryFiles(
+    repositoryRoot,
+    path.join(repositoryRoot, "docs/requirements/zhixu-handoff-v2.0"),
+  ).sort();
+
+  assert.deepEqual(
+    actualPackagePaths,
+    expectedPackagePaths,
+    "generated requirement directory contains missing, stale, or extra artifacts; run node tools/generate_v2_requirements.mjs",
+  );
+
+  for (const artifact of artifacts) {
+    const destination = path.join(repositoryRoot, artifact.path);
+    assert.equal(existsSync(destination), true, `missing generated artifact ${artifact.path}`);
+    assert.equal(
+      readFileSync(destination, "utf8"),
+      artifact.content,
+      `generated artifact drifted from facts/renderers: ${artifact.path}`,
+    );
+  }
 });
 
 test("generator validates and writes only the semantic artifact set", () => {

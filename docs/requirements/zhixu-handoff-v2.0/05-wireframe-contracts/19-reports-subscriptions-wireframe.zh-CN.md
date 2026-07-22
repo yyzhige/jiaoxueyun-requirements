@@ -4,14 +4,15 @@
 | --- | --- |
 | 模块 | RPT-001 |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 页面数量 | 1 |
 | 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
 
 ## RPT-PAGE-CENTER Report Center and Subscription Management
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB / APP | RPT-OBJ-DEFINITION / RPT-OBJ-SUBSCRIPTION | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB / APP | RPT-OBJ-DEFINITION / RPT-OBJ-SUBSCRIPTION | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 

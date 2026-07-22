@@ -46,12 +46,21 @@ test("minimum progress is a planned skeleton with current grade course unit targ
     "PROG-SNAPSHOT-F-PREREQUISITE-TARGET-REFS",
     "PROG-SNAPSHOT-F-NEXT-ALLOWED-TARGET-REF",
   ]) assert.ok(snapshot.fields.some(({ id }) => id === fieldId), fieldId);
+  for (const fieldId of [
+    "PROG-TARGET-F-CORE-ENTITLEMENT-REF",
+    "PROG-TARGET-F-CORE-ENTITLEMENT-VERSION",
+  ]) assert.ok(target.fields.some(({ id }) => id === fieldId), fieldId);
   assert.ok(target.fields.some(({ id }) => id === "PROG-TARGET-F-STATUS"));
   assert.ok(choice.fields.some(({ id }) => id === "PROG-CHOICE-F-STUDENT-CHOICE"));
   assert.ok(actionById(requirementModel, "PROG-ACT-PROPOSE-NEXT-TARGET")
     .inputFieldIds.includes("PROG-CHOICE-F-COMPLETION-EVIDENCE-REF"));
   assert.ok(actionById(requirementModel, "PROG-ACT-SELECT-NEXT-TARGET")
     .permissions.some(({ roleRef, effect }) => roleRef === "ROLE-STUDENT" && effect === "ALLOW"));
+  const syncTarget = actionById(requirementModel, "PROG-ACT-SYNC-STUDENT-TARGET");
+  assert.equal(syncTarget.phaseTwoEntitlementGuard.requiredEntitlementState, "ACTIVE");
+  assert.equal(syncTarget.phaseTwoEntitlementGuard.exactPinnedVersionRequired, true);
+  assert.equal(syncTarget.phaseTwoEntitlementGuard.schoolMustMatch, true);
+  assert.ok(moduleById(requirementModel, "PROG-001").dependencyModuleIds.includes("PLAT-002"));
   assert.deepEqual(validateRequirementModel(requirementModel), []);
 });
 
@@ -81,19 +90,64 @@ test("video requests pin both problem and progress sources plus assessment and r
     "PROBLEM_DRIVEN",
     "PROGRESS_DRIVEN",
   ]);
-  for (const pair of [
-    ["VIDEO-REQUEST-F-ASSESSMENT-RESULT-REF", "VIDEO-REQUEST-F-ASSESSMENT-RESULT-VERSION"],
-    ["VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF", "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-VERSION"],
-    ["VIDEO-REQUEST-F-PUBLISHED-RESULT-REF", "VIDEO-REQUEST-F-PUBLISHED-RESULT-VERSION"],
-    ["VIDEO-REQUEST-F-MATERIAL-RIGHTS-REF", "VIDEO-REQUEST-F-MATERIAL-RIGHTS-VERSION"],
-    ["VIDEO-REQUEST-F-MATERIAL-PERMISSION-REF", "VIDEO-REQUEST-F-MATERIAL-PERMISSION-VERSION"],
+  for (const expected of [
+    {
+      refFieldId: "VIDEO-REQUEST-F-ASSESSMENT-RESULT-REF",
+      versionFieldId: "VIDEO-REQUEST-F-ASSESSMENT-RESULT-VERSION",
+      targetObjectId: "GRD-OBJ-DECISION",
+      targetVersionFieldId: "GRD-DECISION-F-DECISION-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF",
+      versionFieldId: "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-VERSION",
+      targetObjectId: "GRD-OBJ-ASSESSMENT-STANDARD-VERSION",
+      targetVersionFieldId: "GRD-STANDARD-F-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-PUBLISHED-RESULT-REF",
+      versionFieldId: "VIDEO-REQUEST-F-PUBLISHED-RESULT-VERSION",
+      targetObjectId: "PUB-OBJ-RESULT",
+      targetVersionFieldId: "PUB-RESULT-F-RESULT-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-MATERIAL-RIGHTS-REF",
+      versionFieldId: "VIDEO-REQUEST-F-MATERIAL-RIGHTS-VERSION",
+      targetObjectId: "CONTENT-OBJ-LICENSE",
+      targetVersionFieldId: "CONTENT-LICENSE-F-VERSION",
+    },
+    {
+      refFieldId: "VIDEO-REQUEST-F-MATERIAL-PERMISSION-REF",
+      versionFieldId: "VIDEO-REQUEST-F-MATERIAL-PERMISSION-VERSION",
+      targetObjectId: "CONTENT-OBJ-PERMISSION",
+      targetVersionFieldId: "CONTENT-PERMISSION-F-VERSION",
+    },
   ]) {
-    const ref = request.lineageBindings.find(({ refFieldId }) => refFieldId === pair[0]);
-    assert.equal(ref.versionFieldId, pair[1]);
+    const ref = request.lineageBindings.find(({ refFieldId }) => (
+      refFieldId === expected.refFieldId
+    ));
+    assert.deepEqual(ref, expected);
   }
   assert.ok(problem.inputFieldIds.includes("VIDEO-REQUEST-F-ACTIVITY-REF"));
   assert.ok(progress.inputFieldIds.includes("VIDEO-REQUEST-F-NEXT-TARGET-CHOICE-REF"));
   assert.deepEqual(validateRequirementModel(requirementModel), []);
+});
+
+test("video source binding rejects an assessment standard redirected to a homework rubric", () => {
+  const model = structuredClone(requirementModel);
+  const request = objectById(model, "VIDEO-OBJ-REQUEST");
+  const standardRef = request.fields.find(({ id }) => (
+    id === "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF"
+  ));
+  const standardBinding = request.lineageBindings.find(({ refFieldId }) => (
+    refFieldId === "VIDEO-REQUEST-F-ASSESSMENT-STANDARD-REF"
+  ));
+
+  standardRef.valueSource.targetObjectId = "HW-OBJ-RUBRIC";
+  standardRef.versionBinding.targetVersionFieldId = "HW-RUBRIC-F-RUBRIC-VERSION";
+  standardBinding.targetObjectId = "HW-OBJ-RUBRIC";
+  standardBinding.targetVersionFieldId = "HW-RUBRIC-F-RUBRIC-VERSION";
+
+  assertHasCode(validateRequirementModel(model), "INVALID_VIDEO_SOURCE_BINDING_CONTRACT");
 });
 
 test("video delivery is blocked when any one of seven independent gates is not passed", () => {

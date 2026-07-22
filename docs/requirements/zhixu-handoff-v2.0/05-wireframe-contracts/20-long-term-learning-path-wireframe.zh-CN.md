@@ -1,17 +1,20 @@
+交付状态：PLANNED；本文是目标产品需求合同，不表示该能力已上线或属于第一阶段交付。
+
 # LPATH-001 Cross-term Learning Path Web/App 页面合同 v2.0
 
 | 属性 | 值 |
 | --- | --- |
 | 模块 | LPATH-001 |
-| 阶段 | 1 |
+| 阶段 | 3 |
+| 交付状态 | PLANNED |
 | 页面数量 | 1 |
 | 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
 
 ## LPATH-PAGE-PATH Cross-term Learning Path and Interpretation Review
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB / APP | LPATH-OBJ-TIMELINE-ENTRY / LPATH-OBJ-INTERPRETATION | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| PLANNED | WEB / APP | LPATH-OBJ-TIMELINE-ENTRY / LPATH-OBJ-INTERPRETATION | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -26,7 +29,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-ID | Learning Timeline Entry ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-STUDENT-REF | Learning Path Student | ID | 是 | OBJECT_REF: ORG-OBJ-STUDENT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
-| LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-TERM-ID | Timeline Entry Term | ID | 是 | OPTION_SET: OPT-COM-003 | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-TERM-ID | Timeline Entry Term | ID | 是 | OPTION_SET: OPT-COM-004 | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-EVENT-TYPE | Learning Path Event Type | STRING | 是 | OPTION_SET: OPT-ENUM-013 | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-PUBLISHED-RESULT-REF | PUBLISHED-RESULT Source Reference | ID | 否 | OBJECT_REF: PUB-OBJ-RESULT | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | LPATH-OBJ-TIMELINE-ENTRY | LPATH-ENTRY-F-PUBLISHED-RESULT-VERSION | PUBLISHED-RESULT Source Version | INTEGER | 否 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |

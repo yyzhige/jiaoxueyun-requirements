@@ -4,14 +4,15 @@
 | --- | --- |
 | 模块 | SCO-001 |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 页面数量 | 2 |
 | 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
 
 ## SCO-PAGE-GRADEBOOK Authorized Gradebook Projection
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB / APP | SCO-OBJ-VIEW | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB / APP | SCO-OBJ-VIEW | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -56,9 +57,9 @@
 
 ## SCO-PAGE-FOLLOW-UP Gradebook Follow-up Workspace
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB / APP | SCO-OBJ-FOLLOW-UP | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB / APP | SCO-OBJ-FOLLOW-UP | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -74,7 +75,7 @@
 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-ID | Gradebook Follow-up ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-VIEW-REF | Gradebook View Reference | ID | 是 | OBJECT_REF: SCO-OBJ-VIEW | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-VIEW-VERSION | Gradebook View Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
-| SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-ATTENTION-KIND | Attention Event Kind | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-ATTENTION-KIND | Attention Event Kind | STRING | 是 | OPTION_SET: OPT-V2-CLS-005 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-NOTE | Follow-up Note | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | SCO-OBJ-FOLLOW-UP | SCO-FOLLOW-UP-F-VERSION | Follow-up Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 

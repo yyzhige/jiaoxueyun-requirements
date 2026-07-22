@@ -4,14 +4,15 @@
 | --- | --- |
 | 模块 | SCH-001 |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 页面数量 | 2 |
 | 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
 
 ## SCH-PAGE-SCHEDULE-OPERATIONS Web Schedule Generation and Conflict Review Workspace
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB | SCH-OBJ-CALENDAR / SCH-OBJ-CONSTRAINT / SCH-OBJ-CONSTRAINT-SNAPSHOT / SCH-OBJ-CANDIDATE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB | SCH-OBJ-CALENDAR / SCH-OBJ-CONSTRAINT / SCH-OBJ-CONSTRAINT-SNAPSHOT / SCH-OBJ-CANDIDATE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -81,9 +82,9 @@
 
 ## SCH-PAGE-MOBILE-CONFLICT-REVIEW Mobile Schedule Conflict Review
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| APP | SCH-OBJ-CANDIDATE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | APP | SCH-OBJ-CANDIDATE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 

@@ -62,6 +62,12 @@ export function permissionScopeText(scope) {
 
 export function professionalAuthorizationText(action) {
   if (!action || typeof action !== "object") return "—";
+  if (action.teacherWriteAuthorizationBoundary) {
+    return [
+      `teacherWriteAuthorizationBoundary:kind=${action.teacherWriteAuthorizationBoundary.kind}`,
+      `contract=${action.teacherWriteAuthorizationBoundary.contractId}`,
+    ].join(";");
+  }
   if (action.authorizationBoundary) {
     return `authorizationBoundary:kind=${action.authorizationBoundary.kind}`;
   }
@@ -72,6 +78,26 @@ export function professionalAuthorizationText(action) {
     ].join(";");
   }
   return "—";
+}
+
+export function teacherWriteScopePolicyText(policy) {
+  if (!policy || typeof policy !== "object") return "—";
+  if (policy.kind === "ASSIGNED_SUBJECT_COURSE") {
+    return [
+      policy.kind,
+      `resolution=${policy.resolutionMode}`,
+      `subject=${policy.subjectMatch}`,
+      `course=${policy.courseMatch}`,
+    ].join(";");
+  }
+  if (policy.kind === "DOMAIN_CONTRACT") {
+    return [
+      policy.kind,
+      `contract=${policy.contractId}`,
+      `enforcement=${policy.enforcement}`,
+    ].join(";");
+  }
+  return JSON.stringify(policy);
 }
 
 export function requiredText(required) {

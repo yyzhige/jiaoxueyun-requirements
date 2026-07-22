@@ -12,6 +12,11 @@ import {
   matchesRegisteredProfessionalWriteException,
   professionalWritePolicyMatchesRegistry,
 } from "../facts/professional-write-authorization.mjs";
+import {
+  TRACE_AXIS_KEYS,
+  TRACE_AXIS_METADATA,
+  TRACE_AXIS_STATUS,
+} from "../facts/baseline-traceability.mjs";
 
 const REQUIRED_MODEL_COLLECTIONS = MODEL_COLLECTIONS.map(({ key }) => key);
 const BASELINE_V2_COLLECTION_START = MODEL_COLLECTIONS.findIndex(
@@ -62,6 +67,7 @@ const FLOW_ROUTING_POLICIES = new Set([
 ]);
 const FLOW_CONTRACT_PROFILES = new Set([
   "GENERIC",
+  "EVENT_INVALIDATION_FANOUT",
   "LEARNING_PATH_AGGREGATION",
   "REPORT_MATERIALIZATION",
 ]);
@@ -1296,30 +1302,60 @@ function validateAction(errors, action, path, strict) {
       "INVALID_ACTION_CONTRACT",
       { nonEmpty: true },
     );
-    const expectedKeys = new Set([
+    const baseKeys = [
       "refFieldId",
       "versionFieldId",
       "targetObjectId",
-      "requiredState",
-    ]);
+    ];
     relatedStateGuards.forEach((guard, index) => {
       const guardPath = `${path}.relatedStateGuards[${index}]`;
+      const hasSingleState = Object.hasOwn(guard ?? {}, "requiredState");
+      const hasMultipleStates = Object.hasOwn(guard ?? {}, "requiredStates");
+      const expectedKeys = new Set([
+        ...baseKeys,
+        hasMultipleStates ? "requiredStates" : "requiredState",
+      ]);
       if (
         !isRecord(guard)
+        || hasSingleState === hasMultipleStates
         || Object.keys(guard).length !== expectedKeys.size
         || Object.keys(guard).some((key) => !expectedKeys.has(key))
       ) {
         errors.push(
-          `INVALID_ACTION_CONTRACT ${guardPath} must use the closed refFieldId, versionFieldId, targetObjectId, and requiredState shape`,
+          `INVALID_ACTION_CONTRACT ${guardPath} must use the closed ref/version/target shape with exactly one requiredState or requiredStates selector`,
         );
         return;
       }
-      for (const property of expectedKeys) {
+      for (const property of baseKeys) {
         contractString(
           errors,
           guard,
           property,
           guardPath,
+          "INVALID_ACTION_CONTRACT",
+        );
+      }
+      if (hasSingleState) {
+        contractString(
+          errors,
+          guard,
+          "requiredState",
+          guardPath,
+          "INVALID_ACTION_CONTRACT",
+        );
+      } else {
+        const requiredStates = contractStringArray(
+          errors,
+          guard,
+          "requiredStates",
+          guardPath,
+          "INVALID_ACTION_CONTRACT",
+          { nonEmpty: true },
+        );
+        validateUniqueStrings(
+          errors,
+          requiredStates,
+          `${guardPath}.requiredStates`,
           "INVALID_ACTION_CONTRACT",
         );
       }
@@ -1462,6 +1498,15 @@ function validateAction(errors, action, path, strict) {
         "subjectMatch",
         "courseMatch",
       ]);
+      const catalogPartitionKeys = new Set([
+        "kind",
+        "controlSubject",
+        "controlSubjectFieldId",
+        "scopeRefFieldId",
+        "subjectMatch",
+        "scopeMatch",
+        "crossPartitionEffect",
+      ]);
       const validRecordScope = isRecord(scope)
         && Object.keys(scope).length === recordScopeKeys.size
         && Object.keys(scope).every((key) => recordScopeKeys.has(key))
@@ -1473,9 +1518,23 @@ function validateAction(errors, action, path, strict) {
         && scope.kind === "ASSIGNED_SUBJECT_COURSE"
         && scope.subjectMatch === "REQUIRED"
         && scope.courseMatch === "REQUIRED";
-      if (!validRecordScope && !validAssignedSubjectCourseScope) {
+      const validCatalogPartitionScope = isRecord(scope)
+        && Object.keys(scope).length === catalogPartitionKeys.size
+        && Object.keys(scope).every((key) => catalogPartitionKeys.has(key))
+        && scope.kind === "CATALOG_CONTROL_SUBJECT_PARTITION"
+        && ["SCHOOL", "PLATFORM", "STUDENT"].includes(scope.controlSubject)
+        && isValidId(scope.controlSubjectFieldId)
+        && isValidId(scope.scopeRefFieldId)
+        && scope.subjectMatch === "REQUIRED"
+        && scope.scopeMatch === "REQUIRED"
+        && scope.crossPartitionEffect === "DENY";
+      if (
+        !validRecordScope
+        && !validAssignedSubjectCourseScope
+        && !validCatalogPartitionScope
+      ) {
         errors.push(
-          `INVALID_ACTION_CONTRACT ${permissionPath}.scope must declare an OWN_RECORD, OTHER_RECORD, or ASSIGNED_SUBJECT_COURSE scope`,
+          `INVALID_ACTION_CONTRACT ${permissionPath}.scope must declare an OWN_RECORD, OTHER_RECORD, ASSIGNED_SUBJECT_COURSE, or CATALOG_CONTROL_SUBJECT_PARTITION scope`,
         );
       }
     }
@@ -1850,7 +1909,7 @@ function validateFlow(errors, flow, path) {
     && flow.contractProfile !== "GENERIC";
   if (!FLOW_CONTRACT_PROFILES.has(flow.contractProfile)) {
     errors.push(
-      `INVALID_FLOW_PROFILE ${path}.contractProfile must be GENERIC, LEARNING_PATH_AGGREGATION, or REPORT_MATERIALIZATION`,
+      `INVALID_FLOW_PROFILE ${path}.contractProfile must be GENERIC, EVENT_INVALIDATION_FANOUT, LEARNING_PATH_AGGREGATION, or REPORT_MATERIALIZATION`,
     );
   }
   if (specializedProfile) {
@@ -1910,9 +1969,12 @@ function validateFlow(errors, flow, path) {
     { nonEmpty: true },
   );
   if (Object.hasOwn(flow, "sourceOnlyModuleIds")) {
-    if (flow.contractProfile !== "LEARNING_PATH_AGGREGATION") {
+    if (![
+      "EVENT_INVALIDATION_FANOUT",
+      "LEARNING_PATH_AGGREGATION",
+    ].includes(flow.contractProfile)) {
       errors.push(
-        `INVALID_FLOW_PROFILE ${path}.sourceOnlyModuleIds is reserved for LEARNING_PATH_AGGREGATION`,
+        `INVALID_FLOW_PROFILE ${path}.sourceOnlyModuleIds is reserved for source-bearing specialized profiles`,
       );
     }
     const sourceOnlyModuleIds = contractStringArray(
@@ -1929,9 +1991,12 @@ function validateFlow(errors, flow, path) {
       `${path}.sourceOnlyModuleIds`,
       "INVALID_FLOW_CONTRACT",
     );
-  } else if (flow.contractProfile === "LEARNING_PATH_AGGREGATION") {
+  } else if ([
+    "EVENT_INVALIDATION_FANOUT",
+    "LEARNING_PATH_AGGREGATION",
+  ].includes(flow.contractProfile)) {
     errors.push(
-      `INVALID_FLOW_PROFILE ${path}.sourceOnlyModuleIds is required for LEARNING_PATH_AGGREGATION`,
+      `INVALID_FLOW_PROFILE ${path}.sourceOnlyModuleIds is required for source-bearing specialized profiles`,
     );
   }
   const steps = contractArray(
@@ -3099,9 +3164,192 @@ function validateStringArrayAllowEmpty(errors, value, property, path) {
   return value[property];
 }
 
+function validateTraceAxisApplicability(errors, trace, path) {
+  const applicability = requireRecord(errors, trace, "axisApplicability", path);
+  if (!applicability) return;
+  requireClosedKeys(
+    errors,
+    applicability,
+    `${path}.axisApplicability`,
+    new Set(TRACE_AXIS_KEYS),
+  );
+  for (const axisKey of TRACE_AXIS_KEYS) {
+    const axisPath = `${path}.axisApplicability.${axisKey}`;
+    const axis = applicability[axisKey];
+    if (!isRecord(axis)) {
+      errors.push(`INVALID_ENTITY_SHAPE ${axisPath} must be an object`);
+      continue;
+    }
+    requireClosedKeys(
+      errors,
+      axis,
+      axisPath,
+      new Set(["status", "reasonCode", "reason"]),
+    );
+    for (const property of ["status", "reasonCode", "reason"]) {
+      requireString(errors, axis, property, axisPath);
+    }
+    if (!Object.values(TRACE_AXIS_STATUS).includes(axis.status)) {
+      errors.push(
+        `INVALID_ENTITY_SHAPE ${axisPath}.status must be APPLICABLE or NOT_APPLICABLE`,
+      );
+    }
+    const metadata = TRACE_AXIS_METADATA[axisKey];
+    const expectedReasonCode = axis.status === TRACE_AXIS_STATUS.APPLICABLE
+      ? metadata.applicableReasonCode
+      : metadata.notApplicableReasonCode;
+    if (axis.reasonCode !== expectedReasonCode) {
+      errors.push(
+        `INVALID_ENTITY_SHAPE ${axisPath}.reasonCode must be ${expectedReasonCode}`,
+      );
+    }
+    if (
+      typeof axis.reason !== "string"
+      || axis.reason === "—"
+      || axis.reason.trim().length < 12
+    ) {
+      errors.push(
+        `INVALID_ENTITY_SHAPE ${axisPath}.reason must provide an explicit structured rationale`,
+      );
+    }
+  }
+}
+
+function validateBaselineTrace(errors, trace, path) {
+  requireClosedKeys(errors, trace, path, new Set([
+    "id",
+    "chapterId",
+    "decisionIds",
+    "phaseIds",
+    "releaseStatuses",
+    "moduleIds",
+    "pageIds",
+    "flowIds",
+    "objectIds",
+    "actionIds",
+    "permissionRefs",
+    "stateRefs",
+    "metricIds",
+    "launchGateIds",
+    "scenarioIds",
+    "testIds",
+    "axisApplicability",
+  ]));
+  requireString(errors, trace, "chapterId", path);
+  for (const property of [
+    "decisionIds",
+    "phaseIds",
+    "releaseStatuses",
+    "moduleIds",
+    "pageIds",
+    "flowIds",
+    "objectIds",
+    "actionIds",
+    "stateRefs",
+    "metricIds",
+    "launchGateIds",
+    "scenarioIds",
+    "testIds",
+  ]) {
+    const values = validateStringArrayAllowEmpty(errors, trace, property, path);
+    if (values.length === 0 && [
+      "phaseIds",
+      "releaseStatuses",
+    ].includes(property)) {
+      errors.push(`INVALID_ENTITY_SHAPE ${path}.${property} must be a non-empty array`);
+    }
+  }
+  if (!Array.isArray(trace.permissionRefs)) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.permissionRefs must be an array`);
+  } else {
+    trace.permissionRefs.forEach((permissionRef, index) => {
+      const permissionPath = `${path}.permissionRefs[${index}]`;
+      if (!isRecord(permissionRef)) {
+        errors.push(`INVALID_ENTITY_SHAPE ${permissionPath} must be an object`);
+        return;
+      }
+      requireClosedKeys(errors, permissionRef, permissionPath, new Set(["actionId", "effect"]));
+      requireString(errors, permissionRef, "actionId", permissionPath);
+      requireString(errors, permissionRef, "effect", permissionPath);
+      if (!["ALLOW", "DENY"].includes(permissionRef.effect)) {
+        errors.push(`INVALID_ENTITY_SHAPE ${permissionPath}.effect must be ALLOW or DENY`);
+      }
+    });
+  }
+  validateTraceAxisApplicability(errors, trace, path);
+}
+
+function validateDecisionTrace(errors, trace, path) {
+  requireClosedKeys(errors, trace, path, new Set([
+    "id",
+    "decisionId",
+    "migrationIds",
+    "chapterIds",
+    "phaseIds",
+    "releaseStatuses",
+    "moduleIds",
+    "pageIds",
+    "flowIds",
+    "objectIds",
+    "actionIds",
+    "permissionRefs",
+    "stateRefs",
+    "metricIds",
+    "launchGateIds",
+    "scenarioIds",
+    "testIds",
+    "axisApplicability",
+  ]));
+  requireString(errors, trace, "decisionId", path);
+  for (const property of [
+    "migrationIds",
+    "chapterIds",
+    "phaseIds",
+    "releaseStatuses",
+    "moduleIds",
+    "pageIds",
+    "flowIds",
+    "objectIds",
+    "actionIds",
+    "stateRefs",
+    "metricIds",
+    "launchGateIds",
+    "scenarioIds",
+    "testIds",
+  ]) {
+    const values = validateStringArrayAllowEmpty(errors, trace, property, path);
+    if (values.length === 0 && [
+      "migrationIds",
+      "chapterIds",
+      "phaseIds",
+      "releaseStatuses",
+    ].includes(property)) {
+      errors.push(`INVALID_ENTITY_SHAPE ${path}.${property} must be a non-empty array`);
+    }
+  }
+  if (!Array.isArray(trace.permissionRefs)) {
+    errors.push(`INVALID_ENTITY_SHAPE ${path}.permissionRefs must be an array`);
+  } else {
+    trace.permissionRefs.forEach((permissionRef, index) => {
+      const permissionPath = `${path}.permissionRefs[${index}]`;
+      if (!isRecord(permissionRef)) {
+        errors.push(`INVALID_ENTITY_SHAPE ${permissionPath} must be an object`);
+        return;
+      }
+      requireClosedKeys(errors, permissionRef, permissionPath, new Set(["actionId", "effect"]));
+      requireString(errors, permissionRef, "actionId", permissionPath);
+      requireString(errors, permissionRef, "effect", permissionPath);
+      if (!["ALLOW", "DENY"].includes(permissionRef.effect)) {
+        errors.push(`INVALID_ENTITY_SHAPE ${permissionPath}.effect must be ALLOW or DENY`);
+      }
+    });
+  }
+  validateTraceAxisApplicability(errors, trace, path);
+}
+
 function validateMigrationChange(errors, change, path) {
   requireClosedKeys(errors, change, path, new Set([
-    "id", "decisionIds", "oldRule", "newRule", "rejectedReason", "affected",
+    "id", "decisionIds", "oldRule", "newRule", "rejectedReason", "affected", "decisionAffected",
   ]));
   for (const property of ["oldRule", "newRule", "rejectedReason"]) {
     requireString(errors, change, property, path);
@@ -3120,7 +3368,7 @@ function validateMigrationChange(errors, change, path) {
   const affected = requireRecord(errors, change, "affected", path);
   if (!affected) return;
   requireClosedKeys(errors, affected, `${path}.affected`, new Set([
-    "moduleIds", "pageIds", "flowIds", "objectIds", "actionIds", "permissionActionIds", "stateRefs", "metricIds", "scenarioIds", "testIds",
+    "moduleIds", "pageIds", "flowIds", "objectIds", "actionIds", "permissionActionIds", "stateRefs", "metricIds", "launchGateIds", "scenarioIds", "testIds",
   ]));
   for (const property of [
     "moduleIds",
@@ -3131,10 +3379,51 @@ function validateMigrationChange(errors, change, path) {
     "permissionActionIds",
     "stateRefs",
     "metricIds",
+    "launchGateIds",
     "scenarioIds",
     "testIds",
   ]) {
     validateStringArrayAllowEmpty(errors, affected, property, `${path}.affected`);
+  }
+  const decisionAffected = requireRecord(errors, change, "decisionAffected", path);
+  if (!decisionAffected) return;
+  const decisionIds = Array.isArray(change.decisionIds) ? change.decisionIds : [];
+  requireClosedKeys(errors, decisionAffected, `${path}.decisionAffected`, new Set(decisionIds));
+  for (const decisionId of decisionIds) {
+    const sourcePath = `${path}.decisionAffected.${decisionId}`;
+    const source = decisionAffected[decisionId];
+    if (!isRecord(source)) {
+      errors.push(`INVALID_ENTITY_SHAPE ${sourcePath} must be an object`);
+      continue;
+    }
+    requireClosedKeys(errors, source, sourcePath, new Set(["affected", "axisApplicability"]));
+    const sourceAffected = requireRecord(errors, source, "affected", sourcePath);
+    if (sourceAffected) {
+      requireClosedKeys(errors, sourceAffected, `${sourcePath}.affected`, new Set([
+        "moduleIds", "pageIds", "flowIds", "objectIds", "actionIds", "permissionActionIds", "stateRefs", "metricIds", "launchGateIds", "scenarioIds", "testIds",
+      ]));
+      for (const property of [
+        "moduleIds",
+        "pageIds",
+        "flowIds",
+        "objectIds",
+        "actionIds",
+        "permissionActionIds",
+        "stateRefs",
+        "metricIds",
+        "launchGateIds",
+        "scenarioIds",
+        "testIds",
+      ]) {
+        validateStringArrayAllowEmpty(
+          errors,
+          sourceAffected,
+          property,
+          `${sourcePath}.affected`,
+        );
+      }
+    }
+    validateTraceAxisApplicability(errors, source, sourcePath);
   }
 }
 
@@ -3430,6 +3719,24 @@ function validateModelShape(model) {
       "baselineChapters",
       "baseline chapter",
       (chapter, path) => validateBaselineChapter(errors, chapter, path),
+    );
+  }
+  if (Array.isArray(model.baselineTraceability)) {
+    validateEntities(
+      errors,
+      model.baselineTraceability,
+      "baselineTraceability",
+      "baseline trace",
+      (trace, path) => validateBaselineTrace(errors, trace, path),
+    );
+  }
+  if (Array.isArray(model.decisionTraceability)) {
+    validateEntities(
+      errors,
+      model.decisionTraceability,
+      "decisionTraceability",
+      "decision trace",
+      (trace, path) => validateDecisionTrace(errors, trace, path),
     );
   }
   if (Array.isArray(model.migrationChanges)) {

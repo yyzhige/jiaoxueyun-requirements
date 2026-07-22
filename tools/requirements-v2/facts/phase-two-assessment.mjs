@@ -12,6 +12,7 @@ import {
   aiReportingModules,
 } from "./ai-reporting.mjs";
 import { withProfessionalWriteAuthorization } from "./professional-write-authorization.mjs";
+import { DATA_NATURE } from "./data-governance-taxonomy.mjs";
 
 export const PHASE_TWO_ASSESSMENT_MODULE_IDS = deepFreeze([
   "GRD-001",
@@ -121,7 +122,46 @@ const CHALLENGE_RESOLVED_EVENT_ID = "EVT-AI-ASSESSMENT-CHALLENGE-RESOLVED";
 const ASSESSMENT_STANDARD_OBJECT_ID = "GRD-OBJ-ASSESSMENT-STANDARD-VERSION";
 const ASSESSMENT_STANDARD_ID_FIELD = "GRD-STANDARD-F-ID";
 const ASSESSMENT_STANDARD_VERSION_FIELD = "GRD-STANDARD-F-VERSION";
+const PHASE_TWO_ENTITLEMENT_OBJECT_ID = "PLAT-OBJ-PHASE-TWO-CORE-ENTITLEMENT";
+const PHASE_TWO_ENTITLEMENT_REF_FIELD_ID = "GRD-DECISION-F-CORE-ENTITLEMENT-REF";
+const PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID = "GRD-DECISION-F-CORE-ENTITLEMENT-VERSION";
 const ASSESSMENT_READINESS_ACTION_ID = "GRD-ACT-CHECK-PHASE-TWO-ASSESSMENT-READINESS";
+
+function protectedAssessmentServicePlanRevalidation() {
+  return {
+    resolverActionId: "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+    servicePlanObjectId: "PLAT-OBJ-SERVICE-PLAN",
+    entitlementServicePlanRefFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-REF",
+    entitlementServicePlanVersionFieldId: "PLAT-P2ENT-F-SERVICE-PLAN-VERSION",
+    servicePlanStateFieldId: "PLAT-PLAN-F-SERVICE-STATE",
+    servicePlanVersionFieldId: "PLAT-PLAN-F-VERSION",
+    requiredCurrentState: "ACTIVE",
+    currentVersionMustEqualPinnedVersion: true,
+    checkedAtExecution: true,
+    staleMissingOrAmbiguousBehavior: "FAIL_CLOSED",
+    failureResult: "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+    allowedAuthorizationBranches: [
+      "CURRENT_ACTIVE_SERVICE_PLAN",
+      "EXACT_FINITE_D091_PROTECTED_ACTIVITY",
+    ],
+    continuityFallback: {
+      mode: "EXACT_FINITE_D091_PROTECTED_ACTIVITY",
+      protectedEntryObjectId: "PLAT-OBJ-PROTECTED-ACTIVITY-ENTRY",
+      protectedEntryActivityRefFieldId: "PLAT-PROTECT-F-ACTIVITY-REF",
+      protectedEntryActivityVersionFieldId: "PLAT-PROTECT-F-ACTIVITY-VERSION",
+      protectedEntryPublicationSnapshotRefFieldId: "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-REF",
+      protectedEntryPublicationSnapshotVersionFieldId:
+        "PLAT-PROTECT-F-PUBLICATION-SNAPSHOT-VERSION",
+      protectedUntilFieldId: "PLAT-PROTECT-F-PROTECTED-UNTIL",
+      serviceObjectResolution: "PINNED_SUBMISSION_ACTIVITY_AND_PUBLICATION_SNAPSHOT",
+      requiredProtectedOperation: "COMPLETE_PUBLISHED_ACTIVITY",
+      timeRule: "CURRENT_TIME_LE_PROTECTED_UNTIL",
+      exactVersionMatchRequired: true,
+      finiteWindowRequired: true,
+      failureResult: "SERVICE_CONTINUITY_NOT_PROTECTED",
+    },
+  };
+}
 const ANSWER_OPEN_POLICY_FIELD_IDS = [
   "PUB-RESULT-F-ANSWER-OPEN-POLICY-ID",
   "PUB-RESULT-F-ANSWER-OPEN-POLICY-VERSION",
@@ -904,7 +944,7 @@ function initialAttemptClassificationObject() {
         targetVersionFieldId: "GRD-ATTEMPT-CLASS-F-VERSION",
       },
     ],
-    dataNature: "AI_DERIVED_JUDGMENT",
+    dataNature: DATA_NATURE.AI_DERIVED,
     originalFactOverwritePolicy: "FORBIDDEN",
     derivedJudgmentContract: {
       sourceRefFieldId: "GRD-ATTEMPT-CLASS-F-SUBMISSION-REF",
@@ -1051,12 +1091,16 @@ function gradingModule() {
   module.title = "AI Assessment and Completion Determination";
   module.objective = "Return a source-pinned, challengeable AI assessment and explicit next step without inserting a human actor into routine determination";
   module.entryConditions = [
-    "an immutable submission version, activity publication snapshot, help environment, item, and assessment-standard version are available",
+    "an immutable submission version, activity publication snapshot, help environment, item, assessment-standard version, and exact ACTIVE school phase-two entitlement version are available",
   ];
   module.exitConditions = [
     "every accepted submission has one explicit next step or remains unpublished and undecided in the professional exception queue",
   ];
   module.productDecisionIds = ["D007", "D058", "D059", "D060", "D062", "D063", "D064", "D065", "D066", "D070", "D071", "D072", "D073", "D074"];
+  module.dependencyModuleIds = [...new Set([
+    ...(module.dependencyModuleIds ?? []),
+    "PLAT-002",
+  ])];
 
   const decision = module.objects.find(({ id }) => id === "GRD-OBJ-DECISION");
   const capabilityRule = module.objects.find(({ id }) => id === "GRD-OBJ-CAPABILITY-RULE");
@@ -1080,7 +1124,7 @@ function gradingModule() {
   capabilityRule.label = "AI Assessment Capability Rule";
   decision.producerRef = "AI";
   decision.confirmerRef = "SYSTEM";
-  decision.dataNature = "AI_DERIVED_JUDGMENT";
+  decision.dataNature = DATA_NATURE.AI_DERIVED;
   decision.originalFactOverwritePolicy = "FORBIDDEN";
   relabelField(module, "GRD-OBJ-DECISION", "GRD-DECISION-F-OFFICIAL-SCORE", "Effective Activity Score or Level (optional)");
   relabelField(module, "GRD-OBJ-DECISION", "GRD-DECISION-F-TEACHER-FEEDBACK", "Professional Exception Feedback (exception only)");
@@ -1095,6 +1139,52 @@ function gradingModule() {
   relabelField(module, "GRD-OBJ-CAPABILITY-RULE", "GRD-CAP-F-UNAVAILABLE-FALLBACK", "Unable-to-determine Recovery Route");
   decision.fields.find(({ id }) => id === "GRD-DECISION-F-RECOGNIZED-ANSWER").dataType = "TEXT";
   decision.fields.find(({ id }) => id === "GRD-DECISION-F-RECOGNIZED-REGION").dataType = "TEXT";
+  const phaseTwoEntitlementFields = [
+    systemField(
+      PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+      "Pinned Active School Phase-two Core Entitlement",
+      {
+        dataType: "ID",
+        required: {
+          description: "required whenever the queued decision is processed by the second-stage AI assessment service",
+          whenStates: ["PROCESSING"],
+          whenActionIds: ["GRD-ACT-PROCESS"],
+        },
+        valueSource: { kind: "OBJECT_REF", targetObjectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID },
+        mutability: "IMMUTABLE",
+        referenceIntegrity: "VERSION_PINNED",
+        stateGuardPolicy: "ALWAYS_REQUIRED",
+        actionApplicability: { requiredActionIds: ["GRD-ACT-PROCESS"] },
+        versionBinding: {
+          versionFieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+          targetVersionFieldId: "PLAT-P2ENT-F-VERSION",
+        },
+      },
+    ),
+    systemField(
+      PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+      "Pinned Active School Phase-two Core Entitlement Version",
+      {
+        dataType: "INTEGER",
+        required: {
+          description: "required with the exact school phase-two entitlement used for AI assessment",
+          whenStates: ["PROCESSING"],
+          whenActionIds: ["GRD-ACT-PROCESS"],
+        },
+        mutability: "IMMUTABLE",
+      },
+    ),
+  ];
+  appendObjectFields(module, decision.id, phaseTwoEntitlementFields);
+  decision.lineageBindings = [
+    ...(decision.lineageBindings ?? []),
+    {
+      refFieldId: PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+      versionFieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+      targetObjectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+      targetVersionFieldId: "PLAT-P2ENT-F-VERSION",
+    },
+  ];
 
   const classificationBoundActionIds = [
     "GRD-ACT-ENQUEUE",
@@ -1350,6 +1440,40 @@ function gradingModule() {
   const process = module.actions.find(({ id }) => id === "GRD-ACT-PROCESS");
   process.label = "Produce AI Assessment and Completion Determination";
   process.assessmentRole = "ROUTINE_AI_ASSESSMENT";
+  appendActionInputs(module, process.id, [
+    PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+    PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+  ]);
+  appendActionOutputs(module, process.id, [
+    PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+    PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+  ]);
+  process.relatedStateGuards = [
+    ...(process.relatedStateGuards ?? []),
+    {
+      refFieldId: PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+      versionFieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+      targetObjectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+      requiredState: "ACTIVE",
+    },
+  ];
+  process.phaseTwoEntitlementGuard = {
+    entitlementCode: "CORE_AI_ASSESSMENT",
+    entitlementObjectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+    entitlementRefFieldId: PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+    entitlementVersionFieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+    entitlementSchoolRefFieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+    entitlementCodesFieldId: "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS",
+    serviceObjectRefFieldId: "GRD-DECISION-F-SUBMISSION-REF",
+    serviceObjectSchoolResolution: "PINNED_SUBMISSION_ACTIVITY_SCHOOL",
+    requiredEntitlementState: "ACTIVE",
+    exactPinnedVersionRequired: true,
+    schoolMustMatch: true,
+    matchCardinality: "EXACTLY_ONE",
+    missingOrAmbiguousBehavior: "FAIL_CLOSED",
+    failureResult: "PHASE_TWO_ENTITLEMENT_INACTIVE",
+    sourceServicePlanRevalidation: protectedAssessmentServicePlanRevalidation(),
+  };
   process.assessmentStandardBinding = {
     refFieldId: "GRD-DECISION-F-RUBRIC-REF",
     versionFieldId: "GRD-DECISION-F-RUBRIC-VERSION",
@@ -1445,6 +1569,30 @@ function gradingModule() {
     "GRD-ACT-PROCESS",
     "EXTERNAL_AI_CONTRACT_INCOMPLETE",
     "real student data remains inside the product boundary until every external AI processing precondition is fixed and verifiable",
+  );
+  appendFailureResult(
+    module,
+    "GRD-ACT-PROCESS",
+    "PHASE_TWO_ENTITLEMENT_INACTIVE",
+    "AI assessment remains unprocessed and unpublished until the exact school-wide D090 entitlement version is ACTIVE",
+  );
+  appendFailureResult(
+    module,
+    "GRD-ACT-PROCESS",
+    "PHASE_TWO_SERVICE_PLAN_NOT_ACTIVE",
+    "AI assessment requires the entitlement-pinned service plan to remain the current ACTIVE version unless the exact submission activity is protected by D091",
+  );
+  appendFailureResult(
+    module,
+    "GRD-ACT-PROCESS",
+    "SERVICE_CONTINUITY_NOT_PROTECTED",
+    "a non-active service plan may continue assessment only for the exact protected activity and publication snapshot before its finite protected-until time",
+  );
+  appendFailureResult(
+    module,
+    "GRD-ACT-PROCESS",
+    "SCHOOL_SCOPE_MISMATCH",
+    "AI assessment remains unprocessed and unpublished when the entitlement school differs from the pinned submission activity school",
   );
   const route = module.actions.find(({ id }) => id === "GRD-ACT-ROUTE");
   route.label = "Record Explicit Assessment Status and Next Step";
@@ -1758,6 +1906,14 @@ function gradingModule() {
     ],
     duplicateStudentContentInTrace: false,
   };
+  module.phaseTwoCoreEntitlementBindings = [{
+    entitlementCode: "CORE_AI_ASSESSMENT",
+    entitlementObjectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+    consumerObjectId: decision.id,
+    consumerActionIds: ["GRD-ACT-PROCESS"],
+    entitlementRefFieldId: PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+    entitlementVersionFieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+  }];
   module.pages.find(({ id }) => id === "GRD-PAGE-DECISION").label = "AI Assessment Exception and Source Correction Workspace";
   return replaceLegacyAssessmentLanguage(module);
 }
@@ -1995,7 +2151,7 @@ function publicationModule() {
   });
   result.producerRef = "SYSTEM";
   result.confirmerRef = "SYSTEM";
-  result.dataNature = "AI_DERIVED_JUDGMENT";
+  result.dataNature = DATA_NATURE.AI_DERIVED;
   result.originalFactOverwritePolicy = "FORBIDDEN";
   for (const [fieldId, whenStates, whenActionIds] of [
     ["PUB-RESULT-F-CORRECTION-DECISION-REF", ["INVALIDATED"], ["PUB-ACT-CORRECT-RESULT"]],
@@ -2679,7 +2835,7 @@ function correctionAttemptAssessmentObject() {
         targetVersionFieldId: "CORR-ASSESSMENT-F-VERSION",
       },
     ],
-    dataNature: "AI_DERIVED_JUDGMENT",
+    dataNature: DATA_NATURE.AI_DERIVED,
     originalFactOverwritePolicy: "FORBIDDEN",
     derivedJudgmentContract: {
       sourceRefFieldId: "CORR-ASSESSMENT-F-SOURCE-ATTEMPT-REF",
@@ -2743,7 +2899,7 @@ function correctionModule() {
   relabelField(module, "CORR-OBJ-ATTEMPT", "CORR-ATTEMPT-F-TEACHER-JUDGMENT", "Professional Exception Resolution (exception only)");
   relabelField(module, "CORR-OBJ-ATTEMPT", "CORR-ATTEMPT-F-TEACHER-CONFIRMER-REF", "Authorized Professional Exception Resolver");
   const rawAttempt = module.objects.find(({ id }) => id === "CORR-OBJ-ATTEMPT");
-  rawAttempt.dataNature = "ORIGINAL_LEARNING_FACT";
+  rawAttempt.dataNature = DATA_NATURE.RAW_FACT;
   rawAttempt.originalFactOverwritePolicy = "FORBIDDEN";
   rawAttempt.factVersionPolicy = "APPEND_NEW_ATTEMPT_VERSION_ONLY";
   rawAttempt.fields.find(({ id }) => id === "CORR-ATTEMPT-F-CORRECTION-ANSWER").mutability = "IMMUTABLE";
@@ -3282,6 +3438,10 @@ function buildPhaseTwoAssessmentFlows() {
   )).map((flow) => {
     if (flow.id === "DF-006") {
       flow.label = "Submission to AI Assessment and Completion Determination";
+      flow.moduleIds = [...new Set([
+        ...(flow.moduleIds ?? []),
+        "PLAT-002",
+      ])];
       flow.steps = flow.steps.map((step) => ({
         ...step,
         order: step.order === 2
@@ -3322,7 +3482,54 @@ function buildPhaseTwoAssessmentFlows() {
         actionId: ASSESSMENT_READINESS_ACTION_ID,
         condition: "resolve the exact frozen assessment-standard version bound to the accepted submission activity snapshot",
       });
+      const entitlementResolutionIndex = flow.steps.findIndex(({ actionId }) => (
+        actionId === "GRD-ACT-PROCESS"
+      ));
+      const entitlementResolutionOrder = flow.steps[entitlementResolutionIndex].order;
+      flow.steps = flow.steps.map((step) => ({
+        ...step,
+        order: step.order >= entitlementResolutionOrder ? step.order + 1 : step.order,
+      }));
+      flow.steps.splice(entitlementResolutionIndex, 0, {
+        order: entitlementResolutionOrder,
+        actionId: "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT",
+        condition: "resolve exactly one ACTIVE phase-two entitlement for the school derived from the pinned submission activity",
+        providedInputs: [
+          {
+            fieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+            provider: { actorRef: "SYSTEM" },
+          },
+          {
+            fieldId: "PLAT-P2ENT-F-SCHOOL-VERSION",
+            provider: { actorRef: "SYSTEM" },
+          },
+        ],
+      });
       flow.sourceDataRefs.push(
+        {
+          objectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+          fieldId: "PLAT-P2ENT-F-ID",
+          version: "PLAT-P2ENT-F-VERSION",
+          cardinality: "ONE",
+        },
+        {
+          objectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+          fieldId: "PLAT-P2ENT-F-SCHOOL-REF",
+          version: "PLAT-P2ENT-F-VERSION",
+          cardinality: "ONE",
+        },
+        {
+          objectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+          fieldId: "PLAT-P2ENT-F-CORE-AI-ENTITLEMENTS",
+          version: "PLAT-P2ENT-F-VERSION",
+          cardinality: "ONE",
+        },
+        {
+          objectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+          fieldId: "PLAT-P2ENT-F-VERSION",
+          version: "PLAT-P2ENT-F-VERSION",
+          cardinality: "ONE",
+        },
         {
           objectId: ASSESSMENT_STANDARD_OBJECT_ID,
           fieldId: "GRD-STANDARD-F-ACTIVITY-SNAPSHOT-REF",
@@ -3398,8 +3605,47 @@ function buildPhaseTwoAssessmentFlows() {
           targetFieldId: "GRD-DECISION-F-INITIAL-ATTEMPT-CLASSIFICATION-VERSION",
         },
       ];
+      const processStep = flow.steps.find(({ actionId }) => actionId === "GRD-ACT-PROCESS");
+      processStep.providedInputs = [
+        ...(processStep.providedInputs ?? []),
+        {
+          fieldId: PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+          provider: { actorRef: "SYSTEM" },
+        },
+        {
+          fieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+          provider: { actorRef: "SYSTEM" },
+        },
+      ];
+      processStep.sourceBindings = [
+        ...(processStep.sourceBindings ?? []),
+        {
+          sourceObjectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+          sourceFieldId: "PLAT-P2ENT-F-ID",
+          targetFieldId: PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+        },
+        {
+          sourceObjectId: PHASE_TWO_ENTITLEMENT_OBJECT_ID,
+          sourceFieldId: "PLAT-P2ENT-F-VERSION",
+          targetFieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+        },
+      ];
+      flow.targetDataRefs.push(
+        {
+          objectId: "GRD-OBJ-DECISION",
+          fieldId: PHASE_TWO_ENTITLEMENT_REF_FIELD_ID,
+          version: "GRD-DECISION-F-DECISION-VERSION",
+        },
+        {
+          objectId: "GRD-OBJ-DECISION",
+          fieldId: PHASE_TWO_ENTITLEMENT_VERSION_FIELD_ID,
+          version: "GRD-DECISION-F-DECISION-VERSION",
+        },
+      );
       flow.idempotencyKeyParts.identityFieldIds.push(ASSESSMENT_STANDARD_ID_FIELD);
+      flow.idempotencyKeyParts.identityFieldIds.push("PLAT-P2ENT-F-ID");
       flow.idempotencyKeyParts.versionFieldIds.push(ASSESSMENT_STANDARD_VERSION_FIELD);
+      flow.idempotencyKeyParts.versionFieldIds.push("PLAT-P2ENT-F-VERSION");
       flow.failureGranularity = "SUBMISSION_ITEM_AI_ASSESSMENT_RESULT_VERSION";
       flow.retryPolicy = {
         strategy: "RETRY_FAILED_AI_ASSESSMENT_WITHOUT_CHANGING_SUBMISSION_FACTS",
@@ -3429,8 +3675,9 @@ function buildPhaseTwoAssessmentFlows() {
       };
       flow.steps = flow.steps.map((step) => {
         const condition = ({
+          "PLAT-ACT-RESOLVE-ACTIVE-PHASE-TWO-ENTITLEMENT": "the pinned submission activity resolves to exactly one same-school ACTIVE D090 entitlement",
           "GRD-ACT-ROUTE-UNSUPPORTED": "source or input quality requires a concrete supplementation request",
-          "GRD-ACT-PROCESS": "the source versions, frozen assessment standard, external-processing contract, and input quality permit AI assessment",
+          "GRD-ACT-PROCESS": "the source versions, frozen assessment standard, exact ACTIVE same-school D090 entitlement, external-processing contract, and input quality permit AI assessment",
           "GRD-ACT-ROUTE": "AI assessment returns one explicit next step without routine human intervention",
           "GRD-ACT-ROUTE-AI-UNAVAILABLE": "a permitted alternate review is attempted before the professional exception queue",
         })[step.actionId];
@@ -3972,8 +4219,8 @@ export function replacePhaseTwoAssessmentModules(modules) {
   });
 }
 
-export function deferPhaseThreeFlowActions(modules) {
-  const deferredActionIds = new Set([
+export function bindPhaseThreeFlowActions(modules) {
+  const phaseThreeFlowActionIds = new Set([
     "LPATH-ACT-APPEND-CORRECTION-TIMELINE",
     "LPATH-ACT-APPEND-EVIDENCE-TIMELINE",
     "LPATH-ACT-APPEND-PLAN-EXECUTION-TIMELINE",
@@ -3982,19 +4229,13 @@ export function deferPhaseThreeFlowActions(modules) {
     "LPATH-ACT-CREATE-INTERPRETATION-CANDIDATE",
   ]);
   return modules.map((module) => {
-    if (!module.actions.some(({ id }) => deferredActionIds.has(id))) return module;
+    if (!module.actions.some(({ id }) => phaseThreeFlowActionIds.has(id))) return module;
     const replacement = structuredClone(module);
-    for (const action of replacement.actions.filter(({ id }) => deferredActionIds.has(id))) {
+    for (const action of replacement.actions.filter(({ id }) => phaseThreeFlowActionIds.has(id))) {
       action.trigger = { kind: "FLOW", flowIds: ["DF-011"] };
-      action.deferredFlowRegistration = {
-        flowId: "DF-011",
-        targetPhase: PHASE.THIRD,
-        releaseStatus: RELEASE_STATUS.PLANNED,
-        executionAllowedBeforeRegistration: false,
-      };
     }
     for (const scenario of replacement.scenarios.filter(({ actionId }) => (
-      deferredActionIds.has(actionId)
+      phaseThreeFlowActionIds.has(actionId)
     ))) {
       scenario.trigger = { kind: "FLOW", flowIds: ["DF-011"] };
     }

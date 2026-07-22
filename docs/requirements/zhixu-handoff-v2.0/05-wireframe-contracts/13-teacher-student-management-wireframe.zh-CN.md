@@ -4,14 +4,15 @@
 | --- | --- |
 | 模块 | STU-001 |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 页面数量 | 2 |
 | 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
 
 ## STU-PAGE-PROFILE Authorized Student Management Profile
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB / APP | STU-OBJ-PROFILE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB / APP | STU-OBJ-PROFILE | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -56,9 +57,9 @@
 
 ## STU-PAGE-ATTENTION Student Attention Follow-up Workspace
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB / APP | STU-OBJ-ATTENTION | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB / APP | STU-OBJ-ATTENTION | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -74,7 +75,7 @@
 | STU-OBJ-ATTENTION | STU-ATTENTION-F-ID | Student Attention Record ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | STU-OBJ-ATTENTION | STU-ATTENTION-F-PROFILE-REF | Student Profile View Reference | ID | 是 | OBJECT_REF: STU-OBJ-PROFILE | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | STU-OBJ-ATTENTION | STU-ATTENTION-F-PROFILE-VERSION | Student Profile View Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
-| STU-OBJ-ATTENTION | STU-ATTENTION-F-KIND | Student Attention Event Kind | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
+| STU-OBJ-ATTENTION | STU-ATTENTION-F-KIND | Student Attention Event Kind | STRING | 是 | OPTION_SET: OPT-V2-CLS-005 | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | STU-OBJ-ATTENTION | STU-ATTENTION-F-FOLLOW-UP-NOTE | Student Attention Follow-up Note | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 | STU-OBJ-ATTENTION | STU-ATTENTION-F-VERSION | Student Attention Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | must match the declared data type and authorized object scope |
 

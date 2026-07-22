@@ -1,18 +1,20 @@
-# ORG-001 Organization, members, and import PRD v2.0
+# ORG-001 Organization, members, teaching relations, and import PRD v2.0
 
 | 属性 | 值 |
 | --- | --- |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 优先级 | P0 |
-| 目标 | Maintain versioned school organization and execute observable object-level imports. |
+| 目标 | Maintain versioned school organization, historical member relations, expiring substitute-teaching scope, and observable object-level imports. |
 | 基线决策 | `BASE-001`、`BASE-002`、`BASE-007` |
 | NFR | `NFR-002`、`NFR-008` |
 | 进入条件 | an academic user has an active school and term context；organization templates have explicit versions |
-| 退出条件 | organization facts have effective versions；every imported object has a create, update, no-change, reject, or deactivate result |
+| 退出条件 | organization facts have effective versions；temporary substitute access is bound to class, subject, duty, start and mandatory end；every imported object has a create, update, no-change, reject, or deactivate result |
+| 依赖模块 | — |
 
 ## 1. 范围与事实边界
 
-- 本模块权威拥有 11 个对象、49 个动作。
+- 本模块权威拥有 12 个对象、53 个动作。
 - 模块外对象只能以 Object ID、Field ID 和显式源版本引用，不能复制第二套业务事实。
 - 页面可见性不是权限边界；每次执行必须按 Action 合同重新判断 ALLOW、DENY、状态和源版本。
 - AI 只能查询、分析、生成临时草稿或发起受控动作；不能跳过正式 Action、确认者和审计。
@@ -21,9 +23,9 @@
 
 ### ORG-OBJ-TERM Term
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SCHOOL_TERM | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | AUTHORIZED | DRAFT / CURRENT / HISTORICAL / ARCHIVED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_TERM | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | AUTHORIZED | — | DRAFT / CURRENT / HISTORICAL / ARCHIVED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -36,9 +38,9 @@
 
 ### ORG-OBJ-GRADE Grade
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SCHOOL_GRADE | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | ACTIVE / HISTORICAL |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_GRADE | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | — | ACTIVE / HISTORICAL |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -49,9 +51,9 @@
 
 ### ORG-OBJ-CLASS Class
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SCHOOL_CLASS | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | ACTIVE / HISTORICAL / DEACTIVATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_CLASS | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | — | ACTIVE / HISTORICAL / DEACTIVATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -62,9 +64,9 @@
 
 ### ORG-OBJ-SUBJECT Subject Catalog
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SCHOOL_SUBJECT_CATALOG | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | ACTIVE / DEPRECATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_SUBJECT_CATALOG | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | — | ACTIVE / DEPRECATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -74,9 +76,9 @@
 
 ### ORG-OBJ-COURSE Course
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SCHOOL_COURSE | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / ENDED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHOOL_COURSE | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | — | DRAFT / ACTIVE / ENDED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -88,9 +90,9 @@
 
 ### ORG-OBJ-TEACHER Teacher Profile
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TEACHER | SCHOOL | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-002 | S3 | NO_DIRECT_READ | ACTIVE / SUSPENDED / DEACTIVATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TEACHER | SCHOOL | ROLE-ACADEMIC | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | ROLE-SCHOOL-ADMIN | LIFE-002 | S3 | NO_DIRECT_READ | — | ACTIVE / SUSPENDED / DEACTIVATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -100,9 +102,9 @@
 
 ### ORG-OBJ-STUDENT Student Profile
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| STUDENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S3 | NO_DIRECT_READ | ACTIVE / TRANSFERRED / DEACTIVATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S3 | NO_DIRECT_READ | — | ACTIVE / TRANSFERRED / DEACTIVATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -110,12 +112,13 @@
 | ORG-STUDENT-F-NAME | Student Name | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | ORG-STUDENT-F-CLASS-ID | Class ID | STRING | 是 | OPTION_SET: OPT-COM-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | ORG-STUDENT-F-MEMBER-STATE | Member State | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-STUDENT-F-VERSION | Student School-profile Projection Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the exact student, school, object, and source version fixed by the transfer authorization | retain accepted values with transfer, actor, time, and source-version provenance |
 
 ### ORG-OBJ-TEACHING-ASSIGNMENT Teaching Assignment
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TEACHER_COURSE_ASSIGNMENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | AUTHORIZED | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TEACHER_COURSE_ASSIGNMENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | AUTHORIZED | — | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -127,9 +130,9 @@
 
 ### ORG-OBJ-HOMEROOM-ASSIGNMENT Homeroom Assignment
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| HOMEROOM_TEACHER_ASSIGNMENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HOMEROOM_TEACHER_ASSIGNMENT | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S2 | NO_DIRECT_READ | — | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -138,11 +141,29 @@
 | ORG-HOMEROOM-F-CLASS-ID | Homeroom Class ID | STRING | 是 | OPTION_SET: OPT-COM-006 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | ORG-HOMEROOM-F-EFFECTIVE | Effective Range | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
+### ORG-OBJ-SUBSTITUTE-TEACHING-RELATION Expiring Substitute-teaching Relation
+
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBSTITUTE_TEACHING_RELATION | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-002 | S4 | NO_DIRECT_READ | — | PLANNED / EFFECTIVE / EXPIRED / REVOKED |
+
+| Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-SUBSTITUTE-F-ID | Substitute-teaching Relation ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-TEACHER-ID | Substitute Teacher ID | ID | 是 | OPTION_SET: OPT-COM-009 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-CLASS-ID | Substitute Class ID | ID | 是 | OPTION_SET: OPT-COM-006 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-SUBJECT-ID | Substitute Subject ID | ID | 是 | OPTION_SET: OPT-COM-007 | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-DUTY-ID | Substitute Duty ID | STRING | 是 | OPTION_SET: OPT-ENUM-042 | IMMUTABLE | AUTHORIZED_SCOPE | — | must describe the bounded teaching duty and cannot synthesize a class or subject relation | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-START | Substitute Relation Start | DATETIME | 是 | USER_INPUT | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-END | Mandatory Substitute Relation End | DATETIME | 是 | USER_INPUT | IMMUTABLE | AUTHORIZED_SCOPE | — | must be later than start and is mandatory for every temporary substitute relation | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-STATUS | Substitute Relation Status | STRING | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| ORG-SUBSTITUTE-F-VERSION | Substitute Relation Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | OBJECT_VERSION | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+
 ### ORG-OBJ-IMPORT-BATCH Import Batch
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ORGANIZATION_IMPORT | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | LIFE-002 | S3 | AUTHORIZED | UPLOADED / MAPPED / VALIDATED / PENDING_OUTCOME_AUDIT / PENDING_PARTIAL_OUTCOME_AUDIT / PARTIAL_SUCCESS / COMPLETED / REJECTED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORGANIZATION_IMPORT | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | LIFE-002 | S3 | AUTHORIZED | — | UPLOADED / MAPPED / VALIDATED / PENDING_OUTCOME_AUDIT / PENDING_PARTIAL_OUTCOME_AUDIT / PARTIAL_SUCCESS / COMPLETED / REJECTED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -155,9 +176,9 @@
 
 ### ORG-OBJ-IMPORT-ROW Import Row Result
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ORGANIZATION_IMPORT_OBJECT | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | LIFE-002 | S3 | NO_DIRECT_READ | PENDING / VALIDATED / RETRYABLE |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORGANIZATION_IMPORT_OBJECT | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | LIFE-002 | S3 | NO_DIRECT_READ | — | PENDING / VALIDATED / RETRYABLE |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -179,6 +200,9 @@
 | ORG-REL-CLASS-GRADE | ORG-OBJ-CLASS | BELONGS_TO | ORG-OBJ-GRADE | MANY_TO_ONE | SAME_TERM | invalidate class scope after the effective grade version changes |
 | ORG-REL-COURSE-SUBJECT | ORG-OBJ-COURSE | USES_SUBJECT | ORG-OBJ-SUBJECT | MANY_TO_ONE | SAME_TERM | prevent new assignments while preserving historical course references |
 | ORG-REL-IMPORT-ROW-BATCH | ORG-OBJ-IMPORT-ROW | RESULT_OF | ORG-OBJ-IMPORT-BATCH | MANY_TO_ONE | SAME_CONTEXT | retain accepted row results and mark pending rows not executable |
+| ORG-REL-SUBSTITUTE-CLASS | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | ASSIGNED_TO | ORG-OBJ-CLASS | MANY_TO_ONE | SAME_TERM | expire the substitute relation immediately |
+| ORG-REL-SUBSTITUTE-SUBJECT | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | USES_SUBJECT | ORG-OBJ-SUBJECT | MANY_TO_ONE | SAME_TERM | expire the substitute relation immediately |
+| ORG-REL-SUBSTITUTE-TEACHER | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | ASSIGNED_TO | ORG-OBJ-TEACHER | MANY_TO_ONE | SAME_SCHOOL | revoke the substitute relation immediately |
 
 ## 4. 可执行动作合同
 
@@ -206,9 +230,9 @@
 | ORG-ACT-UPDATE-TEACHER | Update an Active Teacher Profile | ORG-OBJ-TEACHER | UPDATE | — | — | ORG-TEACHER-F-ID<br>ORG-TEACHER-F-NAME | ORG-TEACHER-F-MEMBER-STATE | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-SUSPEND-TEACHER | Suspend a Teacher Profile | ORG-OBJ-TEACHER | UPDATE | — | — | ORG-TEACHER-F-ID | ORG-TEACHER-F-MEMBER-STATE | ACTIVE → SUSPENDED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-SUSPEND-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
 | ORG-ACT-DEACTIVATE-TEACHER | Deactivate a Teacher Profile | ORG-OBJ-TEACHER | UPDATE | — | — | ORG-TEACHER-F-ID | ORG-TEACHER-F-MEMBER-STATE | ACTIVE / SUSPENDED → DEACTIVATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-DEACTIVATE-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
-| ORG-ACT-CREATE-STUDENT | Create a Student Profile | ORG-OBJ-STUDENT | CREATE | — | — | ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-MEMBER-STATE | CREATE（成功状态由 ORG-ACT-CREATE-STUDENT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
-| ORG-ACT-UPDATE-STUDENT | Update an Active Student Profile | ORG-OBJ-STUDENT | UPDATE | — | — | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-MEMBER-STATE | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
-| ORG-ACT-TRANSFER-STUDENT | Transfer a Student Profile | ORG-OBJ-STUDENT | UPDATE | — | — | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-MEMBER-STATE | ACTIVE → TRANSFERRED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-TRANSFER-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-CREATE-STUDENT | Create a Student Profile | ORG-OBJ-STUDENT | CREATE | — | — | ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-MEMBER-STATE<br>ORG-STUDENT-F-VERSION | CREATE（成功状态由 ORG-ACT-CREATE-STUDENT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-CREATE-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-UPDATE-STUDENT | Update an Active Student Profile | ORG-OBJ-STUDENT | UPDATE | — | — | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-MEMBER-STATE<br>ORG-STUDENT-F-VERSION | ACTIVE → ACTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPDATE-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-TRANSFER-STUDENT | Mark the Old-school Student Profile Transferred after Membership Termination | ORG-OBJ-STUDENT | UPDATE | — | — | ORG-STUDENT-F-ID<br>ORG-STUDENT-F-CLASS-ID | ORG-STUDENT-F-MEMBER-STATE<br>ORG-STUDENT-F-VERSION | ACTIVE → TRANSFERRED | ALLOW:SYSTEM — the system resolves the exact transfer, student, school, membership, authorization, source-right, and object versions declared by DF-017<br>DENY:ROLE-SCHOOL-ADMIN — school roles cannot synthesize, widen, reorder, or directly execute a cross-school student transfer cutover<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot override minor authorization, guardian dispute, source-right, or school-boundary checks | FLOW_INTERNAL | HIGH | REQUIRED | ORG-ACT-TRANSFER-STUDENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED / TRANSFER_AUTHORIZATION_REQUIRED |
 | ORG-ACT-ASSIGN-SUBJECT-TEACHER | Assign a Subject Teacher to Course and Class | ORG-OBJ-TEACHING-ASSIGNMENT | CREATE | — | — | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE | ORG-TEACHING-F-ID | CREATE（成功状态由 ORG-ACT-ASSIGN-SUBJECT-TEACHER-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff owns assignment changes<br>DENY:DUTY-SUBJECT-LEAD — subject lead may review subject scope but cannot grant organization duties | WEB | LOW | REQUIRED | ORG-ACT-ASSIGN-SUBJECT-TEACHER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT | Activate a Planned Teaching Assignment | ORG-OBJ-TEACHING-ASSIGNMENT | UPDATE | — | — | ORG-TEACHING-F-ID<br>ORG-TEACHING-F-EFFECTIVE | ORG-TEACHING-F-EFFECTIVE | PLANNED → EFFECTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT | Expire an Effective Teaching Assignment | ORG-OBJ-TEACHING-ASSIGNMENT | UPDATE | — | — | ORG-TEACHING-F-ID | ORG-TEACHING-F-EFFECTIVE | EFFECTIVE → EXPIRED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
@@ -217,6 +241,10 @@
 | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | Activate a Planned Homeroom Assignment | ORG-OBJ-HOMEROOM-ASSIGNMENT | UPDATE | — | — | ORG-HOMEROOM-F-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-HOMEROOM-F-EFFECTIVE | PLANNED → EFFECTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT | Expire an Effective Homeroom Assignment | ORG-OBJ-HOMEROOM-ASSIGNMENT | UPDATE | — | — | ORG-HOMEROOM-F-ID | ORG-HOMEROOM-F-EFFECTIVE | EFFECTIVE → EXPIRED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | Revoke a Homeroom Assignment | ORG-OBJ-HOMEROOM-ASSIGNMENT | UPDATE | — | — | ORG-HOMEROOM-F-ID | ORG-HOMEROOM-F-EFFECTIVE | PLANNED / EFFECTIVE → REVOKED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| ORG-ACT-CREATE-SUBSTITUTE-RELATION | Create a Planned Expiring Substitute-teaching Relation | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | CREATE | — | — | ORG-SUBSTITUTE-F-TEACHER-ID<br>ORG-SUBSTITUTE-F-CLASS-ID<br>ORG-SUBSTITUTE-F-SUBJECT-ID<br>ORG-SUBSTITUTE-F-DUTY-ID<br>ORG-SUBSTITUTE-F-START<br>ORG-SUBSTITUTE-F-END | ORG-SUBSTITUTE-F-ID<br>ORG-SUBSTITUTE-F-STATUS<br>ORG-SUBSTITUTE-F-VERSION | CREATE（成功状态由 ORG-ACT-CREATE-SUBSTITUTE-RELATION-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff creates a concrete school, class, subject, duty, start and end relation<br>DENY:ROLE-SCHOOL-ADMIN — a custom role or duty alone cannot synthesize substitute teaching scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot create a school teaching relation | WEB | HIGH | REQUIRED | ORG-ACT-CREATE-SUBSTITUTE-RELATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION | Activate an Expiring Substitute-teaching Relation | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | UPDATE | — | — | ORG-SUBSTITUTE-F-ID<br>ORG-SUBSTITUTE-F-START<br>ORG-SUBSTITUTE-F-END | ORG-SUBSTITUTE-F-STATUS<br>ORG-SUBSTITUTE-F-VERSION | PLANNED → EFFECTIVE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-EXPIRE-SUBSTITUTE-RELATION | Expire Substitute-teaching Scope at the Mandatory End | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | UPDATE | — | — | ORG-SUBSTITUTE-F-END | ORG-SUBSTITUTE-F-STATUS<br>ORG-SUBSTITUTE-F-VERSION | EFFECTIVE → EXPIRED | ALLOW:SYSTEM — the system expires class, subject and duty access at the declared end<br>DENY:CURRENT_ACTOR — no user or custom duty may extend the relation in place | SYSTEM_EVENT | HIGH | REQUIRED | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-REVOKE-SUBSTITUTE-RELATION | Revoke a Substitute-teaching Relation | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | UPDATE | — | — | ORG-SUBSTITUTE-F-ID | ORG-SUBSTITUTE-F-STATUS<br>ORG-SUBSTITUTE-F-VERSION | PLANNED / EFFECTIVE → REVOKED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-REVOKE-SUBSTITUTE-RELATION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
 | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | Download Object-specific Import Template | ORG-OBJ-IMPORT-BATCH | READ | — | — | ORG-IMPORT-F-OBJECT-TYPE | ORG-IMPORT-F-TEMPLATE-VERSION | UNCHANGED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-UPLOAD-IMPORT | Upload Organization Import Workbook | ORG-OBJ-IMPORT-BATCH | CREATE | — | — | ORG-IMPORT-F-OBJECT-TYPE<br>ORG-IMPORT-F-TEMPLATE-VERSION | ORG-IMPORT-F-ID<br>ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | CREATE（成功状态由 ORG-ACT-UPLOAD-IMPORT-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-UPLOAD-IMPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-MAP-IMPORT-FIELDS | Map Workbook Columns to Organization Fields | ORG-OBJ-IMPORT-BATCH | UPDATE | — | — | ORG-IMPORT-F-MAPPING | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | UPLOADED → MAPPED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-MAP-IMPORT-FIELDS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
@@ -228,7 +256,7 @@
 | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | Finalize an Audited Partial Organization Import | ORG-OBJ-IMPORT-BATCH | UPDATE | — | — | ORG-IMPORT-F-ID | ORG-IMPORT-F-BATCH-VERSION<br>ORG-IMPORT-F-STATUS | PENDING_PARTIAL_OUTCOME_AUDIT → PARTIAL_SUCCESS | ALLOW:SYSTEM — the system finalizes only partial-success rows covered by the successful outcome audit<br>DENY:CURRENT_ACTOR — a user cannot finalize provisional partial rows without the outcome audit | FLOW_INTERNAL | HIGH | REQUIRED | ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
 | ORG-ACT-RETRY-FAILED-ROWS | Retry Corrected Failed Import Rows | ORG-OBJ-IMPORT-ROW | UPDATE | — | — | ORG-IMPORT-ROW-F-ID | ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | RETRYABLE → VALIDATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-RETRY-FAILED-ROWS:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE | Mark a Failed Import Row Retryable | ORG-OBJ-IMPORT-ROW | UPDATE | — | — | ORG-IMPORT-ROW-F-ID | ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | VALIDATED → RETRYABLE | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | LOW | REQUIRED | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
-| ORG-ACT-DEACTIVATE-MEMBER | Deactivate a School Member Profile | ORG-OBJ-STUDENT | UPDATE | — | — | ORG-STUDENT-F-ID | ORG-STUDENT-F-MEMBER-STATE | ACTIVE → DEACTIVATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-DEACTIVATE-MEMBER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
+| ORG-ACT-DEACTIVATE-MEMBER | Deactivate a School Member Profile | ORG-OBJ-STUDENT | UPDATE | — | — | ORG-STUDENT-F-ID | ORG-STUDENT-F-MEMBER-STATE<br>ORG-STUDENT-F-VERSION | ACTIVE → DEACTIVATED | ALLOW:ROLE-ACADEMIC — academic staff acts inside the active school and term scope<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot change school organization without school authorization | WEB | HIGH | REQUIRED | ORG-ACT-DEACTIVATE-MEMBER:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT / AUDIT_FAILED |
 | ORG-ACT-RESOLVE-CONTEXT-SCOPE | Resolve Current Term and Organization Scope | ORG-OBJ-TERM | READ | — | — | ORG-TERM-F-ID | ORG-TERM-F-TERM-VERSION<br>ORG-TERM-F-STATUS | UNCHANGED | ALLOW:CURRENT_ACTOR — resolve only organization facts inside the active school identity<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot resolve school scope without authorization | WEB | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-VIEW-MY-TEACHING-SCOPE | View My Class and Teaching Scope on App | ORG-OBJ-TEACHING-ASSIGNMENT | READ | — | — | ORG-TEACHING-F-TEACHER-ID | ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE | UNCHANGED | ALLOW:CURRENT_ACTOR — the current teacher may view only effective class and teaching relationships<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot view teacher scope without school authorization | APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | ORG-ACT-VIEW-IMPORT-NOTIFICATION | View Import Result Notification on App | ORG-OBJ-IMPORT-BATCH | READ | — | — | ORG-IMPORT-F-ID | ORG-IMPORT-F-STATUS | UNCHANGED | ALLOW:CURRENT_ACTOR — the import operator may view the operator's own batch outcome notification<br>DENY:ROLE-PLATFORM-OPS — platform operations cannot view school import results without authorization | APP | READ | NOT_REQUIRED | — | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
@@ -266,6 +294,10 @@
 | ORG-OBJ-HOMEROOM-ASSIGNMENT | EFFECTIVE | ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT |
 | ORG-OBJ-HOMEROOM-ASSIGNMENT | EXPIRED | ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT |  |
 | ORG-OBJ-HOMEROOM-ASSIGNMENT | REVOKED | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT |  |
+| ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | PLANNED | ORG-ACT-CREATE-SUBSTITUTE-RELATION | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION<br>ORG-ACT-REVOKE-SUBSTITUTE-RELATION |
+| ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | EFFECTIVE | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION<br>ORG-ACT-REVOKE-SUBSTITUTE-RELATION |
+| ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | EXPIRED | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION |  |
+| ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | REVOKED | ORG-ACT-REVOKE-SUBSTITUTE-RELATION |  |
 | ORG-OBJ-IMPORT-BATCH | UPLOADED | ORG-ACT-UPLOAD-IMPORT | ORG-ACT-MAP-IMPORT-FIELDS |
 | ORG-OBJ-IMPORT-BATCH | MAPPED | ORG-ACT-MAP-IMPORT-FIELDS | ORG-ACT-VALIDATE-IMPORT-BATCH<br>ORG-ACT-REJECT-IMPORT-BATCH<br>ORG-ACT-CONFIRM-IMPORT |
 | ORG-OBJ-IMPORT-BATCH | VALIDATED | ORG-ACT-VALIDATE-IMPORT-BATCH | ORG-ACT-REJECT-IMPORT-BATCH<br>ORG-ACT-CONFIRM-IMPORT |
@@ -284,19 +316,21 @@
 | --- | --- | --- | --- | --- | --- |
 | DF-001 | School Context Establishment | 1 | ACC-001 / ORG-001 / IAM-001 | ORG-ACT-RESOLVE-CONTEXT-SCOPE | STEP_WITH_NO_CONTEXT_ACTIVATION_BEFORE_ALL_CHECKS_PASS；{"strategy":"RETRY_READS_AND_IDEMPOTENT_CONTEXT_WRITE","maxAttempts":3,"retryableFailureResults":["VERSION_CONFLICT"]}；{"strategy":"EXPIRE_PARTIAL_CONTEXT","description":"if a context write exists before final acceptance, expire it and require full re-establishment"}；{"strategy":"INVALIDATE_PREVIOUS_CONTEXT_DERIVATIONS","targets":["permission cache","term-scoped navigation","write authorization tokens"]} |
 | DF-002 | Organization Import and Permission Refresh | 1 | ORG-001 / IAM-001 / AUD-001 | ORG-ACT-UPLOAD-IMPORT<br>ORG-ACT-MAP-IMPORT-FIELDS<br>ORG-ACT-VALIDATE-IMPORT<br>ORG-ACT-CONFIRM-IMPORT<br>ORG-ACT-FINALIZE-AUDITED-IMPORT<br>ORG-ACT-FINALIZE-AUDITED-PARTIAL-IMPORT | OBJECT_ROW_WITH_PARTIAL_SUCCESS_AND_FAILED_ROW_RETRY；{"strategy":"RETRY_FAILED_ROWS_OR_AUDIT_APPEND","maxAttempts":5,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"ROLLBACK_UNAUDITED_PROVISIONAL_ROWS","description":"rollback provisional accepted rows to the pre-import version when outcome audit fails; do not recalculate permissions until the outcome audit succeeds"}；{"strategy":"INVALIDATE_AFFECTED_ORGANIZATION_SCOPES","targets":["permission decisions","active contexts","teacher work views"]} |
+| DF-017 | Version-pinned Student Transfer Authorization Cutover | 1 | DGV-001 / ACC-001 / ORG-001 / IAM-001 | ORG-ACT-TRANSFER-STUDENT | FORWARD_ONLY_CROSS_DOMAIN_CUTOVER_WITH_OLD_ACCESS_NEVER_RESTORED；{"strategy":"IDEMPOTENT_RESUME_FROM_PINNED_TRANSFER_AND_OBJECT_VERSIONS","maxAttempts":8,"retryableFailureResults":["VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"FORWARD_ONLY_RECONCILIATION_NO_OLD_ACCESS_RESTORE","description":"after cutover starts, keep old membership, student-data authorization, and guardian school delegations terminated; keep pending new scope non-readable, revoke any partially activated wider scope, retry from pinned versions, and deny identifiable old-school history until its restricted boundary is committed"}；{"strategy":"INVALIDATE_ALL_FORMER_RELATIONSHIP_DERIVATIONS","targets":["old-school active contexts","permission decisions and caches","search, aggregation, autocomplete, archive and direct links","export generation and download authorization","guardian task-assistance sessions","teacher and homeroom work views"]} |
 
 ## 8. 页面任务合同
 
-| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| ORG-PAGE-TREE | Term Grade Class Subject and Course Organization Tree | WEB | ORG-OBJ-TERM<br>ORG-OBJ-GRADE<br>ORG-OBJ-CLASS<br>ORG-OBJ-SUBJECT<br>ORG-OBJ-COURSE | ORG-TERM-F-ID<br>ORG-TERM-F-NAME<br>ORG-TERM-F-START<br>ORG-TERM-F-END<br>ORG-GRADE-F-ID<br>ORG-GRADE-F-NAME<br>ORG-GRADE-F-TERM-ID<br>ORG-GRADE-F-STATUS<br>ORG-CLASS-F-ID<br>ORG-CLASS-F-NAME<br>ORG-CLASS-F-GRADE-ID<br>ORG-SUBJECT-F-ID<br>ORG-SUBJECT-F-NAME<br>ORG-COURSE-F-ID<br>ORG-COURSE-F-NAME<br>ORG-COURSE-F-SUBJECT-ID<br>ORG-COURSE-F-TERM-ID<br>ORG-COURSE-F-STATUS | ORG-ACT-CREATE-TERM-VERSION<br>ORG-ACT-ACTIVATE-TERM<br>ORG-ACT-CLOSE-TERM<br>ORG-ACT-ARCHIVE-TERM<br>ORG-ACT-CREATE-GRADE<br>ORG-ACT-UPDATE-GRADE<br>ORG-ACT-MARK-GRADE-HISTORICAL<br>ORG-ACT-CREATE-CLASS<br>ORG-ACT-UPDATE-CLASS<br>ORG-ACT-MARK-CLASS-HISTORICAL<br>ORG-ACT-DEACTIVATE-CLASS<br>ORG-ACT-CREATE-SUBJECT<br>ORG-ACT-UPDATE-SUBJECT<br>ORG-ACT-DEPRECATE-SUBJECT<br>ORG-ACT-CREATE-COURSE<br>ORG-ACT-UPDATE-COURSE<br>ORG-ACT-ACTIVATE-COURSE<br>ORG-ACT-END-COURSE<br>ORG-ACT-RESOLVE-CONTEXT-SCOPE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| ORG-PAGE-MEMBERS | Teacher and Student Member Management | WEB | ORG-OBJ-TEACHER<br>ORG-OBJ-STUDENT | ORG-TEACHER-F-ID<br>ORG-TEACHER-F-NAME<br>ORG-TEACHER-F-MEMBER-STATE<br>ORG-STUDENT-F-ID<br>ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID<br>ORG-STUDENT-F-MEMBER-STATE | ORG-ACT-CREATE-TEACHER<br>ORG-ACT-UPDATE-TEACHER<br>ORG-ACT-SUSPEND-TEACHER<br>ORG-ACT-DEACTIVATE-TEACHER<br>ORG-ACT-CREATE-STUDENT<br>ORG-ACT-UPDATE-STUDENT<br>ORG-ACT-TRANSFER-STUDENT<br>ORG-ACT-DEACTIVATE-MEMBER | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| ORG-PAGE-IMPORT-TEMPLATE | Import Object and Template Selection | WEB | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-OBJECT-TYPE<br>ORG-IMPORT-F-TEMPLATE-VERSION | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE<br>ORG-ACT-UPLOAD-IMPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| ORG-PAGE-IMPORT-MAPPING | Import Mapping and Row Validation | WEB | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-MAPPING<br>ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | ORG-ACT-MAP-IMPORT-FIELDS<br>ORG-ACT-VALIDATE-IMPORT-BATCH<br>ORG-ACT-REJECT-IMPORT-BATCH<br>ORG-ACT-VALIDATE-IMPORT<br>ORG-ACT-CONFIRM-IMPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| ORG-PAGE-IMPORT-RESULT | Object-level Import Result and Retry | WEB | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS<br>ORG-IMPORT-ROW-F-OBJECT-ID | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE<br>ORG-ACT-RETRY-FAILED-ROWS | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| ORG-PAGE-TEACHING-ASSIGNMENT | Subject and Homeroom Teaching Assignment | WEB | ORG-OBJ-TEACHING-ASSIGNMENT<br>ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE<br>ORG-HOMEROOM-F-TEACHER-ID<br>ORG-HOMEROOM-F-CLASS-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-ACT-ASSIGN-SUBJECT-TEACHER<br>ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT<br>ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT<br>ORG-ACT-REVOKE-TEACHING-ASSIGNMENT<br>ORG-ACT-ASSIGN-HOMEROOM<br>ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| ORG-PAGE-APP-MY-TEACHING-SCOPE | My Class and Teaching Scope | APP | ORG-OBJ-TEACHING-ASSIGNMENT<br>ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE<br>ORG-HOMEROOM-F-CLASS-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-ACT-VIEW-MY-TEACHING-SCOPE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| ORG-PAGE-APP-IMPORT-RESULT | Import Result Notification and Anomaly Confirmation | APP | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS<br>ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION<br>ORG-IMPORT-ROW-F-CONFIRMATION-NOTE | ORG-ACT-VIEW-IMPORT-NOTIFICATION<br>ORG-ACT-CONFIRM-IMPORT-ANOMALY | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| Page ID | 页面 | 交付可用性 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ORG-PAGE-TREE | Term Grade Class Subject and Course Organization Tree | BUILD_READY | WEB | ORG-OBJ-TERM<br>ORG-OBJ-GRADE<br>ORG-OBJ-CLASS<br>ORG-OBJ-SUBJECT<br>ORG-OBJ-COURSE | ORG-TERM-F-ID<br>ORG-TERM-F-NAME<br>ORG-TERM-F-START<br>ORG-TERM-F-END<br>ORG-GRADE-F-ID<br>ORG-GRADE-F-NAME<br>ORG-GRADE-F-TERM-ID<br>ORG-GRADE-F-STATUS<br>ORG-CLASS-F-ID<br>ORG-CLASS-F-NAME<br>ORG-CLASS-F-GRADE-ID<br>ORG-SUBJECT-F-ID<br>ORG-SUBJECT-F-NAME<br>ORG-COURSE-F-ID<br>ORG-COURSE-F-NAME<br>ORG-COURSE-F-SUBJECT-ID<br>ORG-COURSE-F-TERM-ID<br>ORG-COURSE-F-STATUS | ORG-ACT-CREATE-TERM-VERSION<br>ORG-ACT-ACTIVATE-TERM<br>ORG-ACT-CLOSE-TERM<br>ORG-ACT-ARCHIVE-TERM<br>ORG-ACT-CREATE-GRADE<br>ORG-ACT-UPDATE-GRADE<br>ORG-ACT-MARK-GRADE-HISTORICAL<br>ORG-ACT-CREATE-CLASS<br>ORG-ACT-UPDATE-CLASS<br>ORG-ACT-MARK-CLASS-HISTORICAL<br>ORG-ACT-DEACTIVATE-CLASS<br>ORG-ACT-CREATE-SUBJECT<br>ORG-ACT-UPDATE-SUBJECT<br>ORG-ACT-DEPRECATE-SUBJECT<br>ORG-ACT-CREATE-COURSE<br>ORG-ACT-UPDATE-COURSE<br>ORG-ACT-ACTIVATE-COURSE<br>ORG-ACT-END-COURSE<br>ORG-ACT-RESOLVE-CONTEXT-SCOPE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-MEMBERS | Teacher and Student Member Management | BUILD_READY | WEB | ORG-OBJ-TEACHER<br>ORG-OBJ-STUDENT | ORG-TEACHER-F-ID<br>ORG-TEACHER-F-NAME<br>ORG-TEACHER-F-MEMBER-STATE<br>ORG-STUDENT-F-ID<br>ORG-STUDENT-F-NAME<br>ORG-STUDENT-F-CLASS-ID<br>ORG-STUDENT-F-MEMBER-STATE | ORG-ACT-CREATE-TEACHER<br>ORG-ACT-UPDATE-TEACHER<br>ORG-ACT-SUSPEND-TEACHER<br>ORG-ACT-DEACTIVATE-TEACHER<br>ORG-ACT-CREATE-STUDENT<br>ORG-ACT-UPDATE-STUDENT<br>ORG-ACT-DEACTIVATE-MEMBER | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-IMPORT-TEMPLATE | Import Object and Template Selection | BUILD_READY | WEB | ORG-OBJ-IMPORT-BATCH | ORG-IMPORT-F-OBJECT-TYPE<br>ORG-IMPORT-F-TEMPLATE-VERSION | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE<br>ORG-ACT-UPLOAD-IMPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-IMPORT-MAPPING | Import Mapping and Row Validation | BUILD_READY | WEB | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-MAPPING<br>ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS | ORG-ACT-MAP-IMPORT-FIELDS<br>ORG-ACT-VALIDATE-IMPORT-BATCH<br>ORG-ACT-REJECT-IMPORT-BATCH<br>ORG-ACT-VALIDATE-IMPORT<br>ORG-ACT-CONFIRM-IMPORT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-IMPORT-RESULT | Object-level Import Result and Retry | BUILD_READY | WEB | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS<br>ORG-IMPORT-ROW-F-OBJECT-ID | ORG-ACT-MARK-IMPORT-ROW-RETRYABLE<br>ORG-ACT-RETRY-FAILED-ROWS | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-TEACHING-ASSIGNMENT | Subject and Homeroom Teaching Assignment | BUILD_READY | WEB | ORG-OBJ-TEACHING-ASSIGNMENT<br>ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE<br>ORG-HOMEROOM-F-TEACHER-ID<br>ORG-HOMEROOM-F-CLASS-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-ACT-ASSIGN-SUBJECT-TEACHER<br>ORG-ACT-ACTIVATE-TEACHING-ASSIGNMENT<br>ORG-ACT-EXPIRE-TEACHING-ASSIGNMENT<br>ORG-ACT-REVOKE-TEACHING-ASSIGNMENT<br>ORG-ACT-ASSIGN-HOMEROOM<br>ORG-ACT-ACTIVATE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-EXPIRE-HOMEROOM-ASSIGNMENT<br>ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-SUBSTITUTE-RELATION | Expiring Substitute-teaching Relationship | BUILD_READY | WEB | ORG-OBJ-SUBSTITUTE-TEACHING-RELATION | ORG-SUBSTITUTE-F-TEACHER-ID<br>ORG-SUBSTITUTE-F-CLASS-ID<br>ORG-SUBSTITUTE-F-SUBJECT-ID<br>ORG-SUBSTITUTE-F-DUTY-ID<br>ORG-SUBSTITUTE-F-START<br>ORG-SUBSTITUTE-F-END<br>ORG-SUBSTITUTE-F-STATUS | ORG-ACT-CREATE-SUBSTITUTE-RELATION<br>ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION<br>ORG-ACT-REVOKE-SUBSTITUTE-RELATION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-APP-MY-TEACHING-SCOPE | My Class and Teaching Scope | BUILD_READY | APP | ORG-OBJ-TEACHING-ASSIGNMENT<br>ORG-OBJ-HOMEROOM-ASSIGNMENT | ORG-TEACHING-F-TEACHER-ID<br>ORG-TEACHING-F-COURSE-ID<br>ORG-TEACHING-F-CLASS-ID<br>ORG-TEACHING-F-EFFECTIVE<br>ORG-HOMEROOM-F-CLASS-ID<br>ORG-HOMEROOM-F-EFFECTIVE | ORG-ACT-VIEW-MY-TEACHING-SCOPE | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| ORG-PAGE-APP-IMPORT-RESULT | Import Result Notification and Anomaly Confirmation | BUILD_READY | APP | ORG-OBJ-IMPORT-BATCH<br>ORG-OBJ-IMPORT-ROW | ORG-IMPORT-F-STATUS<br>ORG-IMPORT-ROW-F-RESULT-TYPE<br>ORG-IMPORT-ROW-F-VALIDATION-RESULT<br>ORG-IMPORT-ROW-F-ERRORS<br>ORG-IMPORT-ROW-F-CONFLICTS<br>ORG-IMPORT-ROW-F-ANOMALY-CONFIRMATION<br>ORG-IMPORT-ROW-F-CONFIRMATION-NOTE | ORG-ACT-VIEW-IMPORT-NOTIFICATION<br>ORG-ACT-CONFIRM-IMPORT-ANOMALY | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
 ## 9. 验收场景
 
@@ -437,6 +471,26 @@
 | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | PERMISSION_DENIED applies to Revoke a Homeroom Assignment | the actor requests Revoke a Homeroom Assignment | Revoke a Homeroom Assignment returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
 | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | VALIDATION_FAILED applies to Revoke a Homeroom Assignment | the actor requests Revoke a Homeroom Assignment | Revoke a Homeroom Assignment returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
 | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-REVOKE-HOMEROOM-ASSIGNMENT | VERSION_CONFLICT applies to Revoke a Homeroom Assignment | the actor requests Revoke a Homeroom Assignment | Revoke a Homeroom Assignment returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CREATE-SUBSTITUTE-RELATION-SCN-SUCCESS | SUCCESS | ORG-ACT-CREATE-SUBSTITUTE-RELATION | the actor meets the entry conditions for Create a Planned Expiring Substitute-teaching Relation | the actor requests Create a Planned Expiring Substitute-teaching Relation | Create a Planned Expiring Substitute-teaching Relation returns the accepted task-specific result | PLANNED | ALLOW |  |
+| ORG-ACT-CREATE-SUBSTITUTE-RELATION-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-CREATE-SUBSTITUTE-RELATION | PERMISSION_DENIED applies to Create a Planned Expiring Substitute-teaching Relation | the actor requests Create a Planned Expiring Substitute-teaching Relation | Create a Planned Expiring Substitute-teaching Relation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-CREATE-SUBSTITUTE-RELATION-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CREATE-SUBSTITUTE-RELATION | VALIDATION_FAILED applies to Create a Planned Expiring Substitute-teaching Relation | the actor requests Create a Planned Expiring Substitute-teaching Relation | Create a Planned Expiring Substitute-teaching Relation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-CREATE-SUBSTITUTE-RELATION-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CREATE-SUBSTITUTE-RELATION | VERSION_CONFLICT applies to Create a Planned Expiring Substitute-teaching Relation | the actor requests Create a Planned Expiring Substitute-teaching Relation | Create a Planned Expiring Substitute-teaching Relation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-CREATE-SUBSTITUTE-RELATION-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-CREATE-SUBSTITUTE-RELATION | AUDIT_FAILED applies to Create a Planned Expiring Substitute-teaching Relation | the actor requests Create a Planned Expiring Substitute-teaching Relation | Create a Planned Expiring Substitute-teaching Relation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION-SCN-SUCCESS | SUCCESS | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION | the actor meets the entry conditions for Activate an Expiring Substitute-teaching Relation | the actor requests Activate an Expiring Substitute-teaching Relation | Activate an Expiring Substitute-teaching Relation returns the accepted task-specific result | EFFECTIVE | ALLOW |  |
+| ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION | PERMISSION_DENIED applies to Activate an Expiring Substitute-teaching Relation | the actor requests Activate an Expiring Substitute-teaching Relation | Activate an Expiring Substitute-teaching Relation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION | VALIDATION_FAILED applies to Activate an Expiring Substitute-teaching Relation | the actor requests Activate an Expiring Substitute-teaching Relation | Activate an Expiring Substitute-teaching Relation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION | VERSION_CONFLICT applies to Activate an Expiring Substitute-teaching Relation | the actor requests Activate an Expiring Substitute-teaching Relation | Activate an Expiring Substitute-teaching Relation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-ACTIVATE-SUBSTITUTE-RELATION | AUDIT_FAILED applies to Activate an Expiring Substitute-teaching Relation | the actor requests Activate an Expiring Substitute-teaching Relation | Activate an Expiring Substitute-teaching Relation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-EXPIRE-SUBSTITUTE-RELATION-SCN-SUCCESS | SUCCESS | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION | the actor meets the entry conditions for Expire Substitute-teaching Scope at the Mandatory End | the actor requests Expire Substitute-teaching Scope at the Mandatory End | Expire Substitute-teaching Scope at the Mandatory End returns the accepted task-specific result | EXPIRED | ALLOW |  |
+| ORG-ACT-EXPIRE-SUBSTITUTE-RELATION-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION | PERMISSION_DENIED applies to Expire Substitute-teaching Scope at the Mandatory End | the actor requests Expire Substitute-teaching Scope at the Mandatory End | Expire Substitute-teaching Scope at the Mandatory End returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-EXPIRE-SUBSTITUTE-RELATION-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION | VALIDATION_FAILED applies to Expire Substitute-teaching Scope at the Mandatory End | the actor requests Expire Substitute-teaching Scope at the Mandatory End | Expire Substitute-teaching Scope at the Mandatory End returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-EXPIRE-SUBSTITUTE-RELATION-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION | VERSION_CONFLICT applies to Expire Substitute-teaching Scope at the Mandatory End | the actor requests Expire Substitute-teaching Scope at the Mandatory End | Expire Substitute-teaching Scope at the Mandatory End returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-EXPIRE-SUBSTITUTE-RELATION-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-EXPIRE-SUBSTITUTE-RELATION | AUDIT_FAILED applies to Expire Substitute-teaching Scope at the Mandatory End | the actor requests Expire Substitute-teaching Scope at the Mandatory End | Expire Substitute-teaching Scope at the Mandatory End returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-REVOKE-SUBSTITUTE-RELATION-SCN-SUCCESS | SUCCESS | ORG-ACT-REVOKE-SUBSTITUTE-RELATION | the actor meets the entry conditions for Revoke a Substitute-teaching Relation | the actor requests Revoke a Substitute-teaching Relation | Revoke a Substitute-teaching Relation returns the accepted task-specific result | REVOKED | ALLOW |  |
+| ORG-ACT-REVOKE-SUBSTITUTE-RELATION-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-REVOKE-SUBSTITUTE-RELATION | PERMISSION_DENIED applies to Revoke a Substitute-teaching Relation | the actor requests Revoke a Substitute-teaching Relation | Revoke a Substitute-teaching Relation returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
+| ORG-ACT-REVOKE-SUBSTITUTE-RELATION-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-REVOKE-SUBSTITUTE-RELATION | VALIDATION_FAILED applies to Revoke a Substitute-teaching Relation | the actor requests Revoke a Substitute-teaching Relation | Revoke a Substitute-teaching Relation returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
+| ORG-ACT-REVOKE-SUBSTITUTE-RELATION-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-REVOKE-SUBSTITUTE-RELATION | VERSION_CONFLICT applies to Revoke a Substitute-teaching Relation | the actor requests Revoke a Substitute-teaching Relation | Revoke a Substitute-teaching Relation returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
+| ORG-ACT-REVOKE-SUBSTITUTE-RELATION-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-REVOKE-SUBSTITUTE-RELATION | AUDIT_FAILED applies to Revoke a Substitute-teaching Relation | the actor requests Revoke a Substitute-teaching Relation | Revoke a Substitute-teaching Relation returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
 | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE-SCN-SUCCESS | SUCCESS | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | the actor meets the entry conditions for Download Object-specific Import Template | the actor requests Download Object-specific Import Template | Download Object-specific Import Template returns the accepted task-specific result | UNCHANGED | ALLOW |  |
 | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE-SCN-PERMISSION_DENIED | FAILURE | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | PERMISSION_DENIED applies to Download Object-specific Import Template | the actor requests Download Object-specific Import Template | Download Object-specific Import Template returns PERMISSION_DENIED without hidden writes | UNCHANGED | DENY | PERMISSION_DENIED |
 | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-DOWNLOAD-IMPORT-TEMPLATE | VALIDATION_FAILED applies to Download Object-specific Import Template | the actor requests Download Object-specific Import Template | Download Object-specific Import Template returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
@@ -507,6 +561,7 @@
 | ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-VALIDATION_FAILED | FAILURE | ORG-ACT-CONFIRM-IMPORT-ANOMALY | VALIDATION_FAILED applies to Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | Confirm an Import Anomaly on App returns VALIDATION_FAILED without hidden writes | UNCHANGED | DENY | VALIDATION_FAILED |
 | ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-VERSION_CONFLICT | FAILURE | ORG-ACT-CONFIRM-IMPORT-ANOMALY | VERSION_CONFLICT applies to Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | Confirm an Import Anomaly on App returns VERSION_CONFLICT without hidden writes | UNCHANGED | DENY | VERSION_CONFLICT |
 | ORG-ACT-CONFIRM-IMPORT-ANOMALY-SCN-AUDIT_FAILED | FAILURE | ORG-ACT-CONFIRM-IMPORT-ANOMALY | AUDIT_FAILED applies to Confirm an Import Anomaly on App | the actor requests Confirm an Import Anomaly on App | Confirm an Import Anomaly on App returns AUDIT_FAILED without hidden writes | UNCHANGED | DENY | AUDIT_FAILED |
+| ORG-ACT-TRANSFER-STUDENT-SCN-TRANSFER_AUTHORIZATION_REQUIRED | BOUNDARY | ORG-ACT-TRANSFER-STUDENT | TRANSFER_AUTHORIZATION_REQUIRED applies while executing Mark the Old-school Student Profile Transferred after Membership Termination | the system executes Mark the Old-school Student Profile Transferred after Membership Termination | the old-school profile remains unchanged when DF-017 and its pinned high-impact authorization are absent | UNCHANGED | DENY | TRANSFER_AUTHORIZATION_REQUIRED |
 
 ## 10. AI 任务映射
 

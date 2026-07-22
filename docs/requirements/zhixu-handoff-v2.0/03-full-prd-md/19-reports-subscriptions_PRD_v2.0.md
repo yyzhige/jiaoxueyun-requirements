@@ -3,12 +3,14 @@
 | 属性 | 值 |
 | --- | --- |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 优先级 | P0 |
 | 目标 | Keep report definitions, subscriptions, runs, snapshots, and deliveries as separate authoritative objects |
 | 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
 | NFR | `NFR-002`、`NFR-008` |
 | 进入条件 | an authorized teacher selects a data scope and product report task |
 | 退出条件 | the accepted definition or subscription remains independently versioned |
+| 依赖模块 | — |
 
 ## 1. 范围与事实边界
 
@@ -21,9 +23,9 @@
 
 ### RPT-OBJ-DEFINITION Report Definition
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | ACTIVE |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | DOMAIN_CONTRACT;contract=RPT_SUBJECT_ASSIGNED_DEFINITION_PROFILE;enforcement=ACTION_DOMAIN_BOUNDARY | ACTIVE |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -36,9 +38,9 @@
 
 ### RPT-OBJ-SUBSCRIPTION Report Subscription
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | ACTIVE / PAUSED / CANCELLED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | CURRENT_ACTOR | CURRENT_ACTOR | CURRENT_ACTOR | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | DOMAIN_CONTRACT;contract=RPT_SUBJECT_ASSIGNED_SUBSCRIPTION_PROFILE;enforcement=ACTION_DOMAIN_BOUNDARY | ACTIVE / PAUSED / CANCELLED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -55,9 +57,9 @@
 
 ### RPT-OBJ-RUN Report Run
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | QUEUED / RUNNING / SUCCEEDED / FAILED / BLOCKED_PERMISSION |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | — | QUEUED / RUNNING / SUCCEEDED / FAILED / BLOCKED_PERMISSION |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -74,9 +76,9 @@
 
 ### RPT-OBJ-SNAPSHOT Immutable Report Snapshot
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | AVAILABLE |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | — | AVAILABLE |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -91,9 +93,9 @@
 
 ### RPT-OBJ-DELIVERY In-product Report Delivery
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | PENDING / DELIVERED / FAILED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_TEACHING_TASK | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-006 | S3 | NO_DIRECT_READ | — | PENDING / DELIVERED / FAILED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -118,10 +120,10 @@
 
 | Action ID | 动作 | 目标对象 | 操作 | 授权边界 | 访问例外 | 输入 Field | 输出 Field | 状态效果 | ALLOW / DENY | 端 / 执行模式 | 风险 | 审计 | 幂等键 | 失败结果 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| RPT-ACT-CREATE-AD-HOC-DEFINITION | Create an Ad-hoc Report Definition | RPT-OBJ-DEFINITION | CREATE | — | — | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-AD-HOC-DEFINITION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts only inside assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment<br>DENY:ROLE-ACADEMIC — academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail or aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-AD-HOC-DEFINITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-AD-HOC-DEFINITION | Create an Ad-hoc Report Definition | RPT-OBJ-DEFINITION | CREATE | teacherWriteAuthorizationBoundary:kind=DOMAIN_CONTRACT;contract=RPT_SUBJECT_ASSIGNED_DEFINITION_PROFILE | — | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-AD-HOC-DEFINITION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts only inside assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment<br>DENY:ROLE-ACADEMIC — academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail or aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-AD-HOC-DEFINITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | RPT-ACT-CREATE-HOMEROOM-DEFINITION | Create an Assigned-class Homeroom Aggregate Report Definition | RPT-OBJ-DEFINITION | CREATE | — | — | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-HOMEROOM-DEFINITION-SCN-SUCCESS 定义） | ALLOW:DUTY-HOMEROOM — homeroom duty acts only on aggregate data for the assigned homeroom class across subjects<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default homeroom aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-HOMEROOM-DEFINITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | RPT-ACT-CREATE-ACADEMIC-DEFINITION | Create an Authorized Academic Aggregate Report Definition | RPT-OBJ-DEFINITION | CREATE | — | — | RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-ACADEMIC-DEFINITION-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts only on aggregate data covered by an active authorized scope grant<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default academic aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-ACADEMIC-DEFINITION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
-| RPT-ACT-CREATE-SUBSCRIPTION | Create an Assigned-subject Report Subscription | RPT-OBJ-SUBSCRIPTION | CREATE | — | — | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-SUBSCRIPTION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts only inside assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment<br>DENY:ROLE-ACADEMIC — academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail or aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
+| RPT-ACT-CREATE-SUBSCRIPTION | Create an Assigned-subject Report Subscription | RPT-OBJ-SUBSCRIPTION | CREATE | teacherWriteAuthorizationBoundary:kind=DOMAIN_CONTRACT;contract=RPT_SUBJECT_ASSIGNED_SUBSCRIPTION_PROFILE | — | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-SUBSCRIPTION-SCN-SUCCESS 定义） | ALLOW:DUTY-SUBJECT-TEACHER — the corresponding subject teacher acts only inside assigned subject, class, and student scope<br>DENY:DUTY-HOMEROOM — homeroom duty cannot use the subject-detail report Action without the corresponding subject assignment<br>DENY:ROLE-ACADEMIC — academic staff cannot use the subject-detail report Action instead of an authorized aggregate Action<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default student-detail or aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION | Create an Assigned-class Homeroom Aggregate Report Subscription | RPT-OBJ-SUBSCRIPTION | CREATE | — | — | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION-SCN-SUCCESS 定义） | ALLOW:DUTY-HOMEROOM — homeroom duty acts only on aggregate data for the assigned homeroom class across subjects<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default homeroom aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION | Create an Authorized Academic Aggregate Report Subscription | RPT-OBJ-SUBSCRIPTION | CREATE | — | — | RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-VERSION | CREATE（成功状态由 RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION-SCN-SUCCESS 定义） | ALLOW:ROLE-ACADEMIC — academic staff acts only on aggregate data covered by an active authorized scope grant<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default academic aggregate report access | WEB / APP | LOW | REQUIRED | RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
 | RPT-ACT-UPDATE-SUBSCRIPTION | Update a Report Subscription Schedule | RPT-OBJ-SUBSCRIPTION | UPDATE | — | — | RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS | RPT-SUBSCRIPTION-F-VERSION | ACTIVE / PAUSED → ACTIVE | ALLOW:CURRENT_ACTOR — the authenticated actor manages only the subscription created by that actor [OWN_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF]<br>DENY:CURRENT_ACTOR — the authenticated actor cannot manage a subscription created by another actor or role [OTHER_RECORD:RPT-SUBSCRIPTION-F-CREATOR-REF]<br>DENY:ROLE-PLATFORM-OPS — platform operations has no default report subscription access | WEB / APP | LOW | REQUIRED | RPT-ACT-UPDATE-SUBSCRIPTION:school:object:source-version:request-id | PERMISSION_DENIED / VALIDATION_FAILED / VERSION_CONFLICT |
@@ -161,13 +163,13 @@
 
 | Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
 | --- | --- | --- | --- | --- | --- |
-| DF-013 | Student Plan Execution to Report Snapshot and In-product Delivery | 1 | APP-001 / PLN-001 / RPT-001 / NOTI-001 | RPT-ACT-CREATE-AD-HOC-RUN<br>RPT-ACT-CREATE-RUN<br>RPT-ACT-START-RUN<br>RPT-ACT-COMPLETE-RUN<br>RPT-ACT-MATERIALIZE-SNAPSHOT<br>RPT-ACT-CREATE-DELIVERY | REPORT_RUN_SNAPSHOT_DELIVERY_AND_NOTIFICATION_OBJECT；{"strategy":"RECHECK_PERMISSION_REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_OUTPUTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","DELIVERY_FAILED","VERSION_CONFLICT"]}；{"strategy":"KEEP_SOURCE_EXECUTION_RUN_AND_SNAPSHOT_WHILE_RETRYING_DELIVERY_ONLY","description":"delivery or notification failure never rolls back student execution, plan, successful run, or immutable snapshot"}；{"strategy":"CREATE_A_NEW_RUN_FOR_NEW_SOURCE_VERSIONS","targets":["future report run","future report snapshot","in-product delivery retry"]} |
+| DF-013 | Student Plan Execution to Report Snapshot and In-product Delivery | 3 | APP-001 / PLN-001 / RPT-001 / NOTI-001 | RPT-ACT-CREATE-AD-HOC-RUN<br>RPT-ACT-CREATE-RUN<br>RPT-ACT-START-RUN<br>RPT-ACT-COMPLETE-RUN<br>RPT-ACT-MATERIALIZE-SNAPSHOT<br>RPT-ACT-CREATE-DELIVERY | REPORT_RUN_SNAPSHOT_DELIVERY_AND_NOTIFICATION_OBJECT；{"strategy":"RECHECK_PERMISSION_REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_OUTPUTS","maxAttempts":4,"retryableFailureResults":["SOURCE_VERSION_STALE","DELIVERY_FAILED","VERSION_CONFLICT"]}；{"strategy":"KEEP_SOURCE_EXECUTION_RUN_AND_SNAPSHOT_WHILE_RETRYING_DELIVERY_ONLY","description":"delivery or notification failure never rolls back student execution, plan, successful run, or immutable snapshot"}；{"strategy":"CREATE_A_NEW_RUN_FOR_NEW_SOURCE_VERSIONS","targets":["future report run","future report snapshot","in-product delivery retry"]} |
 
 ## 8. 页面任务合同
 
-| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RPT-PAGE-CENTER | Report Center and Subscription Management | WEB / APP | RPT-OBJ-DEFINITION<br>RPT-OBJ-SUBSCRIPTION | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE<br>RPT-DEFINITION-F-VERSION<br>RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE<br>RPT-SUBSCRIPTION-F-VERSION | RPT-ACT-CREATE-AD-HOC-DEFINITION<br>RPT-ACT-CREATE-HOMEROOM-DEFINITION<br>RPT-ACT-CREATE-ACADEMIC-DEFINITION<br>RPT-ACT-CREATE-SUBSCRIPTION<br>RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION<br>RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION<br>RPT-ACT-UPDATE-SUBSCRIPTION<br>RPT-ACT-PAUSE-SUBSCRIPTION<br>RPT-ACT-CANCEL-SUBSCRIPTION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| Page ID | 页面 | 交付可用性 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RPT-PAGE-CENTER | Report Center and Subscription Management | BUILD_READY | WEB / APP | RPT-OBJ-DEFINITION<br>RPT-OBJ-SUBSCRIPTION | RPT-DEFINITION-F-ID<br>RPT-DEFINITION-F-NAME<br>RPT-DEFINITION-F-METRIC-IDS<br>RPT-DEFINITION-F-DATA-SCOPE<br>RPT-DEFINITION-F-TIME-RANGE<br>RPT-DEFINITION-F-VERSION<br>RPT-SUBSCRIPTION-F-ID<br>RPT-SUBSCRIPTION-F-CREATOR-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-REF<br>RPT-SUBSCRIPTION-F-DEFINITION-VERSION<br>RPT-SUBSCRIPTION-F-SCHEDULE-FREQUENCY<br>RPT-SUBSCRIPTION-F-EXECUTION-TIME<br>RPT-SUBSCRIPTION-F-TIMEZONE<br>RPT-SUBSCRIPTION-F-RECIPIENTS<br>RPT-SUBSCRIPTION-F-DATA-SCOPE<br>RPT-SUBSCRIPTION-F-VERSION | RPT-ACT-CREATE-AD-HOC-DEFINITION<br>RPT-ACT-CREATE-HOMEROOM-DEFINITION<br>RPT-ACT-CREATE-ACADEMIC-DEFINITION<br>RPT-ACT-CREATE-SUBSCRIPTION<br>RPT-ACT-CREATE-HOMEROOM-SUBSCRIPTION<br>RPT-ACT-CREATE-ACADEMIC-SUBSCRIPTION<br>RPT-ACT-UPDATE-SUBSCRIPTION<br>RPT-ACT-PAUSE-SUBSCRIPTION<br>RPT-ACT-CANCEL-SUBSCRIPTION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
 ## 9. 验收场景
 

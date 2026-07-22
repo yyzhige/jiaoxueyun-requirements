@@ -3,12 +3,14 @@
 | 属性 | 值 |
 | --- | --- |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 优先级 | P0 |
 | 目标 | Aggregate authorized profile view definitions and attention records without owning a second score, evidence, or plan fact |
 | 基线决策 | `BASE-003`、`BASE-008`、`BASE-010` |
 | NFR | `NFR-008` |
 | 进入条件 | the authorized teacher scope resolves source result, evidence, plan, and todo versions |
 | 退出条件 | the profile and attention records retain exact source lineage and read-only homeroom coordination |
+| 依赖模块 | — |
 
 ## 1. 范围与事实边界
 
@@ -21,9 +23,9 @@
 
 ### STU-OBJ-PROFILE Student Profile Query Column and Saved View Definition
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| STUDENT_MANAGEMENT_VIEW_DEFINITION | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | READY |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_MANAGEMENT_VIEW_DEFINITION | SCHOOL | SYSTEM | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | ASSIGNED_SUBJECT_COURSE;resolution=DIRECT_PERMISSION_SCOPE;subject=REQUIRED;course=REQUIRED | READY |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -45,16 +47,16 @@
 
 ### STU-OBJ-ATTENTION Student Attention and Follow-up Record
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| STUDENT_ATTENTION_COORDINATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | OPEN |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STUDENT_ATTENTION_COORDINATION | SCHOOL | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-SUBJECT-TEACHER | DUTY-HOMEROOM | LIFE-003 | S3 | AUTHORIZED | ASSIGNED_SUBJECT_COURSE;resolution=DIRECT_PERMISSION_SCOPE;subject=REQUIRED;course=REQUIRED | OPEN |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | STU-ATTENTION-F-ID | Student Attention Record ID | ID | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | OBJECT_ID | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | STU-ATTENTION-F-PROFILE-REF | Student Profile View Reference | ID | 是 | OBJECT_REF: STU-OBJ-PROFILE | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | STU-ATTENTION-F-PROFILE-VERSION | Student Profile View Version | INTEGER | 是 | SYSTEM | IMMUTABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
-| STU-ATTENTION-F-KIND | Student Attention Event Kind | STRING | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
+| STU-ATTENTION-F-KIND | Student Attention Event Kind | STRING | 是 | OPTION_SET: OPT-V2-CLS-005 | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | STU-ATTENTION-F-FOLLOW-UP-NOTE | Student Attention Follow-up Note | TEXT | 是 | USER_INPUT | EDITABLE | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 | STU-ATTENTION-F-VERSION | Student Attention Version | INTEGER | 是 | SYSTEM | SYSTEM_MANAGED | AUTHORIZED_SCOPE | — | must match the declared data type and authorized object scope | retain accepted values with source and version metadata |
 
@@ -85,14 +87,14 @@
 
 | Flow ID | 数据流 | 阶段 | 参与模块 | 本模块动作 | 失败与补偿 |
 | --- | --- | --- | --- | --- | --- |
-| DF-014 | Student Management Profile Aggregation | 1 | SCO-001 / INS-001 / PLN-001 / APP-001 / STU-001 | STU-ACT-BUILD-PROFILE | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT","AUDIT_FAILED"]}；{"strategy":"KEEP_PRIOR_PROFILE_AND_TODO_VIEW_VERSIONS","description":"a failed aggregation preserves the prior view definitions and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_AND_TODO_PROJECTIONS","targets":["gradebook view definition","student profile view definition","student todo aggregation"]} |
+| DF-014 | Student Management Profile Aggregation | 3 | SCO-001 / INS-001 / PLN-001 / STU-001 | STU-ACT-BUILD-PROFILE | STUDENT_PROFILE_SOURCE_AND_PROJECTION_OBJECT；{"strategy":"REFRESH_SOURCE_VERSIONS_AND_RETRY_FAILED_PROFILE_OBJECTS","maxAttempts":3,"retryableFailureResults":["SOURCE_VERSION_STALE","VERSION_CONFLICT"]}；{"strategy":"KEEP_PRIOR_PROFILE_VIEW_VERSION","description":"a failed aggregation preserves the prior profile view definition and retries only stale or failed student objects"}；{"strategy":"INVALIDATE_ONLY_STALE_PROFILE_PROJECTIONS","targets":["gradebook view definition","student profile view definition"]} |
 
 ## 8. 页面任务合同
 
-| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| STU-PAGE-PROFILE | Authorized Student Management Profile | WEB / APP | STU-OBJ-PROFILE | STU-PROFILE-F-ID<br>STU-PROFILE-F-STUDENT-REF<br>STU-PROFILE-F-RESULT-DATA-ID<br>STU-PROFILE-F-RESULT-REF<br>STU-PROFILE-F-RESULT-VERSION<br>STU-PROFILE-F-EVIDENCE-DATA-ID<br>STU-PROFILE-F-EVIDENCE-REF<br>STU-PROFILE-F-EVIDENCE-VERSION<br>STU-PROFILE-F-PLAN-DATA-ID<br>STU-PROFILE-F-PLAN-REF<br>STU-PROFILE-F-PLAN-VERSION<br>STU-PROFILE-F-QUERY-DEFINITION<br>STU-PROFILE-F-COLUMN-DEFINITION<br>STU-PROFILE-F-SAVED-VIEW-DEFINITION<br>STU-PROFILE-F-PROFILE-VERSION | STU-ACT-OPEN-PROFILE<br>STU-ACT-SAVE-VIEW | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| STU-PAGE-ATTENTION | Student Attention Follow-up Workspace | WEB / APP | STU-OBJ-ATTENTION | STU-ATTENTION-F-ID<br>STU-ATTENTION-F-PROFILE-REF<br>STU-ATTENTION-F-PROFILE-VERSION<br>STU-ATTENTION-F-KIND<br>STU-ATTENTION-F-FOLLOW-UP-NOTE<br>STU-ATTENTION-F-VERSION | STU-ACT-CREATE-ATTENTION<br>STU-ACT-VIEW-ATTENTION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| Page ID | 页面 | 交付可用性 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STU-PAGE-PROFILE | Authorized Student Management Profile | BUILD_READY | WEB / APP | STU-OBJ-PROFILE | STU-PROFILE-F-ID<br>STU-PROFILE-F-STUDENT-REF<br>STU-PROFILE-F-RESULT-DATA-ID<br>STU-PROFILE-F-RESULT-REF<br>STU-PROFILE-F-RESULT-VERSION<br>STU-PROFILE-F-EVIDENCE-DATA-ID<br>STU-PROFILE-F-EVIDENCE-REF<br>STU-PROFILE-F-EVIDENCE-VERSION<br>STU-PROFILE-F-PLAN-DATA-ID<br>STU-PROFILE-F-PLAN-REF<br>STU-PROFILE-F-PLAN-VERSION<br>STU-PROFILE-F-QUERY-DEFINITION<br>STU-PROFILE-F-COLUMN-DEFINITION<br>STU-PROFILE-F-SAVED-VIEW-DEFINITION<br>STU-PROFILE-F-PROFILE-VERSION | STU-ACT-OPEN-PROFILE<br>STU-ACT-SAVE-VIEW | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| STU-PAGE-ATTENTION | Student Attention Follow-up Workspace | BUILD_READY | WEB / APP | STU-OBJ-ATTENTION | STU-ATTENTION-F-ID<br>STU-ATTENTION-F-PROFILE-REF<br>STU-ATTENTION-F-PROFILE-VERSION<br>STU-ATTENTION-F-KIND<br>STU-ATTENTION-F-FOLLOW-UP-NOTE<br>STU-ATTENTION-F-VERSION | STU-ACT-CREATE-ATTENTION<br>STU-ACT-VIEW-ATTENTION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
 ## 9. 验收场景
 

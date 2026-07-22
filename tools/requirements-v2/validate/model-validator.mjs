@@ -1,5 +1,8 @@
 import { formatValidationValue } from "./structure-validator.mjs";
 import { MODEL_COLLECTIONS } from "../model.mjs";
+import { acceptanceTestRegistry } from "../facts/baseline-traceability.mjs";
+
+const acceptanceTestById = new Map(acceptanceTestRegistry.map((entry) => [entry.id, entry]));
 
 const SYSTEM_ACTOR_CATEGORIES = new Set([
   "SYSTEM",
@@ -49,6 +52,25 @@ function sameStringSet(left, right) {
   const rightSet = new Set(list(right));
   return leftSet.size === rightSet.size
     && [...leftSet].every((value) => rightSet.has(value));
+}
+
+function stateReferenceIsValid(index, stateRef) {
+  if (typeof stateRef !== "string" || stateRef.length === 0) return false;
+  const exactField = index.fieldById.get(stateRef)?.value;
+  if (exactField) {
+    return exactField.valueSource?.kind === "OPTION_SET"
+      && index.optionSetById.has(exactField.valueSource.optionSetId);
+  }
+  const separator = stateRef.lastIndexOf(".");
+  if (separator <= 0 || separator === stateRef.length - 1) return false;
+  const ownerId = stateRef.slice(0, separator);
+  const stateCode = stateRef.slice(separator + 1);
+  const object = index.objectById.get(ownerId)?.value;
+  if (object) return list(object.states).includes(stateCode);
+  const field = index.fieldById.get(ownerId)?.value;
+  const optionSet = index.optionSetById.get(field?.valueSource?.optionSetId)?.value;
+  return field?.valueSource?.kind === "OPTION_SET"
+    && list(optionSet?.values).some(({ code }) => code === stateCode);
 }
 
 function triggersMatch(left, right) {
@@ -147,6 +169,14 @@ export function buildModelIndex(model) {
     value,
     path: `baselineChapters[${index}]`,
   }));
+  const baselineTraceability = list(model?.baselineTraceability).map((value, index) => ({
+    value,
+    path: `baselineTraceability[${index}]`,
+  }));
+  const decisionTraceability = list(model?.decisionTraceability).map((value, index) => ({
+    value,
+    path: `decisionTraceability[${index}]`,
+  }));
   const migrationChanges = list(model?.migrationChanges).map((value, index) => ({
     value,
     path: `migrationChanges[${index}]`,
@@ -231,6 +261,9 @@ export function buildModelIndex(model) {
     aiTasks,
     baselineChapters,
     baselineChapterById: mapById(baselineChapters),
+    baselineTraceability,
+    decisionTraceability,
+    decisionTraceById: mapById(decisionTraceability),
     baselineDecisionById: mapById(baselineDecisions),
     baselineDecisions,
     currentReleaseModuleIds: list(model?.currentReleaseModuleIds),
@@ -245,10 +278,12 @@ export function buildModelIndex(model) {
     lifecyclePolicyById: mapById(lifecyclePolicies),
     lifecyclePolicies,
     launchGates,
+    launchGateById: mapById(launchGates),
     metrics,
     metricGroups,
     metricGroupById: mapById(metricGroups),
     migrationChanges,
+    migrationById: mapById(migrationChanges),
     modelProfile: model?.profile,
     modules,
     moduleById: mapById(modules),
@@ -1006,18 +1041,7 @@ export function validateModelReferences(model) {
       const actualFlowIds = index.flows
         .filter(({ value }) => list(value?.steps).some(({ actionId }) => actionId === action?.id))
         .map(({ value }) => value?.id);
-      const deferred = action?.deferredFlowRegistration;
-      const deferredRegistrationValid = actualFlowIds.length === 0
-        && deferred?.flowId === "DF-011"
-        && deferred?.targetPhase === 3
-        && deferred?.releaseStatus === "PLANNED"
-        && deferred?.executionAllowedBeforeRegistration === false
-        && sameStringSet(action?.trigger?.flowIds, [deferred.flowId])
-        && !index.flows.some(({ value }) => value?.id === deferred.flowId);
-      if (
-        !sameStringSet(action?.trigger?.flowIds, actualFlowIds)
-        && !deferredRegistrationValid
-      ) {
+      if (!sameStringSet(action?.trigger?.flowIds, actualFlowIds)) {
         errors.push(
           `INVALID_ACTION_TRIGGER ${formatValidationValue(action?.id)} requires exact containing Flow references`,
         );
@@ -1256,6 +1280,148 @@ export function validateModelReferences(model) {
       );
     }
   }
+  const chapterVisitState = new Map();
+  const visitChapterParent = (chapterId, path = []) => {
+    const state = chapterVisitState.get(chapterId);
+    if (state === "DONE") return;
+    if (state === "VISITING") {
+      errors.push(
+        `BASELINE_CHAPTER_PARENT_CYCLE ${[...path, chapterId].join(" -> ")}`,
+      );
+      return;
+    }
+    chapterVisitState.set(chapterId, "VISITING");
+    const chapter = index.baselineChapterById.get(chapterId)?.value;
+    if (chapter?.parentId && index.baselineChapterById.has(chapter.parentId)) {
+      visitChapterParent(chapter.parentId, [...path, chapterId]);
+    }
+    chapterVisitState.set(chapterId, "DONE");
+  };
+  for (const { value: chapter } of index.baselineChapters) {
+    if (typeof chapter?.id === "string") visitChapterParent(chapter.id);
+  }
+
+  const traceReferenceCollections = [
+    ["moduleIds", index.moduleById],
+    ["pageIds", index.pageById],
+    ["flowIds", new Map(index.flows.map((entry) => [entry.value?.id, entry]))],
+    ["objectIds", index.objectById],
+    ["actionIds", index.actionById],
+    ["metricIds", new Map(index.metrics.map((entry) => [entry.value?.id, entry]))],
+    ["launchGateIds", index.launchGateById],
+    ["scenarioIds", index.scenarioById],
+    ["testIds", acceptanceTestById],
+  ];
+  for (const traceEntry of index.baselineTraceability) {
+    const trace = traceEntry.value;
+    if (!index.baselineChapterById.has(trace?.chapterId)) {
+      errors.push(
+        `MISSING_BASELINE_TRACE_CHAPTER ${formatValidationValue(trace?.id)}.chapterId -> ${formatValidationValue(trace?.chapterId)}`,
+      );
+    }
+    for (const decisionId of list(trace?.decisionIds)) {
+      if (!index.productDecisionById.has(decisionId)) {
+        errors.push(
+          `MISSING_BASELINE_TRACE_DECISION ${formatValidationValue(trace?.id)}.decisionIds -> ${formatValidationValue(decisionId)}`,
+        );
+      }
+    }
+    for (const phaseId of list(trace?.phaseIds)) {
+      if (!index.phaseById.has(phaseId)) {
+        errors.push(
+          `MISSING_BASELINE_TRACE_PHASE ${formatValidationValue(trace?.id)}.phaseIds -> ${formatValidationValue(phaseId)}`,
+        );
+      }
+    }
+    for (const [property, referenceMap] of traceReferenceCollections) {
+      for (const referenceId of list(trace?.[property])) {
+        if (!referenceMap.has(referenceId)) {
+          errors.push(
+            `MISSING_BASELINE_TRACE_REFERENCE ${formatValidationValue(trace?.id)}.${property} -> ${formatValidationValue(referenceId)}`,
+          );
+        }
+      }
+    }
+    for (const permissionRef of list(trace?.permissionRefs)) {
+      const action = index.actionById.get(permissionRef?.actionId)?.value;
+      if (!action) {
+        errors.push(
+          `MISSING_BASELINE_TRACE_PERMISSION ${formatValidationValue(trace?.id)}.permissionRefs -> ${formatValidationValue(permissionRef?.actionId)}`,
+        );
+      } else if (!list(action.permissions).some(({ effect }) => effect === permissionRef.effect)) {
+        errors.push(
+          `BASELINE_TRACE_PERMISSION_MISMATCH ${formatValidationValue(trace?.id)}.permissionRefs -> ${formatValidationValue(permissionRef?.actionId)}:${formatValidationValue(permissionRef?.effect)}`,
+        );
+      }
+    }
+    for (const stateRef of list(trace?.stateRefs)) {
+      if (!stateReferenceIsValid(index, stateRef)) {
+        errors.push(
+          `MISSING_BASELINE_TRACE_STATE ${formatValidationValue(trace?.id)}.stateRefs -> ${formatValidationValue(stateRef)}`,
+        );
+      }
+    }
+  }
+
+  for (const traceEntry of index.decisionTraceability) {
+    const trace = traceEntry.value;
+    const decision = index.productDecisionById.get(trace?.decisionId)?.value;
+    if (!decision) {
+      errors.push(
+        `MISSING_DECISION_TRACE_DECISION ${formatValidationValue(trace?.id)}.decisionId -> ${formatValidationValue(trace?.decisionId)}`,
+      );
+    }
+    for (const migrationId of list(trace?.migrationIds)) {
+      const migration = index.migrationById.get(migrationId)?.value;
+      if (!migration || !list(migration?.decisionIds).includes(trace?.decisionId)) {
+        errors.push(
+          `MISSING_DECISION_TRACE_MIGRATION ${formatValidationValue(trace?.id)}.migrationIds -> ${formatValidationValue(migrationId)}`,
+        );
+      }
+    }
+    for (const chapterId of list(trace?.chapterIds)) {
+      if (!index.baselineChapterById.has(chapterId)) {
+        errors.push(
+          `MISSING_DECISION_TRACE_CHAPTER ${formatValidationValue(trace?.id)}.chapterIds -> ${formatValidationValue(chapterId)}`,
+        );
+      }
+    }
+    for (const phaseId of list(trace?.phaseIds)) {
+      if (!index.phaseById.has(phaseId)) {
+        errors.push(
+          `MISSING_DECISION_TRACE_PHASE ${formatValidationValue(trace?.id)}.phaseIds -> ${formatValidationValue(phaseId)}`,
+        );
+      }
+    }
+    for (const [property, referenceMap] of traceReferenceCollections) {
+      for (const referenceId of list(trace?.[property])) {
+        if (!referenceMap.has(referenceId)) {
+          errors.push(
+            `MISSING_DECISION_TRACE_REFERENCE ${formatValidationValue(trace?.id)}.${property} -> ${formatValidationValue(referenceId)}`,
+          );
+        }
+      }
+    }
+    for (const permissionRef of list(trace?.permissionRefs)) {
+      const action = index.actionById.get(permissionRef?.actionId)?.value;
+      if (!action) {
+        errors.push(
+          `MISSING_DECISION_TRACE_PERMISSION ${formatValidationValue(trace?.id)}.permissionRefs -> ${formatValidationValue(permissionRef?.actionId)}`,
+        );
+      } else if (!list(action.permissions).some(({ effect }) => effect === permissionRef.effect)) {
+        errors.push(
+          `DECISION_TRACE_PERMISSION_MISMATCH ${formatValidationValue(trace?.id)}.permissionRefs -> ${formatValidationValue(permissionRef?.actionId)}:${formatValidationValue(permissionRef?.effect)}`,
+        );
+      }
+    }
+    for (const stateRef of list(trace?.stateRefs)) {
+      if (!stateReferenceIsValid(index, stateRef)) {
+        errors.push(
+          `MISSING_DECISION_TRACE_STATE ${formatValidationValue(trace?.id)}.stateRefs -> ${formatValidationValue(stateRef)}`,
+        );
+      }
+    }
+  }
 
   for (const changeEntry of index.migrationChanges) {
     const change = changeEntry.value;
@@ -1265,6 +1431,71 @@ export function validateModelReferences(model) {
           `MISSING_MIGRATION_DECISION ${formatValidationValue(change?.id)}.decisionIds -> ${formatValidationValue(decisionId)}`,
         );
       }
+    }
+    for (const [property, referenceMap] of traceReferenceCollections) {
+      for (const referenceId of list(change?.affected?.[property])) {
+        if (!referenceMap.has(referenceId)) {
+          errors.push(
+            `MISSING_MIGRATION_REFERENCE ${formatValidationValue(change?.id)}.affected.${property} -> ${formatValidationValue(referenceId)}`,
+          );
+        }
+      }
+    }
+    for (const actionId of list(change?.affected?.permissionActionIds)) {
+      if (!index.actionById.has(actionId)) {
+        errors.push(
+          `MISSING_MIGRATION_REFERENCE ${formatValidationValue(change?.id)}.affected.permissionActionIds -> ${formatValidationValue(actionId)}`,
+        );
+      }
+    }
+    for (const stateRef of list(change?.affected?.stateRefs)) {
+      if (!stateReferenceIsValid(index, stateRef)) {
+        errors.push(
+          `MISSING_MIGRATION_STATE ${formatValidationValue(change?.id)}.affected.stateRefs -> ${formatValidationValue(stateRef)}`,
+        );
+      }
+    }
+    for (const [decisionId, source] of Object.entries(change?.decisionAffected ?? {})) {
+      if (!list(change?.decisionIds).includes(decisionId)) continue;
+      for (const [property, referenceMap] of traceReferenceCollections) {
+        for (const referenceId of list(source?.affected?.[property])) {
+          if (!referenceMap.has(referenceId)) {
+            errors.push(
+              `MISSING_DECISION_AFFECTED_REFERENCE ${formatValidationValue(change?.id)}.decisionAffected.${formatValidationValue(decisionId)}.affected.${property} -> ${formatValidationValue(referenceId)}`,
+            );
+          }
+        }
+      }
+      for (const actionId of list(source?.affected?.permissionActionIds)) {
+        if (!index.actionById.has(actionId)) {
+          errors.push(
+            `MISSING_DECISION_AFFECTED_REFERENCE ${formatValidationValue(change?.id)}.decisionAffected.${formatValidationValue(decisionId)}.affected.permissionActionIds -> ${formatValidationValue(actionId)}`,
+          );
+        }
+      }
+      for (const stateRef of list(source?.affected?.stateRefs)) {
+        if (!stateReferenceIsValid(index, stateRef)) {
+          errors.push(
+            `MISSING_DECISION_AFFECTED_STATE ${formatValidationValue(change?.id)}.decisionAffected.${formatValidationValue(decisionId)}.affected.stateRefs -> ${formatValidationValue(stateRef)}`,
+          );
+        }
+      }
+    }
+    const affectedOutsideModules = [
+      "pageIds",
+      "flowIds",
+      "objectIds",
+      "actionIds",
+      "permissionActionIds",
+      "stateRefs",
+      "metricIds",
+      "launchGateIds",
+      "scenarioIds",
+    ].some((property) => list(change?.affected?.[property]).length > 0);
+    if (!affectedOutsideModules) {
+      errors.push(
+        `MISSING_MIGRATION_IMPACT ${formatValidationValue(change?.id)} requires an affected contract outside moduleIds`,
+      );
     }
   }
 

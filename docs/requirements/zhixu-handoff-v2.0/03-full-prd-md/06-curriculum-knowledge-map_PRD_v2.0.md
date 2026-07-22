@@ -3,12 +3,14 @@
 | 属性 | 值 |
 | --- | --- |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 优先级 | P0 |
 | 目标 | Publish versioned curriculum maps without rewriting historical teaching or evidence references. |
 | 基线决策 | `BASE-003`、`BASE-007`、`BASE-009` |
 | NFR | `NFR-002`、`NFR-008` |
 | 进入条件 | academic staff has an active subject scope；textbook and knowledge point source versions are explicit |
 | 退出条件 | a published curriculum version is immutable；historical assignment and evidence references continue to resolve their original version |
+| 依赖模块 | — |
 
 ## 1. 范围与事实边界
 
@@ -21,9 +23,9 @@
 
 ### CURR-OBJ-CURRICULUM Curriculum Version
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / VALIDATING / VALIDATED / PUBLISHED / DEPRECATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | ROLE-ACADEMIC | LIFE-003 | S2 | NO_DIRECT_READ | — | DRAFT / VALIDATING / VALIDATED / PUBLISHED / DEPRECATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -37,9 +39,9 @@
 
 ### CURR-OBJ-TEXTBOOK Textbook Version
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / DEPRECATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | — | DRAFT / ACTIVE / DEPRECATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -51,9 +53,9 @@
 
 ### CURR-OBJ-CHAPTER Chapter
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / DEPRECATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | ROLE-ACADEMIC | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | — | DRAFT / ACTIVE / DEPRECATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -65,9 +67,9 @@
 
 ### CURR-OBJ-KNOWLEDGE-POINT Knowledge Point
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_CURRICULUM | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | DRAFT / ACTIVE / DEPRECATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | NO_DIRECT_READ | — | DRAFT / ACTIVE / DEPRECATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -79,9 +81,9 @@
 
 ### CURR-OBJ-MAPPING Knowledge Mapping
 
-| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SUBJECT_CURRICULUM | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | AUTHORIZED | DRAFT / VALIDATED / PUBLISHED / DEPRECATED |
+| 数据主体 | 控制主体 | 产生者 | Owner | 确认者 | Steward | 生命周期 | 敏感级别 | 读模式 | 教师写入策略 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUBJECT_CURRICULUM | SCHOOL | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | DUTY-SUBJECT-LEAD | LIFE-003 | S2 | AUTHORIZED | — | DRAFT / VALIDATED / PUBLISHED / DEPRECATED |
 
 | Field ID | 字段 | 类型 | 必填 | 值来源 | 可变性 | 可见性 | 幂等角色 | 校验 | 历史策略 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -156,14 +158,14 @@
 
 ## 8. 页面任务合同
 
-| Page ID | 页面 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| CURR-PAGE-VERSIONS | Curriculum Version Management | WEB | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-NAME<br>CURR-CURRICULUM-F-SUBJECT<br>CURR-CURRICULUM-F-STATUS<br>CURR-CURRICULUM-F-PUBLISHED-AT | CURR-ACT-CREATE-DRAFT<br>CURR-ACT-BEGIN-VALIDATION<br>CURR-ACT-DEPRECATE-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| CURR-PAGE-TEXTBOOK-TREE | Textbook and Chapter Version Tree | WEB | CURR-OBJ-TEXTBOOK<br>CURR-OBJ-CHAPTER | CURR-TEXTBOOK-F-NAME<br>CURR-TEXTBOOK-F-EDITION<br>CURR-CHAPTER-F-ID<br>CURR-CHAPTER-F-TITLE<br>CURR-CHAPTER-F-ORDER | CURR-ACT-ADD-TEXTBOOK<br>CURR-ACT-ACTIVATE-TEXTBOOK<br>CURR-ACT-DEPRECATE-TEXTBOOK<br>CURR-ACT-CREATE-CHAPTER<br>CURR-ACT-REORDER-CHAPTER<br>CURR-ACT-ACTIVATE-CHAPTER<br>CURR-ACT-DEPRECATE-CHAPTER | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| CURR-PAGE-KP-EDITOR | Knowledge Point Version Editor | WEB | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-NAME<br>CURR-KP-F-DEFINITION<br>CURR-KP-F-PARENT-ID<br>CURR-KP-F-STATUS | CURR-ACT-CREATE-KNOWLEDGE-VERSION<br>CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION<br>CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| CURR-PAGE-MAPPING | Chapter Knowledge Mapping Review | WEB | CURR-OBJ-MAPPING | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION<br>CURR-MAPPING-F-STATUS | CURR-ACT-CREATE-MAPPING<br>CURR-ACT-DEPRECATE-MAPPING | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| CURR-PAGE-PUBLISH | Curriculum and Mapping Publication Preview | WEB | CURR-OBJ-CURRICULUM<br>CURR-OBJ-MAPPING | CURR-CURRICULUM-F-VALIDATION<br>CURR-CURRICULUM-F-STATUS<br>CURR-CURRICULUM-F-PUBLISHED-AT<br>CURR-MAPPING-F-VERSION<br>CURR-MAPPING-F-STATUS | CURR-ACT-VALIDATE-MAPPING<br>CURR-ACT-VALIDATE-VERSION<br>CURR-ACT-PUBLISH-MAPPING<br>CURR-ACT-PUBLISH-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
-| CURR-PAGE-PATH | Published Knowledge Path Viewer | WEB / APP | CURR-OBJ-MAPPING | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION<br>CURR-MAPPING-F-VERSION | CURR-ACT-VIEW-KNOWLEDGE-PATH | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| Page ID | 页面 | 交付可用性 | 端 | 对象 | 字段 | 动作 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CURR-PAGE-VERSIONS | Curriculum Version Management | BUILD_READY | WEB | CURR-OBJ-CURRICULUM | CURR-CURRICULUM-F-NAME<br>CURR-CURRICULUM-F-SUBJECT<br>CURR-CURRICULUM-F-STATUS<br>CURR-CURRICULUM-F-PUBLISHED-AT | CURR-ACT-CREATE-DRAFT<br>CURR-ACT-BEGIN-VALIDATION<br>CURR-ACT-DEPRECATE-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-TEXTBOOK-TREE | Textbook and Chapter Version Tree | BUILD_READY | WEB | CURR-OBJ-TEXTBOOK<br>CURR-OBJ-CHAPTER | CURR-TEXTBOOK-F-NAME<br>CURR-TEXTBOOK-F-EDITION<br>CURR-CHAPTER-F-ID<br>CURR-CHAPTER-F-TITLE<br>CURR-CHAPTER-F-ORDER | CURR-ACT-ADD-TEXTBOOK<br>CURR-ACT-ACTIVATE-TEXTBOOK<br>CURR-ACT-DEPRECATE-TEXTBOOK<br>CURR-ACT-CREATE-CHAPTER<br>CURR-ACT-REORDER-CHAPTER<br>CURR-ACT-ACTIVATE-CHAPTER<br>CURR-ACT-DEPRECATE-CHAPTER | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-KP-EDITOR | Knowledge Point Version Editor | BUILD_READY | WEB | CURR-OBJ-KNOWLEDGE-POINT | CURR-KP-F-NAME<br>CURR-KP-F-DEFINITION<br>CURR-KP-F-PARENT-ID<br>CURR-KP-F-STATUS | CURR-ACT-CREATE-KNOWLEDGE-VERSION<br>CURR-ACT-ACTIVATE-KNOWLEDGE-VERSION<br>CURR-ACT-DEPRECATE-KNOWLEDGE-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-MAPPING | Chapter Knowledge Mapping Review | BUILD_READY | WEB | CURR-OBJ-MAPPING | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION<br>CURR-MAPPING-F-STATUS | CURR-ACT-CREATE-MAPPING<br>CURR-ACT-DEPRECATE-MAPPING | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-PUBLISH | Curriculum and Mapping Publication Preview | BUILD_READY | WEB | CURR-OBJ-CURRICULUM<br>CURR-OBJ-MAPPING | CURR-CURRICULUM-F-VALIDATION<br>CURR-CURRICULUM-F-STATUS<br>CURR-CURRICULUM-F-PUBLISHED-AT<br>CURR-MAPPING-F-VERSION<br>CURR-MAPPING-F-STATUS | CURR-ACT-VALIDATE-MAPPING<br>CURR-ACT-VALIDATE-VERSION<br>CURR-ACT-PUBLISH-MAPPING<br>CURR-ACT-PUBLISH-VERSION | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
+| CURR-PAGE-PATH | Published Knowledge Path Viewer | BUILD_READY | WEB / APP | CURR-OBJ-MAPPING | CURR-MAPPING-F-CHAPTER-ID<br>CURR-MAPPING-F-KP-ID<br>CURR-MAPPING-F-RELATION<br>CURR-MAPPING-F-VERSION | CURR-ACT-VIEW-KNOWLEDGE-PATH | CONTEXT_HEADER<br>TASK_WORK_AREA<br>RESULT_AND_FAILURE_STATUS | LOADING<br>READY<br>EMPTY<br>ERROR<br>FORBIDDEN<br>STALE_VERSION |
 
 ## 9. 验收场景
 

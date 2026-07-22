@@ -4,14 +4,15 @@
 | --- | --- |
 | 模块 | CURR-001 |
 | 阶段 | 1 |
+| 交付状态 | BUILD_READY |
 | 页面数量 | 6 |
 | 端原则 | 同一事实与权限合同，按端任务频率和复杂度差异化 |
 
 ## CURR-PAGE-VERSIONS Curriculum Version Management
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB | CURR-OBJ-CURRICULUM | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB | CURR-OBJ-CURRICULUM | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -46,9 +47,9 @@
 
 ## CURR-PAGE-TEXTBOOK-TREE Textbook and Chapter Version Tree
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB | CURR-OBJ-TEXTBOOK / CURR-OBJ-CHAPTER | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB | CURR-OBJ-TEXTBOOK / CURR-OBJ-CHAPTER | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -88,9 +89,9 @@
 
 ## CURR-PAGE-KP-EDITOR Knowledge Point Version Editor
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB | CURR-OBJ-KNOWLEDGE-POINT | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB | CURR-OBJ-KNOWLEDGE-POINT | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -125,9 +126,9 @@
 
 ## CURR-PAGE-MAPPING Chapter Knowledge Mapping Review
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB | CURR-OBJ-MAPPING | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB | CURR-OBJ-MAPPING | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -161,9 +162,9 @@
 
 ## CURR-PAGE-PUBLISH Curriculum and Mapping Publication Preview
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB | CURR-OBJ-CURRICULUM / CURR-OBJ-MAPPING | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB | CURR-OBJ-CURRICULUM / CURR-OBJ-MAPPING | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
@@ -200,9 +201,9 @@
 
 ## CURR-PAGE-PATH Published Knowledge Path Viewer
 
-| 适用端 | 对象 | 区域 | 视图状态 |
-| --- | --- | --- | --- |
-| WEB / APP | CURR-OBJ-MAPPING | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
+| 交付可用性 | 适用端 | 对象 | 区域 | 视图状态 |
+| --- | --- | --- | --- | --- |
+| BUILD_READY | WEB / APP | CURR-OBJ-MAPPING | CONTEXT_HEADER / TASK_WORK_AREA / RESULT_AND_FAILURE_STATUS | LOADING / READY / EMPTY / ERROR / FORBIDDEN / STALE_VERSION |
 
 ### 页面任务
 
